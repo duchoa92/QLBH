@@ -25,8 +25,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::get('/setup-admin', [SetupAdminController::class, 'create'])
-    ->middleware('guest')->name('setup.admin');
+Route::get('/setup-admin', [SetupAdminController::class, 'index'])
+    ->middleware(['guest', 'only_first_user'])
+    ->name('setup.admin');
 
 Route::post('/setup-admin', [SetupAdminController::class, 'store'])
      ->name('setup.admin.store');

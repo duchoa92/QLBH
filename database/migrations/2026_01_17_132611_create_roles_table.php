@@ -14,6 +14,9 @@ return new class extends Migration
         Schema::create('roles', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique(); // admin, staff
+            $table->string('description')->nullable();
+             $table->boolean('is_system')->default(false); // role hệ thống (admin) không cho xoá
+            $table->timestamps();
         });
     }
 

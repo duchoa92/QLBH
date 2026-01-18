@@ -1,9 +1,15 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import InputError from '@/Components/InputError.vue';
+
+
+
+const { props } = usePage();
+const status = props.status;
 
 const form = useForm({
   username: 'admin',
@@ -26,27 +32,24 @@ const submit = () => {
             </div>
 
             <form @submit.prevent="submit" class="space-y-3">
-                <div class="mt-4">
-                    <InputLabel for="username" value="Tên đăng nhập (mặc định)" />
+                <div>
+                    <InputLabel value="Tên đăng nhập (mặc định)" />
                     <TextInput
-                    v-model="form.username"
-                    type="text"
-                    disabled
-                    placeholder="Tên đăng nhập (username)"
-                    class="w-full border rounded px-3 py-2"
+                        v-model="form.username"
+                        readonly
+                        class="mt-1 block w-full bg-gray-100 cursor-not-allowed"
                     />
-                    <InputError class="mt-2" :message="form.errors.password" />
 
-                    <InputLabel for="name" value="Tên hiển thị" />
+                    <InputLabel class="mt-2" for="name" value="Tên hiển thị" />
                     <TextInput
                     v-model="form.name"
                     type="text"
                     placeholder="Tên hiển thị"
-                    class="w-full border rounded px-3 py-2"
+                    class="mt-1 block w-full border rounded px-3 py-2"
                     />
-                    <InputError class="mt-2" :message="form.errors.password" />
+                    <InputError class="mt-2" :message="form.errors.name" />
 
-                    <InputLabel for="password" value="Mật khẩu" />
+                    <InputLabel class="mt-2" for="password" value="Mật khẩu" />
                     <TextInput
                     v-model="form.password"
                     type="password"
@@ -55,33 +58,24 @@ const submit = () => {
                     />
                     <InputError class="mt-2" :message="form.errors.password" />
 
-                    <InputLabel for="password_confirmation" value="Nhập lại mật khẩu" />
+                    <InputLabel class="mt-2" for="password_confirmation" value="Nhập lại mật khẩu" />
                     <TextInput
                     v-model="form.password_confirmation"
                     type="password"
                     placeholder="Nhập lại mật khẩu"
                     class="w-full border rounded px-3 py-2"
                     />
-                    <InputError class="mt-2" :message="form.errors.password" />
+                    <InputError class="mt-2" :message="form.errors.password_confirmation" />
 
-<!--                     <button
-                    class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-                    >
-                    Tạo Admin
-                    </button> -->
+                <div class="mt-4 flex items-center justify-end">
                     <PrimaryButton
-                    class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-                    Khởi tạo
-                </PrimaryButton>
-
-                    <div v-if="form.errors" class="text-red-600 text-sm">
-                        <div v-for="(error, key) in form.errors" :key="key">
-                            {{ error }}
-                        </div>
-                    </div>
+                        class="ms-4"
+                        :class="{ 'opacity-25': form.processing }"
+                        :disabled="form.processing"
+                    >
+                        Khởi tạo
+                    </PrimaryButton>
+                </div>
                 </div>
 
             </form>

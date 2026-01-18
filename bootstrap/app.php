@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
+use App\Http\Middleware\OnlyFirstUser;
 use Illuminate\Foundation\Configuration\Middleware;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -16,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
              \App\Http\Middleware\CheckFirstUser::class,
         ]);
+
+        $middleware->alias([
+        'only_first_user' => OnlyFirstUser::class,
+    ]);
 
         //
     })
