@@ -15,11 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
-             \App\Http\Middleware\CheckFirstUser::class,
+           // \App\Http\Middleware\OnlyFirstUser::class, //để thì tự chuyển
+
         ]);
 
         $middleware->alias([
-        'only_first_user' => OnlyFirstUser::class,
+        'only_first_user' => \App\Http\Middleware\OnlyFirstUser::class,
     ]);
 
         //

@@ -100,8 +100,8 @@ const submit = () => {
                     :disabled="form.processing"
                     type="submit"
                 >
-                    <span v-if="form.processing">Đang đăng nhập...</span>
-                    <span v-else>Đăng nhập</span>
+                    <span v-if="form.processing">Processing login...</span>
+                    <span v-else>Login</span>
                 </PrimaryButton>
             </div>
         </form>

@@ -11,11 +11,18 @@ class SetupAdminController extends Controller
 {
      public function index()
     {
+        if (User::count() > 0) {
+            return redirect('/login');
+        }
+
         return inertia('Auth/SetupAdmin');
     }
 
     public function store(Request $request)
     {
+        if (User::count() > 0) {
+            abort(403, 'Admin đã được khởi tạo');
+        }
 
         $request->validate([
             'name' => 'required|string|max:255',
