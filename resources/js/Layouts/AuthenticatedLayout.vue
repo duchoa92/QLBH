@@ -6,6 +6,10 @@ import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link } from '@inertiajs/vue3';
+import { can } from '@/utils/permission';
+// CHUẨN HÓA SCRIPT
+import { usePage } from '@inertiajs/vue3';
+// const auth = usePage().props.auth
 
 const showingNavigationDropdown = ref(false);
 </script>
@@ -22,7 +26,7 @@ const showingNavigationDropdown = ref(false);
                         <div class="flex">
                             <!-- Logo -->
                             <div class="flex shrink-0 items-center">
-                                <Link :href="route('dashboard')">
+                                <Link href="/dashboard">
                                     <ApplicationLogo
                                         class="block h-9 w-auto fill-current text-gray-800"
                                     />
@@ -30,15 +34,12 @@ const showingNavigationDropdown = ref(false);
                             </div>
 
                             <!-- Navigation Links -->
-                            <div
-                                class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
-                            >
-                                <NavLink
-                                    :href="route('dashboard')"
-                                    :active="route().current('dashboard')"
-                                >
-                                    Dashboard
-                                </NavLink>
+                            <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex" >
+                                <NavLink href="/dashboard" :active="$page.url.startsWith('/dashboard')" >Dashboard</NavLink>
+                                <NavLink v-if="can('users.view')" href="/users" >Quản lý người dùng</NavLink>
+                                <NavLink v-if="can('products.view')" href="/products" >Sản phẩm </NavLink>
+                                <NavLink v-if="can('reports.view')" href="/reports" >Sản phẩm </NavLink>
+
                             </div>
                         </div>
 
@@ -71,13 +72,11 @@ const showingNavigationDropdown = ref(false);
                                     </template>
 
                                     <template #content>
-                                        <DropdownLink
-                                            :href="route('profile.edit')"
-                                        >
+                                        <DropdownLink href="/profile.edit" >
                                             Profile
                                         </DropdownLink>
                                         <DropdownLink
-                                            :href="route('logout')"
+                                            href="/logout"
                                             method="post"
                                             as="button"
                                         >
@@ -141,8 +140,8 @@ const showingNavigationDropdown = ref(false);
                 >
                     <div class="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink
-                            :href="route('dashboard')"
-                            :active="route().current('dashboard')"
+                            href="/dashboard"
+                            :active="$page.url.startsWith('/dashboard')"
                         >
                             Dashboard
                         </ResponsiveNavLink>
@@ -164,11 +163,11 @@ const showingNavigationDropdown = ref(false);
                         </div>
 
                         <div class="mt-3 space-y-1">
-                            <ResponsiveNavLink :href="route('profile.edit')">
+                            <ResponsiveNavLink href="/profile">
                                 Profile
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
-                                :href="route('logout')"
+                                href="/logout"
                                 method="post"
                                 as="button"
                             >
@@ -177,6 +176,11 @@ const showingNavigationDropdown = ref(false);
                         </div>
                     </div>
                 </div>
+
+
+
+
+
             </nav>
 
             <!-- Page Heading -->

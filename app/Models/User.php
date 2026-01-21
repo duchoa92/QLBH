@@ -2,64 +2,83 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'username',
         'name',
         'email',
         'phone',
         'password',
-        'gender',
-        'address',
-        'birthday',
         'status',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
         ];
     }
 
+    /**
+     * User có nhiều role
+     */
     public function roles()
     {
-         return $this->belongsToMany(
-            Role::class,      // Model liên quan
-            'user_roles',     // Bảng trung gian
-            'user_id',        // Khóa ngoại của User
-            'role_id'         // Khóa ngoại của Role
+        return $this->belongsToMany(
+            Role::class,
+            'user_roles'
         );
+    }
+
+    /**
+     * LẤY TOÀN BỘ PERMISSION CỦA USER (QUA ROLE)
+     * 👉 trả về Collection
+     */
+    public function allPermissions()
+    {
+        return $this->roles()
+            ->with('permissions')
+            ->get()
+            ->pluck('permissions')
+            ->flatten()
+            ->unique('id')
+            ->values();
+    }
+
+    /**
+     * CHECK USER CÓ PERMISSION CỤ THỂ KHÔNG
+     */
+    public function hasPermission(string $permission): bool
+    {
+        return $this->allPermissions()
+            ->where('name', $permission)
+            ->isNotEmpty();
+    }
+    
+    /**
+ * Lấy toàn bộ permission của user (qua role)
+ */
+    public function permissions()
+    {
+        return $this->roles()
+            ->with('permissions')
+            ->get()
+            ->pluck('permissions')
+            ->flatten()
+            ->unique('id')
+            ->values();
     }
 
 }
