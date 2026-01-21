@@ -39,6 +39,7 @@ const showingNavigationDropdown = ref(false);
                                 <NavLink v-if="can('users.view')" href="/users" >Quản lý người dùng</NavLink>
                                 <NavLink v-if="can('products.view')" href="/products" >Sản phẩm </NavLink>
                                 <NavLink v-if="can('reports.view')" href="/reports" >Sản phẩm </NavLink>
+                                <NavLink v-if="can('users.view')" :href="route('users.index')" >Users</NavLink>
 
                             </div>
                         </div>
