@@ -36,10 +36,10 @@ const showingNavigationDropdown = ref(false);
                             <!-- Navigation Links -->
                             <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex" >
                                 <NavLink href="/dashboard" :active="$page.url.startsWith('/dashboard')" >Dashboard</NavLink>
-                                <NavLink v-if="can('users.view')" href="/users" >Quản lý người dùng</NavLink>
+                                <!-- <NavLink v-if="can('users.view')" :href="route('users.index')" :active="route().current('users.*')" >Quản lý người dùng</NavLink> -->
                                 <NavLink v-if="can('products.view')" href="/products" >Sản phẩm </NavLink>
-                                <NavLink v-if="can('reports.view')" href="/reports" >Sản phẩm </NavLink>
-                                <NavLink v-if="can('users.view')" :href="route('users.index')" >Users</NavLink>
+                                <NavLink v-if="can('reports.view')" href="/reports" >Báo cáo</NavLink>
+                                <NavLink v-if="can('users.view')" :href="route('users.index')" :active="route().current('users.*')" >Quản lý người dùng</NavLink>
 
                             </div>
                         </div>

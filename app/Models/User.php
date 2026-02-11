@@ -77,6 +77,7 @@ class User extends Authenticatable
             ->get()
             ->pluck('permissions')
             ->flatten()
+            ->pluck('name')
             ->unique('id')
             ->values();
     }
