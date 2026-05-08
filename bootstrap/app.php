@@ -14,26 +14,32 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
+
+    
+
+    // Đăng ký middleware
+    ->withMiddleware(function ($middleware): void {
+
+        // Đăng ký middleware cho Inertia
         $middleware->web(append: [
+
             \App\Http\Middleware\HandleInertiaRequests::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+
         ]);
 
-        // Đăng ký Alias middleware
+        // Đăng ký middleware cho phân quyền
         $middleware->alias([
 
-            'role' => RoleMiddleware::class,
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
 
-            'permission' => PermissionMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
 
             'role_or_permission' =>
-                RoleOrPermissionMiddleware::class,
+                \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
 
         ]);
-
-        //
     })
+
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();

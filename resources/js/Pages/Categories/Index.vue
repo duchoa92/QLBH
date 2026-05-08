@@ -182,7 +182,7 @@ watch(search, (value) => {
                         <div class="flex gap-2">
 
                             <!-- Khôi phục -->
-                            <button v-if="item.deleted_at" @click="restore(item.id)" class="px-3 py-1 bg-green-500 text-white rounded">
+                            <button v-if="item.deleted_at" @click="restore(item.id)" class="px-3 py-1 bg-sky-700 text-white rounded">
                                 Khôi phục
                             </button>
 

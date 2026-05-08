@@ -4,66 +4,12 @@ namespace App\Repositories\Category;
 
 use App\Models\Category;
 
-class CategoryRepository
+use App\Repositories\Base\BaseRepository;
+
+class CategoryRepository extends BaseRepository
 {
-    public function paginate($perPage = 10)
+    public function __construct(Category $model)
     {
-        return Category::query()
-
-            ->withTrashed() // Lấy cả dữ liệu đã xóa
-
-            ->when(
-                request('search'),
-                function ($query) {
-
-                    $query->where(
-                        'name',
-                        'like',
-                        '%' . request('search') . '%'
-                    );
-                }
-            )
-
-            ->latest()
-
-            ->paginate($perPage)
-
-            ->withQueryString();
+        $this->model = $model;
     }
-    // Tạo
-    public function create(array $data): Category
-    {
-            return Category::create($data);
-        }
-
-        public function findById($id): Category
-    {
-        return Category::findOrFail($id);
-    }
-
-    // Cập nhật
-    public function update(Category $category, array $data)
-    {
-        $category->update($data);
-
-        return $category;
-    }
-
-    // Xóa Mềm
-    public function delete(Category $category)
-    {
-        return $category->delete();
-    }
-
-    public function restore($id)
-    {
-        $category = Category::withTrashed()
-            ->findOrFail($id);
-
-        return $category->restore();
-    }
-
-    // Hiện dữ liệu đã xóa
-    
-    
 }

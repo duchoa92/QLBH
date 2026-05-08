@@ -4,30 +4,54 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
 
 class AdminSeeder extends Seeder
 {
     public function run(): void
     {
+        // Tạo quyền
+        $permissions = [
+            'categories.view',
+            'categories.create',
+            'categories.edit',
+            'categories.delete',
+        ];
+
+        foreach ($permissions as $permission) {
+
+            Permission::firstOrCreate([
+                'name' => $permission,
+                'guard_name' => 'web',
+            ]);
+        }
+
+        // Tạo role admin
         $adminRole = Role::firstOrCreate([
-            'name' => 'admin'
+            'name' => 'admin',
+            'guard_name' => 'web',
         ]);
 
-        $user = User::updateOrCreate(
+        // Gán toàn bộ quyền cho admin
+        $adminRole->syncPermissions(
+            Permission::all()
+        );
+
+        // Tạo user admin
+        $user = User::firstOrCreate(
             [
-                'username' => 'admin'
+                'username' => 'admin',
             ],
             [
                 'name' => 'Administrator',
-                'username' => 'admin',
                 'phone' => '0906064789',
                 'email' => 'admin@gmail.com',
-                'password' => Hash::make('111111')
+                'password' => bcrypt('12345678'),
             ]
         );
 
+        // Gán role admin
         $user->assignRole($adminRole);
     }
 }
