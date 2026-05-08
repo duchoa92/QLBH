@@ -15,13 +15,16 @@ class AdminSeeder extends Seeder
             'name' => 'admin'
         ]);
 
-        $user = User::firstOrCreate(
+        $user = User::updateOrCreate(
             [
-                'email' => 'admin@gmail.com'
+                'username' => 'admin'
             ],
             [
                 'name' => 'Administrator',
-                'password' => Hash::make('12345678')
+                'username' => 'admin',
+                'phone' => '0906064789',
+                'email' => 'admin@gmail.com',
+                'password' => Hash::make('111111')
             ]
         );
 
