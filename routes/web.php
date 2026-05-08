@@ -26,4 +26,9 @@ Route::middleware('auth')->group(function () {
     Route::resource('categories', CategoryController::class);
 });
 
+Route::post(
+    'categories/{id}/restore',
+    [CategoryController::class, 'restore']
+)->name('categories.restore');
+
 require __DIR__.'/auth.php';
