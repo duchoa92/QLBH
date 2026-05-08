@@ -10,6 +10,8 @@ class CategoryRepository
     {
         return Category::query()
 
+            ->withTrashed() // Lấy cả dữ liệu đã xóa
+
             ->when(
                 request('search'),
                 function ($query) {

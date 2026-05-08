@@ -181,27 +181,15 @@ watch(search, (value) => {
 
                         <div class="flex gap-2">
 
-                            <a
-                                :href="`/categories/${item.id}/edit`"
-                                class="px-3 py-1 bg-blue-500 text-white rounded"
-                            >
-                                Sửa
-                            </a>
-                            <!-- xÓA -->
-                            <button
-                                @click="destroy(item.id)"
-                                class="px-3 py-1 bg-red-500 text-white rounded"
-                            >
-                                Xóa
-                            </button>
-                            
                             <!-- Khôi phục -->
-                            <button
-                                v-if="item.deleted_at"
-                                @click="restore(item.id)"
-                                class="px-3 py-1 bg-green-500 text-white rounded"
-                            >
+                            <button v-if="item.deleted_at" @click="restore(item.id)" class="px-3 py-1 bg-green-500 text-white rounded">
                                 Khôi phục
+                            </button>
+
+                            <a :href="`/categories/${item.id}/edit`" class="px-3 py-1 bg-blue-500 text-white rounded">Sửa</a>
+                            <!-- Xóa -->
+                            <button @click="destroy(item.id)" class="px-3 py-1 bg-red-500 text-white rounded">
+                                Xóa
                             </button>
 
                         </div>
