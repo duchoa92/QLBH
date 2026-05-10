@@ -2,49 +2,56 @@
 
 namespace App\Services\Base;
 
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use App\Repositories\Base\BaseRepository;
 
 class BaseService
 {
-    protected $repository;
+    protected BaseRepository $repository;
 
-    public function create(array $data)
+    public function __construct(
+        BaseRepository $repository
+    ) {
+        $this->repository = $repository;
+    }
+
+    public function paginate(
+        int $perPage = 10
+    ): LengthAwarePaginator {
+
+        return $this->repository
+            ->paginate($perPage);
+    }
+
+    public function create(array $data): Model
     {
-        if (isset($data['name'])) {
-
-            $data['slug'] =
-                Str::slug($data['name']);
-        }
-
         return $this->repository
             ->create($data);
     }
 
-    public function update(
-        $model,
-        array $data
-    ) {
-
-        if (isset($data['name'])) {
-
-            $data['slug'] =
-                Str::slug($data['name']);
-        }
-
+    public function findById(int $id): Model
+    {
         return $this->repository
-            ->update(
-                $model,
-                $data
-            );
+            ->findById($id);
     }
 
-    public function delete($model)
+    public function update(
+        Model $model,
+        array $data
+    ): Model {
+
+        return $this->repository
+            ->update($model, $data);
+    }
+
+    public function delete(Model $model): bool
     {
         return $this->repository
             ->delete($model);
     }
 
-    public function restore($id)
+    public function restore(int $id): bool
     {
         return $this->repository
             ->restore($id);

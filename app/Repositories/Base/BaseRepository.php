@@ -3,13 +3,21 @@
 namespace App\Repositories\Base;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class BaseRepository
 {
     protected Model $model;
 
-    public function paginate($perPage = 10)
+    public function __construct(Model $model)
     {
+        $this->model = $model;
+    }
+
+    public function paginate(
+        int $perPage = 10
+    ): LengthAwarePaginator {
+
         return $this->model
             ->query()
 
@@ -34,13 +42,13 @@ class BaseRepository
             ->withQueryString();
     }
 
-    public function create(array $data)
+    public function create(array $data): Model
     {
         return $this->model
             ->create($data);
     }
 
-    public function findById($id)
+    public function findById(int $id): Model
     {
         return $this->model
             ->findOrFail($id);
@@ -49,19 +57,19 @@ class BaseRepository
     public function update(
         Model $model,
         array $data
-    ) {
+    ): Model {
 
         $model->update($data);
 
         return $model;
     }
 
-    public function delete(Model $model)
+    public function delete(Model $model): bool
     {
         return $model->delete();
     }
 
-    public function restore($id)
+    public function restore(int $id): bool
     {
         $model = $this->model
             ->withTrashed()

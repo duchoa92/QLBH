@@ -17,6 +17,11 @@ class AdminSeeder extends Seeder
             'categories.create',
             'categories.edit',
             'categories.delete',
+
+            'users.view',
+            'users.create',
+            'users.edit',
+            'users.delete',
         ];
 
         foreach ($permissions as $permission) {

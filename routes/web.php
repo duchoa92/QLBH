@@ -6,11 +6,10 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\UserController;
 
 // Product routes
-Route::middleware([
-    'auth',
-])->group(function () {
+Route::middleware(['auth',])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
@@ -73,6 +72,17 @@ Route::middleware([
     )
         ->middleware('permission:products.edit')
         ->name('products.restore');
+
+
+        // User routes
+    Route::resource(
+       'users', UserController::class
+    )
+        ->middleware([
+        'index' => 'permission:users.view',
+        'create' => 'permission:users.create',
+        'store' => 'permission:users.create',
+        ]);
 });
 
 Route::get('/', function () {
