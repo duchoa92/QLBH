@@ -1,27 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests\User;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 class UpdateUserRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return false;
+        return auth()->user()->can('users.update');
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
+        $userId = $this->route('user')->id;
+
         return [
 
             'name' => [
@@ -36,16 +33,16 @@ class UpdateUserRequest extends FormRequest
                 'max:255',
 
                 Rule::unique('users', 'username')
-                    ->ignore($this->user),
+                    ->ignore($userId),
             ],
 
             'phone' => [
-                'required',
+                'nullable',
                 'string',
                 'max:20',
 
                 Rule::unique('users', 'phone')
-                    ->ignore($this->user),
+                    ->ignore($userId),
             ],
 
             'email' => [
@@ -54,17 +51,18 @@ class UpdateUserRequest extends FormRequest
                 'max:255',
 
                 Rule::unique('users', 'email')
-                    ->ignore($this->user),
+                    ->ignore($userId),
             ],
 
             'password' => [
                 'nullable',
-                'min:6',
+                'confirmed',
+                Password::defaults(),
             ],
 
-            'roles' => [
+            'role' => [
                 'required',
-                'array',
+                'exists:roles,name',
             ],
         ];
     }

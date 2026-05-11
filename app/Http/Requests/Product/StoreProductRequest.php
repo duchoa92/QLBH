@@ -6,36 +6,14 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreProductRequest extends FormRequest
 {
-    /**
-     * Authorize
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Rules
-     */
     public function rules(): array
     {
         return [
-
-            'category_id' => [
-                'nullable',
-                'exists:categories,id',
-            ],
-
-            'brand_id' => [
-                'nullable',
-                'exists:brands,id',
-            ],
-
-            'unit_id' => [
-                'nullable',
-                'exists:units,id',
-            ],
-
             'name' => [
                 'required',
                 'string',
@@ -43,20 +21,14 @@ class StoreProductRequest extends FormRequest
             ],
 
             'sku' => [
-                'required',
+                'nullable',
                 'string',
-                'max:255',
+                'max:100',
                 'unique:products,sku',
             ],
 
-            'barcode' => [
-                'nullable',
-                'string',
-                'unique:products,barcode',
-            ],
-
             'cost_price' => [
-                'required',
+                'nullable',
                 'numeric',
                 'min:0',
             ],
@@ -72,26 +44,6 @@ class StoreProductRequest extends FormRequest
                 'integer',
                 'min:0',
             ],
-
-            'alert_stock' => [
-                'nullable',
-                'integer',
-                'min:0',
-            ],
-
-            'has_imei' => [
-                'boolean',
-            ],
-
-            'is_active' => [
-                'boolean',
-            ],
-
-            'description' => [
-                'nullable',
-                'string',
-            ],
-
         ];
     }
 }

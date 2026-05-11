@@ -2,27 +2,18 @@
 
 namespace App\Http\Requests\Product;
 
-use Illuminate\Validation\Rule;
-
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateProductRequest extends FormRequest
 {
-    /**
-     * Authorize
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Rules
-     */
     public function rules(): array
     {
-        $productId = $this->route('product')->id;
-
         return [
 
             'category_id' => [
@@ -30,52 +21,38 @@ class UpdateProductRequest extends FormRequest
                 'exists:categories,id',
             ],
 
-            'brand_id' => [
-                'nullable',
-                'exists:brands,id',
-            ],
-
-            'unit_id' => [
-                'nullable',
-                'exists:units,id',
-            ],
-
             'name' => [
                 'required',
-                'string',
                 'max:255',
             ],
 
             'sku' => [
-
-                'required',
-
-                'string',
-
-                'max:255',
+                'nullable',
+                'max:100',
 
                 Rule::unique(
                     'products',
                     'sku'
-                )->ignore($productId),
-
+                )->ignore($this->product),
             ],
 
             'barcode' => [
-
                 'nullable',
-
-                'string',
+                'max:100',
 
                 Rule::unique(
                     'products',
                     'barcode'
-                )->ignore($productId),
+                )->ignore($this->product),
+            ],
 
+            'imei' => [
+                'nullable',
+                'max:100',
             ],
 
             'cost_price' => [
-                'required',
+                'nullable',
                 'numeric',
                 'min:0',
             ],
@@ -92,25 +69,13 @@ class UpdateProductRequest extends FormRequest
                 'min:0',
             ],
 
-            'alert_stock' => [
+            'description' => [
                 'nullable',
-                'integer',
-                'min:0',
-            ],
-
-            'has_imei' => [
-                'boolean',
             ],
 
             'is_active' => [
                 'boolean',
             ],
-
-            'description' => [
-                'nullable',
-                'string',
-            ],
-
         ];
     }
 }

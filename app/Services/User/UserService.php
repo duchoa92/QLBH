@@ -5,8 +5,7 @@ namespace App\Services\User;
 use App\Models\User;
 use App\Services\Base\BaseService;
 use App\Repositories\User\UserRepository;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Eloquent\Model;
 
 class UserService extends BaseService
 {
@@ -16,14 +15,25 @@ class UserService extends BaseService
         parent::__construct($repository);
     }
 
-    public function update(
-        $model,
-        array $data
-    ): User {
+    public function update(Model $model, array $data): Model 
+    {
 
-        $model->update($data);
+        if (! empty($data['password'])) {
+
+            $data['password'] = bcrypt($data['password']);
+
+        } else {
+
+            unset($data['password']);
+        }
+
+        $model = $this->repository->update(
+            $model,
+            $data
+        );
 
         if (isset($data['roles'])) {
+
             $model->syncRoles($data['roles']);
         }
 

@@ -16,6 +16,7 @@ class BaseService
         $this->repository = $repository;
     }
 
+    // Phân trang
     public function paginate(
         int $perPage = 10
     ): LengthAwarePaginator {
@@ -24,18 +25,21 @@ class BaseService
             ->paginate($perPage);
     }
 
+    // Tạo mới sản phẩm
     public function create(array $data): Model
     {
         return $this->repository
             ->create($data);
     }
 
+    // Tìm sản phẩm theo ID
     public function findById(int $id): Model
     {
         return $this->repository
             ->findById($id);
     }
 
+    // Cập nhập sản phẩm
     public function update(
         Model $model,
         array $data
@@ -45,12 +49,14 @@ class BaseService
             ->update($model, $data);
     }
 
+    // Xóa sản phẩm
     public function delete(Model $model): bool
     {
         return $this->repository
             ->delete($model);
     }
 
+    // Khôi phục sản phẩm
     public function restore(int $id): bool
     {
         return $this->repository

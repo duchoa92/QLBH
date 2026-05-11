@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
@@ -41,13 +42,21 @@ class Product extends Model
 
     ];
 
+    
+     protected $casts = [
+        'cost_price' => 'decimal:2',
+        'sale_price' => 'decimal:2',
+        'is_active' => 'boolean',
+    ];
+
+
     /*
     |--------------------------------------------------------------------------
     | Relations
     |--------------------------------------------------------------------------
     */
 
-    public function category()
+     public function category(): BelongsTo
     {
         return $this->belongsTo(
             Category::class

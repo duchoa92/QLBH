@@ -2,195 +2,100 @@
 
 namespace App\Http\Controllers;
 
-use Inertia\Inertia;
-
-use App\Models\Brand;
-use App\Models\Product;
-use App\Models\Category;
-use App\Models\Unit;
-
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-
-use Inertia\Response;
-
-use App\Services\Product\ProductService;
-
 use App\Http\Requests\Product\StoreProductRequest;
 use App\Http\Requests\Product\UpdateProductRequest;
+use App\Models\Category;
+use App\Models\Product;
+use App\Services\Product\ProductService;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ProductController extends Controller
 {
-    protected ProductService $service;
+    public function __construct(
+        protected ProductService $service
+    ) {}
 
-    public function __construct(ProductService $service)
+    public function index(): Response
     {
-        $this->service = $service;
-    }
-
-    /**
-     * Danh sách
-     */
-    public function index(Request $request): Response
-    {
-        $products = Product::query()
-
-            ->with([
-                'category',
-                'brand',
-                'unit',
-            ])
-
-            ->when(
-                $request->search,
-                function ($query) use ($request) {
-
-                    $query->where(
-                        'name',
-                        'like',
-                        '%' . $request->search . '%'
-                    )
-
-                    ->orWhere(
-                        'sku',
-                        'like',
-                        '%' . $request->search . '%'
-                    )
-
-                    ->orWhere(
-                        'barcode',
-                        'like',
-                        '%' . $request->search . '%'
-                    );
-                }
-            )
-
-            ->latest()
-
-            ->paginate(10)
-
-            ->withQueryString();
-
         return Inertia::render(
             'Products/Index',
             [
-
-                'products' => $products,
-
-                'filters' => [
-                    'search' => $request->search,
-                ],
-
+                'products' => $this->service->paginate(),
             ]
         );
     }
 
-    /**
-     * Form tạo
-     */
+    // Show the form for creating a new product
     public function create(): Response
     {
         return Inertia::render(
             'Products/Create',
             [
-
                 'categories' => Category::query()
-                    ->where('is_active', true)
+                    ->select('id', 'name')
                     ->get(),
-
-                'brands' => Brand::query()
-                    ->where('is_active', true)
-                    ->get(),
-
-                'units' => Unit::query()
-                    ->where('is_active', true)
-                    ->get(),
-
             ]
         );
     }
 
-    /**
-     * Lưu
-     */
+    // Show the form for editing a product
+    public function edit(
+        Product $product
+    ): Response {
+
+        return Inertia::render(
+            'Products/Edit',
+            [
+                'product' => $product,
+
+                'categories' => Category::query()
+                    ->select('id', 'name')
+                    ->get(),
+            ]
+        );
+    }
+
+    // Store a new product
     public function store(
         StoreProductRequest $request
     ): RedirectResponse {
 
-        $data = $request->validated();
-
-        $data['slug'] = Str::slug(
-            $data['name']
+        $this->service->create(
+            $request->validated()
         );
-
-        $this->service->create($data);
 
         return redirect()
             ->route('products.index')
             ->with(
                 'success',
-                'Tạo sản phẩm thành công'
+                'Thêm sản phẩm thành công'
             );
     }
 
-    /**
-     * Form sửa
-     */
-    public function edit(Product $product): Response
-    {
-        return Inertia::render(
-            'Products/Edit',
-            [
-
-                'product' => $product,
-
-                'categories' => Category::query()
-                    ->where('is_active', true)
-                    ->get(),
-
-                'brands' => Brand::query()
-                    ->where('is_active', true)
-                    ->get(),
-
-                'units' => Unit::query()
-                    ->where('is_active', true)
-                    ->get(),
-
-            ]
-        );
-    }
-
-    /**
-     * Update
-     */
+    // Cập nhập sản phẩm
     public function update(
         UpdateProductRequest $request,
         Product $product
     ): RedirectResponse {
 
-        $data = $request->validated();
-
-        $data['slug'] = Str::slug(
-            $data['name']
-        );
-
         $this->service->update(
             $product,
-            $data
+            $request->validated()
         );
 
         return redirect()
             ->route('products.index')
             ->with(
                 'success',
-                'Cập nhật thành công'
+                'Cập nhật sản phẩm thành công'
             );
     }
 
-    /**
-     * Xóa mềm
-     */
+
+
+   //
     public function destroy(
         Product $product
     ): RedirectResponse {
@@ -205,30 +110,26 @@ class ProductController extends Controller
             );
     }
 
-    /**
-     * Thùng rác
-     */
+    // Hiển thị sản phẩm đã xóa
     public function trash(): Response
     {
-        $products = Product::onlyTrashed()
-
-            ->latest()
-
-            ->paginate(10);
-
         return Inertia::render(
             'Products/Trash',
             [
-                'products' => $products,
+                'products' => Product::query()
+                    ->onlyTrashed()
+                    ->latest()
+                    ->paginate(10)
+                    ->withQueryString(),
             ]
         );
     }
 
-    /**
-     * Khôi phục
-     */
-    public function restore($id): RedirectResponse
-    {
+    // Khôi phục sản phẩm
+    public function restore(
+        int $id
+    ): RedirectResponse {
+
         $this->service->restore($id);
 
         return redirect()
