@@ -33,12 +33,11 @@ class ProductRepository extends BaseRepository
 
         return $this->model
             ->query()
-
+            //->with('category')
             ->with([
                 'category:id,name',
             ])
 
-            ->withTrashed()
 
             ->when(
                 request('search'),

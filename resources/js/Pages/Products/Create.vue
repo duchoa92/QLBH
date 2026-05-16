@@ -1,17 +1,25 @@
 <script setup>
 import { useForm, Link } from '@inertiajs/vue3';
 
+// khởi tạo form với các trường cần thiết
 const form = useForm({
+    category_id: '',
     name: '',
     sku: '',
-    sell_price: '',
     cost_price: '',
-    stock: '',
+    sell_price: '',
+    stock: 0,
 });
 
+// gửi dữ liệu form đến route products.store
 const submit = () => {
     form.post(route('products.store'));
 };
+// nhận dữ liệu categories từ controller
+const props = defineProps({
+    categories: Array,
+});
+
 </script>
 
 <template>
@@ -33,6 +41,32 @@ const submit = () => {
             @submit.prevent="submit"
             class="space-y-4"
         >
+        
+// chọn danh mục cho sản phẩm
+            <div>
+                <label class="block mb-1">
+                    Danh mục
+                </label>
+
+                <select
+                    v-model="form.category_id"
+                    class="w-full border rounded p-2"
+                >
+                    <option value="">
+                        -- Chọn danh mục --
+                    </option>
+
+                    <option
+                        v-for="category in categories"
+                        :key="category.id"
+                        :value="category.id"
+                    >
+                        {{ category.name }}
+                    </option>
+                </select>
+            </div>
+
+
             <div>
                 <label class="block mb-1">
                     Tên sản phẩm

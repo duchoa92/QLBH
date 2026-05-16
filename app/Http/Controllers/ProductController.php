@@ -27,7 +27,7 @@ class ProductController extends Controller
         );
     }
 
-    // Show the form for creating a new product
+    // hiển thị form tạo sản phẩm
     public function create(): Response
     {
         return Inertia::render(
@@ -35,29 +35,31 @@ class ProductController extends Controller
             [
                 'categories' => Category::query()
                     ->select('id', 'name')
+                    ->where('is_active', true)
+                    ->orderBy('name')
                     ->get(),
             ]
         );
     }
 
-    // Show the form for editing a product
-    public function edit(
-        Product $product
-    ): Response {
+    // Hiển thị form chỉnh sửa sản phẩm
+    public function edit(Product $product): Response 
+    {
+            return Inertia::render(
+                'Products/Edit',
+                [
+                    'product' => $product,
 
-        return Inertia::render(
-            'Products/Edit',
-            [
-                'product' => $product,
+                    'categories' => Category::query()
+                        ->select('id', 'name')
+                        ->where('is_active', true)
+                        ->orderBy('name')
+                        ->get(),
+                ]
+            );
+        }
 
-                'categories' => Category::query()
-                    ->select('id', 'name')
-                    ->get(),
-            ]
-        );
-    }
-
-    // Store a new product
+    // Lưu sản phẩm mới
     public function store(
         StoreProductRequest $request
     ): RedirectResponse {
@@ -95,7 +97,7 @@ class ProductController extends Controller
 
 
 
-   //
+   // Xóa sản phẩm
     public function destroy(
         Product $product
     ): RedirectResponse {

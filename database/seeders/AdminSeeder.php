@@ -52,7 +52,7 @@ class AdminSeeder extends Seeder
                 'name' => 'Administrator',
                 'phone' => '0906064789',
                 'email' => 'admin@gmail.com',
-                'password' => bcrypt('12345678'),
+                'password' => bcrypt('111111'),
             ]
         );
 
