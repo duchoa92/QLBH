@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\PosController;
 
 /*
 |--------------------------------------------------------------------------
@@ -102,10 +103,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('categories.restore');
 
     /*
-|--------------------------------------------------------------------------
-| Products
-|--------------------------------------------------------------------------
-*/
+    |--------------------------------------------------------------------------
+    | Products
+    |--------------------------------------------------------------------------
+    */
 
     Route::get(
         '/products',
@@ -162,6 +163,14 @@ Route::middleware(['auth'])->group(function () {
     )
         ->middleware('permission:products.edit')
         ->name('products.restore');
+
+    Route::get(
+        '/products/{product}',
+        [ProductController::class, 'show']
+    )
+        ->middleware('permission:products.view')
+        ->name('products.show');
+
     /*
     |--------------------------------------------------------------------------
     | Users
@@ -206,6 +215,22 @@ Route::middleware(['auth'])->group(function () {
         '/brands/{id}/restore',
         [BrandController::class, 'restore']
     )->name('brands.restore');
+
+
+    // Hiển thịPOS
+    Route::get(
+        '/pos',
+        [PosController::class, 'index']
+    )
+        ->middleware('permission:pos.access')
+        ->name('pos.index');
+
+    Route::post(
+        '/pos/scan-imei',
+        [PosController::class, 'scanImei']
+    )
+        ->middleware('permission:pos.access')
+        ->name('pos.scan-imei');
 
 
 

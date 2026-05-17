@@ -28,6 +28,25 @@ class ProductController extends Controller
         );
     }
 
+    // Hiển thị chi tiết sản phẩm
+    public function show(
+        Product $product
+    ): Response {
+
+        $product->load([
+            'category',
+            'brand',
+            'imeis',
+        ]);
+
+        return Inertia::render(
+            'Products/Show',
+            [
+                'product' => $product,
+            ]
+        );
+    }
+
     // hiển thị form tạo sản phẩm
     public function create(): Response
     {

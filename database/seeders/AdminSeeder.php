@@ -57,6 +57,6 @@ class AdminSeeder extends Seeder
         );
 
         // Gán role admin
-        $user->assignRole($adminRole);
+        $user->assignRole('Super Admin');
     }
 }

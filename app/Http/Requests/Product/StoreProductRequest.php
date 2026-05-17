@@ -60,6 +60,11 @@ class StoreProductRequest extends FormRequest
                 'image',
                 'max:2048',
             ],
+
+            'imeis' => [
+                'nullable',
+                'string',
+            ],
         ];
     }
 }

@@ -84,7 +84,7 @@ const destroy = (id) => {
                     <td class="border p-2">
                         {{ product.name }}
                     </td>
-                    
+
                     <td class="px-4 py-3">
                         <img
                             v-if="product.image_url"
@@ -113,6 +113,17 @@ const destroy = (id) => {
                         {{ product.stock }}
                     </td>
                     <td class="border p-2">
+                        <Link
+                            :href="
+                                route(
+                                    'products.show',
+                                    product.id
+                                )
+                            "
+                            class="text-green-600 mr-3"
+                        >
+                            Xem
+                        </Link>
                         <Link
                             :href="
                                 route(

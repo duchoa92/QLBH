@@ -28,6 +28,8 @@ const form = useForm({
 
     stock: 0,
 
+    imeis: '',
+
     image: null,
 });
 
@@ -149,6 +151,28 @@ const submit = () => {
                     type="text"
                     class="w-full border rounded p-2"
                 >
+            </div>
+
+            <div>
+                <label class="block mb-1">
+                    Danh sách IMEI
+                </label>
+
+                <textarea
+                    v-model="form.imeis"
+                    rows="6"
+                    class="w-full border rounded p-2"
+                    placeholder="Mỗi dòng 1 IMEI"
+                />
+
+                <p class="text-sm text-gray-500 mt-1">
+                    Ví dụ:
+                    <br>
+                    356789111111111
+                    <br>
+                    356789222222222
+                </p>
+
             </div>
 
             <div>
