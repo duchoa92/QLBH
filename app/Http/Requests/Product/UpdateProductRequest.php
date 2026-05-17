@@ -21,6 +21,11 @@ class UpdateProductRequest extends FormRequest
                 'exists:categories,id',
             ],
 
+            'brand_id' => [
+                'nullable',
+                'exists:brands,id',
+            ],
+
             'name' => [
                 'required',
                 'max:255',
@@ -75,6 +80,12 @@ class UpdateProductRequest extends FormRequest
 
             'is_active' => [
                 'boolean',
+            ],
+
+            'image' => [
+                'nullable',
+                'image',
+                'max:2048',
             ],
         ];
     }

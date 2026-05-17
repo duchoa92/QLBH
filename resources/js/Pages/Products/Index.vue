@@ -51,8 +51,14 @@ const destroy = (id) => {
                     <th class="border p-2 text-left">
                         Tên sản phẩm
                     </th>
+                    <th class="px-4 py-3 text-left">
+                        Ảnh
+                    </th>
                     <th class="border p-2">
                         Danh mục
+                    </th>
+                    <th class="border p-2">
+                        Thương hiệu
                     </th>
                     <th class="border p-2 text-left">
                         Giá bán
@@ -78,8 +84,27 @@ const destroy = (id) => {
                     <td class="border p-2">
                         {{ product.name }}
                     </td>
+                    
+                    <td class="px-4 py-3">
+                        <img
+                            v-if="product.image_url"
+                            :src="product.image_url"
+                            class="w-16 h-16 object-cover rounded border"
+                        >
+
+                        <div
+                            v-else
+                            class="text-gray-400"
+                        >
+                            No image
+                        </div>
+
+                    </td>
                     <td class="border p-2">
                         {{ product.category?.name }}
+                    </td>
+                    <td class="border p-2">
+                        {{ product.brand?.name || '-' }}
                     </td>
                     <td class="border p-2">
                         {{ product.sell_price }}

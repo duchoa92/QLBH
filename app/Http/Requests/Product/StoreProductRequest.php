@@ -44,6 +44,22 @@ class StoreProductRequest extends FormRequest
                 'integer',
                 'min:0',
             ],
+
+            'category_id' => [
+                'nullable',
+                'exists:categories,id',
+            ],
+
+            'brand_id' => [
+                'nullable',
+                'exists:brands,id',
+            ],
+
+            'image' => [
+                'nullable',
+                'image',
+                'max:2048',
+            ],
         ];
     }
 }

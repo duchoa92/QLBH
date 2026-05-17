@@ -1,24 +1,42 @@
 <script setup>
-import { useForm, Link } from '@inertiajs/vue3';
 
-// khởi tạo form với các trường cần thiết
-const form = useForm({
-    category_id: '',
-    name: '',
-    sku: '',
-    cost_price: '',
-    sell_price: '',
-    stock: 0,
-});
+import {
+    useForm,
+    Link
+} from '@inertiajs/vue3';
 
-// gửi dữ liệu form đến route products.store
-const submit = () => {
-    form.post(route('products.store'));
-};
-// nhận dữ liệu categories từ controller
 const props = defineProps({
+
     categories: Array,
+
+    brands: Array,
 });
+
+const form = useForm({
+
+    category_id: '',
+
+    brand_id: '',
+
+    name: '',
+
+    sku: '',
+
+    cost_price: '',
+
+    sell_price: '',
+
+    stock: 0,
+
+    image: null,
+});
+
+const submit = () => {
+
+    form.post(
+        route('products.store')
+    );
+};
 
 </script>
 
@@ -44,6 +62,31 @@ const props = defineProps({
 
             <div>
                 <label class="block mb-1">
+                    Tên sản phẩm
+                </label>
+
+                <input
+                    v-model="form.name"
+                    type="text"
+                    class="w-full border rounded p-2"
+                >
+            </div>
+            <div>
+                <label class="block mb-1">
+                    Ảnh sản phẩm
+                </label>
+
+                <input
+                    type="file"
+                    @input="form.image = $event.target.files[0]"
+                    class="w-full border rounded p-2"
+                >
+
+            </div>
+
+            <!-- chọn danh mục -->
+            <div>
+                <label class="block mb-1">
                     Danh mục
                 </label>
 
@@ -52,7 +95,7 @@ const props = defineProps({
                     class="w-full border rounded p-2"
                 >
                     <option value="">
-                        -- Chọn danh mục --
+                        Chọn danh mục
                     </option>
 
                     <option
@@ -64,25 +107,36 @@ const props = defineProps({
                     </option>
                 </select>
             </div>
-
-
+            <!-- chọn thương hiệu từ danh sách brands -->
             <div>
                 <label class="block mb-1">
-                    Tên sản phẩm
+                    Thương hiệu
                 </label>
 
-                <input
-                    v-model="form.name"
-                    type="text"
+                <select
+                    v-model="form.brand_id"
                     class="w-full border rounded p-2"
                 >
+                    <option value="">
+                        Chọn thương hiệu
+                    </option>
 
-                <div
-                    v-if="form.errors.name"
-                    class="text-red-500 text-sm mt-1"
-                >
-                    {{ form.errors.name }}
-                </div>
+                    <option
+                        v-for="brand in brands"
+                        :key="brand.id"
+                        :value="brand.id"
+                    >
+                        {{ brand.name }}
+                    </option>
+                </select>
+            </div>
+
+
+            <div
+                v-if="form.errors.name"
+                class="text-red-500 text-sm mt-1"
+            >
+                {{ form.errors.name }}
             </div>
 
             <div>

@@ -4,20 +4,26 @@ import { Link, useForm } from '@inertiajs/vue3';
 const props = defineProps({
     product: Object,
     categories: Array,
+    brands: Array,
 });
+const { product } = props;
+
 // khởi tạo form với dữ liệu sản phẩm hiện tại
 const form = useForm({
+    _method: 'put',
     category_id: props.product.category_id,
+    brand_id: props.product.brand_id,
     name: props.product.name,
     sku: props.product.sku,
     cost_price: props.product.cost_price,
     sell_price: props.product.sell_price,
     stock: props.product.stock,
+    image: null,
 
 });
 // gửi dữ liệu form đến route products.update
 const submit = () => {
-    form.put(
+    form.post(
         route(
             'products.update',
             props.product.id
@@ -47,6 +53,39 @@ const submit = () => {
         >
             <div>
                 <label class="block mb-1">
+                    Tên sản phẩm
+                </label>
+
+                <input
+                    v-model="form.name"
+                    type="text"
+                    class="w-full border rounded p-2"
+                >
+            </div>
+
+             <div>
+                <label class="block mb-1">
+                    Ảnh sản phẩm
+                </label>
+                <div v-if="product.image_url">
+                    <label class="block mb-2">
+                        Ảnh hiện tại
+                    </label>
+
+                    <img
+                        :src="product.image_url"
+                        class="w-32 h-32 object-cover rounded border"
+                    >
+                </div>
+                <input
+                    type="file"
+                    @input="form.image = $event.target.files[0]"
+                    class="w-full border rounded p-2"
+                >
+
+            </div>
+            <div>
+                <label class="block mb-1">
                     Danh mục
                 </label>
 
@@ -68,18 +107,31 @@ const submit = () => {
                 </select>
             </div>
 
+            <!-- chọn thương hiệu -->
             <div>
                 <label class="block mb-1">
-                    Tên sản phẩm
+                    Thương hiệu
                 </label>
 
-                <input
-                    v-model="form.name"
-                    type="text"
+                <select
+                    v-model="form.brand_id"
                     class="w-full border rounded p-2"
                 >
+                    <option value="">
+                        -- Chọn thương hiệu --
+                    </option>
+
+                    <option
+                        v-for="brand in brands"
+                        :key="brand.id"
+                        :value="brand.id"
+                    >
+                        {{ brand.name }}
+                    </option>
+                </select>
             </div>
 
+            
             <div>
                 <label class="block mb-1">
                     Mã sản phẩm

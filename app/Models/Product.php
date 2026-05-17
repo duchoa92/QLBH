@@ -13,31 +13,19 @@ class Product extends Model
     protected $fillable = [
 
         'category_id',
-
         'brand_id',
-
         'unit_id',
-
         'name',
-
         'slug',
-
         'sku',
-
         'barcode',
-
+        'image',
         'cost_price',
-
         'sell_price',
-
         'stock',
-
         'alert_stock',
-
         'has_imei',
-
         'is_active',
-
         'description',
 
     ];
@@ -81,6 +69,22 @@ class Product extends Model
     {
         return $this->hasMany(
             ProductImei::class
+        );
+    }
+
+    // Accessors image_url
+    protected $appends = [
+        'image_url',
+    ];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if (!$this->image) {
+            return null;
+        }
+
+        return asset(
+            'storage/' . $this->image
         );
     }
 }

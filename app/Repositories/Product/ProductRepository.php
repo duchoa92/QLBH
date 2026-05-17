@@ -35,6 +35,7 @@ class ProductRepository extends BaseRepository
             ->query()
             ->with([
                 'category:id,name',
+                'brand:id,name',
             ])
 
 

@@ -6,6 +6,7 @@ use App\Repositories\Product\ProductRepository;
 use App\Services\Base\BaseService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class ProductService extends BaseService
 {
@@ -24,6 +25,14 @@ class ProductService extends BaseService
             $data['name']
         );
 
+        if (isset($data['image'])) {
+            $data['image'] = $data['image']
+                ->store(
+                    'products',
+                    'public'
+                );
+        }
+
         return $this->repository->create($data);
     }
 
@@ -36,6 +45,21 @@ class ProductService extends BaseService
         $data['slug'] = Str::slug(
             $data['name']
         );
+
+
+        if (isset($data['image'])) {
+            // xóa ảnh cũ nếu có
+            if ($model->image) {
+                Storage::disk('public')
+                    ->delete($model->image);
+            }
+
+            $data['image'] = $data['image']
+                ->store(
+                    'products',
+                    'public'
+                );
+        }
 
         return $this->repository->update(
             $model,

@@ -10,6 +10,7 @@ use App\Services\Product\ProductService;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Models\Brand;
 
 class ProductController extends Controller
 {
@@ -33,9 +34,20 @@ class ProductController extends Controller
         return Inertia::render(
             'Products/Create',
             [
+
+                'brands' => Brand::query()
+                    ->select(
+                        'id',
+                        'name'
+                    )
+                    ->orderBy('name')
+                    ->get(),
+
                 'categories' => Category::query()
-                    ->select('id', 'name')
-                    ->where('is_active', true)
+                    ->select(
+                        'id',
+                        'name'
+                    )
                     ->orderBy('name')
                     ->get(),
             ]
@@ -43,21 +55,34 @@ class ProductController extends Controller
     }
 
     // Hiển thị form chỉnh sửa sản phẩm
-    public function edit(Product $product): Response 
-    {
-            return Inertia::render(
-                'Products/Edit',
-                [
-                    'product' => $product,
+    public function edit(
+        Product $product
+    ): Response {
 
-                    'categories' => Category::query()
-                        ->select('id', 'name')
-                        ->where('is_active', true)
-                        ->orderBy('name')
-                        ->get(),
-                ]
-            );
-        }
+        return Inertia::render(
+            'Products/Edit',
+            [
+
+                'product' => $product,
+
+                'brands' => Brand::query()
+                    ->select(
+                        'id',
+                        'name'
+                    )
+                    ->orderBy('name')
+                    ->get(),
+
+                'categories' => Category::query()
+                    ->select(
+                        'id',
+                        'name'
+                    )
+                    ->orderBy('name')
+                    ->get(),
+            ]
+        );
+    }
 
     // Lưu sản phẩm mới
     public function store(
