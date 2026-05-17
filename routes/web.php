@@ -7,6 +7,7 @@ use App\Http\Controllers\UserController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\BrandController;
 
 /*
 |--------------------------------------------------------------------------
@@ -106,61 +107,61 @@ Route::middleware(['auth'])->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::get(
-    '/products',
-    [ProductController::class, 'index']
-)
-    ->middleware('permission:products.view')
-    ->name('products.index');
+    Route::get(
+        '/products',
+        [ProductController::class, 'index']
+    )
+        ->middleware('permission:products.view')
+        ->name('products.index');
 
-Route::get(
-    '/products/create',
-    [ProductController::class, 'create']
-)
-    ->middleware('permission:products.create')
-    ->name('products.create');
+    Route::get(
+        '/products/create',
+        [ProductController::class, 'create']
+    )
+        ->middleware('permission:products.create')
+        ->name('products.create');
 
-Route::post(
-    '/products',
-    [ProductController::class, 'store']
-)
-    ->middleware('permission:products.create')
-    ->name('products.store');
+    Route::post(
+        '/products',
+        [ProductController::class, 'store']
+    )
+        ->middleware('permission:products.create')
+        ->name('products.store');
 
-Route::get(
-    '/products/{product}/edit',
-    [ProductController::class, 'edit']
-)
-    ->middleware('permission:products.edit')
-    ->name('products.edit');
+    Route::get(
+        '/products/{product}/edit',
+        [ProductController::class, 'edit']
+    )
+        ->middleware('permission:products.edit')
+        ->name('products.edit');
 
-Route::put(
-    '/products/{product}',
-    [ProductController::class, 'update']
-)
-    ->middleware('permission:products.edit')
-    ->name('products.update');
+    Route::put(
+        '/products/{product}',
+        [ProductController::class, 'update']
+    )
+        ->middleware('permission:products.edit')
+        ->name('products.update');
 
-Route::delete(
-    '/products/{product}',
-    [ProductController::class, 'destroy']
-)
-    ->middleware('permission:products.delete')
-    ->name('products.destroy');
+    Route::delete(
+        '/products/{product}',
+        [ProductController::class, 'destroy']
+    )
+        ->middleware('permission:products.delete')
+        ->name('products.destroy');
 
-Route::get(
-    '/products-trash',
-    [ProductController::class, 'trash']
-)
-    ->middleware('permission:products.view')
-    ->name('products.trash');
+    Route::get(
+        '/products-trash',
+        [ProductController::class, 'trash']
+    )
+        ->middleware('permission:products.view')
+        ->name('products.trash');
 
-Route::post(
-    '/products/{id}/restore',
-    [ProductController::class, 'restore']
-)
-    ->middleware('permission:products.edit')
-    ->name('products.restore');
+    Route::post(
+        '/products/{id}/restore',
+        [ProductController::class, 'restore']
+    )
+        ->middleware('permission:products.edit')
+        ->name('products.restore');
     /*
     |--------------------------------------------------------------------------
     | Users
@@ -178,6 +179,36 @@ Route::post(
         'update' => 'permission:users.edit',
         'destroy' => 'permission:users.delete',
     ]);
+
+
+    /*|--------------------------------------------------------------------------
+    | Brands
+    |--------------------------------------------------------------------------
+    */
+    Route::resource(
+        'brands',
+        BrandController::class
+    );
+
+    Route::post(
+        'brands/{id}/restore',
+        [BrandController::class, 'restore']
+    )->name('brands.restore');
+
+
+    // Hiển thị thương hiệu đã xóa
+    Route::get(
+        '/brands-trash',
+        [BrandController::class, 'trash']
+    )->name('brands.trash');
+
+    Route::post(
+        '/brands/{id}/restore',
+        [BrandController::class, 'restore']
+    )->name('brands.restore');
+
+
+
 });
 
 require __DIR__ . '/auth.php';

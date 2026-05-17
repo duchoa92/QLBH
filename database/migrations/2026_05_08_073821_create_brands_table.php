@@ -6,12 +6,11 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('brands', function (Blueprint $table) {
+        Schema::create('brands', function (
+            Blueprint $table
+        ) {
 
             $table->id();
 
@@ -19,6 +18,9 @@ return new class extends Migration
 
             $table->string('slug')
                 ->unique();
+
+            $table->integer('sort_order')
+                ->default(0);
 
             $table->boolean('is_active')
                 ->default(true);
@@ -29,9 +31,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('brands');

@@ -58,6 +58,9 @@ const destroy = (id) => {
                         Giá bán
                     </th>
                     <th class="border p-2 text-left">
+                        Tồn kho
+                    </th>
+                    <th class="border p-2 text-left">
                         Thao tác
                     </th>
                 </tr>
@@ -80,6 +83,9 @@ const destroy = (id) => {
                     </td>
                     <td class="border p-2">
                         {{ product.sell_price }}
+                    </td>
+                    <td class="border p-2">
+                        {{ product.stock }}
                     </td>
                     <td class="border p-2">
                         <Link

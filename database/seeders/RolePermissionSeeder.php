@@ -53,6 +53,16 @@ class RolePermissionSeeder extends Seeder
             'products.edit',
             'products.delete',
 
+            /*
+            |--------------------------------------------------------------------------
+            | Brands
+            |--------------------------------------------------------------------------
+            */
+            'brands.view',
+            'brands.create',
+            'brands.edit',
+            'brands.delete',
+
         ];
 
         /*

@@ -15,6 +15,8 @@ class Brand extends Model
 
         'slug',
 
+        'sort_order',
+
         'is_active',
 
     ];

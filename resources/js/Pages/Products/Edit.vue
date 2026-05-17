@@ -45,7 +45,6 @@ const submit = () => {
             @submit.prevent="submit"
             class="space-y-4"
         >
-// chọn danh mục cho sản phẩm
             <div>
                 <label class="block mb-1">
                     Danh mục
