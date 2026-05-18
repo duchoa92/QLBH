@@ -11,6 +11,7 @@ use App\Http\Controllers\BrandController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\RepairController;
 
 /*
 |--------------------------------------------------------------------------
@@ -137,35 +138,35 @@ Route::middleware(['auth'])->group(function () {
     )
         ->middleware('permission:products.edit')
         ->name('products.edit');
-
+    // Cập nhật sản phẩm
     Route::put(
         '/products/{product}',
         [ProductController::class, 'update']
     )
         ->middleware('permission:products.edit')
         ->name('products.update');
-
+    // Xóa sản phẩm
     Route::delete(
         '/products/{product}',
         [ProductController::class, 'destroy']
     )
         ->middleware('permission:products.delete')
         ->name('products.destroy');
-
+    // Hiển thị sản phẩm đã xóa
     Route::get(
         '/products-trash',
         [ProductController::class, 'trash']
     )
         ->middleware('permission:products.view')
         ->name('products.trash');
-
+    // Khôi phục sản phẩm
     Route::post(
         '/products/{id}/restore',
         [ProductController::class, 'restore']
     )
         ->middleware('permission:products.edit')
         ->name('products.restore');
-
+    // Hiển thị chi tiết sản phẩm
     Route::get(
         '/products/{product}',
         [ProductController::class, 'show']
@@ -315,6 +316,12 @@ Route::middleware(['auth'])->group(function () {
                 'show'
             )->name('show');
         });
+
+    // sửa chữa Routes
+    Route::resource(
+        'repairs',
+        RepairController::class
+    );
 
 
 });
