@@ -10,6 +10,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductImeiController;
+use App\Http\Controllers\SaleController;
 
 /*
 |--------------------------------------------------------------------------
@@ -272,28 +273,48 @@ Route::middleware(['auth'])->group(function () {
                 '/sales/{sale}',
                 'showSale'
             )->name('sale.show');
-            
+
         });
 
     // Sản phẩm IMEI Routes
     Route::prefix('product-imeis')
 
-    ->name('product-imeis.')
+        ->name('product-imeis.')
 
-    ->controller(ProductImeiController::class)
+        ->controller(ProductImeiController::class)
 
-    ->group(function () {
+        ->group(function () {
 
-        Route::get(
-            '/{product}',
-            'index'
-        )->name('index');
+            Route::get(
+                '/{product}',
+                'index'
+            )->name('index');
 
-        Route::post(
-            '/{product}',
-            'store'
-        )->name('store');
-    });
+            Route::post(
+                '/{product}',
+                'store'
+            )->name('store');
+        });
+
+    // Sales Routes
+    Route::prefix('sales')
+
+        ->name('sales.')
+
+        ->controller(SaleController::class)
+
+        ->group(function () {
+
+            Route::get(
+                '/',
+                'index'
+            )->name('index');
+
+            Route::get(
+                '/{sale}',
+                'show'
+            )->name('show');
+        });
 
 
 });
