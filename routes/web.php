@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\PosController;
+use App\Http\Controllers\ProductImeiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -266,7 +267,33 @@ Route::middleware(['auth'])->group(function () {
                 '/checkout',
                 'checkout'
             )->name('checkout');
+
+            Route::get(
+                '/sales/{sale}',
+                'showSale'
+            )->name('sale.show');
+            
         });
+
+    // Sản phẩm IMEI Routes
+    Route::prefix('product-imeis')
+
+    ->name('product-imeis.')
+
+    ->controller(ProductImeiController::class)
+
+    ->group(function () {
+
+        Route::get(
+            '/{product}',
+            'index'
+        )->name('index');
+
+        Route::post(
+            '/{product}',
+            'store'
+        )->name('store');
+    });
 
 
 });

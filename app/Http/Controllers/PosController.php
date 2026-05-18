@@ -79,7 +79,7 @@ class PosController extends Controller
         ]);
     }
 
-
+ // Thanh toán
     public function checkout(
         Request $request
     ) {
@@ -200,6 +200,26 @@ class PosController extends Controller
                     $e->getMessage(),
             ], 500);
         }
+    }
+
+    // Xem hóa đơn bán hàng
+    public function showSale(
+        Sale $sale
+    ): Response {
+
+        $sale->load([
+
+            'items.product',
+        ]);
+
+        return Inertia::render(
+
+            'Pos/SaleInvoice',
+
+            [
+                'sale' => $sale,
+            ]
+        );
     }
 
 }

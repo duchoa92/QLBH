@@ -116,6 +116,17 @@ const destroy = (id) => {
                         <Link
                             :href="
                                 route(
+                                    'product-imeis.index',
+                                    product.id
+                                )
+                            "
+                            class="text-green-600"
+                        >
+                            IMEI
+                        </Link>
+                        <Link
+                            :href="
+                                route(
                                     'products.show',
                                     product.id
                                 )
