@@ -199,6 +199,7 @@ Route::middleware(['auth'])->group(function () {
         BrandController::class
     );
 
+    // Hiển thị thương hiệu đã xóa
     Route::post(
         'brands/{id}/restore',
         [BrandController::class, 'restore']
@@ -211,6 +212,7 @@ Route::middleware(['auth'])->group(function () {
         [BrandController::class, 'trash']
     )->name('brands.trash');
 
+    // Khôi phục thương hiệu
     Route::post(
         '/brands/{id}/restore',
         [BrandController::class, 'restore']
@@ -225,6 +227,7 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('permission:pos.access')
         ->name('pos.index');
 
+    // Quét IMEI
     Route::post(
         '/pos/scan-imei',
         [PosController::class, 'scanImei']
@@ -232,6 +235,38 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('permission:pos.access')
         ->name('pos.scan-imei');
 
+    // Thanh toán
+    Route::post(
+        '/pos/checkout',
+        [PosController::class, 'checkout']
+    )
+        ->middleware('permission:sales.create')
+        ->name('pos.checkout');
+
+    // POS Routes
+    Route::prefix('pos')
+
+        ->name('pos.')
+
+        ->controller(PosController::class)
+
+        ->group(function () {
+
+            Route::get(
+                '/',
+                'index'
+            )->name('index');
+
+            Route::post(
+                '/scan-imei',
+                'scanImei'
+            )->name('scan-imei');
+
+            Route::post(
+                '/checkout',
+                'checkout'
+            )->name('checkout');
+        });
 
 
 });

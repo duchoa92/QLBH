@@ -2,12 +2,16 @@
 import { ref, computed } from 'vue';
 import axios from 'axios';
 
+// Input IMEI
 const imeiInput = ref('');
 
+// Giỏ hàng
 const cart = ref([]);
 
+// Trạng thái loading khi quét IMEI
 const loading = ref(false);
 
+// Tính tổng tiền
 const total = computed(() => {
 
     return cart.value.reduce(
@@ -22,6 +26,7 @@ const total = computed(() => {
     );
 });
 
+// Quét IMEI
 const scanImei = async () => {
 
     if (! imeiInput.value) {
@@ -59,6 +64,9 @@ const scanImei = async () => {
 
             id: response.data.id,
 
+            product_id:
+                response.data.product_id,
+
             imei: response.data.imei,
 
             product_name:
@@ -84,6 +92,42 @@ const removeItem = (index) => {
 
     cart.value.splice(index, 1);
 };
+
+// Thanh toán
+const customerPaid = ref(0);
+
+const checkout = async () => {
+
+    try {
+
+        await axios.post(
+
+            route('pos.checkout'),
+
+            {
+                items: cart.value,
+
+                customer_paid:
+                    customerPaid.value,
+            }
+        );
+
+        alert('Thanh toán thành công');
+
+        cart.value = [];
+
+        customerPaid.value = 0;
+
+    } catch (error) {
+
+        alert(
+            error.response.data.message
+        );
+    }
+};
+
+
+
 </script>
 
 <template>
@@ -190,6 +234,7 @@ const removeItem = (index) => {
 
         </div>
 
+        <!-- Tổng tiền -->
         <div
             class="mt-6 text-right"
         >
@@ -207,6 +252,42 @@ const removeItem = (index) => {
             </div>
 
         </div>
+
+        <!-- Nhập tiền khách đưa -->
+        <div class="mt-4">
+
+            <label class="block mb-2">
+                Tiền khách đưa
+            </label>
+
+            <input
+                v-model="customerPaid"
+                type="number"
+                class="border rounded p-3 w-full"
+            >
+
+        </div>
+<!-- Tiền thừa -->
+        <div class="mt-4 text-xl">
+
+            Tiền thừa:
+
+            {{
+                (
+                    customerPaid - total
+                ).toLocaleString()
+            }}
+
+            đ
+
+        </div>
+
+        <button
+            @click="checkout"
+            class="mt-6 bg-green-600 text-white px-6 py-3 rounded"
+        >
+            Thanh toán
+        </button>
 
     </div>
 
