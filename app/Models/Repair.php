@@ -30,6 +30,13 @@ class Repair extends Model
         'accessories',
     ];
 
+    protected $casts = [
+
+    'issue' => 'array',
+
+    'accessories' => 'array',
+];
+
     public function images(): HasMany
     {
         return $this->hasMany(RepairImage::class);

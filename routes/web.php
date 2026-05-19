@@ -317,6 +317,17 @@ Route::middleware(['auth'])->group(function () {
             )->name('show');
         });
 
+    // Gợi ý thông tin sửa chữa
+    Route::get(
+        'repairs-suggestions',
+        [
+            RepairController::class,
+            'suggestions',
+        ]
+    )->name(
+        'repairs.suggestions'
+    );
+    
     // sửa chữa Routes
     Route::resource(
         'repairs',

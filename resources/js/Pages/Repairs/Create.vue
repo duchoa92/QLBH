@@ -1,5 +1,7 @@
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
+import { ref,  watch, onMounted } from 'vue';
+import axios from 'axios';
 
 const form = useForm({
 
@@ -11,12 +13,199 @@ const form = useForm({
 
     imei: '',
 
-    issue: '',
+    issue: [],
 
-    accessories: '',
+    accessories: [],
 
     images: [],
 });
+
+// Gợi ý phụ kiện
+const accessorySuggestions = ref([]);
+// Gợi ý lỗi
+const issueSuggestions = ref([]);
+
+// Danh sách gợi ý lỗi sau khi lọc
+const filteredIssues = ref([]);
+// Danh sách gợi ý phụ kiện sau khi lọc
+const filteredAccessories = ref([]);
+
+// Input tạm thời để gắn với datalist
+const issueInput = ref('');
+// Input  tạm thời để gắn với datalist
+const accessoryInput = ref('');
+
+// Thêm lỗi vào form
+const addIssue = () => {
+
+    const value = issueInput.value.trim();
+
+    if (
+        value &&
+        !form.issue.includes(value)
+    ) {
+
+        form.issue.push(value);
+
+        issueInput.value = '';
+
+        filteredIssues.value = [];
+    }
+};
+
+// Xóa lỗi khỏi form
+const removeIssue = index => {
+
+    form.issue.splice(
+        index,
+        1
+    );
+};
+
+// Thêm phụ kiện vào form
+const addAccessory = () => {
+
+    const value = accessoryInput.value.trim();
+
+    if (
+        value &&
+        !form.accessories.includes(value)
+    ) {
+
+        form.accessories.push(value);
+
+        accessoryInput.value = '';
+
+        filteredAccessories.value = [];
+    }
+};
+
+// Xóa phụ kiện khỏi form
+const removeAccessory = index => {
+
+    form.accessories.splice(
+        index,
+        1
+    );
+};
+
+// Lọc gợi ý khi người dùng nhập vào input lỗi
+watch(issueInput, value => {
+
+    if (!value) {
+
+        filteredIssues.value = [];
+
+        return;
+    }
+
+    filteredIssues.value =
+
+        issueSuggestions.value.filter(
+
+            item =>
+
+                item
+                    .toLowerCase()
+
+                    .includes(
+                        value.toLowerCase()
+                    )
+
+                &&
+
+                !form.issue.includes(item)
+        );
+});
+// Lọc gợi ý khi người dùng nhập vào input phụ kiện
+watch(accessoryInput, value => {
+
+    if (!value) {
+
+        filteredAccessories.value = [];
+
+        return;
+    }
+
+    filteredAccessories.value =
+
+        accessorySuggestions.value.filter(
+
+            item =>
+
+                item
+                    .toLowerCase()
+
+                    .includes(
+                        value.toLowerCase()
+                    )
+
+                &&
+
+                !form.accessories.includes(item)
+        );
+});
+
+
+// Chọn gợi ý lỗi
+const selectIssue = item => {
+
+    form.issue.push(item);
+
+    issueInput.value = '';
+
+    filteredIssues.value = [];
+};
+
+// Chọn gợi ý phụ kiện
+const selectAccessory = item => {
+
+    form.accessories.push(item);
+
+    accessoryInput.value = '';
+
+    filteredAccessories.value = [];
+};
+
+// Lấy gợi ý từ server khi component được mounted
+onMounted(async () => {
+
+    const response = await axios.get(
+
+        route(
+            'repairs.suggestions'
+        )
+    );
+
+    accessorySuggestions.value =
+
+        response.data.accessories;
+
+    issueSuggestions.value =
+
+        response.data.issues;
+});
+
+// xem trước ảnh tải lên
+const imagePreviews = ref([]);
+// Xử lý khi người dùng chọn ảnh
+const handleImages = event => {
+
+    const files = Array.from(
+        event.target.files
+    );
+
+    form.images = files;
+
+    imagePreviews.value = [];
+
+    files.forEach(file => {
+
+        imagePreviews.value.push(
+            URL.createObjectURL(file)
+        );
+    });
+};
 
 const submit = () => {
 
@@ -125,38 +314,115 @@ const submit = () => {
 
             <!-- phụ kiện kèm theo -->
             <div>
-
-                <label class="block mb-1">
+                <label class="block mb-2">
                     Phụ kiện kèm theo
                 </label>
 
-                <textarea
-                    v-model="form.accessories"
-                    rows="3"
-                    placeholder="Ví dụ: sạc, cáp, sim..."
-                    class="w-full border rounded p-3"
-                ></textarea>
+                <div class="border rounded p-3 relative">
+
+                    <div class="flex flex-wrap gap-2 mb-3">
+
+                        <div
+                            v-for="(item, index) in form.accessories"
+                            :key="index"
+                            class="bg-blue-100 text-blue-700 px-3 py-1 rounded flex items-center gap-2"
+                        >
+
+                            <span>
+                                {{ item }}
+                            </span>
+
+                            <button
+                                type="button"
+                                @click="removeAccessory(index)"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    </div>
+
+                    <input
+                        v-model="accessoryInput"
+                        type="text"
+                        placeholder="Nhập phụ kiện..."
+                        class="w-full outline-none"
+                        @keydown.enter.prevent="addAccessory"
+                    >
+
+                    <!-- dropdown -->
+
+                    <div
+                        v-if="filteredAccessories.length"
+                        class="absolute left-0 right-0 bg-white border rounded shadow mt-2 z-10 max-h-60 overflow-y-auto"
+                    >
+
+                        <div
+                            v-for="item in filteredAccessories"
+                            :key="item"
+                            @click="selectAccessory(item)"
+                            class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        >
+                            {{ item }}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- lỗi -->
 
             <div>
 
-                <label class="block mb-1">
+                <label class="block mb-2">
                     Tình trạng lỗi
                 </label>
 
-                <textarea
-                    v-model="form.issue"
-                    rows="5"
-                    class="w-full border rounded p-3"
-                ></textarea>
+                <div class="border rounded p-3 relative">
 
-                <div
-                    v-if="form.errors.issue"
-                    class="text-red-500 text-sm mt-1"
-                >
-                    {{ form.errors.issue }}
+                    <div class="flex flex-wrap gap-2 mb-3">
+
+                        <div
+                            v-for="(item, index) in form.issue"
+                            :key="index"
+                            class="bg-red-100 text-red-700 px-3 py-1 rounded flex items-center gap-2"
+                        >
+
+                            <span>
+                                {{ item }}
+                            </span>
+
+                            <button
+                                type="button"
+                                @click="removeIssue(index)"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    </div>
+
+                    <input
+                        v-model="issueInput"
+                        type="text"
+                        placeholder="Nhập lỗi..."
+                        class="w-full outline-none"
+                        @keydown.enter.prevent="addIssue"
+                    >
+
+                    <!-- dropdown -->
+
+                    <div
+                        v-if="filteredIssues.length"
+                        class="absolute left-0 right-0 bg-white border rounded shadow mt-2 z-10 max-h-60 overflow-y-auto"
+                    >
+
+                        <div
+                            v-for="item in filteredIssues"
+                            :key="item"
+                            @click="selectIssue(item)"
+                            class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        >
+                            {{ item }}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -170,9 +436,21 @@ const submit = () => {
                 <input
                     type="file"
                     multiple
-                    @input="form.images = $event.target.files"
+                    @input="handleImages"
                     class="w-full border rounded p-3"
                 >
+                <div
+                    v-if="imagePreviews.length"
+                    class="grid grid-cols-3 gap-3 mt-3"
+                >
+
+                    <img
+                        v-for="(image, index) in imagePreviews"
+                        :key="index"
+                        :src="image"
+                        class="w-full h-28 object-cover rounded border"
+                    >
+                </div>
             </div>
 
             <!-- submit -->

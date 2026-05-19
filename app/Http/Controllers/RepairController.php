@@ -30,11 +30,57 @@ class RepairController extends Controller
         );
     }
 
+    // Hiển thị form tạo mới
     public function create(): Response
     {
         return Inertia::render(
             'Repairs/Create'
         );
+    }
+
+    // Lấy danh sách phụ kiện và lỗi phổ biến để gợi ý
+    public function suggestions()
+    {
+        $accessories = Repair::query()
+
+            ->whereNotNull(
+                'accessories'
+            )
+
+            ->pluck(
+                'accessories'
+            )
+
+            ->filter()
+
+            ->unique()
+
+            ->values();
+
+        $issues = Repair::query()
+
+            ->whereNotNull(
+                'issue'
+            )
+
+            ->pluck(
+                'issue'
+            )
+
+            ->filter()
+
+            ->unique()
+
+            ->values();
+
+        return response()->json([
+
+            'accessories' =>
+                $accessories,
+
+            'issues' =>
+                $issues,
+        ]);
     }
 
     // Lưu thông tin sửa chữa mới
@@ -50,6 +96,9 @@ class RepairController extends Controller
 
                 'device_name' => [
                     'required',
+                    'string',
+                    'max:255',
+                    
                 ],
 
                 'issue' => [
@@ -60,6 +109,11 @@ class RepairController extends Controller
                     'nullable',
                     'image',
                     'max:2048',
+                ],
+
+                'accessories' => [
+                    'nullable',
+                    'array',
                 ],
             ]);
 
@@ -143,4 +197,6 @@ class RepairController extends Controller
                 throw $e;
             }
         }
+
+
 }
