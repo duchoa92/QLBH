@@ -10,32 +10,30 @@ class Repair extends Model
     protected $fillable = [
 
         'code',
-
         'customer_name',
-
         'customer_phone',
-
         'device_name',
-
         'imei',
-
         'issue',
-
         'repair_fee',
-
         'status',
-
         'note',
-
         'accessories',
+        'contact_phone',
+        'screen_password',
+        'screen_pattern',
+        'account_type',
+        'account_email',
+        'account_password',
+
     ];
 
+    
     protected $casts = [
-
-    'issue' => 'array',
-
-    'accessories' => 'array',
-];
+        'issue' => 'array',
+        'accessories' => 'array',
+        'images' => 'array',
+    ];
 
     public function images(): HasMany
     {

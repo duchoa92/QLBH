@@ -86,24 +86,47 @@ Route::middleware(['auth'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::resource(
-        'categories',
-        CategoryController::class
-    )->middleware([
-        'index' => 'permission:categories.view',
-        'create' => 'permission:categories.create',
-        'store' => 'permission:categories.create',
-        'edit' => 'permission:categories.edit',
-        'update' => 'permission:categories.edit',
-        'destroy' => 'permission:categories.delete',
-    ]);
+    Route::get(
+        '/categories',
+        [CategoryController::class, 'index']
+    )
+        ->middleware('permission:categories.view')
+        ->name('categories.index');
+
+    Route::get(
+        '/categories/create',
+        [CategoryController::class, 'create']
+    )
+        ->middleware('permission:categories.create')
+        ->name('categories.create');
 
     Route::post(
-        'categories/{id}/restore',
-        [CategoryController::class, 'restore']
+        '/categories',
+        [CategoryController::class, 'store']
+    )
+        ->middleware('permission:categories.create')
+        ->name('categories.store');
+
+    Route::get(
+        '/categories/{category}/edit',
+        [CategoryController::class, 'edit']
     )
         ->middleware('permission:categories.edit')
-        ->name('categories.restore');
+        ->name('categories.edit');
+
+    Route::put(
+        '/categories/{category}',
+        [CategoryController::class, 'update']
+    )
+        ->middleware('permission:categories.edit')
+        ->name('categories.update');
+
+    Route::delete(
+        '/categories/{category}',
+        [CategoryController::class, 'destroy']
+    )
+        ->middleware('permission:categories.delete')
+        ->name('categories.destroy');
 
     /*
     |--------------------------------------------------------------------------
@@ -180,17 +203,47 @@ Route::middleware(['auth'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::resource(
-        'users',
-        UserController::class
-    )->middleware([
-        'index' => 'permission:users.view',
-        'create' => 'permission:users.create',
-        'store' => 'permission:users.create',
-        'edit' => 'permission:users.edit',
-        'update' => 'permission:users.edit',
-        'destroy' => 'permission:users.delete',
-    ]);
+    Route::get(
+        '/users',
+        [UserController::class, 'index']
+    )
+        ->middleware('permission:users.view')
+        ->name('users.index');
+
+    Route::get(
+        '/users/create',
+        [UserController::class, 'create']
+    )
+        ->middleware('permission:users.create')
+        ->name('users.create');
+
+    Route::post(
+        '/users',
+        [UserController::class, 'store']
+    )
+        ->middleware('permission:users.create')
+        ->name('users.store');
+
+    Route::get(
+        '/users/{user}/edit',
+        [UserController::class, 'edit']
+    )
+        ->middleware('permission:users.edit')
+        ->name('users.edit');
+
+    Route::put(
+        '/users/{user}',
+        [UserController::class, 'update']
+    )
+        ->middleware('permission:users.edit')
+        ->name('users.update');
+
+    Route::delete(
+        '/users/{user}',
+        [UserController::class, 'destroy']
+    )
+        ->middleware('permission:users.delete')
+        ->name('users.destroy');
 
 
     /*|--------------------------------------------------------------------------
@@ -201,13 +254,6 @@ Route::middleware(['auth'])->group(function () {
         'brands',
         BrandController::class
     );
-
-    // Hiển thị thương hiệu đã xóa
-    Route::post(
-        'brands/{id}/restore',
-        [BrandController::class, 'restore']
-    )->name('brands.restore');
-
 
     // Hiển thị thương hiệu đã xóa
     Route::get(
@@ -222,31 +268,7 @@ Route::middleware(['auth'])->group(function () {
     )->name('brands.restore');
 
 
-    // Hiển thịPOS
-    Route::get(
-        '/pos',
-        [PosController::class, 'index']
-    )
-        ->middleware('permission:pos.access')
-        ->name('pos.index');
-
-    // Quét IMEI
-    Route::post(
-        '/pos/scan-imei',
-        [PosController::class, 'scanImei']
-    )
-        ->middleware('permission:pos.access')
-        ->name('pos.scan-imei');
-
-    // Thanh toán
-    Route::post(
-        '/pos/checkout',
-        [PosController::class, 'checkout']
-    )
-        ->middleware('permission:sales.create')
-        ->name('pos.checkout');
-
-    // POS Routes
+    // hiển thị POS 
     Route::prefix('pos')
 
         ->name('pos.')
@@ -316,23 +338,28 @@ Route::middleware(['auth'])->group(function () {
                 'show'
             )->name('show');
         });
+    
+
+    // Tìm kiếm khách hàng sửa chữa
+    Route::get(
+        '/repairs/customer-search',
+        [RepairController::class, 'customerSearch']
+    )->name('repairs.customer-search');
 
     // Gợi ý thông tin sửa chữa
     Route::get(
-        'repairs-suggestions',
-        [
-            RepairController::class,
-            'suggestions',
-        ]
-    )->name(
-        'repairs.suggestions'
-    );
-    
-    // sửa chữa Routes
+        '/repairs/suggestions',
+        [RepairController::class, 'suggestions']
+    )->name('repairs.suggestions');
+
+   // sửa chữa Routes
     Route::resource(
         'repairs',
         RepairController::class
-    );
+    )->except([
+        'show',
+    ]);
+
 
 
 });

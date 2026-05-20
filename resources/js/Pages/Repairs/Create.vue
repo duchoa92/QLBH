@@ -1,7 +1,11 @@
 <script setup>
-import { Link, useForm } from '@inertiajs/vue3';
-import { ref,  watch, onMounted } from 'vue';
-import axios from 'axios';
+import { Link, useForm }
+    from '@inertiajs/vue3';
+
+import { ref, } from 'vue';
+
+import CustomerAutocomplete from '@/Components/CustomerAutocomplete.vue';
+import PatternLock from '@/Components/PatternLock.vue';
 
 const form = useForm({
 
@@ -9,186 +13,35 @@ const form = useForm({
 
     customer_phone: '',
 
+    contact_phone: '',
+
     device_name: '',
 
     imei: '',
 
-    issue: [],
+    screen_password: '',
 
-    accessories: [],
+    screen_pattern: '',
+
+    account_type: '',
+
+    account_email: '',
+
+    account_password: '',
+
+    issue: '',
+
+    accessories: '',
+
+    note: '',
 
     images: [],
 });
 
-// Gợi ý phụ kiện
-const accessorySuggestions = ref([]);
-// Gợi ý lỗi
-const issueSuggestions = ref([]);
 
-// Danh sách gợi ý lỗi sau khi lọc
-const filteredIssues = ref([]);
-// Danh sách gợi ý phụ kiện sau khi lọc
-const filteredAccessories = ref([]);
-
-// Input tạm thời để gắn với datalist
-const issueInput = ref('');
-// Input  tạm thời để gắn với datalist
-const accessoryInput = ref('');
-
-// Thêm lỗi vào form
-const addIssue = () => {
-
-    const value = issueInput.value.trim();
-
-    if (
-        value &&
-        !form.issue.includes(value)
-    ) {
-
-        form.issue.push(value);
-
-        issueInput.value = '';
-
-        filteredIssues.value = [];
-    }
-};
-
-// Xóa lỗi khỏi form
-const removeIssue = index => {
-
-    form.issue.splice(
-        index,
-        1
-    );
-};
-
-// Thêm phụ kiện vào form
-const addAccessory = () => {
-
-    const value = accessoryInput.value.trim();
-
-    if (
-        value &&
-        !form.accessories.includes(value)
-    ) {
-
-        form.accessories.push(value);
-
-        accessoryInput.value = '';
-
-        filteredAccessories.value = [];
-    }
-};
-
-// Xóa phụ kiện khỏi form
-const removeAccessory = index => {
-
-    form.accessories.splice(
-        index,
-        1
-    );
-};
-
-// Lọc gợi ý khi người dùng nhập vào input lỗi
-watch(issueInput, value => {
-
-    if (!value) {
-
-        filteredIssues.value = [];
-
-        return;
-    }
-
-    filteredIssues.value =
-
-        issueSuggestions.value.filter(
-
-            item =>
-
-                item
-                    .toLowerCase()
-
-                    .includes(
-                        value.toLowerCase()
-                    )
-
-                &&
-
-                !form.issue.includes(item)
-        );
-});
-// Lọc gợi ý khi người dùng nhập vào input phụ kiện
-watch(accessoryInput, value => {
-
-    if (!value) {
-
-        filteredAccessories.value = [];
-
-        return;
-    }
-
-    filteredAccessories.value =
-
-        accessorySuggestions.value.filter(
-
-            item =>
-
-                item
-                    .toLowerCase()
-
-                    .includes(
-                        value.toLowerCase()
-                    )
-
-                &&
-
-                !form.accessories.includes(item)
-        );
-});
-
-
-// Chọn gợi ý lỗi
-const selectIssue = item => {
-
-    form.issue.push(item);
-
-    issueInput.value = '';
-
-    filteredIssues.value = [];
-};
-
-// Chọn gợi ý phụ kiện
-const selectAccessory = item => {
-
-    form.accessories.push(item);
-
-    accessoryInput.value = '';
-
-    filteredAccessories.value = [];
-};
-
-// Lấy gợi ý từ server khi component được mounted
-onMounted(async () => {
-
-    const response = await axios.get(
-
-        route(
-            'repairs.suggestions'
-        )
-    );
-
-    accessorySuggestions.value =
-
-        response.data.accessories;
-
-    issueSuggestions.value =
-
-        response.data.issues;
-});
-
-// xem trước ảnh tải lên
+// preview ảnh
 const imagePreviews = ref([]);
-// Xử lý khi người dùng chọn ảnh
+
 const handleImages = event => {
 
     const files = Array.from(
@@ -202,11 +55,14 @@ const handleImages = event => {
     files.forEach(file => {
 
         imagePreviews.value.push(
+
             URL.createObjectURL(file)
         );
     });
 };
 
+
+// submit
 const submit = () => {
 
     form.post(
@@ -237,30 +93,32 @@ const submit = () => {
             class="space-y-4"
         >
 
-            <!-- khách -->
 
+
+
+            <!-- khách hàng -->
             <div>
 
                 <label class="block mb-1">
-                    Tên khách hàng
+                    Khách hàng
                 </label>
 
-                <input
-                    v-model="form.customer_name"
-                    type="text"
-                    class="w-full border rounded p-3"
-                >
+                <CustomerAutocomplete
 
-                <div
-                    v-if="form.errors.customer_name"
-                    class="text-red-500 text-sm mt-1"
-                >
-                    {{ form.errors.customer_name }}
-                </div>
+                    @select="
+                        customer => {
+
+                            form.customer_name =
+                                customer.customer_name;
+
+                            form.customer_phone =
+                                customer.customer_phone;
+                        }
+                    "
+                />
             </div>
 
             <!-- sdt -->
-
             <div>
 
                 <label class="block mb-1">
@@ -275,7 +133,6 @@ const submit = () => {
             </div>
 
             <!-- thiết bị -->
-
             <div>
 
                 <label class="block mb-1">
@@ -288,17 +145,9 @@ const submit = () => {
                     placeholder="Ví dụ: iPhone 11"
                     class="w-full border rounded p-3"
                 >
-
-                <div
-                    v-if="form.errors.device_name"
-                    class="text-red-500 text-sm mt-1"
-                >
-                    {{ form.errors.device_name }}
-                </div>
             </div>
 
             <!-- imei -->
-
             <div>
 
                 <label class="block mb-1">
@@ -312,121 +161,155 @@ const submit = () => {
                 >
             </div>
 
-            <!-- phụ kiện kèm theo -->
-            <div>
-                <label class="block mb-2">
-                    Phụ kiện kèm theo
-                </label>
 
-                <div class="border rounded p-3 relative">
+<!-- mật khẩu mở màn -->
+<div>
 
-                    <div class="flex flex-wrap gap-2 mb-3">
+    <label class="block mb-1">
+        Mật khẩu mở màn
+    </label>
 
-                        <div
-                            v-for="(item, index) in form.accessories"
-                            :key="index"
-                            class="bg-blue-100 text-blue-700 px-3 py-1 rounded flex items-center gap-2"
-                        >
+    <input
+        v-model="form.screen_password"
+        type="text"
+        placeholder="PIN / Pattern / Password"
+        class="w-full border rounded p-3"
+    >
+</div>
+ <!-- mẫu hình mở khóa -->
+<div>
 
-                            <span>
-                                {{ item }}
-                            </span>
+    <label class="block mb-3 font-medium">
+        Mẫu hình mở khóa
+    </label>
 
-                            <button
-                                type="button"
-                                @click="removeAccessory(index)"
-                            >
-                                ×
-                            </button>
-                        </div>
-                    </div>
+    <PatternLock
+        v-model="form.screen_pattern"
+    />
+</div>
 
-                    <input
-                        v-model="accessoryInput"
-                        type="text"
-                        placeholder="Nhập phụ kiện..."
-                        class="w-full outline-none"
-                        @keydown.enter.prevent="addAccessory"
-                    >
+<!-- loại tài khoản -->
+<div>
 
-                    <!-- dropdown -->
+    <label class="block mb-1">
+        Loại tài khoản
+    </label>
 
-                    <div
-                        v-if="filteredAccessories.length"
-                        class="absolute left-0 right-0 bg-white border rounded shadow mt-2 z-10 max-h-60 overflow-y-auto"
-                    >
+    <select
+        v-model="form.account_type"
+        class="w-full border rounded p-3"
+    >
 
-                        <div
-                            v-for="item in filteredAccessories"
-                            :key="item"
-                            @click="selectAccessory(item)"
-                            class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                        >
-                            {{ item }}
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <option value="">
+            Chọn tài khoản
+        </option>
 
-            <!-- lỗi -->
+        <option value="google">
+            Google
+        </option>
 
-            <div>
+        <option value="icloud">
+            iCloud
+        </option>
 
-                <label class="block mb-2">
-                    Tình trạng lỗi
-                </label>
+        <option value="xiaomi">
+            Xiaomi
+        </option>
 
-                <div class="border rounded p-3 relative">
+        <option value="samsung">
+            Samsung
+        </option>
+    </select>
+</div>
 
-                    <div class="flex flex-wrap gap-2 mb-3">
+<!-- email tài khoản -->
+<div>
 
-                        <div
-                            v-for="(item, index) in form.issue"
-                            :key="index"
-                            class="bg-red-100 text-red-700 px-3 py-1 rounded flex items-center gap-2"
-                        >
+    <label class="block mb-1">
+        Email / SĐT tài khoản
+    </label>
 
-                            <span>
-                                {{ item }}
-                            </span>
+    <input
+        v-model="form.account_email"
+        type="text"
+        placeholder="example@gmail.com"
+        class="w-full border rounded p-3"
+    >
+</div>
 
-                            <button
-                                type="button"
-                                @click="removeIssue(index)"
-                            >
-                                ×
-                            </button>
-                        </div>
-                    </div>
+<!-- mật khẩu tài khoản -->
+<div>
 
-                    <input
-                        v-model="issueInput"
-                        type="text"
-                        placeholder="Nhập lỗi..."
-                        class="w-full outline-none"
-                        @keydown.enter.prevent="addIssue"
-                    >
+    <label class="block mb-1">
+        Mật khẩu tài khoản
+    </label>
 
-                    <!-- dropdown -->
+    <input
+        v-model="form.account_password"
+        type="text"
+        placeholder="Nhập mật khẩu"
+        class="w-full border rounded p-3"
+    >
+</div>
 
-                    <div
-                        v-if="filteredIssues.length"
-                        class="absolute left-0 right-0 bg-white border rounded shadow mt-2 z-10 max-h-60 overflow-y-auto"
-                    >
+<!-- sdt liên hệ -->
+<div>
 
-                        <div
-                            v-for="item in filteredIssues"
-                            :key="item"
-                            @click="selectIssue(item)"
-                            class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                        >
-                            {{ item }}
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <label class="block mb-1">
+        SĐT liên hệ khác
+    </label>
 
-            <!-- upload ảnh tình trạng máy -->
+    <input
+        v-model="form.contact_phone"
+        type="text"
+        placeholder="Số điện thoại khác"
+        class="w-full border rounded p-3"
+    >
+</div>
+
+<!-- ghi chú -->
+<div>
+
+    <label class="block mb-1">
+        Ghi chú thêm
+    </label>
+
+    <textarea v-model="form.note"
+        rows="4"
+        placeholder="Mô tả thêm..."
+        class="w-full border rounded p-3"
+    />
+</div>
+
+<!-- phụ kiện -->
+<div>
+
+    <label class="block mb-1">
+        Phụ kiện kèm theo
+    </label>
+
+    <textarea
+        v-model="form.accessories"
+        class="w-full border rounded p-3"
+        placeholder="Ví dụ: sạc, cáp..."
+    />
+</div>
+
+<!-- lỗi -->
+<div>
+
+    <label class="block mb-1">
+        Tình trạng lỗi
+    </label>
+
+    <textarea
+        v-model="form.issue"
+        class="w-full border rounded p-3"
+        placeholder="Mô tả lỗi..."
+    />
+</div>
+
+            <!-- ảnh -->
             <div>
 
                 <label class="block mb-1">
@@ -439,6 +322,7 @@ const submit = () => {
                     @input="handleImages"
                     class="w-full border rounded p-3"
                 >
+
                 <div
                     v-if="imagePreviews.length"
                     class="grid grid-cols-3 gap-3 mt-3"
@@ -447,22 +331,26 @@ const submit = () => {
                     <img
                         v-for="(image, index) in imagePreviews"
                         :key="index"
+
                         :src="image"
+
                         class="w-full h-28 object-cover rounded border"
                     >
                 </div>
             </div>
 
             <!-- submit -->
-
             <button
                 type="submit"
+
                 :disabled="form.processing"
+
                 class="bg-blue-600 text-white px-5 py-3 rounded disabled:opacity-50"
             >
-                {{ form.processing
-                    ? 'Đang lưu...'
-                    : 'Lưu phiếu sửa'
+                {{
+                    form.processing
+                        ? 'Đang lưu...'
+                        : 'Lưu phiếu sửa'
                 }}
             </button>
         </form>

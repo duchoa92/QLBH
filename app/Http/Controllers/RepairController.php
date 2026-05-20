@@ -9,6 +9,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\RepairImage;
 use Illuminate\Support\Facades\DB;
+use App\Models\Sale;
+use Illuminate\Http\JsonResponse;
+use App\Http\Requests\RepairRequest;
+
 
 class RepairController extends Controller
 {
@@ -39,164 +43,214 @@ class RepairController extends Controller
     }
 
     // Lấy danh sách phụ kiện và lỗi phổ biến để gợi ý
-    public function suggestions()
+    public function suggestions(): JsonResponse
     {
-        $accessories = Repair::query()
+        $customers = Repair::query()
 
-            ->whereNotNull(
-                'accessories'
+            ->select(
+                'customer_name',
+                'customer_phone'
             )
 
-            ->pluck(
-                'accessories'
+            ->whereNotNull('customer_name')
+
+            ->groupBy(
+                'customer_name',
+                'customer_phone'
             )
 
+            ->orderByRaw('MAX(created_at) DESC')
+
+            ->limit(10)
+
+            ->get();
+
+         $issues = Repair::query()
+            ->whereNotNull('issue')
+            ->pluck('issue')
+            ->flatten()
             ->filter()
-
             ->unique()
-
             ->values();
 
-        $issues = Repair::query()
-
-            ->whereNotNull(
-                'issue'
-            )
-
-            ->pluck(
-                'issue'
-            )
-
+        $accessories = Repair::query()
+            ->whereNotNull('accessories')
+            ->pluck('accessories')
+            ->flatten()
             ->filter()
-
             ->unique()
-
             ->values();
 
         return response()->json([
-
-            'accessories' =>
-                $accessories,
-
-            'issues' =>
-                $issues,
+            'issues' => $issues,
+            'accessories' => $accessories,
+            'customers' => $customers,
         ]);
     }
 
     // Lưu thông tin sửa chữa mới
     public function store(
-            Request $request
-        ): RedirectResponse {
+        RepairRequest $request
+    ): RedirectResponse {
 
-            $request->validate([
+        $request->validate([
 
-                'customer_name' => [
-                    'required',
-                ],
+            'customer_name' => [
+                'required',
+            ],
 
-                'device_name' => [
-                    'required',
-                    'string',
-                    'max:255',
-                    
-                ],
+            'device_name' => [
+                'required',
+                'string',
+                'max:255',
+                
+            ],
 
-                'issue' => [
-                    'required',
-                ],
+            'issue' => [
+                'required',
+            ],
 
-                'images.*' => [
-                    'nullable',
-                    'image',
-                    'max:2048',
-                ],
+            'images.*' => [
+                'nullable',
+                'image',
+                'max:2048',
+            ],
 
-                'accessories' => [
-                    'nullable',
-                    'array',
-                ],
-            ]);
+            'accessories' => [
+                'nullable',
+                'array',
+            ],
+        ]);
 
-            DB::beginTransaction();
+        DB::beginTransaction();
 
-            try {
+        try {
 
-                $repair = Repair::query()
+            $repair = Repair::query()
 
-                    ->create([
+                ->create([
 
-                        'code' =>
+                    'code' =>
 
-                            'SC-' .
-                            now()->format('YmdHis'),
+                        'SC-' .
+                        now()->format('YmdHis'),
 
-                        'customer_name' =>
-                            $request->customer_name,
+                    'customer_name' =>
+                        $request->customer_name,
 
-                        'customer_phone' =>
-                            $request->customer_phone,
+                    'customer_phone' =>
+                        $request->customer_phone,
 
-                        'device_name' =>
-                            $request->device_name,
+                    'device_name' =>
+                        $request->device_name,
 
-                        'imei' =>
-                            $request->imei,
+                    'imei' =>
+                        $request->imei,
 
-                        'issue' =>
-                            $request->issue,
+                    'issue' =>
+                        $request->issue,
 
-                        'accessories' =>
-                            $request->accessories,
+                    'accessories' =>
+                        $request->accessories,
 
-                        'repair_fee' => 0,
+                    'repair_fee' => 0,
 
-                        'status' => 'pending',
-                    ]);
+                    'status' => 'pending',
+                ]);
 
-                /*
-                |--------------------------------------------------------------------------
-                | upload nhiều ảnh
-                |--------------------------------------------------------------------------
-                */
+            /*
+            |--------------------------------------------------------------------------
+            | upload nhiều ảnh
+            |--------------------------------------------------------------------------
+            */
 
-                if ($request->hasFile('images')) {
+            if ($request->hasFile('images')) {
 
-                    foreach (
-                        $request->file('images')
-                        as $image
-                    ) {
+                foreach (
+                    $request->file('images')
+                    as $image
+                ) {
 
-                        $path = $image->store(
-                            'repairs',
-                            'public'
-                        );
+                    $path = $image->store(
+                        'repairs',
+                        'public'
+                    );
 
-                        RepairImage::query()
+                    RepairImage::query()
 
-                            ->create([
+                        ->create([
 
-                                'repair_id' =>
-                                    $repair->id,
+                            'repair_id' =>
+                                $repair->id,
 
-                                'image' =>
-                                    $path,
-                            ]);
-                    }
+                            'image' =>
+                                $path,
+                        ]);
                 }
-
-                DB::commit();
-
-                return redirect()
-
-                    ->route('repairs.index');
-
-            } catch (\Throwable $e) {
-
-                DB::rollBack();
-
-                throw $e;
             }
+
+            DB::commit();
+
+            return redirect()
+
+                ->route('repairs.index');
+
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            throw $e;
+        }
+    }
+
+    // Tìm kiếm khách hàng để gợi ý khi nhập tên hoặc số điện thoại
+    public function customerSearch(
+        Request $request
+    ): JsonResponse {
+
+        $keyword = $request->keyword;
+
+        if (! $keyword) {
+
+            return response()->json([]);
         }
 
+        $repairCustomers = Repair::query()
+
+            ->select([ 'customer_name', 'customer_phone', ])
+
+            ->where(function ($query) use ($keyword) {
+
+                $query
+
+                    ->where(
+                        'customer_name',
+                        'like',
+                        '%' . $keyword . '%'
+                    )
+
+                    ->orWhere(
+                        'customer_phone',
+                        'like',
+                        '%' . $keyword . '%'
+                    );
+            })
+
+            ->get();
+
+    
+        $customers = $repairCustomers
+            ->unique(function ($item) {
+
+                return $item->customer_name .
+                    $item->customer_phone;
+            })
+
+            ->take(10)
+
+            ->values();
+
+        return response()->json($customers);
+    }
 
 }
