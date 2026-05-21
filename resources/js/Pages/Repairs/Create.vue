@@ -6,8 +6,10 @@ import {
     watch,
     onMounted,
 } from 'vue';
-
+// gửi request
 import axios from 'axios';
+// quét mã vạch bằng camera (nếu cần)
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 import {
     Combobox,
@@ -74,9 +76,75 @@ const onSelectCustomer = customer => {
 | Preview ảnh
 |--------------------------------------------------------------------------
 */
-
+// Lưu URL tạm thời của ảnh để hiển thị preview
 const imagePreviews = ref([]);
 
+/*
+|--------------------------------------------------------------------------
+| Scan IMEI
+|--------------------------------------------------------------------------
+*/
+
+const videoRef = ref(null);
+
+const scanning = ref(false);
+
+const codeReader =
+    new BrowserMultiFormatReader();
+
+const startScan = async () => {
+
+    try {
+
+        scanning.value = true;
+
+        const devices =
+            await BrowserMultiFormatReader.listVideoInputDevices();
+
+        const selectedDeviceId =
+            devices[0]?.deviceId;
+
+        if (!selectedDeviceId) {
+
+            alert('Không tìm thấy camera');
+
+            return;
+        }
+
+        codeReader.decodeFromVideoDevice(
+
+            selectedDeviceId,
+
+            videoRef.value,
+
+            (result, err) => {
+
+                if (result) {
+
+                    form.imei =
+                        result.getText();
+
+                    stopScan();
+                }
+            }
+        );
+
+    } catch (error) {
+
+        console.log(error);
+
+        alert('Không thể mở camera');
+    }
+};
+
+const stopScan = () => {
+
+    scanning.value = false;
+
+    codeReader.reset();
+};
+
+// Lưu input lỗi để lọc gợi ý
 const issueInput = ref('');
 
 const issueSuggestions = ref([]);
@@ -450,11 +518,52 @@ const submit = () => {
                                         IMEI / Serial
                                     </label>
 
-                                    <input
-                                        v-model="form.imei"
-                                        type="text"
-                                        class="w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                    <div class="flex gap-2">
+
+                                        <input
+                                            v-model="form.imei"
+                                            type="text"
+                                            placeholder="Quét hoặc nhập IMEI"
+                                            class="flex-1 rounded-2xl border border-gray-300 bg-white px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        >
+
+                                        <!-- scan camera -->
+
+                                        <button
+                                            type="button"
+                                            @click="startScan"
+                                            class="px-4 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition"
+                                        >
+                                            📷
+                                        </button>
+
+                                    </div>
+
+                                    <!-- camera -->
+
+                                    <div
+                                        v-if="scanning"
+                                        class="mt-4 border rounded-2xl overflow-hidden bg-black relative"
                                     >
+
+                                        <video
+                                            ref="videoRef"
+                                            class="w-full h-64 object-cover"
+                                        />
+
+                                        <button
+                                            type="button"
+                                            @click="stopScan"
+                                            class="absolute top-3 right-3 bg-red-500 text-white px-3 py-1 rounded-xl"
+                                        >
+                                            Tắt
+                                        </button>
+
+                                    </div>
+
+                                    <p class="text-xs text-gray-500 mt-2">
+                                        Hỗ trợ camera và đầu quét mã vạch USB
+                                    </p>
 
                                 </div>
 
