@@ -93,70 +93,60 @@ class RepairController extends Controller
         RepairRequest $request
     ): RedirectResponse {
 
-        $request->validate([
-
-            'customer_name' => [
-                'required',
-            ],
-
-            'device_name' => [
-                'required',
-                'string',
-                'max:255',
-                
-            ],
-
-            'issue' => [
-                'required',
-            ],
-
-            'images.*' => [
-                'nullable',
-                'image',
-                'max:2048',
-            ],
-
-            'accessories' => [
-                'nullable',
-                'array',
-            ],
-        ]);
-
         DB::beginTransaction();
 
         try {
 
-            $repair = Repair::query()
+           $repair = Repair::query()
 
-                ->create([
+            ->create([
 
-                    'code' =>
+                'code' =>
+                    'SC-' . now()->format('YmdHis'),
 
-                        'SC-' .
-                        now()->format('YmdHis'),
+                'customer_name' =>
+                    $request->customer_name,
 
-                    'customer_name' =>
-                        $request->customer_name,
+                'customer_phone' =>
+                    $request->customer_phone,
 
-                    'customer_phone' =>
-                        $request->customer_phone,
+                'contact_phone' =>
+                    $request->contact_phone,
 
-                    'device_name' =>
-                        $request->device_name,
+                'device_name' =>
+                    $request->device_name,
 
-                    'imei' =>
-                        $request->imei,
+                'imei' =>
+                    $request->imei,
 
-                    'issue' =>
-                        $request->issue,
+                'screen_password' =>
+                    $request->screen_password,
 
-                    'accessories' =>
-                        $request->accessories,
+                'screen_pattern' =>
+                    $request->screen_pattern,
 
-                    'repair_fee' => 0,
+                'account_type' =>
+                    $request->account_type,
 
-                    'status' => 'pending',
-                ]);
+                'account_email' =>
+                    $request->account_email,
+
+                'account_password' =>
+                    $request->account_password,
+
+                'issue' =>
+                    $request->issue,
+
+                'accessories' =>
+                    $request->accessories,
+
+                'note' =>
+                    $request->note,
+
+                'repair_fee' => 0,
+
+                'status' => 'pending',
+            ]);
 
             /*
             |--------------------------------------------------------------------------

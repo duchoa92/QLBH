@@ -6,72 +6,152 @@ import {
     ComboboxOptions,
 } from '@headlessui/vue';
 
-import { ref, watch } from 'vue';
+import {
+    ref,
+    watch,
+} from 'vue';
+
 import axios from 'axios';
 import { debounce } from 'lodash';
 
-const emit = defineEmits(['select']);
+/**
+ * EMITS
+ */
+const emit = defineEmits([
+    'select',
+    'update:modelValue',
+]);
 
-const keyword = ref('');
+/**
+ * STATE
+ */
+const query = ref('');
 const customers = ref([]);
 const selectedCustomer = ref(null);
 
-watch(
-    keyword,
-    debounce(async value => {
-        if (!value) {
+/**
+ * FETCH CUSTOMERS
+ */
+const fetchCustomers = debounce(
+    async (keyword) => {
+
+        if (!keyword) {
+
             customers.value = [];
+
             return;
         }
 
-        const response = await axios.get(
-            route('repairs.customer-search'),
-            {
-                params: { keyword: value },
-            }
-        );
+        try {
 
-        customers.value = response.data;
-    }, 300)
+            const response = await axios.get(
+                route('repairs.customer-search'),
+                {
+                    params: {
+                        keyword,
+                    },
+                }
+            );
+
+            customers.value =
+                response.data;
+
+        } catch (error) {
+
+            console.error(error);
+        }
+    },
+    300
 );
 
+/**
+ * WATCH INPUT
+ */
+watch(query, value => {
+
+    emit(
+        'update:modelValue',
+        value
+    );
+
+    fetchCustomers(value);
+});
+
+/**
+ * SELECT CUSTOMER
+ */
 const selectCustomer = customer => {
 
-    selectedCustomer.value = customer;
-    emit('select', customer);
+    selectedCustomer.value =
+        customer;
+
+    query.value =
+        customer.customer_name;
+
+    emit(
+        'update:modelValue',
+        customer.customer_name
+    );
+
+    emit(
+        'select',
+        customer
+    );
 
     customers.value = [];
 };
 </script>
 
 <template>
-    <Combobox v-model="selectedCustomer" @update:modelValue="selectCustomer">
+    <Combobox
+        v-model="selectedCustomer"
+        @update:modelValue="selectCustomer"
+    >
 
         <div class="relative">
 
+            <!-- INPUT -->
+
             <ComboboxInput
-                class="w-full border rounded p-3"
+                class="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Nhập tên hoặc số điện thoại"
-                @change="keyword = $event.target.value"
-                :displayValue="customer => customer?.customer_name ?? ''"
+                :displayValue="
+                    customer =>
+                        customer?.customer_name
+                        || query
+                "
+                @change="
+                    query = $event.target.value
+                "
             />
+
+            <!-- DROPDOWN -->
 
             <ComboboxOptions
                 v-if="customers.length"
-                class="absolute z-50 mt-1 w-full bg-white border rounded shadow max-h-60 overflow-y-auto"
+                class="absolute z-50 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"
             >
+
                 <ComboboxOption
                     v-for="customer in customers"
-                    :key="customer.customer_phone"
+                    :key="
+                        customer.customer_phone
+                    "
                     :value="customer"
                     v-slot="{ active }"
                 >
+
                     <div
                         :class="[
-                            'p-3 cursor-pointer',
-                            active ? 'bg-blue-100' : ''
+
+                            'p-3 cursor-pointer border-b',
+
+                            active
+                                ? 'bg-blue-100'
+                                : 'bg-white'
                         ]"
                     >
+
                         <div class="font-medium">
                             {{ customer.customer_name }}
                         </div>
@@ -82,7 +162,6 @@ const selectCustomer = customer => {
                     </div>
                 </ComboboxOption>
             </ComboboxOptions>
-
         </div>
     </Combobox>
 </template>

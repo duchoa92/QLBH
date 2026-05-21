@@ -24,7 +24,7 @@ class RepairRequest extends FormRequest
             ],
 
             'customer_phone' => [
-                'required',
+                'nullable',
                 'string',
                 'max:20',
             ],
@@ -56,13 +56,12 @@ class RepairRequest extends FormRequest
             'screen_pattern' => [
                 'nullable',
                 'string',
-                'max:255',
             ],
 
             'account_type' => [
                 'nullable',
                 'string',
-                'max:50',
+                'max:255',
             ],
 
             'account_email' => [
@@ -79,12 +78,12 @@ class RepairRequest extends FormRequest
 
             'issue' => [
                 'nullable',
-                'string',
+                'array',
             ],
 
             'accessories' => [
                 'nullable',
-                'string',
+                'array',
             ],
 
             'note' => [
@@ -92,14 +91,10 @@ class RepairRequest extends FormRequest
                 'string',
             ],
 
-            'images' => [
-                'nullable',
-                'array',
-            ],
-
             'images.*' => [
+                'nullable',
                 'image',
-                'max:5120',
+                'max:2048',
             ],
         ];
     }
