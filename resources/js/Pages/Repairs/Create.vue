@@ -769,7 +769,7 @@ const submit = () => {
 
                                             <ComboboxInput
                                                 class="w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                                                placeholder="Nhập tình trạng máy..."
+                                                placeholder="Nhập tình trạng máy rồi nhấn Enter để thêm"
 
                                                 :displayValue="() => issueInput"
 

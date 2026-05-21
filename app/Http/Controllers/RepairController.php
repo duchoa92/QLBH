@@ -173,8 +173,7 @@ class RepairController extends Controller
                             'repair_id' =>
                                 $repair->id,
 
-                            'image' =>
-                                $path,
+                            'image_path' => $path,
                         ]);
                 }
             }
