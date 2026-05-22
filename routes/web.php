@@ -354,13 +354,28 @@ Route::middleware(['auth'])->group(function () {
 
    // sửa chữa Routes
     Route::resource(
-        'repairs',
-        RepairController::class
-    )->except([
-        'show',
-    ]);
+    'repairs',
+    RepairController::class
+);
+
+        // Hiển thị chi tiết sửa chữa
+    Route::patch(
+
+    'repairs/{repair}/status',
+
+    [RepairController::class, 'updateStatus']
+
+)->name('repairs.update-status');
 
 
+// Mẫu in hóa đơn sửa chữa
+Route::get(
+
+    'repairs/{repair}/print',
+
+    [RepairController::class, 'print']
+
+)->name('repairs.print');
 
 });
 

@@ -86,4 +86,15 @@ class Repair extends Model
             'technician_id'
         );
     }
+
+    /**
+     * Lịch sử sửa chữa
+     */
+    public function timelines(): HasMany
+    {
+        return $this->hasMany(
+            RepairTimeline::class
+        )->latest();
+    }
+    
 }
