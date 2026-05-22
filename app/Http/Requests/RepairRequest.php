@@ -96,6 +96,12 @@ class RepairRequest extends FormRequest
                 'image',
                 'max:2048',
             ],
+
+            'identity_card' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
         ];
     }
 }

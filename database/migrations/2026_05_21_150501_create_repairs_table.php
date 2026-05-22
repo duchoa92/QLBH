@@ -17,6 +17,7 @@ return new class extends Migration
         Schema::create('repairs', function (Blueprint $table): void {
 
             $table->id();
+            
 
             /*
             |--------------------------------------------------------------------------
@@ -32,10 +33,6 @@ return new class extends Migration
             | Khách hàng
             |--------------------------------------------------------------------------
             */
-
-            $table->string('customer_name');
-
-            $table->string('customer_phone');
 
             $table->string('contact_phone')
                 ->nullable();

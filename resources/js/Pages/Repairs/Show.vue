@@ -162,9 +162,7 @@ const updateStatus = event => {
                             <div
                                 class="font-semibold text-gray-800 mt-1"
                             >
-                                {{
-                                    repair.customer_name
-                                }}
+                               {{ repair.customer?.name }}
                             </div>
 
                         </div>
@@ -180,9 +178,7 @@ const updateStatus = event => {
                             <div
                                 class="font-semibold text-gray-800 mt-1"
                             >
-                                {{
-                                    repair.customer_phone
-                                }}
+                                {{ repair.customer?.phone }}
                             </div>
 
                         </div>
@@ -200,6 +196,23 @@ const updateStatus = event => {
                             >
                                 {{
                                     repair.contact_phone || '---'
+                                }}
+                            </div>
+
+                        </div>
+                        <div>
+
+                            <div
+                                class="text-sm text-gray-500"
+                            >
+                                CCCD
+                            </div>
+
+                            <div
+                                class="font-semibold text-gray-800 mt-1"
+                            >
+                                {{
+                                    repair.customer?.identity_card || '---'
                                 }}
                             </div>
 

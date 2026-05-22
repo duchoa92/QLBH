@@ -293,7 +293,7 @@ const statusLabels = {
 
                                 </td>
 
-                                <!-- customer -->
+                                <!-- khách hàng -->
 
                                 <td class="px-6 py-4">
 
@@ -301,7 +301,7 @@ const statusLabels = {
                                         class="font-semibold text-gray-800"
                                     >
                                         {{
-                                            repair.customer_name
+                                            repair.customer?.name || '---'
                                         }}
                                     </div>
 
@@ -309,12 +309,20 @@ const statusLabels = {
                                         class="text-sm text-gray-500 mt-1"
                                     >
                                         {{
-                                            repair.customer_phone
+                                            repair.customer?.phone || '---'
+                                        }}
+                                    </div>
+
+                                    <div
+                                        class="text-xs text-gray-400 mt-1"
+                                    >
+                                        CCCD:
+                                        {{
+                                            repair.customer?.identity_card || '---'
                                         }}
                                     </div>
 
                                 </td>
-
                                 <!-- device -->
 
                                 <td class="px-6 py-4">

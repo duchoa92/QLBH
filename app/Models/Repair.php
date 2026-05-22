@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Customer;
 
 class Repair extends Model
 {
@@ -95,6 +96,16 @@ class Repair extends Model
         return $this->hasMany(
             RepairTimeline::class
         )->latest();
+    }
+
+        /**
+     * Khách hàng.
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(
+            Customer::class
+        );
     }
     
 }

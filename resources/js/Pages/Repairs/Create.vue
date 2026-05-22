@@ -54,6 +54,8 @@ const form = useForm({
     note: '',
 
     images: [],
+    
+    identity_card: '',
 });
 
 /*
@@ -426,6 +428,19 @@ const submit = () => {
                                         class="w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                                     >
 
+                                </div>
+
+                                <!-- CCCD -->
+                                <div>
+                                    <label class="block mb-2 text-sm font-medium text-gray-700">
+                                        CCCD
+                                    </label>
+
+                                    <input
+                                        v-model="form.identity_card"
+                                        type="text"
+                                        class="w-full rounded-2xl border border-gray-300 px-4 py-3"
+                                    >
                                 </div>
 
                                 <!-- sdt khác -->

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\RepairTimeline;
+use App\Models\Customer;
 
 class RepairController extends Controller
 {
@@ -22,7 +23,7 @@ class RepairController extends Controller
      */
     public function index(
         Request $request
-    ): Response {
+        ): Response {
 
         $search = trim(
             (string) $request->input(
@@ -37,6 +38,10 @@ class RepairController extends Controller
         );
 
         $repairs = Repair::query()
+
+            ->with([
+                'customer',
+            ])
 
             ->when(
 
@@ -57,18 +62,6 @@ class RepairController extends Controller
                                 )
 
                                 ->orWhere(
-                                    'customer_name',
-                                    'like',
-                                    "%{$search}%"
-                                )
-
-                                ->orWhere(
-                                    'customer_phone',
-                                    'like',
-                                    "%{$search}%"
-                                )
-
-                                ->orWhere(
                                     'imei',
                                     'like',
                                     "%{$search}%"
@@ -78,6 +71,35 @@ class RepairController extends Controller
                                     'device_name',
                                     'like',
                                     "%{$search}%"
+                                )
+
+                                ->orWhereHas(
+
+                                    'customer',
+
+                                    function ($customerQuery)
+                                    use ($search): void {
+
+                                        $customerQuery
+
+                                            ->where(
+                                                'name',
+                                                'like',
+                                                "%{$search}%"
+                                            )
+
+                                            ->orWhere(
+                                                'phone',
+                                                'like',
+                                                "%{$search}%"
+                                            )
+
+                                            ->orWhere(
+                                                'identity_card',
+                                                'like',
+                                                "%{$search}%"
+                                            );
+                                    }
                                 );
                         }
                     );
@@ -107,11 +129,20 @@ class RepairController extends Controller
 
                 'code' => $repair->code,
 
-                'customer_name' =>
-                    $repair->customer_name,
+                'customer' => [
 
-                'customer_phone' =>
-                    $repair->customer_phone,
+                    'id' =>
+                        $repair->customer?->id,
+
+                    'name' =>
+                        $repair->customer?->name,
+
+                    'phone' =>
+                        $repair->customer?->phone,
+
+                    'identity_card' =>
+                        $repair->customer?->identity_card,
+                ],
 
                 'device_name' =>
                     $repair->device_name,
@@ -146,13 +177,13 @@ class RepairController extends Controller
                 ],
             ]
         );
-    }
+
+        }
 
     /**
      * Form tạo phiếu sửa.
      */
-    public function create(): Response
-    {
+    public function create(): Response{
         return Inertia::render(
             'Repairs/Create'
         );
@@ -163,20 +194,23 @@ class RepairController extends Controller
      */
     public function suggestions(): JsonResponse
     {
-        $customers = Repair::query()
-            ->select([
-                'customer_name',
-                'customer_phone',
-            ])
-            ->whereNotNull('customer_name')
-            ->groupBy(
-                'customer_name',
-                'customer_phone'
-            )
-            ->orderByRaw('MAX(created_at) DESC')
-            ->limit(10)
-            ->get();
+        // Khách hàng
+        $customers = Customer::query()
 
+        ->select([
+            'id',
+            'name',
+            'phone',
+            'identity_card',
+        ])
+
+        ->latest()
+
+        ->limit(10)
+
+        ->get();
+
+        
         $issues = Repair::query()
             ->whereNotNull('issue')
             ->pluck('issue')
@@ -211,16 +245,47 @@ class RepairController extends Controller
 
         try {
 
+            /*
+            |--------------------------------------------------------------------------
+            | Customer
+            |--------------------------------------------------------------------------
+            */
+
+            $customer = Customer::query()
+
+                ->firstOrCreate(
+
+                    [
+
+                        'phone' =>
+                            $request->customer_phone,
+                    ],
+
+                    [
+
+                        'name' =>
+                            $request->customer_name,
+
+                        'identity_card' =>
+                            $request->customer_identity_card,
+                    ]
+                );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Repair
+            |--------------------------------------------------------------------------
+            */
+
             $repair = Repair::query()
+
                 ->create([
 
-                    'code' => 'SC-' . now()->format('YmdHis'),
+                    'code' =>
+                        'SC-' . now()->format('YmdHis'),
 
-                    'customer_name' =>
-                        $request->customer_name,
-
-                    'customer_phone' =>
-                        $request->customer_phone,
+                    'customer_id' =>
+                        $customer->id,
 
                     'contact_phone' =>
                         $request->contact_phone,
@@ -249,20 +314,30 @@ class RepairController extends Controller
                     'issue' =>
                         $request->issue,
 
+                    'repair_request' =>
+                        $request->repair_request,
+
                     'accessories' =>
                         $request->accessories,
+
+                    'estimated_cost' =>
+                        $request->estimated_cost,
 
                     'note' =>
                         $request->note,
 
-                    'status' => 'pending',
+                    'status' =>
+                        'pending',
 
-                    'received_at' => now(),
+                    'received_at' =>
+                        now(),
                 ]);
 
 
 
-                        /*
+
+
+            /*
             |--------------------------------------------------------------------------
             | Tạo timeline
             |--------------------------------------------------------------------------
@@ -338,51 +413,53 @@ class RepairController extends Controller
         Request $request
     ): JsonResponse {
 
-        $keyword = $request->keyword;
+        $keyword = trim(
+            (string) $request->keyword
+        );
 
-        if (! $keyword) {
+        if ($keyword === '') {
 
             return response()->json([]);
         }
 
-        $repairCustomers = Repair::query()
+        $customers = Customer::query()
 
-            ->select([
-                'customer_name',
-                'customer_phone',
-            ])
+            ->where(
 
-            ->where(function ($query) use ($keyword) {
+                function ($query)
+                use ($keyword): void {
 
-                $query
-                    ->where(
-                        'customer_name',
-                        'like',
-                        '%' . $keyword . '%'
-                    )
+                    $query
 
-                    ->orWhere(
-                        'customer_phone',
-                        'like',
-                        '%' . $keyword . '%'
-                    );
-            })
+                        ->where(
+                            'name',
+                            'like',
+                            '%' . $keyword . '%'
+                        )
+
+                        ->orWhere(
+                            'phone',
+                            'like',
+                            '%' . $keyword . '%'
+                        )
+
+                        ->orWhere(
+                            'identity_card',
+                            'like',
+                            '%' . $keyword . '%'
+                        );
+                }
+            )
 
             ->latest()
+
             ->limit(10)
+
             ->get();
 
-        $customers = $repairCustomers
-            ->unique(function ($item) {
-
-                return
-                    $item->customer_name .
-                    $item->customer_phone;
-            })
-
-            ->values();
-
-        return response()->json($customers);
+        return response()->json(
+            $customers
+        );
     }
 
         /**
@@ -393,6 +470,8 @@ class RepairController extends Controller
     ): Response {
 
         $repair->load([
+
+            'customer',
             'images',
             'technician',
             'timelines.user',
