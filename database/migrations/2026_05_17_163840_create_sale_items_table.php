@@ -6,13 +6,20 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run migrations.
+     */
     public function up(): void
     {
-        Schema::create('sale_items', function (
-            Blueprint $table
-        ) {
+        Schema::create('sale_items', function (Blueprint $table) {
 
             $table->id();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Relations
+            |--------------------------------------------------------------------------
+            */
 
             $table->foreignId('sale_id')
                 ->constrained()
@@ -24,20 +31,44 @@ return new class extends Migration
 
             $table->foreignId('product_imei_id')
                 ->nullable()
-                ->constrained()
+                ->constrained('product_imeis')
                 ->nullOnDelete();
 
-            $table->integer('qty')
+            /*
+            |--------------------------------------------------------------------------
+            | Quantity
+            |--------------------------------------------------------------------------
+            */
+
+            $table->integer('quantity')
                 ->default(1);
 
+            /*
+            |--------------------------------------------------------------------------
+            | Price
+            |--------------------------------------------------------------------------
+            */
+
             $table->decimal(
-                'price',
+                'unit_price',
                 15,
                 2
             );
 
             $table->decimal(
-                'total',
+                'discount',
+                15,
+                2
+            )->default(0);
+
+            $table->decimal(
+                'tax',
+                15,
+                2
+            )->default(0);
+
+            $table->decimal(
+                'subtotal',
                 15,
                 2
             );
@@ -46,6 +77,9 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Reverse migrations.
+     */
     public function down(): void
     {
         Schema::dropIfExists('sale_items');

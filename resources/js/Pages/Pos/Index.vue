@@ -13,12 +13,25 @@ const cart = ref([])
 const addToCart = (product) => {
 
     // kiểm tra sản phẩm đã tồn tại chưa
-    const existing = cart.value.find(
-        item => item.id === product.id
-    )
+    const existing = cart.value.find(item => {
+
+        // hàng IMEI → không gộp
+        if (product.imei_id) {
+
+            return item.imei_id === product.imei_id
+        }
+
+        // hàng thường → gộp SL
+        return item.id === product.id
+    })
 
     // nếu đã có → tăng SL
     if (existing) {
+
+        // IMEI không được cộng số lượng
+        if (product.imei_id) {
+            return
+        }
 
         existing.quantity++
 
@@ -27,10 +40,20 @@ const addToCart = (product) => {
 
     // nếu chưa có → thêm mới
     cart.value.push({
+
         id: product.id,
+
         name: product.name,
+
         sell_price: product.sell_price,
+
         quantity: 1,
+
+        subtotal: product.sell_price,
+
+        imei_id: product.imei_id || null,
+        
+        imei: product.imei || null,
     })
 }
 

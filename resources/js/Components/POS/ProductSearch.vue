@@ -11,6 +11,7 @@ const results = ref([])
 
 let timeout = null
 
+// Tìm kiếm sản phẩm
 const search = () => {
 
     clearTimeout(timeout)
@@ -24,6 +25,42 @@ const search = () => {
             return
         }
 
+        /*
+        |--------------------------------------------------
+        | SCAN EXACT
+        |--------------------------------------------------
+        */
+
+        if (keyword.value.length >= 8) {
+
+            try {
+
+                const scanRes = await axios.post(
+                    '/api/pos/scan',
+                    {
+                        code: keyword.value
+                    }
+                )
+
+                if (scanRes.data.data) {
+
+                    select(scanRes.data.data)
+
+                    return
+                }
+
+            } catch (e) {
+
+                //
+            }
+        }
+
+        /*
+        |--------------------------------------------------
+        | NORMAL SEARCH
+        |--------------------------------------------------
+        */
+
         const res = await axios.get(
             '/api/products/search',
             {
@@ -34,16 +71,6 @@ const search = () => {
         )
 
         results.value = res.data
-
-        // barcode exact match → auto select
-        const exactBarcode = res.data.find(
-            item => item.barcode === keyword.value
-        )
-
-        if (exactBarcode) {
-
-            select(exactBarcode)
-        }
 
     }, 300)
 }

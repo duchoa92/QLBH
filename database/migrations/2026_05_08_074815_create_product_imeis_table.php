@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * Run migrations.
      */
     public function up(): void
     {
@@ -17,7 +17,7 @@ return new class extends Migration
 
             /*
             |--------------------------------------------------------------------------
-            | Quan hệ
+            | Relations
             |--------------------------------------------------------------------------
             */
 
@@ -25,23 +25,34 @@ return new class extends Migration
                 ->constrained()
                 ->cascadeOnDelete();
 
+            $table->foreignId('supplier_id')
+                ->nullable()
+                ->constrained()
+                ->nullOnDelete();
+
+            $table->foreignId('customer_id')
+                ->nullable()
+                ->constrained()
+                ->nullOnDelete();
+
+            $table->foreignId('sale_id')
+                ->nullable()
+                ->constrained()
+                ->nullOnDelete();
+
             /*
             |--------------------------------------------------------------------------
-            | IMEI / SERIAL
+            | Device Information
             |--------------------------------------------------------------------------
             */
 
             $table->string('imei')
+                ->nullable()
                 ->unique();
 
-            /*
-            |--------------------------------------------------------------------------
-            | Thông tin máy
-            |--------------------------------------------------------------------------
-            */
-
             $table->string('serial')
-                ->nullable();
+                ->nullable()
+                ->unique();
 
             $table->string('color')
                 ->nullable();
@@ -51,9 +62,33 @@ return new class extends Migration
 
             /*
             |--------------------------------------------------------------------------
-            | Giá riêng từng máy
+            | Device Condition
             |--------------------------------------------------------------------------
             */
+
+            $table->string('condition')
+                ->default('new');
+
+            /*
+            |--------------------------------------------------------------------------
+            | Battery Health
+            |--------------------------------------------------------------------------
+            */
+
+            $table->unsignedInteger('battery_health')
+                ->nullable();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Prices
+            |--------------------------------------------------------------------------
+            */
+
+            $table->decimal(
+                'purchase_price',
+                15,
+                2
+            )->default(0);
 
             $table->decimal(
                 'cost_price',
@@ -69,25 +104,25 @@ return new class extends Migration
 
             /*
             |--------------------------------------------------------------------------
-            | Trạng thái
+            | Warranty
             |--------------------------------------------------------------------------
             */
 
-            $table->enum('status', [
-
-                'in_stock',
-
-                'sold',
-
-                'repair',
-
-                'returned',
-
-            ])->default('in_stock');
+            $table->timestamp('warranty_expired_at')
+                ->nullable();
 
             /*
             |--------------------------------------------------------------------------
-            | Ngày bán
+            | Imported At
+            |--------------------------------------------------------------------------
+            */
+
+            $table->timestamp('imported_at')
+                ->nullable();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Sold At
             |--------------------------------------------------------------------------
             */
 
@@ -96,7 +131,19 @@ return new class extends Migration
 
             /*
             |--------------------------------------------------------------------------
-            | Ghi chú
+            | Status
+            |--------------------------------------------------------------------------
+            */
+
+            $table->tinyInteger('status')
+                ->default(0)
+                ->comment(
+                    '0=available,1=sold,2=repairing,3=returned'
+                );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Notes
             |--------------------------------------------------------------------------
             */
 
@@ -105,7 +152,19 @@ return new class extends Migration
 
             /*
             |--------------------------------------------------------------------------
-            | Soft delete
+            | Indexes
+            |--------------------------------------------------------------------------
+            */
+
+            $table->index('imei');
+
+            $table->index('serial');
+
+            $table->index('status');
+
+            /*
+            |--------------------------------------------------------------------------
+            | Soft Deletes
             |--------------------------------------------------------------------------
             */
 
@@ -116,7 +175,7 @@ return new class extends Migration
     }
 
     /**
-     * Reverse the migrations.
+     * Reverse migrations.
      */
     public function down(): void
     {

@@ -31,7 +31,16 @@
                 class="border-b"
             >
                 <td class="p-2">
-                    {{ item.name }}
+                    <div>
+                        {{ item.name }}
+                    </div>
+
+                    <div
+                        v-if="item.imei"
+                        class="text-xs text-blue-600"
+                    >
+                        IMEI: {{ item.imei }}
+                    </div>
                 </td>
 
                 <td class="p-2 text-center">
