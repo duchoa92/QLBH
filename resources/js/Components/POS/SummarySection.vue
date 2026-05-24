@@ -1,3 +1,33 @@
+
+
+<script setup>
+import { computed } from 'vue'
+
+const props = defineProps({
+    items: Array
+})
+// Tính tổng tiền tạm tính
+const subtotal = computed(() => {
+
+    return props.items.reduce(
+        (total, item) => {
+
+            return total + (item.sell_price * item.quantity)
+
+        },
+        0
+    )
+})
+// Định dạng số thành định dạng tiền tệ Việt Nam
+const format = (number) => {
+    return Number(number).toLocaleString('vi-VN')
+}
+
+//
+const emit = defineEmits([
+    'checkout',
+])
+</script>
 <template>
     <div>
 
@@ -23,34 +53,11 @@
         </div>
 
         <button
-            class="w-full bg-blue-600 text-white py-3 rounded mt-3"
+            @click="emit('checkout')"
+            class="w-full bg-blue-600 text-white py-3 rounded"
         >
             Thanh toán
         </button>
 
     </div>
 </template>
-
-<script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
-    items: Array
-})
-
-const subtotal = computed(() => {
-
-    return props.items.reduce(
-        (total, item) => {
-
-            return total + (item.sell_price * item.quantity)
-
-        },
-        0
-    )
-})
-
-const format = (number) => {
-    return Number(number).toLocaleString('vi-VN')
-}
-</script>

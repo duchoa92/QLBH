@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\SaleItem;
 
 class Sale extends Model
 {
@@ -11,17 +12,25 @@ class Sale extends Model
 
         'code',
 
+        'customer_id',
+
         'user_id',
 
         'subtotal',
 
         'discount',
 
-        'total',
+        'tax',
 
-        'customer_paid',
+        'grand_total',
 
-        'change_money',
+        'paid_amount',
+
+        'change_amount',
+
+        'payment_method',
+
+        'status',
     ];
 
     public function items(): HasMany

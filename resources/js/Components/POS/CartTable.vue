@@ -1,3 +1,14 @@
+
+<script setup>
+defineProps({
+    items: Array
+})
+
+const format = (number) => {
+    return Number(number).toLocaleString('vi-VN')
+}
+</script>
+
 <template>
     <table class="w-full text-sm">
 
@@ -31,7 +42,7 @@
                 class="border-b"
             >
                 <td class="p-2">
-                    <div>
+                    <div class="font-medium">
                         {{ item.name }}
                     </div>
 
@@ -39,7 +50,16 @@
                         v-if="item.imei"
                         class="text-xs text-blue-600"
                     >
-                        IMEI: {{ item.imei }}
+                        IMEI:
+                        {{ item.imei }}
+                    </div>
+
+                    <div
+                        v-if="item.serial"
+                        class="text-xs text-gray-500"
+                    >
+                        Serial:
+                        {{ item.serial }}
                     </div>
                 </td>
 
@@ -60,13 +80,3 @@
 
     </table>
 </template>
-
-<script setup>
-defineProps({
-    items: Array
-})
-
-const format = (number) => {
-    return Number(number).toLocaleString('vi-VN')
-}
-</script>

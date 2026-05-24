@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Services\PosCheckoutService;
 
 
 class PosController extends Controller
@@ -81,127 +82,30 @@ class PosController extends Controller
 
  // Thanh toán
     public function checkout(
-        Request $request
-    ) {
+        Request $request,
+        PosCheckoutService $service,
+    )
+    {
+        $sale = $service->checkout(
 
-        $request->validate([
+            items: $request->items,
 
-            'items' => [
-                'required',
-                'array',
-            ],
+            customerId: $request->customer_id,
 
-            'customer_paid' => [
-                'required',
-                'numeric',
-                'min:0',
-            ],
+            paidAmount: $request->paid_amount,
+
+            paymentMethod: $request->payment_method,
+
+            userId: auth()->id(),
+        );
+
+        return response()->json([
+
+            'success' => true,
+
+            'sale_id' => $sale->id,
         ]);
-
-        DB::beginTransaction();
-
-        try {
-
-            $subtotal = collect(
-                $request->items
-            )->sum('price');
-
-            $sale = Sale::query()
-
-                ->create([
-
-                    'code' =>
-                        'HD-' . now()->format('YmdHis'),
-
-                    'user_id' =>
-                        auth()->id(),
-
-                    'subtotal' =>
-                        $subtotal,
-
-                    'discount' => 0,
-
-                    'total' =>
-                        $subtotal,
-
-                    'customer_paid' =>
-                        $request->customer_paid,
-
-                    'change_money' =>
-
-                        $request->customer_paid
-                        - $subtotal,
-                ]);
-
-            foreach (
-                $request->items
-                as $item
-            ) {
-
-                SaleItem::query()
-
-                    ->create([
-
-                        'sale_id' =>
-                            $sale->id,
-
-                        'product_id' =>
-                            $item['product_id'],
-
-                        'product_imei_id' =>
-                            $item['id'],
-
-                        'price' =>
-                            $item['price'],
-
-                        'qty' => 1,
-
-                        'total' =>
-                            $item['price'],
-                    ]);
-
-                ProductImei::query()
-
-                    ->where(
-                        'id',
-                        $item['id']
-                    )
-
-                    ->update([
-                        'status' => 'sold',
-                    ]);
-
-                Product::query()
-
-                    ->where(
-                        'id',
-                        $item['product_id']
-                    )
-
-                    ->decrement('stock');
-            }
-
-            DB::commit();
-
-            return response()->json([
-
-                'success' => true,
-
-                'sale_id' => $sale->id,
-            ]);
-
-        } catch (\Throwable $e) {
-
-            DB::rollBack();
-
-            return response()->json([
-
-                'message' =>
-                    $e->getMessage(),
-            ], 500);
-        }
     }
-
     // Xem hóa đơn bán hàng
     public function showSale(
         Sale $sale

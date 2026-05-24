@@ -11,17 +11,21 @@ class SaleItem extends Model
     // Các trường có thể gán hàng loạt
     protected $fillable = [
 
-        'sale_id',
+         'sale_id',
 
         'product_id',
 
         'product_imei_id',
 
-        'qty',
+        'quantity',
 
-        'price',
+        'unit_price',
 
-        'total',
+        'discount',
+
+        'tax',
+
+        'subtotal',
     ];
 
     // Lấy thông tin đơn hàng
