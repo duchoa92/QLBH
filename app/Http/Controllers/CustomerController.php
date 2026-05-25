@@ -6,6 +6,7 @@ use App\Models\Customer;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Services\CustomerImageService;
 
 class CustomerController extends Controller
 {
@@ -69,15 +70,48 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
+
             'full_name' => ['required', 'string', 'max:255'],
+
             'phone' => ['nullable', 'string', 'max:20'],
+
             'birthday' => ['nullable', 'date'],
+
             'gender' => ['nullable', 'string'],
+
             'cccd' => ['nullable', 'string'],
+
+            'province' => ['nullable', 'string'],
+
+            'district' => ['nullable', 'string'],
+
+            'ward' => ['nullable', 'string'],
+
             'address' => ['nullable', 'string'],
+
+            'note' => ['nullable', 'string'],
+
+            /*
+            |--------------------------------------------------
+            | IMAGES
+            |--------------------------------------------------
+            */
+            'images.*' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:5120',
+            ],
+
         ]);
 
-        Customer::create([
+        /*
+        |--------------------------------------------------
+        | Tạo khách hàng
+        |--------------------------------------------------
+        */
+        $customer = Customer::create([
+
             ...$data,
 
             'code' => 'KH' . str_pad(
@@ -88,11 +122,93 @@ class CustomerController extends Controller
             ),
 
             'customer_type' => 'retail',
+
             'is_active' => true,
         ]);
+
+        /*
+        |--------------------------------------------------
+        | UPLOAD IMAGES
+        |--------------------------------------------------
+        */
+        if ($request->hasFile('images')) {
+
+            $imageService = app(CustomerImageService::class);
+
+            foreach ($request->file('images') as $index => $image) {
+
+                $imageService->upload(
+                    customer: $customer,
+                    file: $image,
+                    isPrimary: $index === 0
+                );
+            }
+        }
 
         return redirect()
             ->route('customers.index')
             ->with('success', 'Tạo khách hàng thành công');
     }
+
+    /*
+    |--------------------------------------------------
+    | Khách hàng
+    |--------------------------------------------------
+    */
+
+
+    // Sửa khách hàng
+    public function edit(Customer $customer): Response
+    {
+        $customer->load([
+            'images'
+        ]);
+
+        return Inertia::render('Customers/Edit', [
+            'customer' => $customer,
+        ]);
+    }
+
+
+    // Cập nhật khách hàng
+    public function update(Request $request, Customer $customer)
+    {
+        $data = $request->validate([
+            'full_name' => ['required', 'string'],
+            'phone' => ['nullable', 'string'],
+            'birthday' => ['nullable', 'date'],
+            'gender' => ['nullable', 'string'],
+            'cccd' => ['nullable', 'string'],
+            'province' => ['nullable', 'string'],
+            'district' => ['nullable', 'string'],
+            'ward' => ['nullable', 'string'],
+            'address' => ['nullable', 'string'],
+            'note' => ['nullable', 'string'],
+        ]);
+
+        $customer->update($data);
+
+        return redirect()
+            ->route('customers.index')
+            ->with('success', 'Cập nhật khách hàng thành công');
+    }
+
+    // Xóa khách hàng
+
+
+    // Hiển thị chi tiết khách hàng
+    public function show(Customer $customer): Response
+    {
+        $customer->load([
+            'images',
+            'devices',
+            'points',
+            'debts',
+        ]);
+
+        return Inertia::render('Customers/Show', [
+            'customer' => $customer,
+        ]);
+    }
+
 }

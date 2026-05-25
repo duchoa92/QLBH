@@ -1,5 +1,5 @@
 <script setup>
-import { router } from '@inertiajs/vue3'
+import { Link, router } from '@inertiajs/vue3'
 import { ref, watch } from 'vue'
 
 const props = defineProps({
@@ -31,6 +31,14 @@ watch(search, (value) => {
 
         <!-- HEADER -->
         <div class="flex items-center justify-between mb-4">
+
+
+            <Link
+                :href="route('customers.create')"
+                class="bg-blue-600 text-white px-4 py-2 rounded"
+            >
+                + Thêm khách
+            </Link>
 
             <div>
                 <h1 class="text-2xl font-bold">
@@ -109,10 +117,16 @@ watch(search, (value) => {
                         </td>
 
                         <td class="p-3 font-medium">
-                            {{ item.full_name }}
-                        </td>
 
-                        <td class="p-3">
+                            <Link
+                                :href="route('customers.show', item.id)"
+                                class="text-blue-600 hover:underline"
+                            >
+                                {{ item.full_name }}
+                            </Link>
+
+                        </td>
+                                                <td class="p-3">
                             {{ item.phone }}
                         </td>
 
