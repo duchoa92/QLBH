@@ -4,95 +4,158 @@ import ProductSearch from '@/Components/POS/ProductSearch.vue'
 import CartTable from '@/Components/POS/CartTable.vue'
 import CustomerSection from '@/Components/POS/CustomerSection.vue'
 import SummarySection from '@/Components/POS/SummarySection.vue'
-import { ref } from 'vue'
+import {
+    ref,
+    computed,
+    onMounted,
+    onBeforeUnmount,
+} from 'vue'
 import axios from 'axios'
-import { computed } from 'vue'
 import PaymentModal from '@/Components/POS/PaymentModal.vue'
 
 // Giỏ hàng
 const cart = ref([])
 
+// Khách hàng đã chọn
+const selectedCustomer = ref(null)
+
+// Chỉ số sản phẩm đang chọn trong giỏ hàng
+const selectedCartIndex = ref(0)
+
+// Hiển thị hướng dẫn phím tắt
+const showShortcuts = ref(false)
+
 // Hiển thị modal thanh toán
 const showPaymentModal = ref(false)
+
+// Tính tổng tiền
+const grandTotal = computed(() => {
+
+    return cart.value.reduce(
+        (total, item) => {
+
+            return total +
+                (
+                    Number(item.price) *
+                    Number(item.quantity)
+                )
+        },
+        0
+    )
+}) 
+
+// Chuẩn hóa giá trị nhập vào (bỏ dấu phẩy)
+const normalizePrice = (value) => {
+
+    if (!value) {
+
+        return 0
+    }
+
+    return Number(
+        String(value)
+            .replaceAll(',', '')
+    )
+}
+
 
 // Thêm sản phẩm vào giỏ hàng
 const addToCart = (product) => {
 
-    const existing = cart.value.find(item => {
 
-        /*
-        |--------------------------------------------------------------------------
-        | SẢN PHẨM SERIAL/IMEI
-        |--------------------------------------------------------------------------
-        */
+    const rawPrice =
+        product.sell_price ??
+        product.price ??
+        0
 
-        if (product.product_imei_id) {
+    const price = Number(
 
+        String(rawPrice)
+
+            // bỏ dấu chấm
+            .replaceAll('.', '')
+
+            // bỏ dấu phẩy
+            .replaceAll(',', '')
+
+            // bỏ ký tự tiền
+            .replaceAll('đ', '')
+
+            .trim()
+    )
+
+    const existing = cart.value.find(
+        (item) => {
+
+            // IMEI
+            if (product.imei_id) {
+
+                return (
+                    item.imei_id ===
+                    product.imei_id
+                )
+            }
+
+            // hàng thường
             return (
-                item.product_imei_id ===
-                product.product_imei_id
+                item.id === product.id
             )
         }
+    )
 
-        /*
-        |--------------------------------------------------------------------------
-        | SẢN PHẨM THƯỜNG
-        |--------------------------------------------------------------------------
-        */
-
-        return item.id === product.id
-    })
-
-    /*
-    |--------------------------------------------------------------------------
-    | SẢN PHẨM ĐÃ TỒN TẠI TRONG GIỎ HÀNG
-    |--------------------------------------------------------------------------
-    */
-
+    // đã có
     if (existing) {
 
-        // serial product không tăng SL
-        if (product.product_imei_id) {
+        // IMEI không tăng
+        if (existing.imei_id) {
 
             return
         }
 
         existing.quantity++
 
-        existing.subtotal =
-            existing.quantity *
-            existing.sell_price
-
         return
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | SẢN PHẨM MỚI
-    |--------------------------------------------------------------------------
-    */
-
+    // thêm mới
     cart.value.push({
 
         id: product.id,
 
         name: product.name,
 
-        sell_price: product.sell_price,
+        price: price,
 
         quantity: 1,
 
-        subtotal: product.sell_price,
+        imei_id:
+            product.imei_id || null,
 
-        product_type: product.product_type,
-
-        product_imei_id:
-            product.product_imei_id,
-
-        imei: product.imei,
-
-        serial: product.serial,
+        imei:
+            product.imei || null,
     })
+
+    selectedCartIndex.value =
+        cart.value.length - 1
+
+}
+
+// Xóa sản phẩm
+const removeItem = (index) => {
+
+    cart.value.splice(index, 1)
+
+    if (
+        selectedCartIndex.value >
+        cart.value.length - 1
+    ) {
+
+        selectedCartIndex.value =
+            Math.max(
+                0,
+                cart.value.length - 1
+            )
+    }
 }
 
 // Thanh toán
@@ -114,13 +177,15 @@ const confirmCheckout = async (paymentData) => {
 
     try {
 
-        await axios.post(
+        const response = await axios.post(
             '/pos/checkout',
             {
 
                 items: cart.value,
 
-                customer_id: null,
+                customer_id:
+                    selectedCustomer.value?.id
+                    || null,
 
                 paid_amount:
                     paymentData.paid_amount,
@@ -130,7 +195,10 @@ const confirmCheckout = async (paymentData) => {
             }
         )
 
-        alert('Thanh toán thành công')
+        window.open(
+            `/sales/${response.data.sale_id}/receipt`,
+            '_blank'
+        )
 
         cart.value = []
 
@@ -138,24 +206,204 @@ const confirmCheckout = async (paymentData) => {
 
     } catch (error) {
 
-        console.error(error)
+    console.error(error)
 
-        alert('Thanh toán thất bại')
+    console.log(
+        error.response?.data
+    )
+
+    alert(
+        error.response?.data?.message
+        || 'Thanh toán thất bại'
+    )
+}
+}
+
+// Xử lý phím tắt
+const handleKeydown = (event) => {
+
+    /*
+    |--------------------------------------------------------------------------
+    | ESC → đóng popup
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'Escape') {
+
+        showPaymentModal.value = false
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | F2 → Thanh toán
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'F2') {
+
+        event.preventDefault()
+
+        checkout()
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Delete → xóa item
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        event.key === 'Delete' &&
+        !event.ctrlKey
+    ) {
+
+        if (
+            cart.value[
+                selectedCartIndex.value
+            ]
+        ) {
+
+            cart.value.splice(
+                selectedCartIndex.value,
+                1
+            )
+
+            if (
+                selectedCartIndex.value >
+                cart.value.length - 1
+            ) {
+
+                selectedCartIndex.value =
+                    Math.max(
+                        0,
+                        cart.value.length - 1
+                    )
+            }
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CTRL + DELETE → clear cart
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        event.key === 'Delete' &&
+        event.ctrlKey
+    ) {
+
+        event.preventDefault()
+
+        const confirmed = confirm(
+            'Xóa toàn bộ giỏ hàng?'
+        )
+
+        if (confirmed) {
+
+            cart.value = []
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | +
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        event.key === '+' ||
+        event.key === '='
+    ) {
+
+        const item =
+            cart.value[
+                selectedCartIndex.value
+            ]
+
+        if (item) {
+
+            item.quantity++
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | -
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        event.key === '-' ||
+        event.key === '_'
+    ) {
+
+        const item =
+            cart.value[
+                selectedCartIndex.value
+            ]
+
+        if (
+            item &&
+            item.quantity > 1
+        ) {
+
+            item.quantity--
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Arrow Down
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'ArrowDown') {
+
+        if (
+            selectedCartIndex.value <
+            cart.value.length - 1
+        ) {
+
+            selectedCartIndex.value++
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Arrow Up
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'ArrowUp') {
+
+        if (
+            selectedCartIndex.value > 0
+        ) {
+
+            selectedCartIndex.value--
+        }
     }
 }
 
-// Tính tổng tiền
-const grandTotal = computed(() => {
 
-    return cart.value.reduce(
-        (total, item) => {
+// thêm sự kiện lắng nghe phím tắt khi component được mount
+onMounted(() => {
 
-            return total + item.subtotal
-        },
-        0
+    window.addEventListener(
+        'keydown',
+        handleKeydown
     )
 })
 
+// Xóa sự kiện lắng nghe khi component bị unmount
+onBeforeUnmount(() => {
+
+    window.removeEventListener(
+        'keydown',
+        handleKeydown
+    )
+})
 </script>
 
 <template>
@@ -173,8 +421,10 @@ const grandTotal = computed(() => {
 
                 <!-- GIỎ HÀNG -->
                 <div class="mt-3 flex-1 overflow-auto">
-                    <CartTable
+                   <CartTable
                         :items="cart"
+                        :selected-index="selectedCartIndex"
+                        @remove="removeItem"
                     />
                 </div>
 
@@ -184,10 +434,126 @@ const grandTotal = computed(() => {
             <div class="col-span-4 bg-white rounded shadow p-3 flex flex-col">
 
                 <!-- KHÁCH HÀNG -->
-                <CustomerSection />
+                <CustomerSection
+                    @selected="
+                        selectedCustomer = $event
+                    "
+                />
 
                 <!-- Thanh toán -->
                 <div class="mt-4">
+                    <!-- Keyboard Shortcuts -->
+                    <div class="mb-4">
+
+                        <!-- Toggle -->
+                        <button
+                            @click="showShortcuts = !showShortcuts"
+                            class="text-sm text-blue-600 hover:underline"
+                        >
+                            {{ showShortcuts
+                                ? 'Ẩn phím tắt'
+                                : 'Xem phím tắt'
+                            }}
+                        </button>
+
+                        <!-- Content -->
+                        <div
+                            v-if="showShortcuts"
+                            class="mt-2 border rounded p-3 bg-gray-50"
+                        >
+
+                            <div class="font-bold mb-2">
+                                Phím tắt POS
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        F2
+                                    </kbd>
+
+                                    → Thanh toán
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        ESC
+                                    </kbd>
+
+                                    → Đóng popup
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        DELETE
+                                    </kbd>
+
+                                    → Xóa sản phẩm
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        CTRL + DELETE
+                                    </kbd>
+
+                                    → Xóa giỏ hàng
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        +
+                                    </kbd>
+
+                                    → Tăng SL
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        -
+                                    </kbd>
+
+                                    → Giảm SL
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        ↑ ↓
+                                    </kbd>
+
+                                    → Chọn dòng
+                                </div>
+
+                                <div>
+                                    <kbd
+                                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
+                                    >
+                                        ENTER
+                                    </kbd>
+
+                                    → Xác nhận
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
                     <SummarySection
                         :items="cart"
                         @checkout="checkout"
@@ -207,7 +573,7 @@ const grandTotal = computed(() => {
 
         :show="showPaymentModal"
 
-        :total="grandTotal"
+        :total="Number(grandTotal)"
 
         @close="showPaymentModal = false"
 

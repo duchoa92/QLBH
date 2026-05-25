@@ -82,6 +82,7 @@ class SaleController extends Controller
         );
     }
 
+    // Hiển thị chi tiết đơn hàng
     public function show(
         Sale $sale
     ): Response {
@@ -97,6 +98,25 @@ class SaleController extends Controller
             'Sales/Show',
 
             [
+                'sale' => $sale,
+            ]
+        );
+    }
+
+    // Hiển thị hóa đơn
+    public function receipt(
+        Sale $sale
+    ) {
+
+        $sale->load([
+            'items.product',
+            'items.productImei',
+        ]);
+
+        return inertia(
+            'Sales/Receipt',
+            [
+
                 'sale' => $sale,
             ]
         );

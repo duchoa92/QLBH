@@ -32,9 +32,15 @@ class Product extends Model
 
     
      protected $casts = [
-        'cost_price' => 'decimal:2',
-        'sale_price' => 'decimal:2',
+        'cost_price' => 'float',
+
+        'sell_price' => 'float',
+
+        'tax_percent' => 'float',
+
         'is_active' => 'boolean',
+
+        'allow_negative_stock' => 'boolean',
     ];
 
 

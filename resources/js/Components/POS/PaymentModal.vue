@@ -13,9 +13,15 @@ import {
 // Props
 const props = defineProps({
 
-    show: Boolean,
+    show: {
+        type: Boolean,
+        default: false,
+    },
 
-    total: Number,
+    total: {
+        type: Number,
+        default: 0,
+    },
 })
 
 // Định nghĩa các sự kiện: close, confirm
@@ -59,7 +65,7 @@ const handlePaidInput = (event) => {
 // Tạo URL QR Banking
 const vietQrUrl = computed(() => {
 
-    const amount = props.total
+    const amount = Number(props.total || 0)
 
     const description = 'POS_PAYMENT'
 
@@ -74,7 +80,8 @@ const vietQrUrl = computed(() => {
 // Tính tiền thừa
 const changeAmount = computed(() => {
 
-    return paidAmount.value - props.total
+    return Number(paidAmount.value) -
+        Number(props.total)
 })
 
 /*
@@ -194,7 +201,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="text-3xl font-bold text-blue-600">
-                    {{ formatMoney(total) }} đ
+                    {{ formatMoney(Number(props.total || 0)) }} đ
                 </div>
 
             </div>

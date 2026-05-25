@@ -12,6 +12,7 @@ use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\RepairController;
+use App\Http\Controllers\CustomerController;
 
 /*
 |--------------------------------------------------------------------------
@@ -297,6 +298,11 @@ Route::middleware(['auth'])->group(function () {
                 'showSale'
             )->name('sale.show');
 
+            Route::get(
+                '/sales/{sale}/receipt',
+                'receipt'
+            )->name('receipt');
+
         });
 
     // Sản phẩm IMEI Routes
@@ -378,5 +384,12 @@ Route::get(
 )->name('repairs.print');
 
 });
+
+// Khách hàng Routes
+Route::resource('customers', CustomerController::class);
+
+
+
+
 
 require __DIR__ . '/auth.php';

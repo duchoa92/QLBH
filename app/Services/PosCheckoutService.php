@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Product;
@@ -23,7 +25,7 @@ class PosCheckoutService
             $paidAmount,
             $paymentMethod,
             $userId,
-        ) {
+        ): Sale {
 
             /*
             |--------------------------------------------------------------------------
@@ -32,20 +34,25 @@ class PosCheckoutService
             */
 
             $subtotal = collect($items)
-                ->sum('subtotal');
+                ->sum(function (
+                    array $item
+                ): float {
+
+                    return
+                        (
+                            (float) $item['price']
+                            *
+                            (int) $item['quantity']
+                        );
+                });
 
             $discount = 0;
 
-            $tax = 0;
-
             $grandTotal =
-                $subtotal -
-                $discount +
-                $tax;
+                $subtotal - $discount;
 
-            $changeAmount =
-                $paidAmount -
-                $grandTotal;
+            $changeMoney =
+                $paidAmount - $grandTotal;
 
             /*
             |--------------------------------------------------------------------------
@@ -57,25 +64,17 @@ class PosCheckoutService
 
                 'code' => $this->generateCode(),
 
-                'customer_id' => $customerId,
-
                 'user_id' => $userId,
 
                 'subtotal' => $subtotal,
 
                 'discount' => $discount,
 
-                'tax' => $tax,
+                'total' => $grandTotal,
 
-                'grand_total' => $grandTotal,
+                'customer_paid' => $paidAmount,
 
-                'paid_amount' => $paidAmount,
-
-                'change_amount' => $changeAmount,
-
-                'payment_method' => $paymentMethod,
-
-                'status' => 'completed',
+                'change_money' => $changeMoney,
             ]);
 
             /*
@@ -88,20 +87,27 @@ class PosCheckoutService
 
                 $sale->items()->create([
 
-                    'product_id' => $item['id'],
+                    'product_id' =>
+                        $item['id'],
 
                     'product_imei_id' =>
-                        $item['product_imei_id'],
+                        $item['imei_id'] ?? null,
 
-                    'quantity' => $item['quantity'],
+                    // DB THẬT
+                    'quantity' =>
+                        (int) $item['quantity'],
 
-                    'unit_price' => $item['sell_price'],
+                    // DB THẬT
+                    'unit_price' =>
+                        (float) $item['price'],
 
-                    'discount' => 0,
-
-                    'tax' => 0,
-
-                    'subtotal' => $item['subtotal'],
+                    // DB THẬT
+                    'subtotal' =>
+                        (
+                            (float) $item['price']
+                            *
+                            (int) $item['quantity']
+                        ),
                 ]);
 
                 /*
@@ -111,43 +117,43 @@ class PosCheckoutService
                 */
 
                 $product = Product::query()
-                    ->findOrFail($item['id']);
+                    ->findOrFail(
+                        $item['id']
+                    );
 
                 /*
                 |--------------------------------------------------------------------------
-                | Deduct Stock
+                | Trừ tồn kho
                 |--------------------------------------------------------------------------
                 */
 
                 $product->decrement(
                     'stock',
-                    $item['quantity']
+                    (int) $item['quantity']
                 );
 
                 /*
                 |--------------------------------------------------------------------------
-                | IMEI Product
+                | IMEI
                 |--------------------------------------------------------------------------
                 */
 
-                if ($item['product_imei_id']) {
+                if (
+                    ! empty(
+                        $item['imei_id']
+                    )
+                ) {
 
                     ProductImei::query()
 
                         ->where(
                             'id',
-                            $item['product_imei_id']
+                            $item['imei_id']
                         )
 
                         ->update([
 
-                            'status' =>
-                                ProductImei::STATUS_SOLD,
-
-                            'sale_id' => $sale->id,
-
-                            'customer_id' =>
-                                $customerId,
+                            'status' => 'sold',
 
                             'sold_at' => now(),
                         ]);
@@ -158,11 +164,16 @@ class PosCheckoutService
         });
     }
 
-    /**
-     * Generate invoice code.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | Generate invoice code
+    |--------------------------------------------------------------------------
+    */
+
     private function generateCode(): string
     {
-        return 'INV-' . now()->format('YmdHis');
+        return 'INV-' . now()->format(
+            'YmdHis'
+        );
     }
 }

@@ -5,37 +5,48 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 
 class CustomerSearchController extends Controller
 {
-    public function __invoke(Request $request)
-    {
-        $q = trim((string) $request->get('q', ''));
+    public function __invoke(
+        Request $request
+    ): JsonResponse {
 
-        if ($q === '') {
-            return response()->json([]);
-        }
+        $keyword = $request->get('q');
 
         $customers = Customer::query()
-            ->select([
-                'id',
-                'code',
-                'full_name',
-                'phone',
-                'point_balance',
-                'debt_balance',
-                'customer_type',
-            ])
-            ->where(function ($query) use ($q) {
-                $query->where('phone', 'like', "%{$q}%")
-                      ->orWhere('full_name', 'like', "%{$q}%")
-                      ->orWhere('code', 'like', "%{$q}%")
-                      ->orWhere('cccd', 'like', "%{$q}%");
-            })
-            ->orderByDesc('id')
-            ->limit(10)
-            ->get();
 
-        return response()->json($customers);
+            ->when(
+                $keyword,
+                function ($query) use ($keyword) {
+
+                    $query
+
+                        ->where(
+                            'name',
+                            'like',
+                            "%{$keyword}%"
+                        )
+
+                        ->orWhere(
+                            'phone',
+                            'like',
+                            "%{$keyword}%"
+                        );
+                }
+            )
+
+            ->limit(10)
+
+            ->get([
+                'id',
+                'name',
+                'phone',
+            ]);
+
+        return response()->json(
+            $customers
+        );
     }
 }
