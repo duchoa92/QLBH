@@ -87,4 +87,15 @@ class HoldSaleController
                 'Đã xóa hóa đơn giữ',
         ]);
     }
+
+    // Xem chi tiết hóa đơn giữ
+    public function show(
+        HoldSale $holdSale
+    ): JsonResponse {
+
+        return response()->json([
+
+            'data' => $holdSale,
+        ]);
+    }
 }

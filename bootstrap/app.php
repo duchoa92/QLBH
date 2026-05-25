@@ -21,6 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
     // Đăng ký middleware
     ->withMiddleware(function ($middleware): void {
 
+        // Đăng ký middleware cho Sanctum
+        $middleware->statefulApi();
+
         // Đăng ký middleware cho Inertia
         $middleware->web(append: [
 

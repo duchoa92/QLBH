@@ -37,6 +37,13 @@ Route::middleware('auth:sanctum')->group(function () {
         '/hold-sales',
         [HoldSaleController::class, 'store']
     );
+
+    // Lấy chi tiết hóa đơn giữ
+    Route::get(
+        '/hold-sales/{holdSale}',
+        [HoldSaleController::class, 'show']
+    );
+    
     // Xóa hóa đơn giữ
     Route::delete(
         '/hold-sales/{holdSale}',

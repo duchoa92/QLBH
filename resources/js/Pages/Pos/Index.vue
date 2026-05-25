@@ -17,6 +17,23 @@ import PaymentModal from '@/Components/POS/PaymentModal.vue'
 // Giỏ hàng
 const cart = ref([])
 
+// Danh sách hóa đơn giữ
+const holdSales = ref([]);
+
+// Hiển thị modal hóa đơn giữ
+const showHoldModal = ref(false);
+
+// Tải danh sách hóa đơn giữ
+const fetchHoldSales = async () => {
+
+    const response = await axios.get(
+        '/api/hold-sales'
+    );
+
+    holdSales.value =
+        response.data;
+};
+
 // Khách hàng đã chọn
 const selectedCustomer = ref(null)
 
@@ -326,8 +343,11 @@ const holdBill = async () => {
 
     try {
 
-        const response = await axios.post(
-            '/api/hold-sales',
+        // Lấy CSRF token trước khi gọi API
+        await axios.get('/sanctum/csrf-cookie');
+
+        // Gọi API để lưu hóa đơn giữ
+        const response = await axios.post('/api/hold-sales',
             {
                 items:
                     cart.value,
@@ -349,6 +369,9 @@ const holdBill = async () => {
 
         cart.value = []
 
+        // Tải lại danh sách hóa đơn giữ
+        await fetchHoldSales();
+
     } catch (error) {
 
         console.error(error)
@@ -358,6 +381,23 @@ const holdBill = async () => {
         )
     }
 }
+
+// Tải hóa đơn giữ vào giỏ hàng
+const loadHoldSale = async (holdSaleId) => {
+
+    const response = await axios.get(
+        `/api/hold-sales/${holdSaleId}`
+    );
+
+    const holdSale =
+        response.data.data;
+
+    cart.value =
+        holdSale.cart_items;
+
+    showHoldModal.value =
+        false;
+};
 
 // Xử lý phím tắt
 const handleKeydown = (event) => {
@@ -530,6 +570,8 @@ const handleKeydown = (event) => {
 // thêm sự kiện lắng nghe phím tắt khi component được mount
 onMounted(() => {
 
+    fetchHoldSales();
+
     window.addEventListener(
         'keydown',
         handleKeydown
@@ -699,9 +741,18 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             @click="holdBill"
-                            class="w-full bg-yellow-500 text-white py-3 rounded"
+                            class="px-4 py-2 bg-yellow-500 text-white py-3 rounded"
                         >
                             Lưu tạm hóa đơn
+                        </button>
+
+                        <!-- Chỉ hiển thị nút load hold khi có hóa đơn giữ -->
+                        <button
+                            v-if="holdSales.length > 0"
+                            @click="showHoldModal = true"
+                            class="px-4 py-2 bg-blue-500 text-white py-3 rounded"
+                        >
+                            Có: ({{ holdSales.length }}) hóa đơn
                         </button>
 
                         <SummarySection
@@ -731,4 +782,47 @@ onBeforeUnmount(() => {
 
         @confirm="confirmCheckout"
     />
+
+    <div
+        v-if="showHoldModal"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    >
+        <div class="bg-white w-[500px] rounded p-4">
+
+            <div class="flex justify-between mb-4">
+
+                <h2 class="text-lg font-bold">
+                    Hóa đơn giữ
+                </h2>
+
+                <button
+                    @click="showHoldModal = false"
+                >
+                    X
+                </button>
+            </div>
+
+            <div
+                v-for="hold in holdSales"
+                :key="hold.id"
+                class="border rounded p-3 mb-2"
+            >
+                <div class="font-bold">
+                    {{ hold.name }}
+                </div>
+
+                <div>
+                    {{ hold.grand_total }}
+                </div>
+
+                <button
+                    @click="loadHoldSale(hold.id)"
+                    class="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
+                >
+                    Mở lại
+                </button>
+            </div>
+        </div>
+    </div>
+
 </template>
