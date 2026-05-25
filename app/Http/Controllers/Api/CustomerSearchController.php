@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class CustomerSearchController extends Controller
+class CustomerSearchController
+    extends Controller
 {
     public function __invoke(
         Request $request
@@ -19,10 +20,13 @@ class CustomerSearchController extends Controller
 
             ->when(
                 $keyword,
-                function ($query) use ($keyword) {
+                function (
+                    $query
+                ) use (
+                    $keyword
+                ) {
 
                     $query
-
                         ->where(
                             'name',
                             'like',
@@ -40,8 +44,11 @@ class CustomerSearchController extends Controller
             ->limit(10)
 
             ->get([
+
                 'id',
+
                 'name',
+
                 'phone',
             ]);
 

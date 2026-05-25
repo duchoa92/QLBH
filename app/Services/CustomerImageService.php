@@ -31,7 +31,7 @@ class CustomerImageService
         return CustomerImage::create([
             'customer_id' => $customer->id,
 
-            'type' => 'customer',
+            'type' => 'portrait',
 
             'path' => $path,
 

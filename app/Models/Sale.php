@@ -39,4 +39,21 @@ class Sale extends Model
             SaleItem::class
         );
     }
+
+    // Khách hàng
+    public function customer()
+    {
+        return $this->belongsTo(
+            Customer::class
+        );
+    }
+
+    // Người dùng
+    public function user()
+    {
+        return $this->belongsTo(
+            User::class
+        );
+    }
+
 }

@@ -9,6 +9,7 @@ import {
     computed,
     onMounted,
     onBeforeUnmount,
+    watch,
 } from 'vue'
 import axios from 'axios'
 import PaymentModal from '@/Components/POS/PaymentModal.vue'
@@ -28,6 +29,41 @@ const showShortcuts = ref(false)
 // Hiển thị modal thanh toán
 const showPaymentModal = ref(false)
 
+
+/*
+|--------------------------------------------------------------------------
+| Tải giỏ hàng từ localStorage
+|--------------------------------------------------------------------------
+*/
+
+const savedCart =
+    localStorage.getItem(
+        'pos_cart'
+    )
+
+if (savedCart) {
+
+    cart.value =
+        JSON.parse(savedCart)
+}
+
+/*
+|--------------------------------------------------------------------------
+| Tải chỉ số đã chọn từ localStorage
+|--------------------------------------------------------------------------
+*/
+
+const savedIndex =
+    localStorage.getItem(
+        'pos_selected_index'
+    )
+
+if (savedIndex) {
+
+    selectedCartIndex.value =
+        Number(savedIndex)
+}
+
 // Tính tổng tiền
 const grandTotal = computed(() => {
 
@@ -43,6 +79,43 @@ const grandTotal = computed(() => {
         0
     )
 }) 
+
+/*
+|--------------------------------------------------------------------------
+| Tự động lưu giỏ hàng
+|--------------------------------------------------------------------------
+*/
+
+watch(
+    cart,
+    (value) => {
+
+        localStorage.setItem(
+            'pos_cart',
+            JSON.stringify(value)
+        )
+    },
+    {
+        deep: true,
+    }
+)
+
+/*
+|--------------------------------------------------------------------------
+| Lưu chỉ số đã chọn
+|--------------------------------------------------------------------------
+*/
+
+watch(
+    selectedCartIndex,
+    (value) => {
+
+        localStorage.setItem(
+            'pos_selected_index',
+            value
+        )
+    }
+)
 
 // Chuẩn hóa giá trị nhập vào (bỏ dấu phẩy)
 const normalizePrice = (value) => {
@@ -202,21 +275,88 @@ const confirmCheckout = async (paymentData) => {
 
         cart.value = []
 
+        // Xóa dữ liệu đã lưu trong localStorage
+        localStorage.removeItem(
+            'pos_cart'
+        )
+
+        localStorage.removeItem(
+            'pos_selected_index'
+        )
+
         showPaymentModal.value = false
 
     } catch (error) {
 
-    console.error(error)
+        console.error(error)
 
-    console.log(
-        error.response?.data
-    )
+        console.log(
+            error.response?.data
+        )
 
-    alert(
-        error.response?.data?.message
-        || 'Thanh toán thất bại'
-    )
+        alert(
+            error.response?.data?.message
+            || 'Thanh toán thất bại'
+        )
+    }
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| Hold Bill
+|--------------------------------------------------------------------------
+*/
+
+const holdBill = async () => {
+    
+
+    if (!cart.value.length) {
+
+        alert(
+            'Giỏ hàng trống'
+        )
+
+        return
+    }
+
+    const name = prompt(
+        'Tên hóa đơn giữ'
+    )
+
+    try {
+
+        const response = await axios.post(
+            '/api/hold-sales',
+            {
+                items:
+                    cart.value,
+
+                customer_id:
+                    selectedCustomer.value?.id
+                    || null,
+
+                grand_total:
+                    grandTotal.value,
+
+                name: name,
+            }
+        )
+
+        alert(
+            'Đã giữ hóa đơn'
+        )
+
+        cart.value = []
+
+    } catch (error) {
+
+        console.error(error)
+
+        alert(
+            'Không thể giữ hóa đơn'
+        )
+    }
 }
 
 // Xử lý phím tắt
@@ -554,10 +694,22 @@ onBeforeUnmount(() => {
 
                     </div>
 
-                    <SummarySection
-                        :items="cart"
-                        @checkout="checkout"
-                    />
+                    <div class="space-y-2">
+
+                        <button
+                            type="button"
+                            @click="holdBill"
+                            class="w-full bg-yellow-500 text-white py-3 rounded"
+                        >
+                            Lưu tạm hóa đơn
+                        </button>
+
+                        <SummarySection
+                            :items="cart"
+                            @checkout="checkout"
+                        />
+
+                    </div>
                 </div>
 
             </div>

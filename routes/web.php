@@ -13,6 +13,7 @@ use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\RepairController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\SaleReceiptController;
 
 /*
 |--------------------------------------------------------------------------
@@ -387,6 +388,13 @@ Route::get(
 
 // Khách hàng Routes
 Route::resource('customers', CustomerController::class);
+
+
+// In HĐ
+Route::get(
+    '/sales/{sale}/receipt',
+    [SaleReceiptController::class, 'show']
+)->name('sales.receipt');
 
 
 

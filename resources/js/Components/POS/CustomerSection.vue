@@ -1,6 +1,10 @@
 <script setup>
+
 import axios from 'axios'
-import { ref } from 'vue'
+
+import {
+    ref,
+} from 'vue'
 
 const emit = defineEmits([
     'selected',
@@ -10,7 +14,10 @@ const keyword = ref('')
 
 const customers = ref([])
 
-const selectedCustomer = ref(null)
+const selectedCustomer =
+    ref(null)
+
+let timeout = null
 
 /*
 |--------------------------------------------------------------------------
@@ -18,25 +25,37 @@ const selectedCustomer = ref(null)
 |--------------------------------------------------------------------------
 */
 
-const search = async () => {
+const search = () => {
 
-    if (!keyword.value) {
+    clearTimeout(timeout)
 
-        customers.value = []
+    timeout = setTimeout(
+        async () => {
 
-        return
-    }
+            if (
+                !keyword.value
+            ) {
 
-    const response = await axios.get(
-        '/api/customers/search',
-        {
-            params: {
-                q: keyword.value,
+                customers.value = []
+
+                return
             }
-        }
-    )
 
-    customers.value = response.data
+            const response =
+                await axios.get(
+                    '/api/customers/search',
+                    {
+                        params: {
+                            q: keyword.value,
+                        },
+                    }
+                )
+
+            customers.value =
+                response.data
+        },
+        300
+    )
 }
 
 /*
@@ -52,14 +71,33 @@ const selectCustomer = (
     selectedCustomer.value =
         customer
 
-    customers.value = []
-
     keyword.value =
         customer.name
+
+    customers.value = []
 
     emit(
         'selected',
         customer
+    )
+}
+
+/*
+|--------------------------------------------------------------------------
+| Clear
+|--------------------------------------------------------------------------
+*/
+
+const clearCustomer = () => {
+
+    selectedCustomer.value =
+        null
+
+    keyword.value = ''
+
+    emit(
+        'selected',
+        null
     )
 }
 </script>
@@ -68,8 +106,24 @@ const selectCustomer = (
 
     <div>
 
-        <div class="font-bold mb-2">
-            Khách hàng
+        <!-- Header -->
+
+        <div
+            class="flex justify-between items-center mb-2"
+        >
+
+            <div class="font-bold">
+                Khách hàng
+            </div>
+
+            <button
+                v-if="selectedCustomer"
+                @click="clearCustomer"
+                class="text-xs text-red-500"
+            >
+                Bỏ chọn
+            </button>
+
         </div>
 
         <!-- Input -->
@@ -80,15 +134,15 @@ const selectCustomer = (
                 v-model="keyword"
                 @input="search"
                 type="text"
-                placeholder="Tên / SĐT khách"
-                class="w-full border rounded p-3"
+                placeholder="Tên hoặc SĐT khách"
+                class="w-full border rounded p-2"
             />
 
-            <!-- Dropdown -->
+            <!-- Results -->
 
             <div
                 v-if="customers.length"
-                class="absolute z-50 bg-white border rounded w-full mt-1 shadow"
+                class="absolute z-50 w-full bg-white border rounded shadow mt-1"
             >
 
                 <div
@@ -99,15 +153,23 @@ const selectCustomer = (
                             customer
                         )
                     "
-                    class="p-3 border-b hover:bg-gray-100 cursor-pointer"
+                    class="p-2 hover:bg-gray-100 cursor-pointer border-b"
                 >
 
-                    <div class="font-medium">
-                        {{ customer.name }}
+                    <div
+                        class="font-medium"
+                    >
+                        {{
+                            customer.name
+                        }}
                     </div>
 
-                    <div class="text-sm text-gray-500">
-                        {{ customer.phone }}
+                    <div
+                        class="text-sm text-gray-500"
+                    >
+                        {{
+                            customer.phone
+                        }}
                     </div>
 
                 </div>
@@ -120,15 +182,23 @@ const selectCustomer = (
 
         <div
             v-if="selectedCustomer"
-            class="mt-3 p-3 bg-blue-50 rounded border"
+            class="mt-3 border rounded p-2 bg-blue-50"
         >
 
-            <div class="font-bold">
-                {{ selectedCustomer.name }}
+            <div
+                class="font-medium"
+            >
+                {{
+                    selectedCustomer.name
+                }}
             </div>
 
-            <div class="text-sm text-gray-600">
-                {{ selectedCustomer.phone }}
+            <div
+                class="text-sm text-gray-600"
+            >
+                {{
+                    selectedCustomer.phone
+                }}
             </div>
 
         </div>
