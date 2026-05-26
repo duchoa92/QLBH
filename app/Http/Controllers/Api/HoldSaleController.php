@@ -20,6 +20,31 @@ class HoldSaleController
         Request $request
     ): JsonResponse {
 
+        // dư liệu hợp lệ
+        $request->validate([
+
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+
+            'items' => [
+                'required',
+                'array',
+                'min:1',
+            ],
+
+            'grand_total' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
+        ]);
+
+
+
+
         $holdSale =
             HoldSale::query()
                 ->create([
@@ -60,6 +85,11 @@ class HoldSaleController
     {
         $holds = HoldSale::query()
 
+            ->where(
+                'user_id',
+                auth()->id()
+            )
+
             ->latest()
 
             ->get();
@@ -69,25 +99,6 @@ class HoldSaleController
         );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Delete Hold
-    |--------------------------------------------------------------------------
-    */
-
-    public function destroy(
-        HoldSale $holdSale
-    ): JsonResponse {
-
-        $holdSale->delete();
-
-        return response()->json([
-
-            'message' =>
-                'Đã xóa hóa đơn giữ',
-        ]);
-    }
-
     // Xem chi tiết hóa đơn giữ
     public function show(
         HoldSale $holdSale
@@ -95,7 +106,34 @@ class HoldSaleController
 
         return response()->json([
 
-            'data' => $holdSale,
+            'data' => $holdSale->load(
+            'customer'
+        ),
         ]);
     }
+
+     /*
+    |--------------------------------------------------------------------------
+    | Xóa Hóa Đơn Giữ
+    |--------------------------------------------------------------------------
+    */
+
+    public function destroy(
+    int $holdSale
+): JsonResponse {
+
+    $deleted = HoldSale::query()
+
+        ->where('id', $holdSale)
+
+        ->delete();
+
+    return response()->json([
+
+        'deleted' => $deleted,
+
+        'id' => $holdSale,
+    ]);
+}
+
 }

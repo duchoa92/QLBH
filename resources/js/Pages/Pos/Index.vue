@@ -23,6 +23,28 @@ const holdSales = ref([]);
 // Hiển thị modal hóa đơn giữ
 const showHoldModal = ref(false);
 
+const showSaveHoldModal = ref(false);
+
+const holdName = ref('');
+
+const openHoldModal = () => {
+
+    if (!cart.value.length) {
+
+        alert('Giỏ hàng trống');
+
+        return;
+    }
+
+    holdName.value =
+
+        selectedCustomer.value?.full_name ||
+
+        `Hóa đơn ${Date.now()}`;
+
+    showSaveHoldModal.value = true;
+};
+
 // Tải danh sách hóa đơn giữ
 const fetchHoldSales = async () => {
 
@@ -337,9 +359,6 @@ const holdBill = async () => {
         return
     }
 
-    const name = prompt(
-        'Tên hóa đơn giữ'
-    )
 
     try {
 
@@ -359,7 +378,7 @@ const holdBill = async () => {
                 grand_total:
                     grandTotal.value,
 
-                name: name,
+                name: holdName.value,
             }
         )
 
@@ -367,10 +386,20 @@ const holdBill = async () => {
             'Đã giữ hóa đơn'
         )
 
-        cart.value = []
-
         // Tải lại danh sách hóa đơn giữ
         await fetchHoldSales();
+
+        // Xóa dữ liệu đã lưu trong localStorage
+        cart.value = [];
+
+        // Xóa khách hàng đã chọn
+        selectedCustomer.value = null;
+
+        // Đóng modal lưu hóa đơn giữ
+        showSaveHoldModal.value = false;
+
+        // Reset tên hóa đơn giữ
+        holdName.value = '';
 
     } catch (error) {
 
@@ -384,23 +413,69 @@ const holdBill = async () => {
 
 // Tải hóa đơn giữ vào giỏ hàng
 const loadHoldSale = async (holdSaleId) => {
+    
 
+    // Lấy dữ liệu hóa đơn giữ từ API
     const response = await axios.get(
         `/api/hold-sales/${holdSaleId}`
     );
 
+    // Dữ liệu hóa đơn giữ
     const holdSale =
         response.data.data;
 
+    // Gán sản phẩm vào giỏ hàng
     cart.value =
         holdSale.cart_items;
+    
+    // Nếu hóa đơn giữ có khách hàng, gán vào selectedCustomer
+    selectedCustomer.value =
+    holdSale.customer;
 
+    // Xóa hóa đơn giữ sau khi tải vào giỏ hàng
+    await axios.delete(
+        `/api/hold-sales/${holdSaleId}`
+    );
+
+    // Tải lại danh sách hóa đơn giữ
+    await fetchHoldSales();
+
+    // Đóng modal hóa đơn giữ
     showHoldModal.value =
         false;
 };
 
 // Xử lý phím tắt
 const handleKeydown = (event) => {
+
+    // Nếu đang nhập liệu trong input, textarea hoặc element có contenteditable thì không xử lý phím tắt
+    const tagName =
+        event.target.tagName;
+
+    const isTyping =
+
+        tagName === 'INPUT' ||
+
+        tagName === 'TEXTAREA' ||
+
+        event.target.isContentEditable;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Nếu đang nhập liệu
+    |--------------------------------------------------------------------------
+    */
+
+    if (isTyping) {
+
+        /*
+        |--------------------------------------------------------------------------
+        | Chỉ chặn shortcut POS
+        |--------------------------------------------------------------------------
+        */
+
+        return;
+    }
 
     /*
     |--------------------------------------------------------------------------
@@ -740,7 +815,7 @@ onBeforeUnmount(() => {
 
                         <button
                             type="button"
-                            @click="holdBill"
+                            @click="openHoldModal"
                             class="px-4 py-2 bg-yellow-500 text-white py-3 rounded"
                         >
                             Lưu tạm hóa đơn
@@ -824,5 +899,52 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </div>
+
+
+    <!-- Modal lưu tạm hóa đơn -->
+<div
+    v-if="showSaveHoldModal"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+>
+    <div class="bg-white w-[400px] rounded-xl p-5 shadow-xl">
+
+        <div class="text-lg font-bold mb-4">
+            Lưu tạm hóa đơn
+        </div>
+
+        <div>
+
+            <label class="block mb-2 text-sm font-medium">
+                Tên hóa đơn
+            </label>
+
+            <input
+                v-model="holdName"
+                type="text"
+                class="w-full border rounded-lg px-3 py-2"
+                placeholder="Nhập tên hóa đơn"
+            />
+        </div>
+
+        <div class="flex justify-end gap-2 mt-5">
+
+            <button
+                @click="showSaveHoldModal = false"
+                class="px-4 py-2 border rounded-lg"
+            >
+                Hủy
+            </button>
+
+            <button
+                @click="holdBill"
+                class="px-4 py-2 bg-yellow-500 text-white rounded-lg"
+            >
+                Lưu tạm
+            </button>
+
+        </div>
+
+    </div>
+</div>
 
 </template>

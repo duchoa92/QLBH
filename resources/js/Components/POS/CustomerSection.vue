@@ -14,6 +14,9 @@ const keyword = ref('')
 
 const customers = ref([])
 
+// chỉ số khách hàng được chọn trong danh sách kết quả tìm kiếm
+const selectedIndex = ref(-1)
+
 const selectedCustomer =
     ref(null)
 
@@ -53,6 +56,9 @@ const search = () => {
 
             customers.value =
                 response.data
+
+                // reset chỉ số khách hàng được chọn
+                selectedIndex.value = 0
         },
         300
     )
@@ -76,6 +82,7 @@ const selectCustomer = (
 
     customers.value = []
 
+   
     emit(
         'selected',
         customer
@@ -100,6 +107,73 @@ const clearCustomer = () => {
         null
     )
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| Keyboard Navigation
+|--------------------------------------------------------------------------
+*/
+
+const handleKeydown = (event) => {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Arrow Down
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'ArrowDown') {
+
+        event.preventDefault()
+
+        if (
+            selectedIndex.value <
+            customers.value.length - 1
+        ) {
+
+            selectedIndex.value++
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Arrow Up
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'ArrowUp') {
+
+        event.preventDefault()
+
+        if (selectedIndex.value > 0) {
+
+            selectedIndex.value--
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Enter
+    |--------------------------------------------------------------------------
+    */
+
+    if (event.key === 'Enter') {
+
+        event.preventDefault()
+
+        const customer =
+            customers.value[
+                selectedIndex.value
+            ]
+
+        if (customer) {
+
+            selectCustomer(customer)
+        }
+    }
+}
+
 </script>
 
 <template>
@@ -133,6 +207,7 @@ const clearCustomer = () => {
             <input
                 v-model="keyword"
                 @input="search"
+                @keydown="handleKeydown"
                 type="text"
                 placeholder="Tên hoặc SĐT khách"
                 class="w-full border rounded p-2"
@@ -146,21 +221,26 @@ const clearCustomer = () => {
             >
 
                 <div
-                    v-for="customer in customers"
+                    v-for="(customer, index) in customers"
                     :key="customer.id"
                     @click="
                         selectCustomer(
                             customer
                         )
                     "
-                    class="p-2 hover:bg-gray-100 cursor-pointer border-b"
+                    :class="[
+                        'p-2 cursor-pointer border-b',
+                        index === selectedIndex
+                            ? 'bg-blue-100'
+                            : 'hover:bg-gray-100'
+                    ]"
                 >
 
                     <div
                         class="font-medium"
                     >
                         {{
-                            customer.name
+                            customer.full_name
                         }}
                     </div>
 
@@ -189,7 +269,7 @@ const clearCustomer = () => {
                 class="font-medium"
             >
                 {{
-                    selectedCustomer.name
+                    selectedCustomer.full_name
                 }}
             </div>
 
