@@ -1,167 +1,215 @@
 <script setup>
-import {
-    Combobox,
-    ComboboxInput,
-    ComboboxOption,
-    ComboboxOptions,
-} from '@headlessui/vue';
+import axios from 'axios'
+import { ref } from 'vue'
 
-import {
-    ref,
-    watch,
-} from 'vue';
+import { useDebounceSearch } from '@/Composables/useDebounceSearch'
+import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
 
-import axios from 'axios';
-import { debounce } from 'lodash';
-
-/**
- * EMITS
- */
 const emit = defineEmits([
-    'select',
-    'update:modelValue',
-]);
+    'selected',
+    'next'
+])
 
-/**
- * STATE
- */
-const query = ref('');
-const customers = ref([]);
-const selectedCustomer = ref(null);
+/*
+|--------------------------------------------------------------------------
+| STATE
+|--------------------------------------------------------------------------
+*/
+const selectedCustomer = ref(null)
 
-/**
- * FETCH CUSTOMERS
- */
-const fetchCustomers = debounce(
-    async (keyword) => {
+const customerMeta = ref({
+    is_vip: false,
+    debt: 0,
+})
 
-        if (!keyword) {
+/*
+|--------------------------------------------------------------------------
+| SEARCH (SOURCE OF TRUTH)
+|--------------------------------------------------------------------------
+*/
+const {
+    keyword,
+    results: customers,
+    search,
+} = useDebounceSearch(async (q) => {
 
-            customers.value = [];
+    if (!q) return []
 
-            return;
-        }
+    const res = await axios.get('/api/customers/search', {
+        params: { q }
+    })
 
-        try {
+    return res.data?.data ?? res.data ?? []
 
-            const response = await axios.get(
-                route('repairs.customer-search'),
-                {
-                    params: {
-                        keyword,
-                    },
-                }
-            );
+}, 180)
 
-            customers.value =
-                response.data;
+/*
+|--------------------------------------------------------------------------
+| KEYBOARD ENGINE
+|--------------------------------------------------------------------------
+*/
+const {
+    activeIndex,
+    itemRefs,
+    setItemRef,
+    onKeyDown,
+    setActive,
+    reset,
+} = useAutocompleteKeyboard(customers, (customer) => {
+    selectCustomer(customer)
+})
 
-        } catch (error) {
+/*
+|--------------------------------------------------------------------------
+| SELECT CUSTOMER (SOURCE OF TRUTH)
+|--------------------------------------------------------------------------
+*/
+const selectCustomer = (customer) => {
 
-            console.error(error);
-        }
-    },
-    300
-);
+    selectedCustomer.value = customer
 
-/**
- * WATCH INPUT
- */
-watch(query, value => {
+    keyword.value = customer.full_name
 
-    emit(
-        'update:modelValue',
-        value
-    );
+    reset()
 
-    fetchCustomers(value);
-});
+    customerMeta.value = {
+        is_vip: customer.is_vip ?? false,
+        debt: customer.debt ?? 0,
+    }
 
-/**
- * SELECT CUSTOMER
- */
-const selectCustomer = customer => {
+    emit('selected', customer)
+}
 
-    selectedCustomer.value =
-        customer;
+/*
+|--------------------------------------------------------------------------
+| CLEAR
+|--------------------------------------------------------------------------
+*/
+const clearCustomer = () => {
 
-    query.value =
-        customer.customer_name;
+    selectedCustomer.value = null
+    keyword.value = ''
 
-    emit(
-        'update:modelValue',
-        customer.customer_name
-    );
+    reset()
 
-    emit(
-        'select',
-        customer
-    );
+    emit('selected', null)
+}
 
-    customers.value = [];
-};
+/*
+|--------------------------------------------------------------------------
+| ENTER FLOW (POS ULTRA SAFE)
+|--------------------------------------------------------------------------
+*/
+const onEnter = () => {
+
+    const customer = customers.value?.[activeIndex.value]
+
+    // CASE 1: chọn từ list
+    if (customer) {
+        selectCustomer(customer)
+        emit('next', customer)
+        return
+    }
+
+    // CASE 2: đã có customer
+    if (selectedCustomer.value) {
+        emit('next', selectedCustomer.value)
+        return
+    }
+
+    // CASE 3: fallback search
+    search()
+}
 </script>
 
 <template>
-    <Combobox
-        v-model="selectedCustomer"
-        @update:modelValue="selectCustomer"
-    >
+    <div>
 
+        <!-- HEADER -->
+        <div class="flex justify-between items-center mb-2">
+            <div class="font-bold">
+                Khách hàng
+            </div>
+
+            <button
+                v-if="selectedCustomer"
+                @click="clearCustomer"
+                class="text-xs text-red-500"
+            >
+                Bỏ chọn
+            </button>
+        </div>
+
+        <!-- INPUT -->
         <div class="relative">
 
-            <!-- INPUT -->
-
-            <ComboboxInput
-                class="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Nhập tên hoặc số điện thoại"
-                :displayValue="
-                    customer =>
-                        customer?.customer_name
-                        || query
-                "
-                @change="
-                    query = $event.target.value
-                "
+            <input
+                v-model="keyword"
+                @input="search"
+                @keydown.enter.prevent="onEnter"
+                @keydown="onKeyDown"
+                type="text"
+                placeholder="Tên hoặc SĐT khách"
+                class="w-full border rounded p-2"
+                autocomplete="off"
             />
 
-            <!-- DROPDOWN -->
-
-            <ComboboxOptions
+            <!-- RESULTS -->
+            <div
                 v-if="customers.length"
-                class="absolute z-50 mt-1 w-full bg-white border rounded shadow-lg max-h-72 overflow-y-auto"
+                class="absolute z-50 w-full bg-white border rounded shadow mt-1 max-h-60 overflow-auto"
             >
-
-                <ComboboxOption
-                    v-for="customer in customers"
-                    :key="
-                        customer.customer_phone
-                    "
-                    :value="customer"
-                    v-slot="{ active }"
+                <div
+                    v-for="(customer, index) in customers"
+                    :key="customer.id"
+                    :ref="el => setItemRef(el, index)"
+                    @mouseenter="setActive(index)"
+                    @click="selectCustomer(customer)"
+                    :class="[
+                        'p-2 cursor-pointer border-b',
+                        index === activeIndex
+                            ? 'bg-blue-100'
+                            : 'hover:bg-gray-100'
+                    ]"
                 >
+                    <div class="font-medium">
+                        {{ customer.full_name }}
+
+                        <span
+                            v-if="customer.is_vip"
+                            class="text-xs text-yellow-500 ml-1"
+                        >
+                            VIP
+                        </span>
+                    </div>
+
+                    <div class="text-sm text-gray-500">
+                        {{ customer.phone }}
+                    </div>
 
                     <div
-                        :class="[
-
-                            'p-3 cursor-pointer border-b',
-
-                            active
-                                ? 'bg-blue-100'
-                                : 'bg-white'
-                        ]"
+                        v-if="customer.debt > 0"
+                        class="text-xs text-red-500"
                     >
-
-                        <div class="font-medium">
-                            {{ customer.customer_name }}
-                        </div>
-
-                        <div class="text-sm text-gray-500">
-                            {{ customer.customer_phone }}
-                        </div>
+                        Nợ: {{ customer.debt.toLocaleString() }}
                     </div>
-                </ComboboxOption>
-            </ComboboxOptions>
+                </div>
+            </div>
         </div>
-    </Combobox>
+
+        <!-- SELECTED -->
+        <div
+            v-if="selectedCustomer"
+            class="mt-3 border rounded p-2 bg-blue-50"
+        >
+            <div class="font-medium">
+                {{ selectedCustomer.full_name }}
+            </div>
+
+            <div class="text-sm text-gray-600">
+                {{ selectedCustomer.phone }}
+            </div>
+        </div>
+
+    </div>
 </template>

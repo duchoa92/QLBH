@@ -1,6 +1,7 @@
 <script setup>
 
 import axios from 'axios'
+import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
 
 import {
     ref,
@@ -14,8 +15,6 @@ const keyword = ref('')
 
 const customers = ref([])
 
-// chỉ số khách hàng được chọn trong danh sách kết quả tìm kiếm
-const selectedIndex = ref(-1)
 
 const selectedCustomer =
     ref(null)
@@ -58,7 +57,7 @@ const search = () => {
                 response.data
 
                 // reset chỉ số khách hàng được chọn
-                selectedIndex.value = 0
+                reset()
         },
         300
     )
@@ -106,73 +105,23 @@ const clearCustomer = () => {
         'selected',
         null
     )
+    reset()
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Keyboard Navigation
-|--------------------------------------------------------------------------
-*/
 
-const handleKeydown = (event) => {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Arrow Down
-    |--------------------------------------------------------------------------
-    */
 
-    if (event.key === 'ArrowDown') {
-
-        event.preventDefault()
-
-        if (
-            selectedIndex.value <
-            customers.value.length - 1
-        ) {
-
-            selectedIndex.value++
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Arrow Up
-    |--------------------------------------------------------------------------
-    */
-
-    if (event.key === 'ArrowUp') {
-
-        event.preventDefault()
-
-        if (selectedIndex.value > 0) {
-
-            selectedIndex.value--
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Enter
-    |--------------------------------------------------------------------------
-    */
-
-    if (event.key === 'Enter') {
-
-        event.preventDefault()
-
-        const customer =
-            customers.value[
-                selectedIndex.value
-            ]
-
-        if (customer) {
-
-            selectCustomer(customer)
-        }
-    }
-}
+const {
+    activeIndex,
+    itemRefs,
+    setItemRef,
+    onKeyDown,
+    setActive,
+    reset,
+} = useAutocompleteKeyboard(customers, (customer) => {
+    selectCustomer(customer)
+})
 
 </script>
 
@@ -207,7 +156,7 @@ const handleKeydown = (event) => {
             <input
                 v-model="keyword"
                 @input="search"
-                @keydown="handleKeydown"
+                @keydown="onKeyDown"
                 type="text"
                 placeholder="Tên hoặc SĐT khách"
                 class="w-full border rounded p-2"
@@ -222,6 +171,8 @@ const handleKeydown = (event) => {
 
                 <div
                     v-for="(customer, index) in customers"
+                    :ref="el => setItemRef(el, index)"
+                    @mouseenter="setActive(index)"
                     :key="customer.id"
                     @click="
                         selectCustomer(
@@ -230,7 +181,7 @@ const handleKeydown = (event) => {
                     "
                     :class="[
                         'p-2 cursor-pointer border-b',
-                        index === selectedIndex
+                        index === activeIndex
                             ? 'bg-blue-100'
                             : 'hover:bg-gray-100'
                     ]"

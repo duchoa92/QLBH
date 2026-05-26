@@ -30,20 +30,15 @@ const holdName = ref('');
 const openHoldModal = () => {
 
     if (!cart.value.length) {
-
-        alert('Giỏ hàng trống');
-
-        return;
+        alert('Giỏ hàng trống')
+        return
     }
 
-    holdName.value =
+    holdName.value = selectedCustomer.value?.full_name?.trim()
+        || `Hóa đơn ${Date.now()}`
 
-        selectedCustomer.value?.full_name ||
-
-        `Hóa đơn ${Date.now()}`;
-
-    showSaveHoldModal.value = true;
-};
+    showSaveHoldModal.value = true
+}
 
 // Tải danh sách hóa đơn giữ
 const fetchHoldSales = async () => {
@@ -58,6 +53,10 @@ const fetchHoldSales = async () => {
 
 // Khách hàng đã chọn
 const selectedCustomer = ref(null)
+
+const onCustomerSelected = (customer) => {
+    selectedCustomer.value = customer
+}
 
 // Chỉ số sản phẩm đang chọn trong giỏ hàng
 const selectedCartIndex = ref(0)
@@ -125,9 +124,7 @@ const grandTotal = computed(() => {
 |--------------------------------------------------------------------------
 */
 
-watch(
-    cart,
-    (value) => {
+watch(cart,(value) => {
 
         localStorage.setItem(
             'pos_cart',
@@ -425,12 +422,12 @@ const loadHoldSale = async (holdSaleId) => {
         response.data.data;
 
     // Gán sản phẩm vào giỏ hàng
-    cart.value =
-        holdSale.cart_items;
-    
+    cart.value = holdSale.cart_items;
+
     // Nếu hóa đơn giữ có khách hàng, gán vào selectedCustomer
-    selectedCustomer.value =
-    holdSale.customer;
+    selectedCustomer.value = holdSale.customer;
+
+    selectedCartIndex.value = 0
 
     // Xóa hóa đơn giữ sau khi tải vào giỏ hàng
     await axios.delete(
@@ -641,11 +638,30 @@ const handleKeydown = (event) => {
     }
 }
 
+/*
+|--------------------------------------------------------------------------
+| FIX: sync selectedCartIndex với cart
+|--------------------------------------------------------------------------
+*/
+watch(cart, () => {
+
+    if (selectedCartIndex.value > cart.value.length - 1) {
+
+        selectedCartIndex.value = Math.max(
+            0,
+            cart.value.length - 1
+        )
+    }
+
+}, { deep: true })
+
 
 // thêm sự kiện lắng nghe phím tắt khi component được mount
 onMounted(() => {
 
-    fetchHoldSales();
+    watch(cart, () => {
+        fetchHoldSales()
+    }, { deep: true })
 
     window.addEventListener(
         'keydown',
@@ -692,9 +708,7 @@ onBeforeUnmount(() => {
 
                 <!-- KHÁCH HÀNG -->
                 <CustomerSection
-                    @selected="
-                        selectedCustomer = $event
-                    "
+                    @selected="onCustomerSelected"
                 />
 
                 <!-- Thanh toán -->
