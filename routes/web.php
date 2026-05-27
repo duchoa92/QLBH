@@ -384,17 +384,17 @@ Route::get(
 
 )->name('repairs.print');
 
-});
-
 // Khách hàng Routes
 Route::resource('customers', CustomerController::class);
-
 
 // In HĐ
 Route::get(
     '/sales/{sale}/receipt',
     [SaleReceiptController::class, 'show']
 )->name('sales.receipt');
+
+
+});
 
 
 

@@ -15,9 +15,15 @@ class ProductController extends Controller
     {
         $keyword = $request->string('keyword')->toString();
 
-        $categoryId = $request->integer('category_id');
+        $categoryId = $request->input('category_id');
 
-        $query = Product::query()
+        $products = Product::query()
+
+            /*
+            |--------------------------------------------------
+            | ACTIVE ONLY
+            |--------------------------------------------------
+            */
             ->where('is_active', true)
 
             /*
@@ -25,9 +31,9 @@ class ProductController extends Controller
             | SEARCH
             |--------------------------------------------------
             */
-            ->when($keyword, function ($q) use ($keyword) {
+            ->when($keyword, function ($query) use ($keyword) {
 
-                $q->where(function ($sub) use ($keyword) {
+                $query->where(function ($sub) use ($keyword) {
 
                     $sub->where('name', 'like', "%{$keyword}%")
                         ->orWhere('sku', 'like', "%{$keyword}%")
@@ -37,17 +43,17 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------
-            | FILTER CATEGORY
+            | CATEGORY FILTER
             |--------------------------------------------------
             */
-            ->when($categoryId, function ($q) use ($categoryId) {
+            ->when($categoryId, function ($query) use ($categoryId) {
 
-                $q->where('category_id', $categoryId);
+                $query->where('category_id', $categoryId);
             })
 
             /*
             |--------------------------------------------------
-            | ORDER BEST SELLER FIRST
+            | BEST SELLER FIRST
             |--------------------------------------------------
             */
             ->orderByDesc('sold_count')
@@ -57,11 +63,30 @@ class ProductController extends Controller
             | NEWEST
             |--------------------------------------------------
             */
-            ->orderByDesc('id');
+            ->orderByDesc('id')
 
-        $products = $query
+            /*
+            |--------------------------------------------------
+            | LIMIT
+            |--------------------------------------------------
+            */
             ->limit(100)
-            ->get();
+
+            /*
+            |--------------------------------------------------
+            | SELECT OPTIMIZE
+            |--------------------------------------------------
+            */
+            ->get([
+                'id',
+                'name',
+                'sku',
+                'barcode',
+                'sell_price',
+                'stock',
+                //'sold_count',
+                'category_id',
+            ]);
 
         return response()->json($products);
     }

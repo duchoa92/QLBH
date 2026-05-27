@@ -4,8 +4,8 @@ import axios from 'axios'
 
 import {
     ref,
-    watch,
     onMounted,
+    watch,
 } from 'vue'
 
 const emit = defineEmits([
@@ -32,15 +32,24 @@ const categories = ref([])
 */
 const loadProducts = async () => {
 
-    const res = await axios.get('/api/products', {
+    try {
 
-        params: {
-            keyword: keyword.value,
-            category_id: categoryId.value,
-        },
-    })
+        const response = await axios.get(
+            '/api/products',
+            {
+                params: {
+                    keyword: keyword.value,
+                    category_id: categoryId.value,
+                },
+            }
+        )
 
-    products.value = res.data
+        products.value = response.data
+
+    } catch (error) {
+
+        console.error(error)
+    }
 }
 
 /*
@@ -50,9 +59,18 @@ const loadProducts = async () => {
 */
 const loadCategories = async () => {
 
-    const res = await axios.get('/api/categories')
+    try {
 
-    categories.value = res.data
+        const response = await axios.get(
+            '/api/categories'
+        )
+
+        categories.value = response.data
+
+    } catch (error) {
+
+        console.error(error)
+    }
 }
 
 /*
@@ -60,7 +78,7 @@ const loadCategories = async () => {
 | SELECT PRODUCT
 |--------------------------------------------------
 */
-const select = (product) => {
+const selectProduct = (product) => {
 
     emit('selected', product)
 }
@@ -77,12 +95,13 @@ const formatPrice = (value) => {
 
 /*
 |--------------------------------------------------
-| WATCH SEARCH
+| WATCH
 |--------------------------------------------------
 */
 watch(
     [keyword, categoryId],
     () => {
+
         loadProducts()
     }
 )
@@ -101,6 +120,7 @@ onMounted(() => {
 </script>
 
 <template>
+
     <div>
 
         <!-- SEARCH -->
@@ -109,18 +129,18 @@ onMounted(() => {
             <input
                 v-model="keyword"
                 type="text"
-                class="w-full border rounded p-2"
+                class="w-full border rounded-lg p-3"
                 placeholder="Tìm sản phẩm..."
             />
 
         </div>
 
-        <!-- CATEGORY -->
-        <div class="mb-3">
+        <!-- FILTER -->
+        <div class="mb-4">
 
             <select
                 v-model="categoryId"
-                class="w-full border rounded p-2"
+                class="w-full border rounded-lg p-3"
             >
                 <option value="">
                     Tất cả danh mục
@@ -144,27 +164,45 @@ onMounted(() => {
             <div
                 v-for="product in products"
                 :key="product.id"
-                class="border rounded p-3 cursor-pointer hover:bg-gray-100"
-                @click="select(product)"
+                class="border rounded-xl p-3 bg-white cursor-pointer hover:bg-gray-100 transition"
+                @click="selectProduct(product)"
             >
-                <div class="font-bold">
+
+                <!-- NAME -->
+                <div class="font-semibold text-sm">
+
                     {{ product.name }}
+
                 </div>
 
-                <div class="text-sm text-gray-500">
-                    SKU: {{ product.sku }}
-                </div>
-
-                <div class="text-red-600 font-bold mt-2">
-                    {{ formatPrice(product.price) }}
-                </div>
-
+                <!-- SKU -->
                 <div class="text-xs text-gray-500 mt-1">
-                    Đã bán: {{ product.sold_count }}
+
+                    SKU: {{ product.sku }}
+
                 </div>
 
-                <div class="text-xs">
-                    Tồn: {{ product.stock }}
+                <!-- PRICE -->
+                <div class="text-red-600 font-bold mt-2">
+
+                    {{ formatPrice(product.price) }}
+
+                </div>
+
+                <!-- STOCK -->
+                <div class="text-xs mt-2">
+
+                    Tồn kho:
+                    {{ product.stock }}
+
+                </div>
+
+                <!-- SOLD -->
+                <div class="text-xs text-gray-500">
+
+                    Đã bán:
+                    {{ product.sold_count }}
+
                 </div>
 
             </div>
@@ -172,4 +210,5 @@ onMounted(() => {
         </div>
 
     </div>
+
 </template>

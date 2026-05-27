@@ -11,13 +11,14 @@ const emit = defineEmits([
     'selected',
 ])
 
+const props = defineProps({
+    customer: Object,
+})
+
 const keyword = ref('')
 
 const customers = ref([])
 
-
-const selectedCustomer =
-    ref(null)
 
 let timeout = null
 
@@ -63,18 +64,10 @@ const search = () => {
     )
 }
 
-/*
-|--------------------------------------------------------------------------
-| Select
-|--------------------------------------------------------------------------
-*/
-
+// Chọn khách hàng
 const selectCustomer = (
     customer
 ) => {
-
-    selectedCustomer.value =
-        customer
 
     keyword.value =
         customer.name
@@ -88,16 +81,9 @@ const selectCustomer = (
     )
 }
 
-/*
-|--------------------------------------------------------------------------
-| Clear
-|--------------------------------------------------------------------------
-*/
-
+// Xóa khách hàng đã chọn
 const clearCustomer = () => {
 
-    selectedCustomer.value =
-        null
 
     keyword.value = ''
 
@@ -108,10 +94,7 @@ const clearCustomer = () => {
     reset()
 }
 
-
-
-
-
+// Keyboard navigation
 const {
     activeIndex,
     itemRefs,
@@ -140,7 +123,7 @@ const {
             </div>
 
             <button
-                v-if="selectedCustomer"
+                v-if="props.customer"
                 @click="clearCustomer"
                 class="text-xs text-red-500"
             >
@@ -212,7 +195,7 @@ const {
         <!-- Selected -->
 
         <div
-            v-if="selectedCustomer"
+            v-if="props.customer"
             class="mt-3 border rounded p-2 bg-blue-50"
         >
 
@@ -220,7 +203,7 @@ const {
                 class="font-medium"
             >
                 {{
-                    selectedCustomer.full_name
+                    props.customer.full_name
                 }}
             </div>
 
@@ -228,7 +211,7 @@ const {
                 class="text-sm text-gray-600"
             >
                 {{
-                    selectedCustomer.phone
+                    props.customer.phone
                 }}
             </div>
 

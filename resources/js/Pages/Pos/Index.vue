@@ -13,6 +13,8 @@ import {
 } from 'vue'
 import axios from 'axios'
 import PaymentModal from '@/Components/POS/PaymentModal.vue'
+import { toast } from 'vue-sonner'
+import 'vue-sonner/style.css'
 
 
 // Giỏ hàng
@@ -31,7 +33,7 @@ const holdName = ref('');
 const openHoldModal = () => {
 
     if (!cart.value.length) {
-        alert('Giỏ hàng trống')
+        toast.error('Giỏ hàng trống')
         return
     }
 
@@ -86,17 +88,27 @@ if (savedCart) {
         JSON.parse(savedCart)
 }
 
-/*
-|--------------------------------------------------------------------------
-| Tải chỉ số đã chọn từ localStorage
-|--------------------------------------------------------------------------
-*/
 
+// Tải chỉ số đã chọn từ localStorage
 const savedIndex =
     localStorage.getItem(
         'pos_selected_index'
     )
 
+// Tải khách hàng từ localStorage
+const savedCustomer =
+    localStorage.getItem(
+        'pos_customer'
+    )
+
+if (savedCustomer) {
+
+    selectedCustomer.value =
+        JSON.parse(savedCustomer)
+}
+
+
+// Tải chỉ số đã chọn từ localStorage
 if (savedIndex) {
 
     selectedCartIndex.value =
@@ -154,6 +166,36 @@ watch(
     }
 )
 
+
+/*
+|--------------------------------------------------------------------------
+| Tự động lưu khách hàng
+|--------------------------------------------------------------------------
+*/
+
+watch(
+    selectedCustomer,
+    (value) => {
+
+        if (value) {
+
+            localStorage.setItem(
+                'pos_customer',
+                JSON.stringify(value)
+            )
+
+            return
+        }
+
+        localStorage.removeItem(
+            'pos_customer'
+        )
+    },
+    {
+        deep: true,
+    }
+)
+
 // Chuẩn hóa giá trị nhập vào (bỏ dấu phẩy)
 const normalizePrice = (value) => {
 
@@ -172,7 +214,7 @@ const normalizePrice = (value) => {
 // Thêm sản phẩm vào giỏ hàng
 const addToCart = (product) => {
 
-
+    console.log(product)
     const rawPrice =
         product.sell_price ??
         product.price ??
@@ -268,12 +310,14 @@ const removeItem = (index) => {
     }
 }
 
+
+
 // Thanh toán
 const checkout = () => {
 
     if (!cart.value.length) {
 
-        alert('Giỏ hàng trống')
+        toast.error('Giỏ hàng trống')
 
         return
     }
@@ -285,6 +329,11 @@ const checkout = () => {
 // Xác nhận thanh toán
 const confirmCheckout = async (paymentData) => {
 
+    // Hiển thị thông báo đang xử lý
+    const loadingToast = toast.loading(
+    'Đang thanh toán...'
+)
+
     try {
 
         const response = await axios.post(
@@ -292,6 +341,7 @@ const confirmCheckout = async (paymentData) => {
             {
 
                 items: cart.value,
+
 
                 customer_id:
                     selectedCustomer.value?.id
@@ -305,12 +355,16 @@ const confirmCheckout = async (paymentData) => {
             }
         )
 
-        window.open(
+        //mở hóa đơn
+/*         window.open(
             `/sales/${response.data.sale_id}/receipt`,
             '_blank'
-        )
+        ) */
 
         cart.value = []
+
+        // Xóa khách hàng đã chọn
+        selectedCustomer.value = null
 
         // Xóa dữ liệu đã lưu trong localStorage
         localStorage.removeItem(
@@ -321,9 +375,26 @@ const confirmCheckout = async (paymentData) => {
             'pos_selected_index'
         )
 
+        localStorage.removeItem(
+        'pos_customer'
+        )
+
         showPaymentModal.value = false
 
+        // Ẩn thông báo đang xử lý
+        toast.dismiss(loadingToast)
+
+        // Hiển thị thông báo thành công
+        toast.success(
+            'Thanh toán thành công'
+        )
+
+    
+
     } catch (error) {
+
+        // ẩn thông báo đang xử lý
+        toast.dismiss(loadingToast)
 
         console.error(error)
 
@@ -331,7 +402,7 @@ const confirmCheckout = async (paymentData) => {
             error.response?.data
         )
 
-        alert(
+        toast.error(
             error.response?.data?.message
             || 'Thanh toán thất bại'
         )
@@ -350,7 +421,7 @@ const holdBill = async () => {
 
     if (!cart.value.length) {
 
-        alert(
+        toast.error(
             'Giỏ hàng trống'
         )
 
@@ -380,8 +451,8 @@ const holdBill = async () => {
             }
         )
 
-        alert(
-            'Đã giữ hóa đơn'
+        toast.success(
+            'Đã giữ hóa đơn thành công'
         )
 
         // Tải lại danh sách hóa đơn giữ
@@ -393,6 +464,10 @@ const holdBill = async () => {
         // Xóa khách hàng đã chọn
         selectedCustomer.value = null;
 
+        localStorage.removeItem(
+        'pos_customer'
+)
+
         // Đóng modal lưu hóa đơn giữ
         showSaveHoldModal.value = false;
 
@@ -403,7 +478,7 @@ const holdBill = async () => {
 
         console.error(error)
 
-        alert(
+        toast.error(
             'Không thể giữ hóa đơn'
         )
     }
@@ -709,6 +784,7 @@ onBeforeUnmount(() => {
 
                 <!-- KHÁCH HÀNG -->
                 <CustomerSection
+                    :customer="selectedCustomer"
                     @selected="onCustomerSelected"
                 />
 

@@ -11,9 +11,9 @@ use App\Http\Controllers\Api\CategoryController;
 
 
 
-Route::middleware('auth:sanctum')->group(function () {
-
-    // Quét mã vạch để tìm sản phẩm
+Route::middleware(['web', 'auth'])->group(function () {
+    
+// Quét mã vạch để tìm sản phẩm
     Route::post(
         '/pos/scan',
         [PosScanController::class, 'scan']
@@ -59,5 +59,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Lấy danh sách danh mục
     Route::get('/categories', [CategoryController::class, 'index']);
+
 
 });

@@ -19,7 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     
 
     // Đăng ký middleware
-    ->withMiddleware(function ($middleware): void {
+    ->withMiddleware(function (Middleware $middleware): void {
 
         // Đăng ký middleware cho Sanctum
         $middleware->statefulApi();

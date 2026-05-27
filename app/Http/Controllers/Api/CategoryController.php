@@ -14,7 +14,10 @@ class CategoryController extends Controller
     {
         $categories = Category::query()
             ->orderBy('name')
-            ->get();
+            ->get([
+                'id',
+                'name',
+            ]);
 
         return response()->json($categories);
     }

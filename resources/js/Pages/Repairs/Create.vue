@@ -20,6 +20,7 @@ import {
 
 import CustomerAutocomplete from '@/Components/CustomerAutocomplete.vue';
 import PatternLock from '@/Components/PatternLock.vue';
+import { Toaster } from 'vue-sonner';
 
 const form = useForm({
 
@@ -108,7 +109,7 @@ const startScan = async () => {
 
         if (!selectedDeviceId) {
 
-            alert('Không tìm thấy camera');
+            toast.error('Không tìm thấy camera');
 
             return;
         }
@@ -135,7 +136,7 @@ const startScan = async () => {
 
         console.log(error);
 
-        alert('Không thể mở camera');
+        toast.error('Không thể mở camera');
     }
 };
 
