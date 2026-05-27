@@ -5,6 +5,7 @@ import axios from 'axios'
 import {
     ref,
     onMounted,
+    onBeforeUnmount,
     watch,
 } from 'vue'
 
@@ -116,6 +117,36 @@ onMounted(() => {
     loadProducts()
 
     loadCategories()
+
+    const loadProducts = async () => {
+
+        const response = await axios.get(
+            '/api/products'
+        )
+
+        products.value =
+            response.data.data
+            ?? response.data
+    }
+
+    onMounted(() => {
+
+        loadProducts()
+
+        window.addEventListener(
+            'pos-refresh-products',
+            loadProducts
+        )
+    })
+
+    onBeforeUnmount(() => {
+
+        window.removeEventListener(
+            'pos-refresh-products',
+            loadProducts
+        )
+    })
+
 })
 </script>
 

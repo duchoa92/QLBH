@@ -388,6 +388,10 @@ const confirmCheckout = async (paymentData) => {
         toast.success(
             'Thanh toán thành công'
         )
+        // Refresh sản phẩm
+        window.dispatchEvent(
+    new Event('pos-refresh-products')
+)
 
     
 
