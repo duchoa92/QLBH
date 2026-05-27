@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Brand;
+use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {

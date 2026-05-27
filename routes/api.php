@@ -6,6 +6,9 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\ProductSearchController;
 use App\Http\Controllers\Api\PosScanController;
 use App\Http\Controllers\Api\HoldSaleController;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\CategoryController;
+
 
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -21,6 +24,10 @@ Route::middleware('auth:sanctum')->group(function () {
         '/products/search',
         [ProductSearchController::class, 'search']
     );
+
+    // Lấy danh sách sản phẩm
+    Route::get('/products', [ProductController::class, 'index']);
+
 
     // Tìm kiếm khách hàng
     Route::get('/customers/search', [CustomerController::class, 'search']);
@@ -49,5 +56,8 @@ Route::middleware('auth:sanctum')->group(function () {
         '/hold-sales/{holdSale}',
         [HoldSaleController::class, 'destroy']
     );
+
+    // Lấy danh sách danh mục
+    Route::get('/categories', [CategoryController::class, 'index']);
 
 });

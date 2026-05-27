@@ -1,266 +1,174 @@
+
 <script setup>
 import axios from 'axios'
-import { ref } from 'vue'
 
-import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
-import { useDebounceSearch } from '@/Composables/useDebounceSearch'
+import {
+    ref,
+    watch,
+    onMounted,
+} from 'vue'
 
-const emit = defineEmits(['selected'])
+const emit = defineEmits([
+    'selected',
+])
 
 /*
-|--------------------------------------------------------------------------
-| ACTION FIRST (IMPORTANT - FIX RUNTIME ORDER)
-|--------------------------------------------------------------------------
+|--------------------------------------------------
+| STATE
+|--------------------------------------------------
 */
-const select = (product) => {
-    emit('selected', product)
+const keyword = ref('')
 
-    keyword.value = ''
-    products.value = []
-    reset()
+const categoryId = ref('')
+
+const products = ref([])
+
+const categories = ref([])
+
+/*
+|--------------------------------------------------
+| LOAD PRODUCTS
+|--------------------------------------------------
+*/
+const loadProducts = async () => {
+
+    const res = await axios.get('/api/products', {
+
+        params: {
+            keyword: keyword.value,
+            category_id: categoryId.value,
+        },
+    })
+
+    products.value = res.data
 }
 
 /*
-|--------------------------------------------------------------------------
-| SEARCH (SOURCE OF TRUTH)
-|--------------------------------------------------------------------------
+|--------------------------------------------------
+| LOAD CATEGORIES
+|--------------------------------------------------
 */
-const {
-    keyword,
-    results: products,
-    search,
-} = useDebounceSearch(async (q) => {
+const loadCategories = async () => {
 
-    if (!q) return []
+    const res = await axios.get('/api/categories')
 
-    /*
-    |------------------------------------------
-    | BARCODE SCAN (LOCK SAFE)
-    |------------------------------------------
-    */
-    if (q.length >= 8) {
-        try {
-            const scanRes = await axios.post('/api/pos/scan', {
-                code: q
-            })
-
-            if (scanRes.data?.data) {
-                select(scanRes.data.data)
-                return []
-            }
-        } catch (e) {}
-    }
-
-    /*
-    |------------------------------------------
-    | PRODUCT SEARCH
-    |------------------------------------------
-    */
-    const res = await axios.get('/api/products/search', {
-        params: { q }
-    })
-
-    return res.data?.data ?? res.data ?? []
-
-}, 150)
+    categories.value = res.data
+}
 
 /*
-|--------------------------------------------------------------------------
-| KEYBOARD ENGINE
-|--------------------------------------------------------------------------
+|--------------------------------------------------
+| SELECT PRODUCT
+|--------------------------------------------------
 */
-const {
-    activeIndex,
-    itemRefs,
-    setItemRef,
-    onKeyDown,
-    setActive,
-    reset,
-} = useAutocompleteKeyboard(products, (product) => {
-    select(product)
-})
+const select = (product) => {
+
+    emit('selected', product)
+}
 
 /*
-|--------------------------------------------------------------------------
+|--------------------------------------------------
 | FORMAT PRICE
-|--------------------------------------------------------------------------
+|--------------------------------------------------
 */
-const format = (number) =>
-    Number(number).toLocaleString('vi-VN')
+const formatPrice = (value) => {
+
+    return Number(value).toLocaleString('vi-VN')
+}
+
+/*
+|--------------------------------------------------
+| WATCH SEARCH
+|--------------------------------------------------
+*/
+watch(
+    [keyword, categoryId],
+    () => {
+        loadProducts()
+    }
+)
+
+/*
+|--------------------------------------------------
+| INIT
+|--------------------------------------------------
+*/
+onMounted(() => {
+
+    loadProducts()
+
+    loadCategories()
+})
 </script>
 
 <template>
-    <div class="relative">
+    <div>
 
-        <!-- INPUT -->
-        <input
-            v-model="keyword"
-            @input="search"
-            @keydown="onKeyDown"
-            type="text"
-            placeholder="Quét mã / tên sản phẩm"
-            class="w-full border rounded p-3 text-lg"
-        />
+        <!-- SEARCH -->
+        <div class="mb-3">
 
-        <!-- RESULTS -->
-        <div
-            v-if="products.length"
-            class="absolute w-full bg-white border rounded mt-1 shadow z-50"
-        >
-            <div
-                v-for="(product, index) in products"
-                :key="product.id"
-                :ref="el => setItemRef(el, index)"
-                @mouseenter="setActive(index)"
-                @click="select(product)"
-                :class="[
-                    'p-2 cursor-pointer',
-                    index === activeIndex
-                        ? 'bg-blue-100'
-                        : 'hover:bg-gray-100'
-                ]"
-            >
-                <div class="font-medium">
-                    {{ product.name }}
-                </div>
+            <input
+                v-model="keyword"
+                type="text"
+                class="w-full border rounded p-2"
+                placeholder="Tìm sản phẩm..."
+            />
 
-                <div class="text-sm text-gray-500">
-                    {{ format(product.sell_price) }}
-                </div>
-            </div>
         </div>
 
-    </div>
-</template><script setup>
-import axios from 'axios'
-import { ref } from 'vue'
+        <!-- CATEGORY -->
+        <div class="mb-3">
 
-import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
-import { useDebounceSearch } from '@/Composables/useDebounceSearch'
-
-const emit = defineEmits(['selected'])
-
-/*
-|--------------------------------------------------------------------------
-| ACTION FIRST (IMPORTANT - FIX RUNTIME ORDER)
-|--------------------------------------------------------------------------
-*/
-const select = (product) => {
-    emit('selected', product)
-
-    keyword.value = ''
-    products.value = []
-    reset()
-}
-
-/*
-|--------------------------------------------------------------------------
-| SEARCH (SOURCE OF TRUTH)
-|--------------------------------------------------------------------------
-*/
-const {
-    keyword,
-    results: products,
-    search,
-} = useDebounceSearch(async (q) => {
-
-    if (!q) return []
-
-    /*
-    |------------------------------------------
-    | BARCODE SCAN (LOCK SAFE)
-    |------------------------------------------
-    */
-    if (q.length >= 8) {
-        try {
-            const scanRes = await axios.post('/api/pos/scan', {
-                code: q
-            })
-
-            if (scanRes.data?.data) {
-                select(scanRes.data.data)
-                return []
-            }
-        } catch (e) {}
-    }
-
-    /*
-    |------------------------------------------
-    | PRODUCT SEARCH
-    |------------------------------------------
-    */
-    const res = await axios.get('/api/products/search', {
-        params: { q }
-    })
-
-    return res.data?.data ?? res.data ?? []
-
-}, 150)
-
-/*
-|--------------------------------------------------------------------------
-| KEYBOARD ENGINE
-|--------------------------------------------------------------------------
-*/
-const {
-    activeIndex,
-    itemRefs,
-    setItemRef,
-    onKeyDown,
-    setActive,
-    reset,
-} = useAutocompleteKeyboard(products, (product) => {
-    select(product)
-})
-
-/*
-|--------------------------------------------------------------------------
-| FORMAT PRICE
-|--------------------------------------------------------------------------
-*/
-const format = (number) =>
-    Number(number).toLocaleString('vi-VN')
-</script>
-
-<template>
-    <div class="relative">
-
-        <!-- INPUT -->
-        <input
-            v-model="keyword"
-            @input="search"
-            @keydown="onKeyDown"
-            type="text"
-            placeholder="Quét mã / tên sản phẩm"
-            class="w-full border rounded p-3 text-lg"
-        />
-
-        <!-- RESULTS -->
-        <div
-            v-if="products.length"
-            class="absolute w-full bg-white border rounded mt-1 shadow z-50"
-        >
-            <div
-                v-for="(product, index) in products"
-                :key="product.id"
-                :ref="el => setItemRef(el, index)"
-                @mouseenter="setActive(index)"
-                @click="select(product)"
-                :class="[
-                    'p-2 cursor-pointer',
-                    index === activeIndex
-                        ? 'bg-blue-100'
-                        : 'hover:bg-gray-100'
-                ]"
+            <select
+                v-model="categoryId"
+                class="w-full border rounded p-2"
             >
-                <div class="font-medium">
+                <option value="">
+                    Tất cả danh mục
+                </option>
+
+                <option
+                    v-for="category in categories"
+                    :key="category.id"
+                    :value="category.id"
+                >
+                    {{ category.name }}
+                </option>
+
+            </select>
+
+        </div>
+
+        <!-- PRODUCT GRID -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+            <div
+                v-for="product in products"
+                :key="product.id"
+                class="border rounded p-3 cursor-pointer hover:bg-gray-100"
+                @click="select(product)"
+            >
+                <div class="font-bold">
                     {{ product.name }}
                 </div>
 
                 <div class="text-sm text-gray-500">
-                    {{ format(product.sell_price) }}
+                    SKU: {{ product.sku }}
                 </div>
+
+                <div class="text-red-600 font-bold mt-2">
+                    {{ formatPrice(product.price) }}
+                </div>
+
+                <div class="text-xs text-gray-500 mt-1">
+                    Đã bán: {{ product.sold_count }}
+                </div>
+
+                <div class="text-xs">
+                    Tồn: {{ product.stock }}
+                </div>
+
             </div>
+
         </div>
 
     </div>
