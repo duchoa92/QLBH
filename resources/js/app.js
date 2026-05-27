@@ -6,6 +6,7 @@ import { Toaster } from 'vue-sonner';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
+import 'vue-sonner/style.css'
 
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -21,37 +22,15 @@ createInertiaApp({
 
         createApp({
 
-            render: () =>
-                h('div', [
-
-                    h(App, props),
-
-                    h(Toaster, {
-
-                        richColors: true,
-
-                        position: 'top-center',
-
-                        expand: true,
-
-                        closeButton: true,
-
-                        duration: 4000,
-                        
-                        offset: '20px',
-
-                        toastOptions: {
-                            style: {
-                                zIndex: '999999',
-                            },
-                        },
-
-                    }),
-
-                ]),
+            render: () => h(App, props),
 
         })
+            .component(
+                'Toaster',
+                Toaster
+            )
             .use(plugin)
+            .use(ZiggyVue)
             .mount(el)
     },
     progress: {

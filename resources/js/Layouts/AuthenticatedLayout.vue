@@ -6,11 +6,20 @@ import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link } from '@inertiajs/vue3';
+import { Toaster } from 'vue-sonner'
 
 const showingNavigationDropdown = ref(false);
 </script>
 
 <template>
+    <Toaster
+        richColors
+        position="top-center"
+        :expand="true"
+        :closeButton="true"
+        :duration="2500"
+    />
+
     <div>
         <div class="min-h-screen bg-gray-100">
             <nav
