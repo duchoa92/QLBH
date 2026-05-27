@@ -6,7 +6,6 @@ import CustomerSection from '@/Components/POS/CustomerSection.vue'
 import SummarySection from '@/Components/POS/SummarySection.vue'
 import {
     ref,
-    computed,
     onMounted,
     onBeforeUnmount,
     watch,
@@ -15,54 +14,60 @@ import axios from 'axios'
 import PaymentModal from '@/Components/POS/PaymentModal.vue'
 import { toast } from 'vue-sonner'
 import 'vue-sonner/style.css'
+import { usePos } from '@/Composables/usePos'
+import { useHoldSale } from '@/Composables/useHoldSale'
+
+const {
+
+    cart,
+
+    selectedCustomer,
+
+    selectedCartIndex,
+
+    grandTotal,
+
+    addToCart,
+
+    removeItem,
+
+    clearCart,
+
+} = usePos()
 
 
-// Giỏ hàng
-const cart = ref([])
+const {
 
-// Danh sách hóa đơn giữ
-const holdSales = ref([]);
+    holdSales,
 
-// Hiển thị modal hóa đơn giữ
-const showHoldModal = ref(false);
+    showHoldModal,
 
-const showSaveHoldModal = ref(false);
+    showSaveHoldModal,
 
-const holdName = ref('');
+    holdName,
 
-const openHoldModal = () => {
+    fetchHoldSales,
 
-    if (!cart.value.length) {
-        toast.error('Giỏ hàng trống')
-        return
-    }
+    openHoldModal,
 
-    holdName.value = selectedCustomer.value?.full_name?.trim()
-        || `Hóa đơn ${Date.now()}`
+    holdBill,
 
-    showSaveHoldModal.value = true
-}
+    loadHoldSale,
 
-// Tải danh sách hóa đơn giữ
-const fetchHoldSales = async () => {
+} = useHoldSale(
 
-    const response = await axios.get(
-        '/api/hold-sales'
-    );
+    cart,
 
-    holdSales.value =
-        response.data;
-};
+    selectedCustomer,
 
-// Khách hàng đã chọn
-const selectedCustomer = ref(null)
+    grandTotal,
+
+    clearCart,
+)
 
 const onCustomerSelected = (customer) => {
     selectedCustomer.value = customer
 }
-
-// Chỉ số sản phẩm đang chọn trong giỏ hàng
-const selectedCartIndex = ref(0)
 
 // Hiển thị hướng dẫn phím tắt
 const showShortcuts = ref(false)
@@ -71,244 +76,7 @@ const showShortcuts = ref(false)
 const showPaymentModal = ref(false)
 
 
-/*
-|--------------------------------------------------------------------------
-| Tải giỏ hàng từ localStorage
-|--------------------------------------------------------------------------
-*/
 
-const savedCart =
-    localStorage.getItem(
-        'pos_cart'
-    )
-
-if (savedCart) {
-
-    cart.value =
-        JSON.parse(savedCart)
-}
-
-
-// Tải chỉ số đã chọn từ localStorage
-const savedIndex =
-    localStorage.getItem(
-        'pos_selected_index'
-    )
-
-// Tải khách hàng từ localStorage
-const savedCustomer =
-    localStorage.getItem(
-        'pos_customer'
-    )
-
-if (savedCustomer) {
-
-    selectedCustomer.value =
-        JSON.parse(savedCustomer)
-}
-
-
-// Tải chỉ số đã chọn từ localStorage
-if (savedIndex) {
-
-    selectedCartIndex.value =
-        Number(savedIndex)
-}
-
-// Tính tổng tiền
-const grandTotal = computed(() => {
-
-    return cart.value.reduce(
-        (total, item) => {
-
-            return total +
-                (
-                    Number(item.price) *
-                    Number(item.quantity)
-                )
-        },
-        0
-    )
-}) 
-
-/*
-|--------------------------------------------------------------------------
-| Tự động lưu giỏ hàng
-|--------------------------------------------------------------------------
-*/
-
-watch(cart,(value) => {
-
-        localStorage.setItem(
-            'pos_cart',
-            JSON.stringify(value)
-        )
-    },
-    {
-        deep: true,
-    }
-)
-
-/*
-|--------------------------------------------------------------------------
-| Lưu chỉ số đã chọn
-|--------------------------------------------------------------------------
-*/
-
-watch(
-    selectedCartIndex,
-    (value) => {
-
-        localStorage.setItem(
-            'pos_selected_index',
-            value
-        )
-    }
-)
-
-
-/*
-|--------------------------------------------------------------------------
-| Tự động lưu khách hàng
-|--------------------------------------------------------------------------
-*/
-
-watch(
-    selectedCustomer,
-    (value) => {
-
-        if (value) {
-
-            localStorage.setItem(
-                'pos_customer',
-                JSON.stringify(value)
-            )
-
-            return
-        }
-
-        localStorage.removeItem(
-            'pos_customer'
-        )
-    },
-    {
-        deep: true,
-    }
-)
-
-// Chuẩn hóa giá trị nhập vào (bỏ dấu phẩy)
-const normalizePrice = (value) => {
-
-    if (!value) {
-
-        return 0
-    }
-
-    return Number(
-        String(value)
-            .replaceAll(',', '')
-    )
-}
-
-
-// Thêm sản phẩm vào giỏ hàng
-const addToCart = (product) => {
-
-    console.log(product)
-    const rawPrice =
-        product.sell_price ??
-        product.price ??
-        0
-
-    const price = Number(
-
-        String(rawPrice)
-
-            // bỏ dấu chấm
-            .replaceAll('.', '')
-
-            // bỏ dấu phẩy
-            .replaceAll(',', '')
-
-            // bỏ ký tự tiền
-            .replaceAll('đ', '')
-
-            .trim()
-    )
-
-    const existing = cart.value.find(
-        (item) => {
-
-            // IMEI
-            if (product.imei_id) {
-
-                return (
-                    item.imei_id ===
-                    product.imei_id
-                )
-            }
-
-            // hàng thường
-            return (
-                item.id === product.id
-            )
-        }
-    )
-
-    // đã có
-    if (existing) {
-
-        // IMEI không tăng
-        if (existing.imei_id) {
-
-            return
-        }
-
-        existing.quantity++
-
-        return
-    }
-
-    // thêm mới
-    cart.value.push({
-
-        id: product.id,
-
-        name: product.name,
-
-        price: price,
-
-        quantity: 1,
-
-        imei_id:
-            product.imei_id || null,
-
-        imei:
-            product.imei || null,
-    })
-
-    selectedCartIndex.value =
-        cart.value.length - 1
-
-}
-
-// Xóa sản phẩm
-const removeItem = (index) => {
-
-    cart.value.splice(index, 1)
-
-    if (
-        selectedCartIndex.value >
-        cart.value.length - 1
-    ) {
-
-        selectedCartIndex.value =
-            Math.max(
-                0,
-                cart.value.length - 1
-            )
-    }
-}
 
 
 
@@ -360,25 +128,11 @@ const confirmCheckout = async (paymentData) => {
             `/sales/${response.data.sale_id}/receipt`,
             '_blank'
         ) */
+        
+        // Xóa giỏ hàng
+        clearCart()
 
-        cart.value = []
-
-        // Xóa khách hàng đã chọn
-        selectedCustomer.value = null
-
-        // Xóa dữ liệu đã lưu trong localStorage
-        localStorage.removeItem(
-            'pos_cart'
-        )
-
-        localStorage.removeItem(
-            'pos_selected_index'
-        )
-
-        localStorage.removeItem(
-        'pos_customer'
-        )
-
+        
         showPaymentModal.value = false
 
         // Ẩn thông báo đang xử lý
@@ -414,113 +168,6 @@ const confirmCheckout = async (paymentData) => {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Hold Bill
-|--------------------------------------------------------------------------
-*/
-
-const holdBill = async () => {
-    
-
-    if (!cart.value.length) {
-
-        toast.error(
-            'Giỏ hàng trống'
-        )
-
-        return
-    }
-
-
-    try {
-
-        // Lấy CSRF token trước khi gọi API
-        await axios.get('/sanctum/csrf-cookie');
-
-        // Gọi API để lưu hóa đơn giữ
-        const response = await axios.post('/api/hold-sales',
-            {
-                items:
-                    cart.value,
-
-                customer_id:
-                    selectedCustomer.value?.id
-                    || null,
-
-                grand_total:
-                    grandTotal.value,
-
-                name: holdName.value,
-            }
-        )
-
-        toast.success(
-            'Đã giữ hóa đơn thành công'
-        )
-
-        // Tải lại danh sách hóa đơn giữ
-        await fetchHoldSales();
-
-        // Xóa dữ liệu đã lưu trong localStorage
-        cart.value = [];
-
-        // Xóa khách hàng đã chọn
-        selectedCustomer.value = null;
-
-        localStorage.removeItem(
-        'pos_customer'
-)
-
-        // Đóng modal lưu hóa đơn giữ
-        showSaveHoldModal.value = false;
-
-        // Reset tên hóa đơn giữ
-        holdName.value = '';
-
-    } catch (error) {
-
-        console.error(error)
-
-        toast.error(
-            'Không thể giữ hóa đơn'
-        )
-    }
-}
-
-// Tải hóa đơn giữ vào giỏ hàng
-const loadHoldSale = async (holdSaleId) => {
-    
-
-    // Lấy dữ liệu hóa đơn giữ từ API
-    const response = await axios.get(
-        `/api/hold-sales/${holdSaleId}`
-    );
-
-    // Dữ liệu hóa đơn giữ
-    const holdSale =
-        response.data.data;
-
-    // Gán sản phẩm vào giỏ hàng
-    cart.value = holdSale.cart_items;
-
-    // Nếu hóa đơn giữ có khách hàng, gán vào selectedCustomer
-    selectedCustomer.value = holdSale.customer;
-
-    selectedCartIndex.value = 0
-
-    // Xóa hóa đơn giữ sau khi tải vào giỏ hàng
-    await axios.delete(
-        `/api/hold-sales/${holdSaleId}`
-    );
-
-    // Tải lại danh sách hóa đơn giữ
-    await fetchHoldSales();
-
-    // Đóng modal hóa đơn giữ
-    showHoldModal.value =
-        false;
-};
 
 // Xử lý phím tắt
 const handleKeydown = (event) => {
@@ -718,22 +365,7 @@ const handleKeydown = (event) => {
     }
 }
 
-/*
-|--------------------------------------------------------------------------
-| FIX: sync selectedCartIndex với cart
-|--------------------------------------------------------------------------
-*/
-watch(cart, () => {
 
-    if (selectedCartIndex.value > cart.value.length - 1) {
-
-        selectedCartIndex.value = Math.max(
-            0,
-            cart.value.length - 1
-        )
-    }
-
-}, { deep: true })
 
 
 // thêm sự kiện lắng nghe phím tắt khi component được mount
