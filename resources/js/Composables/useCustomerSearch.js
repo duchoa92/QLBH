@@ -1,61 +1,169 @@
 import axios from 'axios'
-import { ref } from 'vue'
 
-export function useCustomerSearch() {
-    const query = ref('')
-    const loading = ref(false)
-    const results = ref([])
-    const selectedCustomer = ref(null)
+import {
+    ref,
+} from 'vue'
+
+import { useAutocompleteKeyboard }
+    from '@/Composables/useAutocompleteKeyboard'
+
+export function useCustomerSearch(
+    emit
+) {
+
+    /*
+    |--------------------------------------------------------------------------
+    | STATE
+    |--------------------------------------------------------------------------
+    */
+
+    const keyword = ref('')
+
+    const customers = ref([])
+
+    const selectedCustomer =
+        ref(null)
 
     let timeout = null
 
-    const search = (keyword) => {
-        query.value = keyword
+    /*
+    |--------------------------------------------------------------------------
+    | SEARCH
+    |--------------------------------------------------------------------------
+    */
+
+    const search = () => {
 
         clearTimeout(timeout)
 
-        if (!keyword || keyword.length < 2) {
-            results.value = []
-            return
+        timeout = setTimeout(
+            async () => {
+
+                if (
+                    !keyword.value
+                ) {
+
+                    customers.value = []
+
+                    return
+                }
+
+                try {
+
+                    const response =
+                        await axios.get(
+                            '/api/customers/search',
+                            {
+                                params: {
+                                    q: keyword.value,
+                                },
+                            }
+                        )
+
+                    customers.value =
+                        response.data
+
+                    reset()
+
+                } catch (error) {
+
+                    console.error(error)
+                }
+            },
+            300
+        )
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | SELECT CUSTOMER
+    |--------------------------------------------------------------------------
+    */
+
+    const selectCustomer = (
+        customer
+    ) => {
+
+        selectedCustomer.value =
+            customer
+
+        keyword.value =
+            customer.full_name
+
+        customers.value = []
+
+        emit(
+            'selected',
+            customer
+        )
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CLEAR CUSTOMER
+    |--------------------------------------------------------------------------
+    */
+
+    const clearCustomer = () => {
+
+        selectedCustomer.value =
+            null
+
+        keyword.value = ''
+
+        emit(
+            'selected',
+            null
+        )
+
+        reset()
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | KEYBOARD
+    |--------------------------------------------------------------------------
+    */
+
+    const {
+        activeIndex,
+        itemRefs,
+        setItemRef,
+        onKeyDown,
+        setActive,
+        reset,
+    } = useAutocompleteKeyboard(
+
+        customers,
+
+        (customer) => {
+
+            selectCustomer(customer)
         }
-
-        timeout = setTimeout(async () => {
-            loading.value = true
-
-            try {
-                const res = await axios.get('/api/customers/search', {
-                    params: { q: keyword }
-                })
-
-                results.value = res.data
-            } catch (e) {
-                results.value = []
-            } finally {
-                loading.value = false
-            }
-
-        }, 300)
-    }
-
-    const select = (customer) => {
-        selectedCustomer.value = customer
-        query.value = customer.full_name
-        results.value = []
-    }
-
-    const clear = () => {
-        selectedCustomer.value = null
-        query.value = ''
-        results.value = []
-    }
+    )
 
     return {
-        query,
-        loading,
-        results,
+
+        keyword,
+
+        customers,
+
         selectedCustomer,
+
         search,
-        select,
-        clear
+
+        selectCustomer,
+
+        clearCustomer,
+
+        activeIndex,
+
+        itemRefs,
+
+        setItemRef,
+
+        onKeyDown,
+
+        setActive,
     }
 }

@@ -1,24 +1,64 @@
 import axios from 'axios'
 
-import { toast } from 'vue-sonner'
+import { useToast } from '@/Composables/useToast'
+import { useEventBus } from '@/Composables/useEventBus'
+
 
 export function useCheckout(
+
     cart,
+
     selectedCustomer,
+
     clearCart,
 ) {
 
+    /*
+    |--------------------------------------------------------------------------
+    | CHECKOUT
+    |--------------------------------------------------------------------------
+    */
+
     const confirmCheckout = async (
+
         paymentData,
-        callback = null
+
+        onSuccess = null,
     ) => {
 
+        /*
+        |--------------------------------------------------------------------------
+        | Validate
+        |--------------------------------------------------------------------------
+        */
+
+        if (!cart.value.length) {
+
+            toast.error(
+                'Giỏ hàng trống'
+            )
+
+            return
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Loading
+        |--------------------------------------------------------------------------
+        */
+
         const loadingToast =
-            loading(
+            toast.loading(
                 'Đang thanh toán...'
             )
 
         try {
+
+            /*
+            |--------------------------------------------------------------------------
+            | API
+            |--------------------------------------------------------------------------
+            */
 
             const response =
                 await axios.post(
@@ -29,63 +69,82 @@ export function useCheckout(
                             cart.value,
 
                         customer_id:
-                            selectedCustomer.value?.id
+                            selectedCustomer
+                                .value?.id
                             || null,
 
                         paid_amount:
-                            paymentData.paid_amount,
+                            paymentData
+                                .paid_amount,
 
                         payment_method:
-                            paymentData.payment_method,
+                            paymentData
+                                .payment_method,
                     }
                 )
 
+            /*
+            |--------------------------------------------------------------------------
+            | Clear cart
+            |--------------------------------------------------------------------------
+            */
+
             clearCart()
-
-            dismiss(
-                loadingToast
-            )
-
-            success(
-                'Thanh toán thành công'
-            )
 
             /*
             |--------------------------------------------------------------------------
             | Refresh products
             |--------------------------------------------------------------------------
             */
-
-            window.dispatchEvent(
-                new Event(
-                    'pos-refresh-products'
-                )
+            emitEvent(
+                'products:refresh'
             )
 
             /*
             |--------------------------------------------------------------------------
-            | Callback
+            | Success callback
             |--------------------------------------------------------------------------
             */
 
-            if (callback) {
+            if (onSuccess) {
 
-                callback(response.data)
+                onSuccess(response.data)
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Toast success
+            |--------------------------------------------------------------------------
+            */
+
+            toast.dismiss(
+                loadingToast
+            )
+
+            toast.success(
+                'Thanh toán thành công'
+            )
 
             return response.data
 
         } catch (error) {
 
-            dismiss(
-                loadingToast
-            )
+            /*
+            |--------------------------------------------------------------------------
+            | Error
+            |--------------------------------------------------------------------------
+            */
 
             console.error(error)
 
-            error(
+            toast.dismiss(
+                loadingToast
+            )
 
-                error.response?.data?.message
+            toast.error(
+
+                error.response?.data
+                    ?.message
 
                 || 'Thanh toán thất bại'
             )
@@ -99,3 +158,10 @@ export function useCheckout(
         confirmCheckout,
     }
 }
+// 
+const toast = useToast()
+
+
+// Sự kiện 
+const { emitEvent } =
+    useEventBus()

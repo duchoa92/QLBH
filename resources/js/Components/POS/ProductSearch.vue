@@ -1,78 +1,24 @@
 
 <script setup>
-import axios from 'axios'
-
-import {
-    ref,
-    onMounted,
-    onBeforeUnmount,
-    watch,
-} from 'vue'
+import { useProductSearch } from '@/Composables/useProductSearch'
 
 const emit = defineEmits([
     'selected',
 ])
 
-/*
-|--------------------------------------------------
-| STATE
-|--------------------------------------------------
-*/
-const keyword = ref('')
+// COMPOSABLE
+const {
 
-const categoryId = ref('')
+    keyword,
 
-const products = ref([])
+    categoryId,
 
-const categories = ref([])
+    products,
 
-/*
-|--------------------------------------------------
-| LOAD PRODUCTS
-|--------------------------------------------------
-*/
-const loadProducts = async () => {
+    categories,
 
-    try {
+} = useProductSearch()
 
-        const response = await axios.get(
-            '/api/products',
-            {
-                params: {
-                    keyword: keyword.value,
-                    category_id: categoryId.value,
-                },
-            }
-        )
-
-        products.value = response.data
-
-    } catch (error) {
-
-        console.error(error)
-    }
-}
-
-/*
-|--------------------------------------------------
-| LOAD CATEGORIES
-|--------------------------------------------------
-*/
-const loadCategories = async () => {
-
-    try {
-
-        const response = await axios.get(
-            '/api/categories'
-        )
-
-        categories.value = response.data
-
-    } catch (error) {
-
-        console.error(error)
-    }
-}
 
 /*
 |--------------------------------------------------
@@ -94,18 +40,6 @@ const formatPrice = (value) => {
     return Number(value).toLocaleString('vi-VN')
 }
 
-/*
-|--------------------------------------------------
-| WATCH
-|--------------------------------------------------
-*/
-watch(
-    [keyword, categoryId],
-    () => {
-
-        loadProducts()
-    }
-)
 
 /*
 |--------------------------------------------------
@@ -117,30 +51,6 @@ const refreshProducts = () => {
     loadProducts()
 }
 
-/*
-|--------------------------------------------------
-| INIT
-|--------------------------------------------------
-*/
-onMounted(() => {
-
-    loadProducts()
-
-    loadCategories()
-
-    window.addEventListener(
-        'pos-refresh-products',
-        refreshProducts
-    )
-})
-
-onBeforeUnmount(() => {
-
-    window.removeEventListener(
-        'pos-refresh-products',
-        refreshProducts
-    )
-})
 
 </script>
 

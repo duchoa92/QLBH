@@ -22,7 +22,14 @@ createInertiaApp({
 
         createApp({
 
-            render: () => h(App, props),
+            render: () => [
+                h(App, props),
+                h(Toaster, {
+                    richColors: true,
+                    position: 'top-right',
+                    closeButton: true,
+                }),
+            ],
 
         })
             .component(

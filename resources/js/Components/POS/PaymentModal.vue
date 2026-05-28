@@ -1,15 +1,15 @@
 <script setup>
 // Imports
 import {
-    computed,
     ref,
-    watch,
-    onMounted,
-    onBeforeUnmount,
-    nextTick,
 } from 'vue'
 import { useMoney } from '@/Composables/useMoney'
-
+import { usePaymentKeyboard } from '@/Composables/usePaymentKeyboard'
+import { useVietQr } from '@/Composables/useVietQr'
+import { usePaymentValidation } from '@/Composables/usePaymentValidation'
+import { usePayment } from '@/Composables/usePayment'
+import QrPayment from '@/Components/POS/QrPayment.vue'
+import PaymentActions from '@/Components/POS/PaymentActions.vue'
 
 // Props
 const props = defineProps({
@@ -31,24 +31,45 @@ const emit = defineEmits([
     'confirm',
 ])
 
-// Số tiền khách đưa
-const paidAmount = ref(0)
-// Hiển thị số tiền khách đưa dưới dạng định dạng tiền tệ
-const paidAmountDisplay = ref('')
-
-// Phương thức thanh toán: cash, bank, card
-const paymentMethod = ref('cash')
 
 // Ref cho input số tiền khách đưa
 const paidInputRef = ref(null)
 
+// Payment composables
 const {
+
+    paidAmount,
+
+    paidAmountDisplay,
+
+    paymentMethod,
+
+    vietQrUrl,
+
+    changeAmount,
 
     formatMoney,
 
-    parseMoney,
+    handlePaidInput,
 
-} = useMoney()
+    confirmPayment,
+
+} = usePayment(
+
+    props,
+
+    emit,
+
+    paidInputRef,
+)
+
+// kiem tra thanh toan
+const {
+
+    validatePayment,
+
+} = usePaymentValidation()
+
 
 
 // Xử lý khi nhập số tiền khách đưa
@@ -62,119 +83,20 @@ paidAmountDisplay.value =
     formatMoney(rawValue)
 
 
-// Tạo URL QR Banking
-const vietQrUrl = computed(() => {
+    
 
-    const amount = Number(props.total || 0)
+// Phím tắt
+usePaymentKeyboard(
 
-    const description = 'POS_PAYMENT'
+    props,
 
-    const bankBin = '970422'
+    emit,
 
-    const bankAccount = '0123456789'
-
-    return `https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${amount}&addInfo=${description}`
-})
-
-
-// Tính tiền thừa
-const changeAmount = computed(() => {
-
-    return Number(paidAmount.value) -
-        Number(props.total)
-})
-
-/*
-|--------------------------------------------------------------------------
-| Confirm
-|--------------------------------------------------------------------------
-*/
-
-const confirmPayment = () => {
-
-    if (paidAmount.value < props.total) {
-
-        alert('Khách đưa chưa đủ tiền')
-
-        return
-    }
-
-    emit('confirm', {
-
-        paid_amount: paidAmount.value,
-
-        payment_method: paymentMethod.value,
-    })
-}
-
-/*
-|--------------------------------------------------------------------------
-| Reset
-|--------------------------------------------------------------------------
-*/
-
-watch(
-    () => props.show,
-    (value) => {
-
-        if (value) {
-
-            paidAmount.value = props.total
-
-            paidAmountDisplay.value =
-                formatMoney(props.total)
-
-            nextTick(() => {
-
-                paidInputRef.value?.focus()
-
-                paidInputRef.value?.select()
-            })
-        }
-    }
+    confirmPayment,
 )
 
-/*
-|--------------------------------------------------------------------------
-| Keyboard
-|--------------------------------------------------------------------------
-*/
 
-const handleKeydown = (event) => {
 
-    if (!props.show) {
-
-        return
-    }
-
-    // ESC
-    if (event.key === 'Escape') {
-
-        emit('close')
-    }
-
-    // ENTER
-    if (event.key === 'Enter') {
-
-        confirmPayment()
-    }
-}
-
-onMounted(() => {
-
-    window.addEventListener(
-        'keydown',
-        handleKeydown
-    )
-})
-
-onBeforeUnmount(() => {
-
-    window.removeEventListener(
-        'keydown',
-        handleKeydown
-    )
-})
 
 </script>
 
@@ -252,21 +174,10 @@ onBeforeUnmount(() => {
 
 
             <!-- QR Banking -->
-            <div
+            <QrPayment
                 v-if="paymentMethod === 'bank'"
-                class="mb-4"
-            >
-
-                <div class="text-sm text-gray-500 mb-2">
-                    Quét QR để thanh toán
-                </div>
-
-                <img
-                    :src="vietQrUrl"
-                    class="w-56 mx-auto border rounded-lg shadow"
-                />
-
-            </div>
+                :url="vietQrUrl"
+            />
 
 
             <!-- Change -->

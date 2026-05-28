@@ -4,8 +4,11 @@ import {
     watch,
 } from 'vue'
 
-import { useLocalStorage }
-    from '@/Composables/useLocalStorage'
+import { useLocalStorage } from '@/Composables/useLocalStorage'
+import { useCartTotals } from '@/Composables/useCartTotals'
+
+
+
 
 export function usePos() {
 
@@ -43,26 +46,20 @@ export function usePos() {
         load('pos_selected_index', 0)
     )
 
-    /*
-    |--------------------------------------------------------------------------
-    | GRAND TOTAL
-    |--------------------------------------------------------------------------
-    */
+    // Tính toán tổng tiền
+    const {
 
-    const grandTotal = computed(() => {
+        totalQuantity,
 
-        return cart.value.reduce(
-            (total, item) => {
+        subTotal,
 
-                return total +
-                    (
-                        Number(item.price) *
-                        Number(item.quantity)
-                    )
-            },
-            0
-        )
-    })
+        discount,
+
+        vat,
+
+        grandTotal,
+
+    } = useCartTotals(cart)
 
     /*
     |--------------------------------------------------------------------------
@@ -188,6 +185,14 @@ export function usePos() {
         selectedCustomer,
 
         selectedCartIndex,
+
+        totalQuantity,
+
+        subTotal,
+
+        discount,
+
+        vat,
 
         grandTotal,
 

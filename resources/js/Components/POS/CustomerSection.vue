@@ -1,110 +1,45 @@
 <script setup>
 
-import axios from 'axios'
-import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
-
-import {
-    ref,
-} from 'vue'
+import { useCustomerSearch } from '@/Composables/useCustomerSearch'
 
 const emit = defineEmits([
     'selected',
 ])
 
+const {
+
+    keyword,
+
+    customers,
+
+    selectedCustomer,
+
+    search,
+
+    selectCustomer,
+
+    clearCustomer,
+
+    activeIndex,
+
+    itemRefs,
+
+    setItemRef,
+
+    onKeyDown,
+
+    setActive,
+
+} = useCustomerSearch(emit)
+
+
 const props = defineProps({
     customer: Object,
 })
 
-const keyword = ref('')
-
-const customers = ref([])
 
 
-let timeout = null
 
-/*
-|--------------------------------------------------------------------------
-| Search
-|--------------------------------------------------------------------------
-*/
-
-const search = () => {
-
-    clearTimeout(timeout)
-
-    timeout = setTimeout(
-        async () => {
-
-            if (
-                !keyword.value
-            ) {
-
-                customers.value = []
-
-                return
-            }
-
-            const response =
-                await axios.get(
-                    '/api/customers/search',
-                    {
-                        params: {
-                            q: keyword.value,
-                        },
-                    }
-                )
-
-            customers.value =
-                response.data
-
-                // reset chỉ số khách hàng được chọn
-                reset()
-        },
-        300
-    )
-}
-
-// Chọn khách hàng
-const selectCustomer = (
-    customer
-) => {
-
-    keyword.value =
-        customer.name
-
-    customers.value = []
-
-   
-    emit(
-        'selected',
-        customer
-    )
-}
-
-// Xóa khách hàng đã chọn
-const clearCustomer = () => {
-
-
-    keyword.value = ''
-
-    emit(
-        'selected',
-        null
-    )
-    reset()
-}
-
-// Keyboard navigation
-const {
-    activeIndex,
-    itemRefs,
-    setItemRef,
-    onKeyDown,
-    setActive,
-    reset,
-} = useAutocompleteKeyboard(customers, (customer) => {
-    selectCustomer(customer)
-})
 
 </script>
 

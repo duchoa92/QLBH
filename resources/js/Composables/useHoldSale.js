@@ -1,13 +1,22 @@
-import { ref } from 'vue'
 import axios from 'axios'
-import { toast } from 'vue-sonner'
+
+import { ref } from 'vue'
+
+import { useToast }
+from '@/Composables/useToast'
 
 export function useHoldSale(
+
     cart,
+
     selectedCustomer,
+
     grandTotal,
+
     clearCart,
 ) {
+
+    const toast = useToast()
 
     /*
     |--------------------------------------------------------------------------
@@ -17,25 +26,29 @@ export function useHoldSale(
 
     const holdSales = ref([])
 
-    const showHoldModal = ref(false)
+    const showHoldModal =
+        ref(false)
 
-    const showSaveHoldModal = ref(false)
+    const showSaveHoldModal =
+        ref(false)
 
     const holdName = ref('')
 
     /*
     |--------------------------------------------------------------------------
-    | LOAD
+    | FETCH HOLD SALES
     |--------------------------------------------------------------------------
     */
 
-    const fetchHoldSales = async () => {
+    const fetchHoldSales =
+        async () => {
 
         try {
 
-            const response = await axios.get(
-                '/api/hold-sales'
-            )
+            const response =
+                await axios.get(
+                    '/api/hold-sales'
+                )
 
             holdSales.value =
                 response.data
@@ -48,7 +61,7 @@ export function useHoldSale(
 
     /*
     |--------------------------------------------------------------------------
-    | OPEN MODAL
+    | OPEN HOLD MODAL
     |--------------------------------------------------------------------------
     */
 
@@ -56,7 +69,7 @@ export function useHoldSale(
 
         if (!cart.value.length) {
 
-            error(
+            toast.error(
                 'Giỏ hàng trống'
             )
 
@@ -64,15 +77,21 @@ export function useHoldSale(
         }
 
         holdName.value =
-            selectedCustomer.value?.full_name?.trim()
-            || `Hóa đơn ${Date.now()}`
 
-        showSaveHoldModal.value = true
+            selectedCustomer.value
+                ?.full_name?.trim()
+
+            ||
+
+            `Hóa đơn ${Date.now()}`
+        
+        showSaveHoldModal.value =
+            true
     }
 
     /*
     |--------------------------------------------------------------------------
-    | SAVE HOLD
+    | HOLD BILL
     |--------------------------------------------------------------------------
     */
 
@@ -80,7 +99,7 @@ export function useHoldSale(
 
         if (!cart.value.length) {
 
-            error(
+            toast.error(
                 'Giỏ hàng trống'
             )
 
@@ -93,10 +112,12 @@ export function useHoldSale(
                 '/api/hold-sales',
                 {
 
-                    items: cart.value,
+                    items:
+                        cart.value,
 
                     customer_id:
-                        selectedCustomer.value?.id
+                        selectedCustomer
+                            .value?.id
                         || null,
 
                     grand_total:
@@ -107,7 +128,7 @@ export function useHoldSale(
                 }
             )
 
-            success(
+            toast.success(
                 'Đã lưu hóa đơn'
             )
 
@@ -115,16 +136,16 @@ export function useHoldSale(
 
             clearCart()
 
+            holdName.value = ''
+
             showSaveHoldModal.value =
                 false
-
-            holdName.value = ''
 
         } catch (error) {
 
             console.error(error)
 
-            error(
+            toast.error(
                 'Không thể lưu hóa đơn'
             )
         }
@@ -136,9 +157,8 @@ export function useHoldSale(
     |--------------------------------------------------------------------------
     */
 
-    const loadHoldSale = async (
-        holdSaleId
-    ) => {
+    const loadHoldSale =
+        async (holdSaleId) => {
 
         try {
 
@@ -165,7 +185,7 @@ export function useHoldSale(
             showHoldModal.value =
                 false
 
-            success(
+            toast.success(
                 'Đã mở hóa đơn'
             )
 
@@ -173,7 +193,7 @@ export function useHoldSale(
 
             console.error(error)
 
-            error(
+            toast.error(
                 'Không thể mở hóa đơn'
             )
         }
