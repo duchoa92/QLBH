@@ -8,6 +8,7 @@ import {
     onBeforeUnmount,
     nextTick,
 } from 'vue'
+import { useMoney } from '@/Composables/useMoney'
 
 
 // Props
@@ -41,25 +42,24 @@ const paymentMethod = ref('cash')
 // Ref cho input số tiền khách đưa
 const paidInputRef = ref(null)
 
-// Định dạng số thành định dạng tiền tệ Việt Nam
-const formatMoney = (value) => {
+const {
 
-    return Number(value || 0)
-        .toLocaleString('vi-VN')
-}
+    formatMoney,
+
+    parseMoney,
+
+} = useMoney()
+
 
 // Xử lý khi nhập số tiền khách đưa
-const handlePaidInput = (event) => {
+const rawValue =
+    parseMoney(event.target.value)
 
-    const rawValue = event.target.value
-        .replace(/\D/g, '')
+paidAmount.value =
+    rawValue
 
-    paidAmount.value =
-        Number(rawValue)
-
-    paidAmountDisplay.value =
-        formatMoney(rawValue)
-}
+paidAmountDisplay.value =
+    formatMoney(rawValue)
 
 
 // Tạo URL QR Banking

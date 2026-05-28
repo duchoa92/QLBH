@@ -1,6 +1,29 @@
-import { ref, computed, watch } from 'vue'
+import {
+    ref,
+    computed,
+    watch,
+} from 'vue'
+
+import { useLocalStorage }
+    from '@/Composables/useLocalStorage'
 
 export function usePos() {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local Storage
+    |--------------------------------------------------------------------------
+    */
+
+    const {
+
+        save,
+
+        load,
+
+        remove,
+
+    } = useLocalStorage()
 
     /*
     |--------------------------------------------------------------------------
@@ -8,36 +31,17 @@ export function usePos() {
     |--------------------------------------------------------------------------
     */
 
-    const cart = ref([])
+    const cart = ref(
+        load('pos_cart', [])
+    )
 
-    const selectedCustomer = ref(null)
+    const selectedCustomer = ref(
+        load('pos_customer', null)
+    )
 
-    const selectedCartIndex = ref(0)
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOAD LOCAL STORAGE
-    |--------------------------------------------------------------------------
-    */
-
-    const savedCart =
-        localStorage.getItem('pos_cart')
-
-    if (savedCart) {
-
-        cart.value = JSON.parse(savedCart)
-    }
-
-    const savedCustomer =
-        localStorage.getItem(
-            'pos_customer'
-        )
-
-    if (savedCustomer) {
-
-        selectedCustomer.value =
-            JSON.parse(savedCustomer)
-    }
+    const selectedCartIndex = ref(
+        load('pos_selected_index', 0)
+    )
 
     /*
     |--------------------------------------------------------------------------
@@ -62,40 +66,55 @@ export function usePos() {
 
     /*
     |--------------------------------------------------------------------------
-    | WATCH
+    | AUTO SAVE
     |--------------------------------------------------------------------------
     */
 
-    watch(cart, (value) => {
+    watch(
+        cart,
+        (value) => {
 
-        localStorage.setItem(
-            'pos_cart',
-            JSON.stringify(value)
-        )
-
-    }, {
-        deep: true,
-    })
-
-    watch(selectedCustomer, (value) => {
-
-        if (value) {
-
-            localStorage.setItem(
-                'pos_customer',
-                JSON.stringify(value)
+            save(
+                'pos_cart',
+                value
             )
-
-            return
+        },
+        {
+            deep: true,
         }
+    )
 
-        localStorage.removeItem(
-            'pos_customer'
-        )
+    watch(
+        selectedCustomer,
+        (value) => {
 
-    }, {
-        deep: true,
-    })
+            if (!value) {
+
+                remove('pos_customer')
+
+                return
+            }
+
+            save(
+                'pos_customer',
+                value
+            )
+        },
+        {
+            deep: true,
+        }
+    )
+
+    watch(
+        selectedCartIndex,
+        (value) => {
+
+            save(
+                'pos_selected_index',
+                value
+            )
+        }
+    )
 
     /*
     |--------------------------------------------------------------------------
@@ -153,13 +172,13 @@ export function usePos() {
 
         selectedCustomer.value = null
 
-        localStorage.removeItem(
-            'pos_cart'
-        )
+        selectedCartIndex.value = 0
 
-        localStorage.removeItem(
-            'pos_customer'
-        )
+        remove('pos_cart')
+
+        remove('pos_customer')
+
+        remove('pos_selected_index')
     }
 
     return {

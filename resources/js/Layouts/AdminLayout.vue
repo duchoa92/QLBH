@@ -16,7 +16,7 @@ watch(
 
         if (message) {
 
-            toast.success(message)
+            success(message)
 
         }
 

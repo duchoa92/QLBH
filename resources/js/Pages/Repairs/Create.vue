@@ -109,7 +109,7 @@ const startScan = async () => {
 
         if (!selectedDeviceId) {
 
-            toast.error('Không tìm thấy camera');
+            error('Không tìm thấy camera');
 
             return;
         }
@@ -136,7 +136,7 @@ const startScan = async () => {
 
         console.log(error);
 
-        toast.error('Không thể mở camera');
+        error('Không thể mở camera');
     }
 };
 

@@ -56,7 +56,7 @@ export function useHoldSale(
 
         if (!cart.value.length) {
 
-            toast.error(
+            error(
                 'Giỏ hàng trống'
             )
 
@@ -80,7 +80,7 @@ export function useHoldSale(
 
         if (!cart.value.length) {
 
-            toast.error(
+            error(
                 'Giỏ hàng trống'
             )
 
@@ -107,7 +107,7 @@ export function useHoldSale(
                 }
             )
 
-            toast.success(
+            success(
                 'Đã lưu hóa đơn'
             )
 
@@ -124,7 +124,7 @@ export function useHoldSale(
 
             console.error(error)
 
-            toast.error(
+            error(
                 'Không thể lưu hóa đơn'
             )
         }
@@ -165,7 +165,7 @@ export function useHoldSale(
             showHoldModal.value =
                 false
 
-            toast.success(
+            success(
                 'Đã mở hóa đơn'
             )
 
@@ -173,7 +173,7 @@ export function useHoldSale(
 
             console.error(error)
 
-            toast.error(
+            error(
                 'Không thể mở hóa đơn'
             )
         }
