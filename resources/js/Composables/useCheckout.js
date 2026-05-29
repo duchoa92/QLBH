@@ -1,7 +1,6 @@
-import axios from 'axios'
-
 import { useToast } from '@/Composables/useToast'
 import { useEventBus } from '@/Composables/useEventBus'
+import { paymentService } from '@/Modules/POS/Payment/Services/paymentService'
 
 
 export function useCheckout(
@@ -61,27 +60,19 @@ export function useCheckout(
             */
 
             const response =
-                await axios.post(
-                    '/pos/checkout',
-                    {
+                await paymentService.checkout({
+                    items: cart.value,
 
-                        items:
-                            cart.value,
+                    customer_id:
+                        selectedCustomer.value?.id
+                        || null,
 
-                        customer_id:
-                            selectedCustomer
-                                .value?.id
-                            || null,
+                    paid_amount:
+                        paymentData.paid_amount,
 
-                        paid_amount:
-                            paymentData
-                                .paid_amount,
-
-                        payment_method:
-                            paymentData
-                                .payment_method,
-                    }
-                )
+                    payment_method:
+                        paymentData.payment_method,
+                })
 
             /*
             |--------------------------------------------------------------------------

@@ -1,35 +1,23 @@
 import { computed } from 'vue'
 
-export const useVietQr = (
-    total
-) => {
+import { paymentConfig }
+from '@/config/payment'
 
-    /*
-    |--------------------------------------------------------------------------
-    | Config
-    |--------------------------------------------------------------------------
-    */
-
-    const bankBin = '970422'
-
-    const bankAccount =
-        '0123456789'
-
-    const description =
-        'POS_PAYMENT'
-
-    /*
-    |--------------------------------------------------------------------------
-    | QR URL
-    |--------------------------------------------------------------------------
-    */
+export function useVietQr(total) {
 
     const vietQrUrl = computed(() => {
 
-        const amount =
-            Number(total.value || 0)
+        const {
 
-        return `https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${amount}&addInfo=${description}`
+            bankBin,
+
+            bankAccount,
+
+            description,
+
+        } = paymentConfig.vietQr
+
+        return `https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${Number(total.value || 0)}&addInfo=${description}`
     })
 
     return {

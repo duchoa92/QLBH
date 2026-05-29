@@ -7,7 +7,7 @@ import {
 import { useToast } from '@/Composables/useToast'
 import PaymentModal from '@/Components/POS/PaymentModal.vue'
 import { usePos } from '@/Composables/usePos'
-import { useHoldSale } from '@/Composables/useHoldSale'
+import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
 import { useCheckout } from '@/Composables/useCheckout'
 import { useKeyboardShortcuts } from '@/Composables/useKeyboardShortcuts'
 import HoldSaleModal from '@/Components/POS/HoldSaleModal.vue'
