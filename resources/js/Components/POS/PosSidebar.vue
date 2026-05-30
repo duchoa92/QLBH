@@ -1,6 +1,6 @@
 <script setup>
 
-import CustomerSection from '@/Components/POS/CustomerSection.vue'
+import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import SummarySection from '@/Components/POS/SummarySection.vue'
 import KeyboardShortcuts from '@/Components/POS/KeyboardShortcuts.vue'
 

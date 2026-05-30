@@ -84,10 +84,33 @@ class ProductController extends Controller
                 'barcode',
                 'sell_price',
                 'stock',
-                //'sold_count',
+                'has_imei',
                 'category_id',
             ]);
 
-        return response()->json($products);
+        return response()->json(
+
+            $products->map(function ($product) {
+
+               return [
+
+                    'id' => $product->id,
+
+                    'name' => $product->name,
+
+                    'sku' => $product->sku,
+
+                    'barcode' => $product->barcode,
+
+                    'price' => $product->sell_price,
+
+                    'stock' => $product->stock,
+
+                    'has_imei' => $product->has_imei,
+
+                    'category_id' => $product->category_id,
+                ];
+            })
+        );
     }
 }

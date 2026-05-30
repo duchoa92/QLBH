@@ -4,20 +4,50 @@ import {
     ref,
     onMounted,
 } from 'vue'
+import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
+import { productService } from '@/Modules/POS/Product/Services/productService'
 import { useToast } from '@/Composables/useToast'
 import PaymentModal from '@/Components/POS/PaymentModal.vue'
-import { usePos } from '@/Composables/usePos'
+import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
 import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
 import { useCheckout } from '@/Composables/useCheckout'
 import { useKeyboardShortcuts } from '@/Composables/useKeyboardShortcuts'
-import HoldSaleModal from '@/Components/POS/HoldSaleModal.vue'
-import SaveHoldModal from '@/Components/POS/SaveHoldModal.vue'
+import HoldSaleModal from '@/Modules/POS/HoldSale/Components/HoldSaleModal.vue'
+import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
 import PosSidebar from '@/Components/POS/PosSidebar.vue'
 import PosMainPanel from '@/Components/POS/PosMainPanel.vue'
+import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
+import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
+
+// Khai báo test Barcode nhập tay, sau này đổi thành máy quét
+const testBarcode = ref('')
+const scanTestBarcode =
+    async () => {
+
+    try {
+
+        const product =
+            await productService
+                .findByBarcode(
+                    testBarcode.value
+                )
+
+        addToCart(product)
+
+        testBarcode.value = ''
+
+    } catch (error) {
+
+        errorToast(
+
+            error?.response?.data?.message
+            || 'Không tìm thấy sản phẩm'
+        )
+    }
+}
 
 
-
-// Sử dụng composable usePos để quản lý trạng thái giỏ hàng
+// Sử dụng composable useCart để quản lý trạng thái giỏ hàng
 const {
 
     cart,
@@ -34,7 +64,7 @@ const {
 
     clearCart,
 
-} = usePos()
+} = useCart()
 
 // Sử dụng composable useHoldSale để xử lý lưu tạm hóa đơn
 const {
@@ -139,6 +169,32 @@ useKeyboardShortcuts({
     clearCart,
 })
 
+// 
+useBarcodeScanner(
+
+    async (barcode) => {
+
+        try {
+
+            const product =
+                await productService
+                    .findByBarcode(
+                        barcode
+                    )
+
+            addToCart(product)
+
+        } catch (error) {
+
+            console.error(error)
+
+            errorToast(
+                'Không tìm thấy sản phẩm'
+            )
+        }
+    }
+)
+
 
 onMounted(() => {
 
@@ -149,7 +205,7 @@ const {
 
     success,
 
-    error,
+    error: errorToast,
 
     loading,
 
@@ -160,61 +216,69 @@ const {
 </script>
 
 <template>
-    <div class="h-screen bg-gray-100 p-3">
 
-        <div class="grid grid-cols-12 gap-3 h-full">
+<!-- Ô nhập Imei -->
+    <div class="p-2 bg-yellow-50 border-b">
 
-            <!-- PHẦN TRÁI -->
-            <PosMainPanel
-                :cart="cart"
-
-                :selected-cart-index="
-                    selectedCartIndex
-                "
-
-                @add-product="addToCart"
-
-                @remove-item="removeItem"
-            />
-
-
-            <!-- Phải -->
-            <PosSidebar
-                :cart="cart"
-
-                :selected-customer="
-                    selectedCustomer
-                "
-
-                :show-shortcuts="
-                    showShortcuts
-                "
-
-                :hold-sales="holdSales"
-
-                @customer-selected="
-                    onCustomerSelected
-                "
-
-                @toggle-shortcuts="
-                    showShortcuts =
-                    !showShortcuts
-                "
-
-                @open-hold="
-                    openHoldModal
-                "
-
-                @show-hold-list="
-                    showHoldModal = true
-                "
-
-                @checkout="checkout"
-            />
-
-        </div>
+        <input
+            v-model="testBarcode"
+            @keyup.enter="scanTestBarcode"
+            class="border p-2 rounded w-full"
+            placeholder="Nhập barcode hoặc IMEI để test"
+        />
 
     </div>
+   <PosLayout>
+
+        <!-- PHẦN TRÁI -->
+        <PosMainPanel
+            :cart="cart"
+
+            :selected-cart-index="
+                selectedCartIndex
+            "
+
+            @add-product="addToCart"
+
+            @remove-item="removeItem"
+        />
+
+
+        <!-- Phải -->
+        <PosSidebar
+            :cart="cart"
+
+            :selected-customer="
+                selectedCustomer
+            "
+
+            :show-shortcuts="
+                showShortcuts
+            "
+
+            :hold-sales="holdSales"
+
+            @customer-selected="
+                onCustomerSelected
+            "
+
+            @toggle-shortcuts="
+                showShortcuts =
+                !showShortcuts
+            "
+
+            @open-hold="
+                openHoldModal
+            "
+
+            @show-hold-list="
+                showHoldModal = true
+            "
+
+            @checkout="checkout"
+        />
+
+    </PosLayout>
 
 
     <!-- Modal thanh toán -->

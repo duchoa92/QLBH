@@ -99,6 +99,35 @@ const updateQty = (item, event) => {
                         {{ item.imei }}
                     </div>
 
+                    <div
+                        v-if="item.serial"
+                        class="text-xs text-gray-500"
+                    >
+                        Serial:
+                        {{ item.serial }}
+                    </div>
+
+                    <div
+                        v-if="
+                            item.color ||
+                            item.storage
+                        "
+                        class="text-xs text-gray-500"
+                    >
+                        {{ item.color }}
+
+                        <span
+                            v-if="
+                                item.color &&
+                                item.storage
+                            "
+                        >
+                            -
+                        </span>
+
+                        {{ item.storage }}
+                    </div>
+
                 </td>
 
                 <!-- Số lượng -->
@@ -107,15 +136,21 @@ const updateQty = (item, event) => {
 
                     <input
                         :value="item.quantity"
+
+                        :disabled="!!item.imei"
+
                         @change="
                             updateQty(
                                 item,
                                 $event
                             )
                         "
+
                         type="number"
+
                         min="1"
-                        class="w-20 border rounded px-2 py-1 text-center"
+
+                        class="w-20 border rounded px-2 py-1 text-center disabled:bg-gray-100"
                     />
 
                 </td>

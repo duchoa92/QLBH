@@ -51,10 +51,13 @@ class PosController extends Controller
             ], 404);
         }
 
-        if ($imei->status === 'sold') {
+        if (
+            $imei->status !==
+            ProductImei::STATUS_AVAILABLE
+        ) {
 
             return response()->json([
-                'message' => 'IMEI đã bán',
+                'message' => 'IMEI không khả dụng',
             ], 422);
         }
 
@@ -74,6 +77,8 @@ class PosController extends Controller
                 'name' => $imei->product->name,
 
                 'price' => $imei->product->sell_price,
+
+                'has_imei' => true,
             ],
 
             'product_id' => $imei->product->id,

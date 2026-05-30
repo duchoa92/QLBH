@@ -64,6 +64,8 @@ class PosCheckoutService
 
                 'code' => $this->generateCode(),
 
+                'customer_id' => $customerId,
+
                 'user_id' => $userId,
 
                 'subtotal' => $subtotal,
@@ -121,6 +123,16 @@ class PosCheckoutService
                         $item['id']
                     );
 
+                if (
+                    $product->stock <
+                    (int) $item['quantity']
+                ) {
+
+                    throw new \Exception(
+                        "Sản phẩm {$product->name} không đủ tồn kho"
+                    );
+                }
+
                 /*
                 |--------------------------------------------------------------------------
                 | Trừ tồn kho
@@ -154,19 +166,36 @@ class PosCheckoutService
                     )
                 ) {
 
-                    ProductImei::query()
+                    $imei = ProductImei::query()
 
-                        ->where(
-                            'id',
+                        ->findOrFail(
                             $item['imei_id']
-                        )
+                        );
 
-                        ->update([
+                    if (
+                        $imei->status !==
+                        ProductImei::STATUS_AVAILABLE
+                    ) {
 
-                            'status' => 'sold',
+                        throw new \Exception(
+                            "IMEI {$imei->imei} không khả dụng"
+                        );
+                    }
 
-                            'sold_at' => now(),
-                        ]);
+                   ProductImei::query()
+
+                    ->where(
+                        'id',
+                        $item['imei_id']
+                    )
+
+                    ->update([
+
+                        'status' =>
+                            ProductImei::STATUS_SOLD,
+
+                        'sold_at' => now(),
+                    ]);
                 }
             }
 

@@ -4,11 +4,12 @@ import {
 } from 'vue'
 import { usePayment } from '@/Modules/POS/Payment/Composables/usePayment'
 import { usePaymentKeyboard } from '@/Modules/POS/Payment/Composables/usePaymentKeyboard'
-import QrPayment from '@/Components/POS/QrPayment.vue'
+import QrPayment from '@/Modules/POS/Payment/Components/QrPayment.vue'
 import PaymentActions from '@/Modules/POS/Payment/Components/PaymentActions.vue'
-import PaymentSummary from '@/Components/POS/PaymentSummary.vue'
-import PaymentAmountInput from '@/Components/POS/PaymentAmountInput.vue'
-import PaymentMethodSelect from '@/Components/POS/PaymentMethodSelect.vue'
+import PaymentSummary from '@/Modules/POS/Payment/Components/PaymentSummary.vue'
+import PaymentAmountInput from '@/Modules/POS/Payment/Components/PaymentAmountInput.vue'
+import PaymentMethodSelect from '@/Modules/POS/Payment/Components/PaymentMethodSelect.vue'
+
 
 // Props
 const props = defineProps({

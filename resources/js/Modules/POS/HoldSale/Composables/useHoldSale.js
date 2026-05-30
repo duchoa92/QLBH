@@ -46,11 +46,8 @@ export function useHoldSale(
 
         try {
 
-            const response =
-                await holdSaleService.getAll()
-
             holdSales.value =
-                response.data
+                await holdSaleService.getAll()
 
         } catch (error) {
 
@@ -164,7 +161,7 @@ export function useHoldSale(
                 )
 
             const holdSale =
-                response.data.data
+                response.data
 
             cart.value =
                 holdSale.cart_items

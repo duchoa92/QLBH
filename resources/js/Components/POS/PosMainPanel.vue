@@ -1,8 +1,9 @@
 <script setup>
 
-import ProductSearch from '@/Components/POS/ProductSearch.vue'
-
+import ProductSearch from '@/Modules/POS/Product/Components/ProductSearch.vue'
 import CartTable from '@/Components/POS/CartTable.vue'
+import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
+import { productService } from '@/Modules/POS/Product/Services/productService'
 
 const props = defineProps({
 
@@ -23,6 +24,43 @@ const emit = defineEmits([
 
     'remove-item',
 ])
+
+/*
+|--------------------------------------------------------------------------
+| BARCODE SCANNER
+|--------------------------------------------------------------------------
+*/
+
+useBarcodeScanner(
+
+    async (barcode) => {
+
+        try {
+
+            const product =
+                await productService
+                    .findByBarcode(
+                        barcode
+                    )
+
+            if (!product) {
+
+                return
+            }
+
+            emit(
+                'add-product',
+                product
+            )
+
+        } catch (error) {
+
+            console.error(error)
+        }
+    }
+)
+
+
 </script>
 
 <template>

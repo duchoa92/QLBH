@@ -12,6 +12,13 @@ export function useCheckout(
     clearCart,
 ) {
 
+    const toast = useToast()
+    const {
+
+        emitEvent,
+
+    } = useEventBus()
+
     /*
     |--------------------------------------------------------------------------
     | CHECKOUT
@@ -149,10 +156,3 @@ export function useCheckout(
         confirmCheckout,
     }
 }
-// 
-const toast = useToast()
-
-
-// Sự kiện 
-const { emitEvent } =
-    useEventBus()

@@ -8,7 +8,7 @@ use App\Http\Controllers\Api\PosScanController;
 use App\Http\Controllers\Api\HoldSaleController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
-
+use App\Http\Controllers\Api\ProductApiController;
 
 
 Route::middleware(['web', 'auth'])->group(function () {
@@ -17,6 +17,15 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post(
         '/pos/scan',
         [PosScanController::class, 'scan']
+    );
+
+    // Tìm kiếm sản phẩm theo mã vạch
+    Route::get(
+        '/products/barcode',
+        [
+            ProductApiController::class,
+            'findByBarcode',
+        ]
     );
 
     // Tìm kiếm sản phẩm theo tên hoặc mã vạch

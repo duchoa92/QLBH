@@ -1,33 +1,35 @@
-import axios from 'axios'
+import api from '@/Services/api'
 
 export const holdSaleService = {
 
     async getAll() {
-
-        return axios.get(
+        const response = await api.get(
             '/api/hold-sales'
         )
+        return response.data    
     },
 
     async getById(id) {
-
-        return axios.get(
+        const response = await api.get(
             `/api/hold-sales/${id}`
         )
+        return response.data
     },
 
     async create(payload) {
 
-        return axios.post(
+        const response = await api.post(
             '/api/hold-sales',
             payload
         )
+        return response.data
     },
 
     async remove(id) {
 
-        return axios.delete(
+        const response = await api.delete(
             `/api/hold-sales/${id}`
         )
+        return response.data
     },
 }
