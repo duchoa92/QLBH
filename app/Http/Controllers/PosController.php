@@ -78,7 +78,7 @@ class PosController extends Controller
 
                 'price' => $imei->product->sell_price,
 
-                'has_imei' => true,
+                'product_type' => true,
             ],
 
             'product_id' => $imei->product->id,

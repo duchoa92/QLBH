@@ -24,7 +24,7 @@ class Product extends Model
         'sell_price',
         'stock',
         'alert_stock',
-        'has_imei',
+        'product_type',
         'is_active',
         'description',
 

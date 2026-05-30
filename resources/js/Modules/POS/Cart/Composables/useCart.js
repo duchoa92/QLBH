@@ -119,20 +119,28 @@ export function useCart() {
 
     const addToCart = (product) => {
 
-        
-        // Nếu sản phẩm có IMEI, mỗi IMEI là một item riêng biệt
-        if (product.imei) {
+        /*
+        |--------------------------------------------------
+        | Sản phẩm IMEI
+        |--------------------------------------------------
+        */
 
-            const existsImei =
-                cart.value.find((item) => {
+        if (
+            product.imei_id ||
+            product.imei
+        ) {
+
+            const exists =
+                cart.value.some((item) => {
 
                     return (
-                        item.imei ===
-                        product.imei
+                        item.imei_id === product.imei_id
+                        ||
+                        item.imei === product.imei
                     )
                 })
 
-            if (existsImei) {
+            if (exists) {
 
                 return
             }
@@ -141,34 +149,37 @@ export function useCart() {
 
                 id: product.id,
 
-                name: product.name,
-
-                price: Number(
-                    product.price
-                ),
-
-                quantity: 1,
+                imei_id:
+                    product.imei_id ?? null,
 
                 imei:
-                    product.imei,
+                    product.imei ?? null,
 
                 serial:
-                    product.serial,
+                    product.serial ?? null,
 
                 color:
-                    product.color,
+                    product.color ?? null,
 
                 storage:
-                    product.storage,
+                    product.storage ?? null,
+
+                name:
+                    product.name,
+
+                price:
+                    Number(product.price),
+
+                quantity: 1,
             })
 
             return
         }
 
         /*
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------
         | Sản phẩm thường
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------
         */
 
         const existing =

@@ -41,7 +41,7 @@ const selectProduct = (
 ) => {
 
     if (
-        product.has_imei
+        product.product_type
     ) {
 
         error(

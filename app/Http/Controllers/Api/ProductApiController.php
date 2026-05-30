@@ -101,13 +101,20 @@ class ProductApiController extends Controller
 
             'stock' => $product->stock,
 
-            'imei' => $imei?->imei,
+            'imei_id' =>
+                $imei?->id,
 
-            'serial' => $imei?->serial,
+            'imei' =>
+                $imei?->imei,
 
-            'color' => $imei?->color,
+            'serial' =>
+                $imei?->serial,
 
-            'storage' => $imei?->storage,
+            'color' =>
+                $imei?->color,
+
+            'storage' =>
+                $imei?->storage,
         ]);
     }
 }

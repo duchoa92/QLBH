@@ -84,7 +84,8 @@ class ProductController extends Controller
                 'barcode',
                 'sell_price',
                 'stock',
-                'has_imei',
+                'product_type',
+                'manage_stock_by_serial',
                 'category_id',
             ]);
 
@@ -106,7 +107,9 @@ class ProductController extends Controller
 
                     'stock' => $product->stock,
 
-                    'has_imei' => $product->has_imei,
+                    'product_type' => $product->product_type,
+
+                    'manage_stock_by_serial' => $product->manage_stock_by_serial,
 
                     'category_id' => $product->category_id,
                 ];
