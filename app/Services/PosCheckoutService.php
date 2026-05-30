@@ -112,62 +112,21 @@ class PosCheckoutService
                         ),
                 ]);
 
-                /*
-                |--------------------------------------------------------------------------
-                | Product
-                |--------------------------------------------------------------------------
-                */
-
+                // 
                 $product = Product::query()
                     ->findOrFail(
                         $item['id']
                     );
 
-                if (
-                    $product->stock <
-                    (int) $item['quantity']
-                ) {
-
-                    throw new \Exception(
-                        "Sản phẩm {$product->name} không đủ tồn kho"
-                    );
-                }
-
                 /*
                 |--------------------------------------------------------------------------
-                | Trừ tồn kho
+                | Sản phẩm IMEI
                 |--------------------------------------------------------------------------
                 */
 
-                $product->decrement(
-                    'stock',
-                    (int) $item['quantity']
-                );
-
-                /*
-                |--------------------------------------------------
-                | Cộng số lượng đã bán
-                |--------------------------------------------------
-                */
-                $product->increment(
-                    'sold_count',
-                    (int) $item['quantity']
-                );
-
-                /*
-                |--------------------------------------------------------------------------
-                | IMEI
-                |--------------------------------------------------------------------------
-                */
-
-                if (
-                    ! empty(
-                        $item['imei_id']
-                    )
-                ) {
+                if (!empty($item['imei_id'])) {
 
                     $imei = ProductImei::query()
-
                         ->findOrFail(
                             $item['imei_id']
                         );
@@ -182,14 +141,56 @@ class PosCheckoutService
                         );
                     }
 
-                   ProductImei::query()
+                    if ($product->stock < 1) {
 
-                    ->where(
-                        'id',
-                        $item['imei_id']
-                    )
+                        throw new \Exception(
+                            "Sản phẩm {$product->name} đã hết hàng"
+                        );
+                    }
 
-                    ->update([
+                    $product->decrement(
+                        'stock',
+                        1
+                    );
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Sản phẩm thường
+                |--------------------------------------------------------------------------
+                */
+                else {
+
+                    if (
+                        $product->stock <
+                        (int) $item['quantity']
+                    ) {
+
+                        throw new \Exception(
+                            "Sản phẩm {$product->name} không đủ tồn kho"
+                        );
+                    }
+
+                    $product->decrement(
+                        'stock',
+                        (int) $item['quantity']
+                    );
+                }
+
+                /*
+                |--------------------------------------------------
+                | Cộng số lượng đã bán
+                |--------------------------------------------------
+                */
+                $product->increment(
+                    'sold_count',
+                    (int) $item['quantity']
+                );
+
+                // 
+                if (!empty($item['imei_id'])) {
+
+                    $imei->update([
 
                         'status' =>
                             ProductImei::STATUS_SOLD,

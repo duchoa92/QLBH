@@ -19,6 +19,8 @@ import PosMainPanel from '@/Components/POS/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 
+
+
 // Khai báo test Barcode nhập tay, sau này đổi thành máy quét
 const testBarcode = ref('')
 const scanTestBarcode =
@@ -65,6 +67,7 @@ const {
     clearCart,
 
 } = useCart()
+
 
 // Sử dụng composable useHoldSale để xử lý lưu tạm hóa đơn
 const {

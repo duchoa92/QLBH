@@ -119,6 +119,10 @@ export function useCart() {
 
     const addToCart = (product) => {
 
+        // debug
+        console.log(product)
+        console.log('ADD CART', product)
+
         /*
         |--------------------------------------------------
         | Sản phẩm IMEI
@@ -172,6 +176,9 @@ export function useCart() {
 
                 quantity: 1,
             })
+
+            // debug
+            console.log(cart.value)
 
             return
         }

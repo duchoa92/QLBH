@@ -60,7 +60,7 @@ defineProps({
 
                 <div>
                     <strong>Giá bán:</strong>
-                    {{ product.sell_price }}
+                    {{ product.price }}
                 </div>
 
                 <div>

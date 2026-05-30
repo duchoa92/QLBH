@@ -66,15 +66,6 @@ class ProductApiController extends Controller
                     $imei->product_id
                 );
             }
-
-            if ($imei) {
-
-                $product = Product::query()
-
-                    ->find(
-                        $imei->product_id
-                    );
-            }
         }
 
         
@@ -95,7 +86,7 @@ class ProductApiController extends Controller
 
             'barcode' => $product->barcode,
 
-            'price' => $imei
+            'price' => $imei && $imei->sell_price > 0
                 ? $imei->sell_price
                 : $product->sell_price,
 

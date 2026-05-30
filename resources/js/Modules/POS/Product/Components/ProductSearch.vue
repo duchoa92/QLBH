@@ -41,7 +41,7 @@ const selectProduct = (
 ) => {
 
     if (
-        product.product_type
+        product.product_type === 'imei'
     ) {
 
         error(
@@ -158,9 +158,15 @@ const refreshProducts = () => {
                 </div>
 
                 <!-- STOCK -->
-                <div class="text-xs mt-2">
+                <div
+                    class="text-xs mt-2"
+                    :class="{
+                        'text-red-600':
+                            product.stock <= 0
+                    }"
+                >
 
-                    Tồn kho:
+                    Tồn:
                     {{ product.stock }}
 
                 </div>

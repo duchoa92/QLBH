@@ -77,17 +77,31 @@ class ProductController extends Controller
             | SELECT OPTIMIZE
             |--------------------------------------------------
             */
-            ->get([
-                'id',
-                'name',
-                'sku',
-                'barcode',
-                'sell_price',
-                'stock',
-                'product_type',
-                'manage_stock_by_serial',
-                'category_id',
-            ]);
+            ->get()
+            ->map(function ($product) {
+
+                return [
+
+                    'id' => $product->id,
+
+                    'name' => $product->name,
+
+                    'sku' => $product->sku,
+
+                    'barcode' => $product->barcode,
+
+                    'price' => $product->sell_price,
+
+                    'stock' => $product->stock,
+
+                    'manage_stock_by_serial' => $product->manage_stock_by_serial,
+
+                    'category_id' => $product->category_id,
+
+                    'product_type' => $product->product_type,
+                ];
+            });
+        
 
         return response()->json(
 

@@ -92,14 +92,6 @@ const updateQty = (item, event) => {
                     </div>
 
                     <div
-                        v-if="item.imei"
-                        class="text-xs text-blue-600"
-                    >
-                        IMEI:
-                        {{ item.imei }}
-                    </div>
-
-                    <div
                         v-if="item.serial"
                         class="text-xs text-gray-500"
                     >
@@ -108,23 +100,18 @@ const updateQty = (item, event) => {
                     </div>
 
                     <div
-                        v-if="
-                            item.color ||
-                            item.storage
-                        "
+                        v-if="item.color"
                         class="text-xs text-gray-500"
                     >
+                        Màu:
                         {{ item.color }}
+                    </div>
 
-                        <span
-                            v-if="
-                                item.color &&
-                                item.storage
-                            "
-                        >
-                            -
-                        </span>
-
+                    <div
+                        v-if="item.storage"
+                        class="text-xs text-gray-500"
+                    >
+                        Bộ nhớ:
                         {{ item.storage }}
                     </div>
 
