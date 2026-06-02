@@ -143,6 +143,14 @@ const refreshProducts = () => {
 
                 </div>
 
+                <!--Bát buộc quét Imei-->
+                <div
+                    v-if="product.product_type === 'imei'"
+                    class="text-xs text-red-600 font-semibold"
+                >
+                    Bắt buộc quét IMEI
+                </div>
+
                 <!-- SKU -->
                 <div class="text-xs text-gray-500 mt-1">
 

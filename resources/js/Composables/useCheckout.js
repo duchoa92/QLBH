@@ -66,7 +66,11 @@ export function useCheckout(
             |--------------------------------------------------------------------------
             */
 
+            // debug
+            console.log(cart.value)
+            
             const response =
+
                 await paymentService.checkout({
                     items: cart.value,
 

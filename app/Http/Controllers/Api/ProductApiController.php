@@ -58,7 +58,7 @@ class ProductApiController extends Controller
                 ) {
 
                     return response()->json([
-                        'message' => 'IMEI không khả dụng',
+                        'message' => 'IMEI không khả dụng hoặc đã bán',
                     ], 422);
                 }
 

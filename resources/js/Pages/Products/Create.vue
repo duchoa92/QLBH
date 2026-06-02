@@ -24,7 +24,7 @@ const form = useForm({
 
     cost_price: '',
 
-    price: '',
+    sell_price: '',
 
     stock: 0,
 
@@ -193,7 +193,7 @@ const submit = () => {
                 </label>
 
                 <input
-                    v-model="form.price"
+                    v-model="form.sell_price"
                     type="number"
                     class="w-full border rounded p-2"
                 >

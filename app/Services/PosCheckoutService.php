@@ -119,6 +119,21 @@ class PosCheckoutService
                     );
 
                 /*
+                |--------------------------------------------------
+                | IMEI PRODUCT MUST HAVE IMEI
+                |--------------------------------------------------
+                */
+                if (
+                    $product->product_type === 'imei'
+                    &&
+                    empty($item['imei_id'])
+                ) {
+
+                    throw new \Exception(
+                        "Sản phẩm {$product->name} phải quét IMEI"
+                    );
+                }
+                /*
                 |--------------------------------------------------------------------------
                 | Sản phẩm IMEI
                 |--------------------------------------------------------------------------
@@ -141,17 +156,20 @@ class PosCheckoutService
                         );
                     }
 
-                    if ($product->stock < 1) {
+                    ProductImei::query()
 
-                        throw new \Exception(
-                            "Sản phẩm {$product->name} đã hết hàng"
-                        );
-                    }
+                        ->where(
+                            'id',
+                            $item['imei_id']
+                        )
 
-                    $product->decrement(
-                        'stock',
-                        1
-                    );
+                        ->update([
+
+                            'status' =>
+                                ProductImei::STATUS_SOLD,
+
+                            'sold_at' => now(),
+                        ]);
                 }
 
                 /*

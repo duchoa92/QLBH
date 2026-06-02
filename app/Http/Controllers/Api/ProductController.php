@@ -101,33 +101,10 @@ class ProductController extends Controller
                     'product_type' => $product->product_type,
                 ];
             });
-        
+
 
         return response()->json(
-
-            $products->map(function ($product) {
-
-               return [
-
-                    'id' => $product->id,
-
-                    'name' => $product->name,
-
-                    'sku' => $product->sku,
-
-                    'barcode' => $product->barcode,
-
-                    'price' => $product->sell_price,
-
-                    'stock' => $product->stock,
-
-                    'product_type' => $product->product_type,
-
-                    'manage_stock_by_serial' => $product->manage_stock_by_serial,
-
-                    'category_id' => $product->category_id,
-                ];
-            })
+            $products
         );
     }
 }

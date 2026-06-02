@@ -107,7 +107,7 @@ const destroy = (id) => {
                         {{ product.brand?.name || '-' }}
                     </td>
                     <td class="border p-2">
-                        {{ product.price }}
+                        {{ product.sell_price }}
                     </td>
                     <td class="border p-2">
                         {{ product.stock }}
