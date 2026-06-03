@@ -1,10 +1,8 @@
 <template>
 
-    <div class="h-screen bg-gray-100 p-3">
+    <div class="h-screen overflow-hidden bg-slate-100">
 
-        <div
-            class="grid grid-cols-12 gap-3 h-full"
-        >
+        <div class="grid h-full grid-cols-1 gap-3 p-3 lg:grid-cols-12">
 
             <slot />
 

@@ -3,6 +3,7 @@
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import SummarySection from '@/Components/POS/SummarySection.vue'
 import KeyboardShortcuts from '@/Components/POS/KeyboardShortcuts.vue'
+import CartTable from '@/Components/POS/CartTable.vue'
 
 defineProps({
 
@@ -37,6 +38,8 @@ defineEmits([
 
     'show-hold-list',
 
+    'remove-item',
+
     'checkout',
 ])
 
@@ -44,72 +47,103 @@ defineEmits([
 
 <template>
 
-    <div
-        class="col-span-4 bg-white rounded shadow p-3 flex flex-col"
+    <aside
+        class="min-h-0 rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-5 xl:col-span-4"
     >
 
-        <!-- CUSTOMER -->
+        <div class="flex h-full min-h-0 flex-col">
 
-        <CustomerSection
+            <div
+                class="flex items-center justify-between border-b border-slate-200 px-4 py-3"
+            >
 
-            :customer="selectedCustomer"
+                <div>
 
-            @selected="
-                $emit(
-                    'customer-selected',
-                    $event
-                )
-            "
-        />
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Hoa don hien tai
+                    </div>
 
-        <!-- ACTION AREA -->
+                    <h2 class="text-lg font-bold text-slate-900">
+                        Don ban hang
+                    </h2>
 
-        <div class="mt-4">
+                </div>
 
-            <!-- SHORTCUTS -->
+                <div class="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {{ cart.length }} mat hang
+                </div>
 
-            <KeyboardShortcuts
+            </div>
 
-                :show="showShortcuts"
+            <div class="space-y-3 border-b border-slate-200 p-4">
 
-                @toggle="
-                    $emit(
-                        'toggle-shortcuts'
-                    )
-                "
-            />
+                <CustomerSection
 
-            <!-- BUTTONS -->
+                    :customer="selectedCustomer"
 
-            <div class="space-y-2">
-
-                <!-- HOLD -->
-
-                <button
-                    type="button"
-                    @click="$emit('open-hold')"
-                    class="w-full px-4 py-3 bg-yellow-500 text-white rounded"
-                >
-                    Lưu tạm hóa đơn
-                </button>
-
-                <!-- HOLD LIST -->
-
-                <button
-                    v-if="holdSales.length > 0"
-                    @click="
+                    @selected="
                         $emit(
-                            'show-hold-list'
+                            'customer-selected',
+                            $event
                         )
                     "
-                    class="w-full px-4 py-3 bg-blue-500 text-white rounded"
-                >
-                    Có:
-                    ({{ holdSales.length }})
-                    hóa đơn
-                </button>
+                />
 
-                <!-- SUMMARY -->
+                <div class="grid grid-cols-2 gap-2">
+
+                    <button
+                        type="button"
+                        @click="$emit('open-hold')"
+                        class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
+                    >
+                        Luu tam
+                    </button>
+
+                    <button
+                        type="button"
+                        :disabled="holdSales.length === 0"
+                        @click="
+                            $emit(
+                                'show-hold-list'
+                            )
+                        "
+                        class="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+                    >
+                        Don giu ({{ holdSales.length }})
+                    </button>
+
+                </div>
+
+                <KeyboardShortcuts
+
+                    :show="showShortcuts"
+
+                    @toggle="
+                        $emit(
+                            'toggle-shortcuts'
+                        )
+                    "
+                />
+
+            </div>
+
+            <div class="min-h-0 flex-1 overflow-auto">
+
+                <CartTable
+
+                    :items="cart"
+
+                    @remove="
+                        $emit(
+                            'remove-item',
+                            $event
+                        )
+                    "
+                />
+
+            </div>
+
+            <div class="border-t border-slate-200 p-4">
 
                 <SummarySection
 
@@ -126,6 +160,6 @@ defineEmits([
 
         </div>
 
-    </div>
+    </aside>
 
 </template>

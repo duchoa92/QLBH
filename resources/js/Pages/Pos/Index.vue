@@ -1,4 +1,3 @@
-
 <script setup>
 import {
     ref,
@@ -17,40 +16,7 @@ import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
 import PosSidebar from '@/Components/POS/PosSidebar.vue'
 import PosMainPanel from '@/Components/POS/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
-import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 
-
-
-// Khai báo test Barcode nhập tay, sau này đổi thành máy quét
-const testBarcode = ref('')
-const scanTestBarcode =
-    async () => {
-
-    try {
-
-        const result =
-            await productService.scan(
-                testBarcode.value
-            )
-
-        addToCart(
-            result.data
-        )
-
-        testBarcode.value = ''
-
-    } catch (error) {
-
-        errorToast(
-
-            error?.response?.data?.message
-            || 'Không tìm thấy sản phẩm'
-        )
-    }
-}
-
-
-// Sử dụng composable useCart để quản lý trạng thái giỏ hàng
 const {
 
     cart,
@@ -69,8 +35,6 @@ const {
 
 } = useCart()
 
-
-// Sử dụng composable useHoldSale để xử lý lưu tạm hóa đơn
 const {
 
     holdSales,
@@ -100,8 +64,6 @@ const {
     clearCart,
 )
 
-
-// Sử dụng composable useCheckout để xử lý thanh toán
 const {
 
     confirmCheckout,
@@ -115,20 +77,19 @@ const {
     clearCart,
 )
 
+const {
 
+    error: errorToast,
 
-// Khi khách hàng được chọn từ component CustomerSection, cập nhật selectedCustomer
+} = useToast()
+
 const onCustomerSelected = (customer) => {
     selectedCustomer.value = customer
 }
 
-// Hiển thị hướng dẫn phím tắt
 const showShortcuts = ref(false)
-
-// Hiển thị modal thanh toán
 const showPaymentModal = ref(false)
 
-// Xử lý xác nhận thanh toán từ PaymentModal
 const handleCheckout = async (
     paymentData
 ) => {
@@ -143,15 +104,11 @@ const handleCheckout = async (
     )
 }
 
-
-
-
-// Thanh toán
 const checkout = () => {
 
     if (!cart.value.length) {
 
-        error('Giỏ hàng trống')
+        errorToast('Gio hang trong')
 
         return
     }
@@ -159,7 +116,6 @@ const checkout = () => {
     showPaymentModal.value = true
 }
 
-// Sử dụng composable useKeyboardShortcuts để xử lý phím tắt
 useKeyboardShortcuts({
 
     cart,
@@ -173,7 +129,6 @@ useKeyboardShortcuts({
     clearCart,
 })
 
-// 
 useBarcodeScanner(
 
     async (barcode) => {
@@ -194,62 +149,26 @@ useBarcodeScanner(
             console.error(error)
 
             errorToast(
-                'Không tìm thấy sản phẩm'
+                'Khong tim thay san pham'
             )
         }
     }
 )
 
-
 onMounted(() => {
 
     fetchHoldSales()
 })
-
-const {
-
-    success,
-
-    error: errorToast,
-
-    loading,
-
-    dismiss,
-
-} = useToast()
-
 </script>
 
 <template>
 
-<!-- Ô nhập Imei -->
-    <div class="p-2 bg-yellow-50 border-b">
+    <PosLayout>
 
-        <input
-            v-model="testBarcode"
-            @keyup.enter="scanTestBarcode"
-            class="border p-2 rounded w-full"
-            placeholder="Nhập barcode hoặc IMEI để test"
-        />
-
-    </div>
-   <PosLayout>
-
-        <!-- PHẦN TRÁI -->
         <PosMainPanel
-            :cart="cart"
-
-            :selected-cart-index="
-                selectedCartIndex
-            "
-
             @add-product="addToCart"
-
-            @remove-item="removeItem"
         />
 
-
-        <!-- Phải -->
         <PosSidebar
             :cart="cart"
 
@@ -280,14 +199,14 @@ const {
                 showHoldModal = true
             "
 
+            @remove-item="removeItem"
+
             @checkout="checkout"
         />
 
     </PosLayout>
 
-
-    <!-- Modal thanh toán -->
-     <PaymentModal
+    <PaymentModal
 
         :show="showPaymentModal"
 
@@ -298,7 +217,6 @@ const {
         @confirm="handleCheckout"
     />
 
-    <!-- Modal hóa đơn giữ -->
     <HoldSaleModal
 
         :show="showHoldModal"
@@ -310,8 +228,7 @@ const {
         @load="loadHoldSale"
     />
 
-    <!-- Modal lưu tạm hóa đơn -->
-     <SaveHoldModal
+    <SaveHoldModal
 
         :show="showSaveHoldModal"
 
@@ -325,6 +242,5 @@ const {
             holdName = $event
         "
     />
-
 
 </template>

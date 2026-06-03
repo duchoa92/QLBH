@@ -1,100 +1,48 @@
 <script setup>
 
 import ProductSearch from '@/Modules/POS/Product/Components/ProductSearch.vue'
-import CartTable from '@/Components/POS/CartTable.vue'
-import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
-import { productService } from '@/Modules/POS/Product/Services/productService'
-
-const props = defineProps({
-
-    cart: {
-        type: Array,
-        default: () => [],
-    },
-
-    selectedCartIndex: {
-        type: Number,
-        default: 0,
-    },
-})
 
 const emit = defineEmits([
 
     'add-product',
-
-    'remove-item',
 ])
-
-/*
-|--------------------------------------------------------------------------
-| BARCODE SCANNER
-|--------------------------------------------------------------------------
-*/
-
-useBarcodeScanner(
-
-    async (barcode) => {
-
-        try {
-
-            const product =
-                await productService
-                    .findByBarcode(
-                        barcode
-                    )
-
-            if (!product) {
-
-                return
-            }
-
-            emit(
-                'add-product',
-                product
-            )
-
-        } catch (error) {
-
-            console.error(error)
-        }
-    }
-)
-
 
 </script>
 
 <template>
 
-    <div
-        class="col-span-8 bg-white rounded shadow p-3 flex flex-col"
+    <section
+        class="min-h-0 rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-7 xl:col-span-8"
     >
 
-        <!-- Search -->
-        <ProductSearch
-            @selected="
-                emit(
-                    'add-product',
-                    $event
-                )
-            "
-        />
+        <div class="flex h-full min-h-0 flex-col">
 
-        <!-- Cart -->
-        <div
-            class="mt-3 flex-1 overflow-auto"
-        >
+            <div
+                class="flex items-center justify-between border-b border-slate-200 px-4 py-3"
+            >
 
-            <CartTable
+                <div>
 
-                :items="cart"
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Kho hang
+                    </div>
 
-                :selected-index="
-                    selectedCartIndex
-                "
+                    <h1 class="text-lg font-bold text-slate-900">
+                        Chon san pham
+                    </h1>
 
-                @remove="
+                </div>
+
+                <div class="rounded-md bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
+                    POS ban hang
+                </div>
+
+            </div>
+
+            <ProductSearch
+                @selected="
                     emit(
-                        'remove-item',
+                        'add-product',
                         $event
                     )
                 "
@@ -102,6 +50,6 @@ useBarcodeScanner(
 
         </div>
 
-    </div>
+    </section>
 
 </template>

@@ -1,4 +1,3 @@
-
 <script setup>
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
 import { useToast } from '@/Composables/useToast'
@@ -14,7 +13,6 @@ const {
 
 } = useToast()
 
-// COMPOSABLE
 const {
 
     keyword,
@@ -31,12 +29,6 @@ const {
 
 } = useProductSearch()
 
-
-/*
-|--------------------------------------------------
-| SELECT PRODUCT
-|--------------------------------------------------
-*/
 const selectProduct = (
     product
 ) => {
@@ -46,7 +38,7 @@ const selectProduct = (
     ) {
 
         error(
-            'Sản phẩm này phải quét IMEI'
+            'San pham nay phai quet IMEI'
         )
 
         return
@@ -58,7 +50,6 @@ const selectProduct = (
     )
 }
 
-// Quét IMEI
 const scanImei = async () => {
 
     const value = keyword.value.trim()
@@ -74,7 +65,6 @@ const scanImei = async () => {
                 value
             )
 
-
         emit(
             'selected',
             result.data
@@ -84,140 +74,80 @@ const scanImei = async () => {
 
     } catch (error) {
 
-        // Không phải IMEI thì bỏ qua
-
         console.error(error)
     }
 }
 
-/*
-|--------------------------------------------------
-| FORMAT PRICE
-|--------------------------------------------------
-*/
 const formatPrice = (value) => {
 
     return Number(value).toLocaleString('vi-VN')
 }
 
-
-/*
-|--------------------------------------------------
-| REFRESH PRODUCTS
-|--------------------------------------------------
-*/
 const refreshProducts = () => {
 
     loadProducts()
 }
-
-
 </script>
 
 <template>
 
-    <div>
+    <div class="flex min-h-0 flex-1 flex-col">
 
-        <!-- SEARCH -->
-        <div class="mb-3">
+        <div class="border-b border-slate-200 bg-slate-50 p-4">
 
-            <input
-                v-model="keyword"
-                @keyup.enter="scanImei"
-                type="text"
-                class="w-full border rounded-lg p-3"
-                placeholder="Tên SP / Barcode / IMEI"
-            />
+            <div class="grid gap-3 md:grid-cols-[1fr_220px_112px]">
 
-        </div>
+                <div>
 
-        <!-- FILTER -->
-        <div class="mb-4">
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Tim nhanh / Barcode / IMEI
+                    </label>
 
-            <select
-                v-model="categoryId"
-                class="w-full border rounded-lg p-3"
-            >
-                <option value="">
-                    Tất cả danh mục
-                </option>
-
-                <option
-                    v-for="category in categories"
-                    :key="category.id"
-                    :value="category.id"
-                >
-                    {{ category.name }}
-                </option>
-
-            </select>
-
-        </div>
-
-        <div
-            v-if="loading" class="text-center py-10"
-        >
-            Đang tải sản phẩm...
-        </div>
-
-        <!-- PRODUCT GRID -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-
-            <div
-                v-for="product in products"
-                :key="product.id"
-                class="border rounded-xl p-3 bg-white cursor-pointer hover:bg-gray-100 transition"
-                @click="selectProduct(product)"
-            >
-
-                <!-- NAME -->
-                <div class="font-semibold text-sm">
-
-                    {{ product.name }}
+                    <input
+                        v-model="keyword"
+                        @keyup.enter="scanImei"
+                        type="text"
+                        class="h-12 w-full rounded-md border-slate-300 bg-white px-4 text-base font-medium text-slate-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Nhap ten san pham, SKU, barcode hoac IMEI"
+                    />
 
                 </div>
 
-                <!--Bát buộc quét Imei-->
-                <div
-                    v-if="product.product_type === 'imei'"
-                    class="text-xs text-red-600 font-semibold"
-                >
-                    Bắt buộc quét IMEI
-                </div>
+                <div>
 
-                <!-- SKU -->
-                <div class="text-xs text-gray-500 mt-1">
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Danh muc
+                    </label>
 
-                    SKU: {{ product.sku }}
+                    <select
+                        v-model="categoryId"
+                        class="h-12 w-full rounded-md border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                        <option value="">
+                            Tat ca
+                        </option>
 
-                </div>
+                        <option
+                            v-for="category in categories"
+                            :key="category.id"
+                            :value="category.id"
+                        >
+                            {{ category.name }}
+                        </option>
 
-                <!-- PRICE -->
-                <div class="text-red-600 font-bold mt-2">
-
-                    {{ formatPrice(product.price) }}
-
-                </div>
-
-                <!-- STOCK -->
-                <div
-                    class="text-xs mt-2"
-                    :class="{
-                        'text-red-600':
-                            product.stock <= 0
-                    }"
-                >
-
-                    Tồn:
-                    {{ product.stock }}
+                    </select>
 
                 </div>
 
-                <!-- SOLD -->
-                <div class="text-xs text-gray-500">
+                <div class="flex items-end">
 
-                    Đã bán:
-                    {{ product.sold_count }}
+                    <button
+                        type="button"
+                        @click="refreshProducts"
+                        class="h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                    >
+                        Tai lai
+                    </button>
 
                 </div>
 
@@ -225,16 +155,90 @@ const refreshProducts = () => {
 
         </div>
 
-        <!-- Không tìm thấy sản phẩm -->
-        <div
-            v-if="
-                !loading &&
-                products.length === 0
-            "
-            class="text-center py-10 text-gray-500"
-        >
-            Không tìm thấy sản phẩm
+        <div class="min-h-0 flex-1 overflow-auto p-4">
+
+            <div
+                v-if="loading"
+                class="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-500"
+            >
+                Dang tai san pham...
+            </div>
+
+            <div
+                v-else-if="products.length"
+                class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+            >
+
+                <button
+                    v-for="product in products"
+                    :key="product.id"
+                    type="button"
+                    class="group flex min-h-[148px] flex-col rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+                    @click="selectProduct(product)"
+                >
+
+                    <div class="flex items-start justify-between gap-2">
+
+                        <div class="min-w-0">
+
+                            <div class="h-10 overflow-hidden text-sm font-bold leading-5 text-slate-900">
+                                {{ product.name }}
+                            </div>
+
+                            <div class="mt-1 truncate text-xs text-slate-500">
+                                SKU: {{ product.sku }}
+                            </div>
+
+                        </div>
+
+                        <span
+                            v-if="product.product_type === 'imei'"
+                            class="shrink-0 rounded bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600"
+                        >
+                            IMEI
+                        </span>
+
+                    </div>
+
+                    <div class="mt-auto pt-4">
+
+                        <div class="text-lg font-black text-rose-600">
+                            {{ formatPrice(product.price) }}
+                        </div>
+
+                        <div class="mt-2 flex items-center justify-between text-xs">
+
+                            <span
+                                class="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-600"
+                                :class="{
+                                    'bg-rose-50 text-rose-600':
+                                        product.stock <= 0
+                                }"
+                            >
+                                Ton: {{ product.stock }}
+                            </span>
+
+                            <span class="text-slate-500">
+                                Da ban: {{ product.sold_count }}
+                            </span>
+
+                        </div>
+
+                    </div>
+
+                </button>
+
+            </div>
+
+            <div
+                v-else
+                class="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-500"
+            >
+                Khong tim thay san pham
+            </div>
+
         </div>
+
     </div>
 
 </template>

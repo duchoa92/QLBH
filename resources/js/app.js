@@ -3,6 +3,7 @@ import './bootstrap';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { Toaster } from 'vue-sonner';
+import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
@@ -17,7 +18,27 @@ createInertiaApp({
         resolvePageComponent(
             `./Pages/${name}.vue`,
             import.meta.glob('./Pages/**/*.vue'),
-        ),
+        ).then((page) => {
+
+            const adminModules = [
+                'Brands/',
+                'Categories/',
+                'Customers/',
+                'ProductImeis/',
+                'Products/',
+                'Repairs/',
+                'Sales/',
+            ]
+
+            if (
+                !page.default.layout &&
+                adminModules.some((module) => name.startsWith(module))
+            ) {
+                page.default.layout = AdminLayout
+            }
+
+            return page
+        }),
     setup({ el, App, props, plugin }) {
 
         createApp({

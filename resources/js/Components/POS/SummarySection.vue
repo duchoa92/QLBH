@@ -3,14 +3,11 @@ import { computed } from 'vue'
 
 const props = defineProps({
 
-    items: Array,
+    items: {
+        type: Array,
+        default: () => [],
+    },
 })
-
-/*
-|--------------------------------------------------------------------------
-| Tạm tính
-|--------------------------------------------------------------------------
-*/
 
 const subtotal = computed(() => {
 
@@ -30,23 +27,21 @@ const subtotal = computed(() => {
     )
 })
 
-/*
-|--------------------------------------------------------------------------
-| Format money
-|--------------------------------------------------------------------------
-*/
+const itemCount = computed(() => {
+
+    return props.items.reduce(
+
+        (total, item) => total + Number(item.quantity || 0),
+
+        0
+    )
+})
 
 const format = (number) => {
 
     return Number(number || 0)
         .toLocaleString('vi-VN')
 }
-
-/*
-|--------------------------------------------------------------------------
-| Emit
-|--------------------------------------------------------------------------
-*/
 
 const emit = defineEmits([
     'checkout',
@@ -55,57 +50,61 @@ const emit = defineEmits([
 
 <template>
 
-    <div>
+    <div class="space-y-3">
 
-        <!-- Tạm tính -->
+        <div class="space-y-2 rounded-lg bg-slate-50 p-3">
 
-        <div class="flex justify-between py-2 border-b">
+            <div class="flex justify-between text-sm text-slate-600">
 
-            <span>
-                Tạm tính
+                <span>So luong</span>
+
+                <span class="font-semibold text-slate-900">
+                    {{ itemCount }}
+                </span>
+
+            </div>
+
+            <div class="flex justify-between text-sm text-slate-600">
+
+                <span>Tam tinh</span>
+
+                <span class="font-semibold text-slate-900">
+                    {{ format(subtotal) }}
+                </span>
+
+            </div>
+
+            <div class="flex justify-between text-sm text-slate-600">
+
+                <span>Giam gia</span>
+
+                <span class="font-semibold text-slate-900">
+                    0
+                </span>
+
+            </div>
+
+        </div>
+
+        <div class="flex items-end justify-between">
+
+            <span class="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Tong thanh toan
             </span>
 
-            <span>
+            <span class="text-2xl font-black text-blue-700">
                 {{ format(subtotal) }}
             </span>
 
         </div>
-
-        <!-- Giảm giá -->
-
-        <div class="flex justify-between py-2 border-b">
-
-            <span>
-                Giảm giá
-            </span>
-
-            <span>
-                0
-            </span>
-
-        </div>
-
-        <!-- Tổng -->
-
-        <div class="flex justify-between py-3 text-xl font-bold">
-
-            <span>
-                Tổng tiền
-            </span>
-
-            <span>
-                {{ format(subtotal) }}
-            </span>
-
-        </div>
-
-        <!-- Button -->
 
         <button
+            type="button"
             @click="emit('checkout')"
-            class="w-full bg-blue-600 text-white py-3 rounded"
+            class="h-14 w-full rounded-md bg-blue-600 text-base font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            :disabled="!items.length"
         >
-            Thanh toán
+            Thanh toan
         </button>
 
     </div>

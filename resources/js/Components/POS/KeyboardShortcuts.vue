@@ -16,114 +16,59 @@ defineEmits([
 
 <template>
 
-    <div class="mb-4">
-
-        <!-- Toggle -->
+    <div>
 
         <button
+            type="button"
             @click="$emit('toggle')"
-            class="text-sm text-blue-600 hover:underline"
+            class="text-sm font-semibold text-blue-600 hover:text-blue-700"
         >
 
             {{
                 show
-                    ? 'Ẩn phím tắt'
-                    : 'Xem phím tắt'
+                    ? 'An phim tat'
+                    : 'Xem phim tat'
             }}
 
         </button>
 
-        <!-- Content -->
-
         <div
             v-if="show"
-            class="mt-2 border rounded p-3 bg-gray-50"
+            class="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3"
         >
 
-            <div class="font-bold mb-2">
-                Phím tắt POS
+            <div class="mb-2 text-sm font-bold text-slate-900">
+                Phim tat POS
             </div>
 
-            <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
 
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
+                <div class="flex items-center gap-2">
+                    <kbd class="rounded border bg-white px-2 py-1 font-bold text-slate-700 shadow-sm">
                         F2
                     </kbd>
-
-                    → Thanh toán
+                    Thanh toan
                 </div>
 
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
+                <div class="flex items-center gap-2">
+                    <kbd class="rounded border bg-white px-2 py-1 font-bold text-slate-700 shadow-sm">
                         ESC
                     </kbd>
-
-                    → Đóng popup
+                    Dong popup
                 </div>
 
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
-                        DELETE
+                <div class="flex items-center gap-2">
+                    <kbd class="rounded border bg-white px-2 py-1 font-bold text-slate-700 shadow-sm">
+                        DEL
                     </kbd>
-
-                    → Xóa sản phẩm
+                    Xoa hang
                 </div>
 
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
-                        CTRL + DELETE
+                <div class="flex items-center gap-2">
+                    <kbd class="rounded border bg-white px-2 py-1 font-bold text-slate-700 shadow-sm">
+                        + / -
                     </kbd>
-
-                    → Xóa giỏ hàng
-                </div>
-
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
-                        +
-                    </kbd>
-
-                    → Tăng SL
-                </div>
-
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
-                        -
-                    </kbd>
-
-                    → Giảm SL
-                </div>
-
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
-                        ↑ ↓
-                    </kbd>
-
-                    → Chọn dòng
-                </div>
-
-                <div>
-                    <kbd
-                        class="px-2 py-1 bg-white border rounded shadow-sm text-xs"
-                    >
-                        ENTER
-                    </kbd>
-
-                    → Xác nhận
+                    Tang giam SL
                 </div>
 
             </div>
