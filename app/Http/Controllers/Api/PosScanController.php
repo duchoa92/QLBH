@@ -19,7 +19,7 @@ class PosScanController extends Controller
         |--------------------------------------------------
         */
 
-        $imei = ProductImei::query()
+         $imei = ProductImei::query()
 
             ->with('product')
 
@@ -29,8 +29,7 @@ class PosScanController extends Controller
 
             ->first();
 
-        // Debug
-        dd($code, $imei);
+
 
         if ($imei) {
 

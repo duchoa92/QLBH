@@ -16,12 +16,54 @@ class ProductSearchController extends Controller
 
             ->when($q, function ($query) use ($q) {
 
-                $query->where('name', 'like', "%{$q}%")
-                    ->orWhere('barcode', 'like', "%{$q}%")
-                    ->orWhere('sku', 'like', "%{$q}%");
+                $query->where(function ($subQuery) use ($q) {
+
+                    $subQuery
+
+                        ->where(
+                            'name',
+                            'like',
+                            "%{$q}%"
+                        )
+
+                        ->orWhere(
+                            'barcode',
+                            'like',
+                            "%{$q}%"
+                        )
+
+                        ->orWhere(
+                            'sku',
+                            'like',
+                            "%{$q}%"
+                        )
+
+                        ->orWhereHas(
+                            'imeis',
+                            function ($imeiQuery) use ($q) {
+
+                                $imeiQuery
+
+                                    ->where(
+                                        'imei',
+                                        'like',
+                                        "%{$q}%"
+                                    )
+
+                                    ->orWhere(
+                                        'serial',
+                                        'like',
+                                        "%{$q}%"
+                                    );
+                            }
+                        );
+                });
             })
 
-            ->where('is_active', true)
+            ->where(
+                'is_active',
+                true
+            )
 
             ->limit(10)
 
@@ -33,6 +75,8 @@ class ProductSearchController extends Controller
                 'sku',
             ]);
 
-        return response()->json($products);
+        return response()->json(
+            $products
+        );
     }
 }

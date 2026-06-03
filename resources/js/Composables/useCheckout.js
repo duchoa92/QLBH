@@ -66,8 +66,6 @@ export function useCheckout(
             |--------------------------------------------------------------------------
             */
 
-            // debug
-            console.log(cart.value)
             
             const response =
 

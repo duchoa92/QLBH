@@ -91,6 +91,8 @@ class PosController extends Controller
         PosCheckoutService $service,
     )
     {
+        
+
         $sale = $service->checkout(
 
             items: $request->items,

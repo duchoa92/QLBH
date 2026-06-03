@@ -74,6 +74,7 @@ const scanImei = async () => {
                 value
             )
 
+
         emit(
             'selected',
             result.data
@@ -84,6 +85,8 @@ const scanImei = async () => {
     } catch (error) {
 
         // Không phải IMEI thì bỏ qua
+
+        console.error(error)
     }
 }
 
