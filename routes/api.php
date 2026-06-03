@@ -12,62 +12,62 @@ use App\Http\Controllers\Api\ProductApiController;
 
 
 Route::middleware(['web', 'auth'])->group(function () {
-    
+
 // Quét mã vạch để tìm sản phẩm
-    Route::post(
-        '/pos/scan',
-        [PosScanController::class, 'scan']
-    );
+Route::post(
+    '/pos/scan',
+    [PosScanController::class, 'scan']
+);
 
-    // Tìm kiếm sản phẩm theo mã vạch
-    Route::get(
-        '/products/barcode',
-        [
-            ProductApiController::class,
-            'findByBarcode',
-        ]
-    );
+// Tìm kiếm sản phẩm theo mã vạch
+Route::get(
+    '/products/barcode',
+    [
+        ProductApiController::class,
+        'findByBarcode',
+    ]
+);
 
-    // Tìm kiếm sản phẩm theo tên hoặc mã vạch
-    Route::get(
-        '/products/search',
-        [ProductSearchController::class, 'search']
-    );
+// Tìm kiếm sản phẩm theo tên hoặc mã vạch
+Route::get(
+    '/products/search',
+    [ProductSearchController::class, 'search']
+);
 
-    // Lấy danh sách sản phẩm
-    Route::get('/products', [ProductController::class, 'index']);
+// Lấy danh sách sản phẩm
+Route::get('/products', [ProductController::class, 'index']);
 
 
-    // Tìm kiếm khách hàng
-    Route::get('/customers/search', [CustomerController::class, 'search']);
-    // Thêm khách hàng mới
-    Route::post('/customers', [CustomerController::class, 'store']);
+// Tìm kiếm khách hàng
+Route::get('/customers/search', [CustomerController::class, 'search']);
+// Thêm khách hàng mới
+Route::post('/customers', [CustomerController::class, 'store']);
 
-    // Danh sách hóa đơn giữ
-    Route::get(
-        '/hold-sales',
-        [HoldSaleController::class, 'index']
-    );
-    // Lưu hóa đơn giữ
-    Route::post(
-        '/hold-sales',
-        [HoldSaleController::class, 'store']
-    );
+// Danh sách hóa đơn giữ
+Route::get(
+    '/hold-sales',
+    [HoldSaleController::class, 'index']
+);
+// Lưu hóa đơn giữ
+Route::post(
+    '/hold-sales',
+    [HoldSaleController::class, 'store']
+);
 
-    // Lấy chi tiết hóa đơn giữ
-    Route::get(
-        '/hold-sales/{holdSale}',
-        [HoldSaleController::class, 'show']
-    );
-    
-    // Xóa hóa đơn giữ
-    Route::delete(
-        '/hold-sales/{holdSale}',
-        [HoldSaleController::class, 'destroy']
-    );
+// Lấy chi tiết hóa đơn giữ
+Route::get(
+    '/hold-sales/{holdSale}',
+    [HoldSaleController::class, 'show']
+);
 
-    // Lấy danh sách danh mục
-    Route::get('/categories', [CategoryController::class, 'index']);
+// Xóa hóa đơn giữ
+Route::delete(
+    '/hold-sales/{holdSale}',
+    [HoldSaleController::class, 'destroy']
+);
+
+// Lấy danh sách danh mục
+Route::get('/categories', [CategoryController::class, 'index']);
 
 
 });

@@ -94,7 +94,7 @@ watch(search, value => {
                         </td>
 
                         <td class="p-3">
-                            {{ Number(sale.total).toLocaleString() }}
+                            {{ Number(sale.subtotal).toLocaleString() }}
                         </td>
 
                         <td class="p-3">

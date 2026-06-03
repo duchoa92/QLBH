@@ -119,6 +119,7 @@ class PosController extends Controller
         $sale->load([
 
             'items.product',
+            'items.imei',
         ]);
 
         return Inertia::render(

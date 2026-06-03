@@ -41,5 +41,19 @@ export const productService = {
             )
 
         return response.data
-    }
+    },
+
+    // Quét barcode hoặc IMEI
+    async scan(code) {
+
+        const response =
+            await api.post(
+                '/api/pos/scan',
+                {
+                    code,
+                }
+            )
+
+        return response.data
+    },
 }

@@ -25,9 +25,12 @@ class PosScanController extends Controller
 
             ->where('imei', $code)
 
-            ->where('status', 'available')
+            ->where('status', ProductImei::STATUS_AVAILABLE)
 
             ->first();
+
+        // Debug
+        dd($code, $imei);
 
         if ($imei) {
 

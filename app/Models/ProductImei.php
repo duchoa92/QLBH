@@ -46,10 +46,20 @@ class ProductImei extends Model
 
     ];
 
+    // Thêm quan hệ với Product
     public function product(): BelongsTo
     {
         return $this->belongsTo(
             Product::class
+        );
+    }
+
+    // Thêm quan hệ với SaleItem
+    public function saleItems()
+    {
+        return $this->hasMany(
+            SaleItem::class,
+            'product_imei_id'
         );
     }
 }

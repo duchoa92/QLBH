@@ -28,13 +28,14 @@ const scanTestBarcode =
 
     try {
 
-        const product =
-            await productService
-                .findByBarcode(
-                    testBarcode.value
-                )
+        const result =
+            await productService.scan(
+                testBarcode.value
+            )
 
-        addToCart(product)
+        addToCart(
+            result.data
+        )
 
         testBarcode.value = ''
 
@@ -179,13 +180,14 @@ useBarcodeScanner(
 
         try {
 
-            const product =
-                await productService
-                    .findByBarcode(
-                        barcode
-                    )
+            const result =
+                await productService.scan(
+                    barcode
+                )
 
-            addToCart(product)
+            addToCart(
+                result.data
+            )
 
         } catch (error) {
 

@@ -25,6 +25,7 @@ const props = defineProps({
                     <strong>Ngày:</strong>
                     {{ sale.created_at }}
                 </p>
+
             </div>
 
             <table class="w-full">
@@ -41,10 +42,20 @@ const props = defineProps({
                             IMEI
                         </th>
 
-                        <th class="py-2 text-right">
-                            Giá
+                        <th class="py-2 text-center">
+                            SL
                         </th>
+
+                        <th class="py-2 text-right">
+                            Đơn giá
+                        </th>
+
+                        <th class="py-2 text-right">
+                            Thành tiền
+                        </th>
+
                     </tr>
+
                 </thead>
 
                 <tbody>
@@ -55,19 +66,81 @@ const props = defineProps({
                     >
 
                         <td class="py-2">
-                            {{ item.product.name }}
+
+                            {{ item.product?.name }}
+
                         </td>
 
                         <td class="py-2">
-                            {{ item.product_imei?.imei }}
+
+                            {{ item.imei?.imei ?? '-' }}
+
+                        </td>
+
+                        <td class="py-2 text-center">
+
+                            {{ item.quantity }}
+
                         </td>
 
                         <td class="py-2 text-right">
-                            {{ Number(item.price).toLocaleString() }}
+
+                            {{
+                                Number(
+                                    item.unit_price
+                                ).toLocaleString(
+                                    'vi-VN'
+                                )
+                            }}
+
                         </td>
+
+                        <td class="py-2 text-right">
+
+                            {{
+                                Number(
+                                    item.subtotal
+                                ).toLocaleString(
+                                    'vi-VN'
+                                )
+                            }}
+
+                        </td>
+
                     </tr>
+
                 </tbody>
+
+                <tfoot>
+
+                    <tr class="border-t">
+
+                        <td
+                            colspan="4"
+                            class="text-right font-bold py-3"
+                        >
+                            Tổng cộng
+                        </td>
+
+                        <td class="text-right font-bold">
+
+                            {{
+                                Number(
+                                    sale.subtotal
+                                ).toLocaleString(
+                                    'vi-VN'
+                                )
+                            }}
+
+                        </td>
+
+                    </tr>
+
+                </tfoot>
+
             </table>
+
         </div>
+
     </div>
 </template>

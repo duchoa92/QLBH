@@ -2,6 +2,7 @@
 <script setup>
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
 import { useToast } from '@/Composables/useToast'
+import { productService } from '@/Modules/POS/Product/Services/productService'
 
 const emit = defineEmits([
     'selected',
@@ -57,6 +58,35 @@ const selectProduct = (
     )
 }
 
+// Quét IMEI
+const scanImei = async () => {
+
+    const value = keyword.value.trim()
+
+    if (!value) {
+        return
+    }
+
+    try {
+
+        const result =
+            await productService.scan(
+                value
+            )
+
+        emit(
+            'selected',
+            result.data
+        )
+
+        keyword.value = ''
+
+    } catch (error) {
+
+        // Không phải IMEI thì bỏ qua
+    }
+}
+
 /*
 |--------------------------------------------------
 | FORMAT PRICE
@@ -90,9 +120,10 @@ const refreshProducts = () => {
 
             <input
                 v-model="keyword"
+                @keyup.enter="scanImei"
                 type="text"
                 class="w-full border rounded-lg p-3"
-                placeholder="Tìm sản phẩm..."
+                placeholder="Tên SP / Barcode / IMEI"
             />
 
         </div>

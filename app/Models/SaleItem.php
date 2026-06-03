@@ -44,7 +44,7 @@ class SaleItem extends Model
         );
     }
 
-    public function productImei(): BelongsTo
+    public function imei(): BelongsTo
     {
         return $this->belongsTo(
             ProductImei::class,

@@ -118,23 +118,44 @@ const submit = () => {
                     >
 
                         <td class="p-3">
-                            {{ imei.imei }}
+                            <Link
+                                :href="
+                                    route(
+                                        'product-imeis.show',
+                                        imei.id
+                                    )
+                                "
+                            >
+                                {{ imei.imei }}
+                            </Link>
                         </td>
 
                         <td class="p-3">
 
                             <span
-                                v-if="imei.status === 'available'"
+                                v-if="imei.status === 0"
                                 class="text-green-600"
                             >
-                                Chưa bán
+                                Còn hàng
                             </span>
 
                             <span
-                                v-else
+                                v-else-if="imei.status === 1"
                                 class="text-red-600"
                             >
                                 Đã bán
+                            </span>
+
+                            <span
+                                v-else-if="imei.status === 2"
+                            >
+                                Đang sửa
+                            </span>
+
+                            <span
+                                v-else-if="imei.status === 3"
+                            >
+                                Đã trả
                             </span>
                         </td>
                     </tr>

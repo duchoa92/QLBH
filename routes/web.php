@@ -361,37 +361,44 @@ Route::middleware(['auth'])->group(function () {
 
    // sửa chữa Routes
     Route::resource(
-    'repairs',
-    RepairController::class
-);
+        'repairs',
+        RepairController::class
+    );
 
         // Hiển thị chi tiết sửa chữa
     Route::patch(
 
-    'repairs/{repair}/status',
+        'repairs/{repair}/status',
 
-    [RepairController::class, 'updateStatus']
+        [RepairController::class, 'updateStatus']
 
-)->name('repairs.update-status');
+    )->name('repairs.update-status');
 
 
-// Mẫu in hóa đơn sửa chữa
-Route::get(
+    // Mẫu in hóa đơn sửa chữa
+    Route::get(
 
-    'repairs/{repair}/print',
+        'repairs/{repair}/print',
 
-    [RepairController::class, 'print']
+        [RepairController::class, 'print']
 
-)->name('repairs.print');
+    )->name('repairs.print');
 
-// Khách hàng Routes
-Route::resource('customers', CustomerController::class);
+    // Khách hàng Routes
+    Route::resource('customers', CustomerController::class);
 
-// In HĐ
-Route::get(
-    '/sales/{sale}/receipt',
-    [SaleReceiptController::class, 'show']
-)->name('sales.receipt');
+    // In HĐ
+    Route::get(
+        '/sales/{sale}/receipt',
+        [SaleReceiptController::class, 'show']
+    )->name('sales.receipt');
+
+
+    // Hiển thị chi tiết sản phẩm IMEI
+    Route::get(
+        '/imeis/{imei}',
+        [ProductImeiController::class, 'show']
+    )->name('product-imeis.show');
 
 
 });

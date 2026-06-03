@@ -76,8 +76,11 @@ const printInvoice = () => {
                         :key="item.id"
                     >
 
-                        <td class="py-2">
-                            {{ item.product.name }}
+                        <td  v-if="item.imei"
+                            class="text-xs text-blue-600"
+                        >
+                            IMEI:
+                            {{ item.imei?.imei ?? '-' }}
                         </td>
 
                         <td class="text-right">

@@ -53,11 +53,35 @@ class ProductImeiController extends Controller
                     $request->imei,
 
                 'status' =>
-                    'in_stock',
+                    ProductImei::STATUS_AVAILABLE,
             ]);
 
         $product->increment('stock');
 
         return back();
     }
+
+
+    // Hiển thị chi tiết IMEI
+    public function show(
+        ProductImei $imei
+    ): Response {
+
+        $imei->load([
+
+            'product',
+
+            'saleItems.sale.customer',
+        ]);
+
+        return Inertia::render(
+
+            'ProductImeis/Show',
+
+            [
+                'imei' => $imei,
+            ]
+        );
+    }
+
 }
