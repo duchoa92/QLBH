@@ -100,7 +100,7 @@ const refreshProducts = () => {
                 <div>
 
                     <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Tim nhanh / Barcode / IMEI
+                        Tìm nhanh / Barcode / IMEI
                     </label>
 
                     <input
@@ -108,7 +108,7 @@ const refreshProducts = () => {
                         @keyup.enter="scanImei"
                         type="text"
                         class="h-12 w-full rounded-md border-slate-300 bg-white px-4 text-base font-medium text-slate-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        placeholder="Nhap ten san pham, SKU, barcode hoac IMEI"
+                        placeholder="Nhập tên sản phẩm, SKU, barcode hoặc IMEI"
                     />
 
                 </div>
@@ -116,7 +116,7 @@ const refreshProducts = () => {
                 <div>
 
                     <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Danh muc
+                        Danh mục
                     </label>
 
                     <select
@@ -124,7 +124,7 @@ const refreshProducts = () => {
                         class="h-12 w-full rounded-md border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     >
                         <option value="">
-                            Tat ca
+                            Tất cả
                         </option>
 
                         <option
@@ -146,7 +146,7 @@ const refreshProducts = () => {
                         @click="refreshProducts"
                         class="h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
                     >
-                        Tai lai
+                        Tải lại
                     </button>
 
                 </div>
@@ -161,7 +161,7 @@ const refreshProducts = () => {
                 v-if="loading"
                 class="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-500"
             >
-                Dang tai san pham...
+                Đang tải sản phẩm...
             </div>
 
             <div
@@ -215,11 +215,11 @@ const refreshProducts = () => {
                                         product.stock <= 0
                                 }"
                             >
-                                Ton: {{ product.stock }}
+                                Tồn: {{ product.stock }}
                             </span>
 
                             <span class="text-slate-500">
-                                Da ban: {{ product.sold_count }}
+                                Đã bán: {{ product.sold_count }}
                             </span>
 
                         </div>
@@ -234,7 +234,7 @@ const refreshProducts = () => {
                 v-else
                 class="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm font-semibold text-slate-500"
             >
-                Khong tim thay san pham
+                Không tìm thấy sản phẩm
             </div>
 
         </div>

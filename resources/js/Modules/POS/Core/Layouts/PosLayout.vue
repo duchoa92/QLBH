@@ -3,11 +3,11 @@
 
     <div class="flex flex-col lg:flex-row h-full">
 
-      <div class="w-full lg:w-[70%] p-3 flex flex-col">
+      <div class="w-full lg:w-[70%] p-3 flex flex-col min-h-0 ">
         <slot name="main" />
       </div>
 
-      <div class="w-full lg:w-[30%] p-3 flex flex-col bg-white border-t lg:border-l">
+      <div class="w-full lg:w-[30%] p-3 flex flex-col min-h-0">
         <slot name="sidebar" />
       </div>
 

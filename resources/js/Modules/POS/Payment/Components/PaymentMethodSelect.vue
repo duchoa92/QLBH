@@ -18,12 +18,6 @@ const emit = defineEmits([
 
     <div class="mb-4">
 
-        <label
-            class="block text-sm mb-1"
-        >
-            Phương thức thanh toán
-        </label>
-
         <select
             :value="modelValue"
 

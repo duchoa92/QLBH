@@ -89,21 +89,39 @@ const onCustomerSelected = (customer) => {
 
 const showShortcuts = ref(false)
 
+
 // Thanh toán 
 
 const showInvoice = ref(false)
 const invoiceData = ref(null)
 
+// loading khi nhấn checkout để tránh việc click nhiều lần vào nút checkout
+const loading = ref(false)
+
 const handleCheckout = async (data) => {
 
-    const res = await confirmCheckout({
-        ...data,
-        cart: cart.value
-    })
+    if (!cart.value.length) {
+        errorToast('Giỏ hàng trống')
+        return
+    }
 
-    invoiceData.value = res
-    showInvoice.value = true
+    try {
 
+        loading.value = true
+
+        const res = await confirmCheckout({
+            ...data,
+            cart: cart.value
+        })
+
+        invoiceData.value = res
+        showInvoice.value = true
+
+    } catch (e) {
+        errorToast('Lỗi thanh toán')
+    } finally {
+        loading.value = false
+    }
 }
 
 const checkout = async (data) => {
@@ -113,7 +131,10 @@ const checkout = async (data) => {
         return
     }
 
-    await handleCheckout(data)
+    await handleCheckout({
+        ...data,
+        paidAmount: Number(grandTotal.value) 
+    })
 }
 
 useKeyboardShortcuts({
@@ -122,7 +143,7 @@ useKeyboardShortcuts({
 
     selectedCartIndex,
 
-    checkout,
+    checkout: handleCheckout,
 
     clearCart,
 })
@@ -147,7 +168,7 @@ useBarcodeScanner(
             console.error(error)
 
             errorToast(
-                'Khong tim thay san pham'
+                'Không tìm thấy sản phẩm với mã vạch này'
             )
         }
     }
@@ -180,6 +201,8 @@ onMounted(() => {
                 :selected-customer="selectedCustomer"
                 :show-shortcuts="showShortcuts"
                 :hold-sales="holdSales"
+                :grand-total="grandTotal"
+                :loading="loading"
                 @customer-selected="onCustomerSelected"
                 @toggle-shortcuts="showShortcuts = !showShortcuts"
                 @open-hold="openHoldModal"

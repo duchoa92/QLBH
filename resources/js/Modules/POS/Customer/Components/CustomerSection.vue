@@ -40,7 +40,7 @@ const props = defineProps({
         <div class="mb-2 flex items-center justify-between">
 
             <div class="text-sm font-bold text-slate-900">
-                Khach hang
+                Khách hàng
             </div>
 
             <button
@@ -49,7 +49,7 @@ const props = defineProps({
                 @click="clearCustomer"
                 class="text-xs font-semibold text-rose-600 hover:text-rose-700"
             >
-                Bo chon
+                Bỏ chọn
             </button>
 
         </div>
@@ -61,7 +61,7 @@ const props = defineProps({
                 @input="search"
                 @keydown="onKeyDown"
                 type="text"
-                placeholder="Ten hoac SDT khach"
+                placeholder="Tên hoặc số điện thoại khách"
                 class="h-11 w-full rounded-md border-slate-300 px-3 text-sm font-medium shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
 

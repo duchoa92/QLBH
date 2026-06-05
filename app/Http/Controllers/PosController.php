@@ -99,7 +99,7 @@ class PosController extends Controller
 
             customerId: $request->customer_id,
 
-            paidAmount: $request->paid_amount,
+            paidAmount: $request->paidAmount ?? $request->total ?? 0,
 
             paymentMethod: $request->payment_method,
 

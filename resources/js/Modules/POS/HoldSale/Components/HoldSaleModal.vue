@@ -32,7 +32,7 @@ defineEmits([
             <div class="flex justify-between mb-4">
 
                 <h2 class="text-lg font-bold">
-                    Hóa đơn giữ
+                    Hóa đơn đã lưu
                 </h2>
 
                 <button
@@ -61,7 +61,7 @@ defineEmits([
                     @click="$emit('load', hold.id)"
                     class="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
                 >
-                    Mở lại
+                    Mở hóa đơn
                 </button>
 
             </div>
