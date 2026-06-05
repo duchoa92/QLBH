@@ -1,9 +1,11 @@
 <script setup>
 
+import { ref } from 'vue'
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import SummarySection from '@/Components/POS/SummarySection.vue'
 import KeyboardShortcuts from '@/Components/POS/KeyboardShortcuts.vue'
 import CartTable from '@/Components/POS/CartTable.vue'
+
 
 defineProps({
 
@@ -42,6 +44,10 @@ defineEmits([
 
     'checkout',
 ])
+
+
+const note = ref('')
+const paymentMethod = ref('cash')
 
 </script>
 
@@ -145,16 +151,39 @@ defineEmits([
 
             <div class="border-t border-slate-200 p-4">
 
-                <SummarySection
+                <div class="p-4 border-t bg-white">
 
-                    :items="cart"
+                    <button
+                        @click="$emit('checkout', {
+                            note,
+                            paymentMethod
+                        })"
+                        class="w-full bg-blue-600 text-white py-3 rounded font-semibold"
+                    >
+                        Thanh toán
+                    </button>
 
-                    @checkout="
-                        $emit(
-                            'checkout'
-                        )
-                    "
+                </div>
+
+            </div>
+
+            <div class="p-4 border-t space-y-3">
+
+                <!-- NOTE -->
+                <textarea
+                    v-model="note"
+                    placeholder="Ghi chú..."
+                    class="w-full border rounded p-2 text-sm"
                 />
+
+                <!-- PAYMENT -->
+                <select
+                    v-model="paymentMethod"
+                    class="w-full border rounded p-2 text-sm"
+                >
+                    <option value="cash">Tiền mặt</option>
+                    <option value="bank">Chuyển khoản</option>
+                </select>
 
             </div>
 

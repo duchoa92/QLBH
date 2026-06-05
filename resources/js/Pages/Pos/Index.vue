@@ -6,7 +6,6 @@ import {
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { useToast } from '@/Composables/useToast'
-import PaymentModal from '@/Components/POS/PaymentModal.vue'
 import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
 import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
 import { useCheckout } from '@/Composables/useCheckout'
@@ -16,6 +15,7 @@ import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
 import PosSidebar from '@/Components/POS/PosSidebar.vue'
 import PosMainPanel from '@/Components/POS/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
+import InvoiceModal from '@/Components/POS/InvoiceModal.vue'
 
 const {
 
@@ -88,32 +88,32 @@ const onCustomerSelected = (customer) => {
 }
 
 const showShortcuts = ref(false)
-const showPaymentModal = ref(false)
 
-const handleCheckout = async (
-    paymentData
-) => {
+// Thanh toán 
 
-    await confirmCheckout(
-        paymentData,
-        () => {
+const showInvoice = ref(false)
+const invoiceData = ref(null)
 
-            showPaymentModal.value =
-                false
-        }
-    )
+const handleCheckout = async (data) => {
+
+    const res = await confirmCheckout({
+        ...data,
+        cart: cart.value
+    })
+
+    invoiceData.value = res
+    showInvoice.value = true
+
 }
 
-const checkout = () => {
+const checkout = async (data) => {
 
     if (!cart.value.length) {
-
         errorToast('Gio hang trong')
-
         return
     }
 
-    showPaymentModal.value = true
+    await handleCheckout(data)
 }
 
 useKeyboardShortcuts({
@@ -123,8 +123,6 @@ useKeyboardShortcuts({
     selectedCartIndex,
 
     checkout,
-
-    showPaymentModal,
 
     clearCart,
 })
@@ -155,6 +153,11 @@ useBarcodeScanner(
     }
 )
 
+
+
+
+
+
 onMounted(() => {
 
     fetchHoldSales()
@@ -165,57 +168,28 @@ onMounted(() => {
 
     <PosLayout>
 
-        <PosMainPanel
-            @add-product="addToCart"
-        />
+        <template #main>
+            <PosMainPanel
+                @add-product="addToCart"
+            />
+        </template>
 
-        <PosSidebar
-            :cart="cart"
-
-            :selected-customer="
-                selectedCustomer
-            "
-
-            :show-shortcuts="
-                showShortcuts
-            "
-
-            :hold-sales="holdSales"
-
-            @customer-selected="
-                onCustomerSelected
-            "
-
-            @toggle-shortcuts="
-                showShortcuts =
-                !showShortcuts
-            "
-
-            @open-hold="
-                openHoldModal
-            "
-
-            @show-hold-list="
-                showHoldModal = true
-            "
-
-            @remove-item="removeItem"
-
-            @checkout="checkout"
-        />
+        <template #sidebar>
+            <PosSidebar
+                :cart="cart"
+                :selected-customer="selectedCustomer"
+                :show-shortcuts="showShortcuts"
+                :hold-sales="holdSales"
+                @customer-selected="onCustomerSelected"
+                @toggle-shortcuts="showShortcuts = !showShortcuts"
+                @open-hold="openHoldModal"
+                @show-hold-list="showHoldModal = true"
+                @remove-item="removeItem"
+                @checkout="checkout"
+            />
+        </template>
 
     </PosLayout>
-
-    <PaymentModal
-
-        :show="showPaymentModal"
-
-        :total="Number(grandTotal)"
-
-        @close="showPaymentModal = false"
-
-        @confirm="handleCheckout"
-    />
 
     <HoldSaleModal
 
@@ -241,6 +215,13 @@ onMounted(() => {
         @update:holdName="
             holdName = $event
         "
+    />
+
+    <InvoiceModal
+        v-if="invoiceData"
+        :show="showInvoice"
+        :data="invoiceData"
+        @close="showInvoice = false"
     />
 
 </template>
