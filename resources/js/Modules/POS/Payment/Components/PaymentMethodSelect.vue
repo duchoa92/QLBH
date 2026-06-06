@@ -1,6 +1,6 @@
 <script setup>
 
-defineProps({
+const props = defineProps({
 
     modelValue: {
         type: String,
@@ -19,7 +19,7 @@ const emit = defineEmits([
     <div class="mb-4">
 
         <select
-            :value="modelValue"
+            :value="props.modelValue"
 
             @change="
                 emit(

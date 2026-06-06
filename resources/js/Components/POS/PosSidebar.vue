@@ -49,7 +49,7 @@ defineEmits([
 
 const note = ref('')
 const paymentMethod = ref('cash')
-const paidAmount = ref(0)
+const paidAmount = ref('')
 
 </script>
 
@@ -132,7 +132,7 @@ const paidAmount = ref(0)
 
             <button
                 :disabled="cart.length === 0 || loading"
-                @click="$emit('checkout', { note, paymentMethod, paidAmount })"
+                @click="$emit('checkout', {note, paymentMethod, paidAmount })"
                 class="w-full py-3 rounded font-semibold flex justify-between items-center px-4 active:scale-95 transition"
                 :class="[
                     cart.length === 0

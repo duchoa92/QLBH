@@ -127,13 +127,13 @@ const handleCheckout = async (data) => {
 const checkout = async (data) => {
 
     if (!cart.value.length) {
-        errorToast('Gio hang trong')
+        errorToast('Giỏ hàng trống')
         return
     }
 
     await handleCheckout({
         ...data,
-        paidAmount: Number(grandTotal.value) 
+        paidAmount: Number(data.paidAmount || grandTotal.value)
     })
 }
 
