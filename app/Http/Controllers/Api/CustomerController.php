@@ -15,7 +15,7 @@ class CustomerController extends Controller
 
     /*
     |---------------------------------------
-    | CREATE CUSTOMER (MODAL POS)
+    | Tạo khách hàng (MODAL POS)
     |---------------------------------------
     */
     public function store(Request $request)
@@ -51,5 +51,25 @@ class CustomerController extends Controller
             ->get();
 
         return response()->json($customers);
+    }
+
+    /*
+    |---------------------------------------
+    | Lấy danh sách công nợ của khách hàng
+    |---------------------------------------
+    */
+    public function debts(
+        Customer $customer
+    )
+    {
+        $debts = $customer
+            ->debts()
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'debts' => $debts,
+            'total' => $customer->debt_balance,
+        ]);
     }
 }

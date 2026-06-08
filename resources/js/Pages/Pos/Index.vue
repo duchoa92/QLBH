@@ -113,11 +113,7 @@ const handleCheckout = async (data) => {
             ...data,
             cart: cart.value
         })
-
-        // Debug
-        console.log('CHECK RES:', res)
-        console.log('INVOICE DATA:', res)
-
+        
         if(!res) return
 
         invoiceData.value = res

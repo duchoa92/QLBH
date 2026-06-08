@@ -43,27 +43,46 @@ const updateQty = (item, event) => {
     <div
         v-for="item in items"
         :key="item.id"
-        class="flex justify-between items-center py-2 border-b"
+        class="bg-white border border-gray-300 rounded-xl px-3 py-2 mb-[4px] shadow-sm"
     >
 
-        <div>
-            <div class="text-sm font-medium">
-                {{ item.name }}
+        <div class="flex justify-between items-start">
+            <div class="flex-1 min-w-0">
+                <div class="font-medium text-sm truncate">
+                    {{ item.name }}
+                </div>
+
+                <div class="text-xs text-gray-500">
+                    {{ format(item.price) }} ₫
+                </div>
             </div>
 
-            <div class="text-xs text-gray-500">
-                {{ item.price }}
+            <div class="flex items-center gap-2 ml-3">
+
+                <button class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
+                    @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)" 
+                >
+                    -
+                </button>
+
+                <span class="w-4 text-center text-sm">
+                    {{ item.quantity }}
+                </span>
+
+                <button class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
+                    @click="item.quantity++"
+                >
+                    +
+                </button>
+
+                <button
+                    class="text-red-500 hover:text-red-600 shadow-sm"
+                    @click="emit('remove', item)"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 size-4" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+
             </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-
-            <button @click="item.qty--">-</button>
-
-            <span>{{ item.qty }}</span>
-
-            <button @click="item.qty++">+</button>
-
         </div>
 
     </div>

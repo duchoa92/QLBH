@@ -211,4 +211,25 @@ class CustomerController extends Controller
         ]);
     }
 
+
+    // Tìm kiếm khách hàng (API)
+    public function search(Request $request)
+    {
+        $search = $request->get('search');
+
+        $customers = Customer::query()
+            ->select(['id', 'full_name', 'phone']) // Chỉ lấy những trường cần thiết
+            ->withSum(['sales as total_debt' => function ($query) {
+                $query->where('status', 'unpaid'); // Giả định status 'unpaid' là nợ
+            }], 'remaining_amount') // Cột chứa số tiền còn lại phải trả
+            ->where(function ($q) use ($search) {
+                $q->where('full_name', 'like', "%{$search}%")
+                ->orWhere('phone', 'like', "%{$search}%");
+            })
+            ->limit(10)
+            ->get();
+
+        return response()->json($customers);
+    }
+
 }

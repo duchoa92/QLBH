@@ -69,5 +69,11 @@ Route::delete(
 // Lấy danh sách danh mục
 Route::get('/categories', [CategoryController::class, 'index']);
 
+// Lấy danh sách sản phẩm theo danh mục
+Route::get(
+    '/customers/{customer}/debts',
+    [CustomerController::class, 'debts']
+);
+
 
 });
