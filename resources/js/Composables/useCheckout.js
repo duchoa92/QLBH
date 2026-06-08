@@ -66,9 +66,7 @@ export function useCheckout(
             |--------------------------------------------------------------------------
             */
 
-             
-            // Debug
-            console.log('paymentData', paymentData)
+        
 
             const response =
            

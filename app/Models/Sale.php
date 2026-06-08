@@ -31,6 +31,7 @@ class Sale extends Model
         'payment_method',
 
         'status',
+
     ];
 
     public function items(): HasMany

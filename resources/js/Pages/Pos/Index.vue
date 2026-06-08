@@ -114,6 +114,12 @@ const handleCheckout = async (data) => {
             cart: cart.value
         })
 
+        // Debug
+        console.log('CHECK RES:', res)
+        console.log('INVOICE DATA:', res)
+
+        if(!res) return
+
         invoiceData.value = res
         showInvoice.value = true
 
@@ -132,8 +138,9 @@ const checkout = async (data) => {
     }
 
     await handleCheckout({
-        ...data,
-        paidAmount: Number(data.paidAmount || grandTotal.value)
+        note: data.note,
+        payment_method: data.payment_method,
+        paid_amount: Number(data.paid_amount || grandTotal.value)
     })
 }
 

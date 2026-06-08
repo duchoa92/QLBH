@@ -72,11 +72,13 @@ class PosCheckoutService
 
                 'discount' => $discount,
 
-                'total' => $grandTotal,
+                'grand_total' => $grandTotal,
 
                 'customer_paid' => $paidAmount,
 
                 'change_money' => $changeMoney,
+
+                'payment_method' => $paymentMethod,
             ]);
 
             /*

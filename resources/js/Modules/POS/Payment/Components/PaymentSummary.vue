@@ -2,7 +2,7 @@
 
 defineProps({
 
-    total: {
+    grand_total: {
         type: Number,
         default: 0,
     },

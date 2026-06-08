@@ -78,10 +78,9 @@ class PosController extends Controller
 
                 'sell_price' => $imei->product->sell_price,
 
-                'product_type' => true,
+                'product_type' => $imei->product->product_type,
             ],
 
-            'product_id' => $imei->product->id,
         ]);
     }
 
@@ -99,18 +98,50 @@ class PosController extends Controller
 
             customerId: $request->customer_id,
 
-            paid_amount: $request->paid_amount ?? 0,
+            paidAmount: $request->paid_amount ?? 0,
 
-            payment_method: $request->payment_method,
+            paymentMethod: $request->payment_method,
 
             userId: auth()->id(),
         );
 
-        return response()->json([
+        // Load quan hệ để trả về dữ liệu đầy đủ
+        $sale->load([
+            'items.product',
+            'items.imei',
+            'customer',
+        ]);
 
+        // Trả về dữ liệu hóa đơn sau khi thanh toán thành công
+       return response()->json([
             'success' => true,
 
-            'sale_id' => $sale->id,
+            'data' => [
+                'id' => $sale->id,
+                'code' => $sale->code,
+
+                'customer' => [
+                    'full_name' => $sale->customer->name ?? 'Khách lẻ',
+                ],
+
+                'items' => $sale->items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'quantity' => $item->quantity,
+                        'unit_price' => $item->unit_price,
+                        'product' => [
+                            'name' => $item->product->name,
+                        ],
+                    ];
+                }),
+
+                'subtotal' => $sale->subtotal,
+                'discount' => $sale->discount,
+                'paid' => (float) $sale->paid_amount,
+                'change' => (float) $sale->change_amount,
+
+                'payment_method' => $sale->payment_method ?? 'cash',
+            ],
         ]);
     }
     // Xem hóa đơn bán hàng

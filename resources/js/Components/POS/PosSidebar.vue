@@ -1,166 +1,85 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
-import KeyboardShortcuts from '@/Components/POS/KeyboardShortcuts.vue'
 import CartTable from '@/Components/POS/CartTable.vue'
 import PaymentMethodSelect from '@/Modules/POS/Payment/Components/PaymentMethodSelect.vue'
 
-defineProps({
-
-    cart: {
-        type: Array,
-        default: () => [],
-    },
-
-    selectedCustomer: {
-        type: Object,
-        default: null,
-    },
-
-    showShortcuts: {
-        type: Boolean,
-        default: false,
-    },
-
-    holdSales: {
-        type: Array,
-        default: () => [],
-    },
-
-    grandTotal: Number,
+const props = defineProps({
+    cart: { type: Array, default: () => [] },
+    selectedCustomer: { type: Object, default: null },
+    holdSales: { type: Array, default: () => [] },
+    grandTotal: { type: Number, default: 0 },
     loading: Boolean,
 })
 
-defineEmits([
-
-    'customer-selected',
-
-    'toggle-shortcuts',
-
-    'open-hold',
-
-    'show-hold-list',
-
-    'remove-item',
-
-    'checkout',
-])
-
+const emit = defineEmits(['customer-selected', 'open-hold', 'show-hold-list', 'remove-item', 'checkout'])
 
 const note = ref('')
 const paymentMethod = ref('cash')
 const paidAmount = ref('')
 
+const changeAmount = computed(() => {
+    const paid = Number(paidAmount.value) || 0
+    return paid > props.grandTotal ? paid - props.grandTotal : 0
+})
+
+const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN')
 </script>
 
 <template>
-
-    <aside class="rounded-lg border bg-white shadow-sm h-full flex flex-col min-h-0">
-
-        <!-- HEADER -->
-        <div class="border-b px-4 py-3 flex justify-between items-center">
-            <h2 class="text-lg font-bold">Đơn hàng</h2>
-            <span class="bg-gray-100 px-3 py-1 rounded text-sm">
-                {{ cart.length }} mặt hàng
-            </span>
+    <aside class="flex flex-col h-[calc(100vh-64px)] w-full lg:w-[380px] bg-white border-l shadow-xl shrink-0">
+        
+        <div class="shrink-0 border-b border-gray-200 bg-gray-50 p-2">
+            <CustomerSection
+                :customer="selectedCustomer"
+                @selected="$emit('customer-selected', $event)"
+            />
         </div>
 
-        <!-- BODY (SCROLL ONLY DESKTOP) -->
-        <div class="flex-1 min-h-0 lg:overflow-auto">
-
-            <!-- CUSTOMER + ACTION -->
-            <div class="space-y-3 border-b p-4">
-
-                <CustomerSection
-                    :customer="selectedCustomer"
-                    @selected="$emit('customer-selected', $event)"
-                />
-
-                <div class="grid grid-cols-2 gap-2">
-                    <button @click="$emit('open-hold')" class="btn-yellow">
-                        Lưu tạm
-                    </button>
-
-                    <button
-                        :disabled="holdSales.length === 0"
-                        @click="$emit('show-hold-list')"
-                        class="btn-blue"
-                    >
-                        Hóa đơn đã lưu ({{ holdSales.length }})
-                    </button>
-                </div>
-
-                <KeyboardShortcuts
-                    :show="showShortcuts"
-                    @toggle="$emit('toggle-shortcuts')"
-                />
-
-            </div>
-
-            <!-- CART -->
+        <div class="flex-1 overflow-y-auto bg-white custom-scrollbar">
             <CartTable
+                v-if="cart.length > 0"
                 :items="cart"
                 @remove="$emit('remove-item', $event)"
             />
-
-            <div>
-                <input
-                    v-model="paidAmount"
-                    type="number"
-                    placeholder="Tiền khách đưa"
-                    class="w-full border rounded p-2 text-sm"
-                />
+            <div v-else class="h-full flex flex-col items-center justify-center text-gray-400 opacity-60">
+                <i class="fa-solid fa-cart-shopping text-3xl mb-2"></i>
+                <p class="text-sm">Giỏ hàng trống</p>
             </div>
-            <!-- NOTE + PAYMENT -->
-            <div class="p-4 space-y-3 border-t">
-
-                <!-- Chọn phương thức thanh toán -->
-                <PaymentMethodSelect v-model="paymentMethod" />
-
-                <textarea
-                    v-model="note"
-                    placeholder="Ghi chú..."
-                    class="w-full border rounded p-2 text-sm"
-                />
-
-            </div>
-
         </div>
 
-        <!-- FOOTER (FIXED) -->
-        <div class="p-4 border-t bg-white lg:sticky lg:bottom-0">
+        <div class="shrink-0 border-t border-gray-200 bg-gray-50 p-2">
+            <div class="flex justify-between items-center mb-2 px-1">
+                <div class="flex gap-2">
+                    <button @click="$emit('open-hold')" class="text-xs text-orange-600 font-bold hover:underline">F4 Lưu</button>
+                    <button @click="$emit('show-hold-list')" class="text-xs text-indigo-600 font-bold hover:underline">Chờ ({{ holdSales.length }})</button>
+                </div>
+                <div class="text-right">
+                    <span class="text-lg font-black text-blue-700">{{ formatMoney(grandTotal) }}</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1.5 mb-2">
+                <PaymentMethodSelect v-model="paymentMethod" class="h-9 text-sm rounded-lg" />
+                <input v-model="paidAmount" type="number" placeholder="Khách đưa" class="h-9 px-3 border border-gray-300 rounded-lg text-sm shadow-sm" />
+                <input v-model="note" type="text" placeholder="Ghi chú..." class="col-span-2 h-9 px-3 border border-gray-300 rounded-lg text-sm shadow-sm" />
+            </div>
 
             <button
                 :disabled="cart.length === 0 || loading"
-                @click="$emit('checkout', {note, paymentMethod, paidAmount })"
-                class="w-full py-3 rounded font-semibold flex justify-between items-center px-4 active:scale-95 transition"
-                :class="[
-                    cart.length === 0
-                        ? 'bg-gray-300 text-gray-500'
-                        : 'bg-blue-600 text-white hover:bg-blue-700',
-                    loading ? 'opacity-50' : ''
-                ]"
+                @click="$emit('checkout', { note, payment_method: paymentMethod, paid_amount: paidAmount })"
+                class="w-full h-11 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:bg-gray-300"
             >
-
-                <span>
-                    {{
-                        loading
-                            ? 'Đang xử lý...'
-                            : cart.length === 0
-                                ? 'Chưa có sản phẩm'
-                                : '💳 Thanh toán'
-                    }}
+                {{ loading ? 'ĐANG XỬ LÝ...' : 'THANH TOÁN (F9)' }}
+                <span v-if="changeAmount > 0" class="ml-2 text-green-200 font-normal">
+                    Thừa: {{ formatMoney(changeAmount) }}
                 </span>
-
-                <span v-if="cart.length">
-                    {{ Number(grandTotal).toLocaleString() }} đ
-                </span>
-
             </button>
-
         </div>
-
     </aside>
-    
-
 </template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>

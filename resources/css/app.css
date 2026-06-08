@@ -48,3 +48,30 @@
 
     transform: translateY(-50%) !important;
 }
+
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .print\\:block,
+    .print\\:block * {
+        visibility: visible;
+    }
+
+    .print\\:hidden {
+        display: none !important;
+    }
+
+    /* KHỔ GIẤY */
+    @page {
+        size: 80mm auto; /*Nếu khổ 58mm thì để 58mm */
+        margin: 0;
+    }
+
+
+    body {
+        margin: 0;
+    }
+}
