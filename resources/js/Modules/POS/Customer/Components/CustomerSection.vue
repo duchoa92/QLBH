@@ -78,6 +78,7 @@ const loadDebts = async () => {
                                 v-if="Number(props.customer.debt_balance) > 0"
                                 type="button"
                                 @click="showDebtModal = true"
+                                title="Số tiền đang nợ"
                                 class="ml-1 font-semibold text-red-600 hover:underline"
                             >
                                 (

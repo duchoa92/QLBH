@@ -13,14 +13,35 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['customer-selected', 'open-hold', 'show-hold-list', 'remove-item', 'checkout'])
-
+// Ghi chú đơn hàng
 const note = ref('')
+// Phương thức thanh toán
 const paymentMethod = ref('cash')
+// tiền khách đưa
 const paidAmount = ref('')
+// thanh toán nợ cũ
+const payOldDebt = ref(false)
 
 const changeAmount = computed(() => {
     const paid = Number(paidAmount.value) || 0
-    return paid > props.grandTotal ? paid - props.grandTotal : 0
+    return paid > totalNeedToPay.value
+    ? paid - totalNeedToPay.value
+    : 0
+})
+
+// Tổng tiền cần thanh toán (bao gồm nợ cũ nếu có)
+const totalNeedToPay = computed(() => {
+
+    const debt = payOldDebt.value
+        ? Number(
+            props.selectedCustomer?.debt_balance || 0
+        )
+        : 0
+
+    return (
+        Number(props.grandTotal)
+        + debt
+    )
 })
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN')
@@ -30,14 +51,14 @@ const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN')
     <aside class="flex flex-col h-[calc(100vh-64px)] w-full lg:w-[380px]
            bg-white border-l shadow-xl shrink-0
            rounded-2xl overflow-hidden">
-        
+        <!-- khối khách hàng -->
         <div class="shrink-0 border-b border-gray-200 bg-white p-2">
             <CustomerSection
                 :customer="selectedCustomer"
                 @selected="$emit('customer-selected', $event)"
             />
         </div>
-
+        <!-- khối giỏ hàng -->
         <div class="flex-1 overflow-y-auto bg-gray-100 custom-scrollbar px-[4px] py-[2px]">
             <CartTable
                 v-if="cart.length > 0"
@@ -49,25 +70,69 @@ const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN')
                 <p class="text-sm">Giỏ hàng trống</p>
             </div>
         </div>
-
+        <!-- khối thanh toán -->
         <div class="shrink-0 border-t border-gray-200 bg-white p-2">
             <div class="flex justify-between items-center mb-2 px-1">
                 <div class="flex gap-2">
                     <button @click="$emit('open-hold')" class="text-xs text-orange-600 font-bold hover:underline">F4 Lưu</button>
                     <button @click="$emit('show-hold-list')" class="text-xs text-indigo-600 font-bold hover:underline">Chờ ({{ holdSales.length }})</button>
                 </div>
+                <!-- Tổng tiền -->
                 <div class="text-right">
-                    <span class="text-sm text-gray-500 ">Tổng cộng:</span>
-                    <span class="text-lg font-black text-blue-700">{{ formatMoney(grandTotal) }}</span>
+                    <div>
+                        <span class="text-sm text-gray-500">
+                            Tiền hàng:
+                        </span>
+                        <span class="font-bold text-blue-700">
+                            {{ formatMoney(grandTotal) }}
+                        </span>
+                    </div>
+
+                    <!-- Thanh toán nợ cũ -->
+                    <div
+                        v-if="selectedCustomer && Number(selectedCustomer.debt_balance) > 0"
+                        class=""
+                    >
+                        <label
+                            class="flex items-right gap-2 text-sm text-red-600 font-medium"
+                        >
+
+                            <input
+                                v-model="payOldDebt"
+                                type="checkbox"
+                            >
+                            {{
+                                formatMoney(
+                                    selectedCustomer.debt_balance
+                                )
+                            }}
+                            (Nợ cũ)
+
+                        </label>
+
+                    </div>
+                    <div
+                        class="font-black text-lg text-green-600"
+                    >
+                        Thu:
+                        {{
+                            formatMoney(
+                                totalNeedToPay
+                            )
+                        }}
+                    </div>
                 </div>
             </div>
 
+            <!-- Phương thức thanh toán -->
             <div class="grid grid-cols-2 gap-1.5 mb-2">
                 <PaymentMethodSelect v-model="paymentMethod" class="h-9 px-3  text-sm rounded-lg" />
                 <input v-model="paidAmount" type="number" placeholder="Khách đưa" class="h-9 px-3 border border-gray-300 rounded-lg text-sm shadow-sm" />
                 <input v-model="note" type="text" placeholder="Ghi chú..." class="col-span-2 h-9 px-3 border border-gray-300 rounded-lg text-sm shadow-sm" />
             </div>
 
+            
+            <!-- Thanh toán -->
             <button
                 :disabled="cart.length === 0 || loading"
                 @click="$emit('checkout', { note, payment_method: paymentMethod, paid_amount: paidAmount })"
