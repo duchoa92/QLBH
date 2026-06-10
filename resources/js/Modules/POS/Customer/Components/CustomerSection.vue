@@ -1,7 +1,9 @@
 <script setup>
 import { ref } from 'vue'
+import CustomerDebtModal from './CustomerDebtModal.vue'
+import { customerDebtService } from '../Services/customerDebtService'
 import { useCustomerSearch } from '@/Composables/useCustomerSearch'
-import { customerService } from '@/Modules/POS/Customer/Services/customerService'
+
 
 const emit = defineEmits([
     'selected',
@@ -29,25 +31,39 @@ const showDebtModal = ref(false)
 // Danh sách nợ
 const debts = ref([])
 
-// Load nợ của khách hàng
-const loadDebts = async () => {
+// Tổng nợ
+const debtTotal = ref(0)
 
-    if (!props.customer) {
 
-        return
-    }
+// Mở modal nợ
+const openDebtModal = async () => {
 
-    const response =
-        await customerService
-            .getDebts(
+    try {
+
+        if (!props.customer?.id) {
+
+            return
+        }
+
+        const response =
+            await customerDebtService.getDebts(
                 props.customer.id
             )
 
-    debts.value =
-        response.debts
+        debts.value =
+            response.data.debts
 
-    showDebtModal.value = true
+        debtTotal.value =
+            response.data.total
+
+        showDebtModal.value = true
+
+    } catch (error) {
+
+        console.error(error)
+    }
 }
+
 </script>
 
 <template>
@@ -74,21 +90,16 @@ const loadDebts = async () => {
                         >
                             - {{ props.customer.phone }}
 
-                            <button
-                                v-if="Number(props.customer.debt_balance) > 0"
-                                type="button"
-                                @click="showDebtModal = true"
-                                title="Số tiền đang nợ"
-                                class="ml-1 font-semibold text-red-600 hover:underline"
+                            <span
+                                v-if="props.customer.debt_balance > 0"
+                                @click.stop="openDebtModal"
+                                title="nhấn để xem chi tiết Nợ"
+                                class="ml-2 cursor-pointer font-bold text-red-600"
                             >
-                                (
-                                {{
-                                    Number(
-                                        props.customer.debt_balance
-                                    ).toLocaleString('vi-VN')
-                                }}
-                                đ)
-                            </button>
+                            (
+                            {{ Number(props.customer.debt_balance).toLocaleString('vi-VN') }}
+                            )
+                            </span>
                         </span>
                         
                     </span>
@@ -146,99 +157,18 @@ const loadDebts = async () => {
         </div>
     </div>
 
-<div
-    v-if="showDebtModal"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
->
+<CustomerDebtModal
 
-    <div
-        class="bg-white w-[700px] rounded-lg shadow-lg p-5"
-    >
+    :show="showDebtModal"
 
-        <div
-            class="flex items-center justify-between mb-4"
-        >
+    :debts="debts"
 
-            <h3
-                class="font-bold text-lg"
-            >
-                Chi tiết công nợ
-            </h3>
+    :total="debtTotal"
 
-            <button
-                @click="
-                    showDebtModal = false
-                "
-            >
-                ✕
-            </button>
-
-        </div>
-
-        <table
-            class="w-full text-sm"
-        >
-
-            <thead>
-
-                <tr>
-
-                    <th class="text-left p-2">
-                        Ngày
-                    </th>
-
-                    <th class="text-left p-2">
-                        Nội dung
-                    </th>
-
-                    <th class="text-right p-2">
-                        Số tiền
-                    </th>
-
-                </tr>
-
-            </thead>
-
-            <tbody>
-
-                <tr
-                    v-for="
-                        debt in debts
-                    "
-                    :key="debt.id"
-                >
-
-                    <td class="p-2">
-                        {{ debt.created_at }}
-                    </td>
-
-                    <td class="p-2">
-                        {{ debt.note }}
-                    </td>
-
-                    <td
-                        class="p-2 text-right"
-                    >
-
-                        {{
-                            Number(
-                                debt.amount
-                            ).toLocaleString(
-                                'vi-VN'
-                            )
-                        }}
-
-                    </td>
-
-                </tr>
-
-            </tbody>
-
-        </table>
-
-    </div>
-
-</div>
+    @close="
+        showDebtModal = false
+    "
+/>
 
 </template>
 

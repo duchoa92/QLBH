@@ -32,6 +32,8 @@ class Sale extends Model
 
         'status',
 
+        'note',
+
     ];
 
     public function items(): HasMany

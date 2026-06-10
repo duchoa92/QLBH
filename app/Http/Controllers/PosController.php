@@ -2,15 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Product;
 use App\Models\ProductImei;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Sale;
-use App\Models\SaleItem;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use App\Services\PosCheckoutService;
 
 
@@ -102,13 +98,15 @@ class PosController extends Controller
 
             paymentMethod: $request->payment_method,
 
+            payOldDebt: (bool) $request->pay_old_debt,
+
             userId: auth()->id(),
         );
 
         // Load quan hệ để trả về dữ liệu đầy đủ
         $sale->load([
             'items.product',
-            'items.imei',
+            'items.productImei',
             'customer',
         ]);
 
@@ -121,15 +119,24 @@ class PosController extends Controller
                 'code' => $sale->code,
 
                 'customer' => [
-                    'full_name' => $sale->customer->name ?? 'Khách lẻ',
+                    'full_name' => $sale->customer->full_name ?? 'Khách lẻ',
                 ],
 
                 'items' => $sale->items->map(function ($item) {
                     return [
+
                         'id' => $item->id,
+
                         'quantity' => $item->quantity,
+
                         'unit_price' => $item->unit_price,
+
+                        'subtotal' => $item->subtotal,
+
+                        'imei' => $item->productImei?->imei,
+
                         'product' => [
+
                             'name' => $item->product->name,
                         ],
                     ];
@@ -152,7 +159,7 @@ class PosController extends Controller
         $sale->load([
 
             'items.product',
-            'items.imei',
+            'items.productImei',
         ]);
 
         return Inertia::render(

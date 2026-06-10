@@ -106,7 +106,7 @@ const printInvoice = () => {
                     <span>Khách đưa</span>
 
                     <strong>
-                        {{ Number(sale.customer_paid).toLocaleString() }}
+                        {{ Number(sale.paid_amount).toLocaleString() }}
                     </strong>
                 </div>
 
@@ -115,7 +115,7 @@ const printInvoice = () => {
                     <span>Tiền thừa</span>
 
                     <strong>
-                        {{ Number(sale.change_money).toLocaleString() }}
+                        {{ Number(sale.change_amount).toLocaleString() }}
                     </strong>
                 </div>
             </div>

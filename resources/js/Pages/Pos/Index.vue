@@ -136,7 +136,8 @@ const checkout = async (data) => {
     await handleCheckout({
         note: data.note,
         payment_method: data.payment_method,
-        paid_amount: Number(data.paid_amount || grandTotal.value)
+        paid_amount: Number(data.paid_amount || 0),
+        pay_old_debt: data.pay_old_debt,
     })
 }
 

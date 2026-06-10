@@ -129,7 +129,7 @@ window.onload = () => {
 
                 <div>
                     {{
-                        format(item.total)
+                        format(item.grand_total)
                     }}
                 </div>
 
@@ -176,7 +176,7 @@ window.onload = () => {
                 <span>
                     {{
                         format(
-                            sale.total
+                            sale.grand_total
                         )
                     }}
                 </span>
@@ -194,7 +194,7 @@ window.onload = () => {
                 <span>
                     {{
                         format(
-                            sale.customer_paid
+                            sale.paid_amount
                         )
                     }}
                 </span>
@@ -212,7 +212,7 @@ window.onload = () => {
                 <span>
                     {{
                         format(
-                            sale.change_money
+                            sale.change_amount
                         )
                     }}
                 </span>

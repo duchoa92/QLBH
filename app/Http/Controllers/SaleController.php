@@ -90,7 +90,7 @@ class SaleController extends Controller
         $sale->load([
 
             'items.product',
-            'items.imei',
+            'items.productImei',
         ]);
 
         return Inertia::render(

@@ -82,6 +82,9 @@ export function useCheckout(
 
                     payment_method:
                         paymentData.payment_method,
+
+                    pay_old_debt:
+                        paymentData.pay_old_debt,
                 })
 
             /*

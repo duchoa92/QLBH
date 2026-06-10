@@ -48,14 +48,33 @@ class CustomerController extends Controller
                       ->orWhere('full_name', 'like', "%{$q}%");
             })
             ->limit(10)
-            ->get();
+            ->get()
+            ->map(function (
+            Customer $customer
+        ) {
+
+            return [
+
+                'id' =>
+                    $customer->id,
+
+                'full_name' =>
+                    $customer->full_name,
+
+                'phone' =>
+                    $customer->phone,
+
+                'debt_balance' =>
+                    $customer->debt_balance,
+            ];
+        });
 
         return response()->json($customers);
     }
 
     /*
     |---------------------------------------
-    | Lấy danh sách công nợ của khách hàng
+    | Lấy danh sách Nợ của khách hàng
     |---------------------------------------
     */
     public function debts(
@@ -65,11 +84,41 @@ class CustomerController extends Controller
         $debts = $customer
             ->debts()
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($debt) {
+
+                return [
+
+                    'id' =>
+                        $debt->id,
+
+                    'type' =>
+                        $debt->type,
+
+                    'amount' =>
+                        $debt->amount,
+
+                    'note' =>
+                        $debt->note,
+
+                    'source_id' =>
+                        $debt->source_id,
+
+                    'created_at' =>
+                        $debt->created_at
+                            ->format('d/m/Y H:i'),
+                ];
+            });
 
         return response()->json([
-            'debts' => $debts,
-            'total' => $customer->debt_balance,
+
+            'debts' =>
+                $debts,
+
+            'total' =>
+                $customer->debt_balance,
         ]);
     }
+
+
 }

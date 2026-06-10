@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\Sale;
 use Illuminate\Support\Facades\DB;
+use App\Models\Customer;
+use App\Models\CustomerDebt;
 
 class PosCheckoutService
 {
@@ -16,6 +18,7 @@ class PosCheckoutService
         ?int $customerId,
         float $paidAmount,
         string $paymentMethod,
+        bool $payOldDebt,
         int $userId,
     ): Sale {
 
@@ -24,6 +27,7 @@ class PosCheckoutService
             $customerId,
             $paidAmount,
             $paymentMethod,
+            $payOldDebt,
             $userId,
         ): Sale {
 
@@ -51,8 +55,8 @@ class PosCheckoutService
             $grandTotal =
                 $subtotal - $discount;
 
-            $changeMoney =
-                $paidAmount - $grandTotal;
+            // Tạm tính tiền thừa (nếu có)
+            $changeMoney = 0;
 
             /*
             |--------------------------------------------------------------------------
@@ -74,9 +78,9 @@ class PosCheckoutService
 
                 'grand_total' => $grandTotal,
 
-                'customer_paid' => $paidAmount,
+                'paid_amount' => $paidAmount,
 
-                'change_money' => $changeMoney,
+                'change_amount' => $changeMoney,
 
                 'payment_method' => $paymentMethod,
             ]);
@@ -122,7 +126,7 @@ class PosCheckoutService
 
                 /*
                 |--------------------------------------------------
-                | IMEI PRODUCT MUST HAVE IMEI
+                | IMEI bắt buộc nếu sản phẩm có kiểu IMEI
                 |--------------------------------------------------
                 */
                 if (
@@ -158,20 +162,7 @@ class PosCheckoutService
                         );
                     }
 
-                    ProductImei::query()
-
-                        ->where(
-                            'id',
-                            $item['imei_id']
-                        )
-
-                        ->update([
-
-                            'status' =>
-                                ProductImei::STATUS_SOLD,
-
-                            'sold_at' => now(),
-                        ]);
+                    
                 }
 
                 /*
@@ -207,7 +198,7 @@ class PosCheckoutService
                     (int) $item['quantity']
                 );
 
-                // 
+                // Nếu có IMEI thì cập nhật trạng thái đã bán
                 if (!empty($item['imei_id'])) {
 
                     $imei->update([
@@ -219,6 +210,206 @@ class PosCheckoutService
                     ]);
                 }
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Phát sinh Nợ mới
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $customerId
+                &&
+                $paidAmount < $grandTotal
+            ) {
+
+                $newDebt =
+                    $grandTotal - $paidAmount;
+
+                CustomerDebt::query()
+                    ->create([
+
+                        'customer_id' =>
+                            $customerId,
+
+                        'type' =>
+                            'increase',
+
+                        'amount' =>
+                            $newDebt,
+
+                        'source_type' =>
+                            Sale::class,
+
+                        'source_id' =>
+                            $sale->id,
+
+                        'note' =>
+                            'Nợ phát sinh từ hóa đơn',
+                    ]);
+
+                Customer::query()
+
+                    ->where(
+                        'id',
+                        $customerId
+                    )
+
+                    ->increment(
+                        'debt_balance',
+                        $newDebt
+                    );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Xử lý nợ cũ
+            |--------------------------------------------------------------------------
+            */
+
+            $debtPaid = 0;
+
+            if (
+                $payOldDebt
+                &&
+                $customerId
+            ) {
+
+                $customer = Customer::query()
+                    ->find($customerId);
+
+                if (
+                    $customer
+                    &&
+                    $customer->debt_balance > 0
+                ) {
+
+                    $totalNeedToPay =
+                        $grandTotal
+                        +
+                        $customer->debt_balance;
+
+                    /*
+                    |--------------------------------------------------
+                    | Khách đưa chưa đủ
+                    |--------------------------------------------------
+                    */
+
+                    if (
+                        $paidAmount < $totalNeedToPay
+                    ) {
+
+                        $remainingDebt =
+                            $totalNeedToPay
+                            -
+                            $paidAmount;
+
+                        /*
+                        |--------------------------------------------------
+                        | Gán toàn bộ tiền cho hóa đơn mới trước
+                        |--------------------------------------------------
+                        */
+
+                        $newDebt = max(
+                            0,
+                            $remainingDebt
+                        );
+
+                        if ($newDebt > 0) {
+
+                            CustomerDebt::query()
+                                ->create([
+
+                                    'customer_id' =>
+                                        $customerId,
+
+                                    'type' =>
+                                        'increase',
+
+                                    'amount' =>
+                                        $newDebt,
+
+                                    'source_type' =>
+                                        Sale::class,
+
+                                    'source_id' =>
+                                        $sale->id,
+
+                                    'note' =>
+                                        'Thiếu thanh toán',
+                                ]);
+
+                            $customer->increment(
+                                'debt_balance',
+                                $newDebt
+                            );
+                        }
+                    }
+
+                    /*
+                    |--------------------------------------------------
+                    | Khách đưa dư để trả nợ cũ
+                    |--------------------------------------------------
+                    */
+
+                    $extraMoney = max(
+                        0,
+                        $paidAmount - $grandTotal
+                    );
+
+                    $debtPaid = min(
+                        $customer->debt_balance,
+                        $extraMoney
+                    );
+
+                    if ($debtPaid > 0) {
+
+                        CustomerDebt::query()
+                            ->create([
+
+                                'customer_id' =>
+                                    $customer->id,
+
+                                'type' =>
+                                    'decrease',
+
+                                'amount' =>
+                                    $debtPaid,
+
+                                'source_type' =>
+                                    Sale::class,
+
+                                'source_id' =>
+                                    $sale->id,
+
+                                'note' =>
+                                    'Thanh toán Nợ cũ',
+                            ]);
+
+                        $customer->decrement(
+                            'debt_balance',
+                            $debtPaid
+                        );
+                    }
+                }
+            }
+
+            // Tính tiền thừa
+            $usedMoney = $grandTotal + $debtPaid;
+
+        
+
+            $changeMoney =
+                max(
+                    0,
+                    $paidAmount - $usedMoney
+                );
+
+            $sale->update([
+
+                'change_amount' =>
+                    $changeMoney,
+            ]);
 
             return $sale;
         });

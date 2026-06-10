@@ -75,5 +75,14 @@ Route::get(
     [CustomerController::class, 'debts']
 );
 
+// lấy chi tiết Nợ của khách hàng
+Route::get(
+    '/customers/{customer}/debts',
+    [
+        \App\Http\Controllers\Api\CustomerController::class,
+        'debts'
+    ]
+);
+
 
 });

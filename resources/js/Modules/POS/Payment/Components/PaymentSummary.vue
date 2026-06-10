@@ -34,7 +34,7 @@ defineProps({
             <div
                 class="text-3xl font-bold text-blue-600"
             >
-                {{ formatMoney(total) }} đ
+                {{ formatMoney(grand_total) }} đ
             </div>
 
         </div>

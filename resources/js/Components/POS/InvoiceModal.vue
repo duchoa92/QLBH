@@ -126,7 +126,7 @@ const printInvoice = () => {
             <div class="total-section">
                 <div class="total-row">
                     <span>Tổng cộng: </span>
-                    <span>{{ format(data.subtotal || data.total) }}</span>
+                    <span>{{ format(data.subtotal || data.grand_total) }}</span>
                 </div>
                 
                 <div class="total-row">
@@ -138,7 +138,7 @@ const printInvoice = () => {
                 
                 <div class="total-row grand-total">
                     <span>KHÁCH PHẢI TRẢ:</span>
-                    <span>{{ format(data.total) }}</span>
+                    <span>{{ format(data.grand_total) }}</span>
                 </div>
                 
                 <div class="line-equal" style="border-top-style: dotted;"></div>
