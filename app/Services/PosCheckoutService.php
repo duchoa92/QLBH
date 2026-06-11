@@ -33,7 +33,7 @@ class PosCheckoutService
 
             /*
             |--------------------------------------------------------------------------
-            | Totals
+            | Tính toán tổng tiền hóa đơn
             |--------------------------------------------------------------------------
             */
 
@@ -58,9 +58,21 @@ class PosCheckoutService
             // Tạm tính tiền thừa (nếu có)
             $changeMoney = 0;
 
+            // Nếu không có khách hàng và tiền thanh toán chưa đủ thì báo lỗi
+            if (
+                !$customerId
+                &&
+                $paidAmount < $grandTotal
+            ) {
+
+                throw new \Exception(
+                    'Khách lẻ phải thanh toán đủ tiền'
+                );
+            }
+            
             /*
             |--------------------------------------------------------------------------
-            | Create Sale
+            | Tạo hóa đơn bán hàng
             |--------------------------------------------------------------------------
             */
 
@@ -87,7 +99,7 @@ class PosCheckoutService
 
             /*
             |--------------------------------------------------------------------------
-            | Sale Items
+            | Xử lý từng sản phẩm trong hóa đơn
             |--------------------------------------------------------------------------
             */
 
@@ -211,13 +223,9 @@ class PosCheckoutService
                 }
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | Phát sinh Nợ mới
-            |--------------------------------------------------------------------------
-            */
-
             if (
+                !$payOldDebt
+                &&
                 $customerId
                 &&
                 $paidAmount < $grandTotal
@@ -245,7 +253,7 @@ class PosCheckoutService
                             $sale->id,
 
                         'note' =>
-                            'Nợ phát sinh từ hóa đơn',
+                            'Thanh toán hóa đơn còn thiếu',
                     ]);
 
                 Customer::query()
@@ -260,6 +268,7 @@ class PosCheckoutService
                         $newDebt
                     );
             }
+
 
             /*
             |--------------------------------------------------------------------------
@@ -284,82 +293,72 @@ class PosCheckoutService
                     $customer->debt_balance > 0
                 ) {
 
-                    $totalNeedToPay =
-                        $grandTotal
-                        +
-                        $customer->debt_balance;
-
                     /*
-                    |--------------------------------------------------
-                    | Khách đưa chưa đủ
-                    |--------------------------------------------------
+                    |--------------------------------------------------------------------------
+                    | Tiền dành cho hóa đơn mới
+                    |--------------------------------------------------------------------------
                     */
 
-                    if (
-                        $paidAmount < $totalNeedToPay
-                    ) {
+                    $moneyForInvoice = min(
+                        $paidAmount,
+                        $grandTotal
+                    );
 
-                        $remainingDebt =
-                            $totalNeedToPay
-                            -
-                            $paidAmount;
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Thiếu tiền hóa đơn mới
+                    |--------------------------------------------------------------------------
+                    */
 
-                        /*
-                        |--------------------------------------------------
-                        | Gán toàn bộ tiền cho hóa đơn mới trước
-                        |--------------------------------------------------
-                        */
+                    $newDebt = max(
+                        0,
+                        $grandTotal - $moneyForInvoice
+                    );
 
-                        $newDebt = max(
-                            0,
-                            $remainingDebt
+                    if ($newDebt > 0) {
+
+                        CustomerDebt::query()
+                            ->create([
+
+                                'customer_id' =>
+                                    $customerId,
+
+                                'type' =>
+                                    'increase',
+
+                                'amount' =>
+                                    $newDebt,
+
+                                'source_type' =>
+                                    Sale::class,
+
+                                'source_id' =>
+                                    $sale->id,
+
+                                'note' =>
+                                    'Thanh toán hóa đơn còn thiếu',
+                            ]);
+
+                        $customer->increment(
+                            'debt_balance',
+                            $newDebt
                         );
-
-                        if ($newDebt > 0) {
-
-                            CustomerDebt::query()
-                                ->create([
-
-                                    'customer_id' =>
-                                        $customerId,
-
-                                    'type' =>
-                                        'increase',
-
-                                    'amount' =>
-                                        $newDebt,
-
-                                    'source_type' =>
-                                        Sale::class,
-
-                                    'source_id' =>
-                                        $sale->id,
-
-                                    'note' =>
-                                        'Thiếu thanh toán',
-                                ]);
-
-                            $customer->increment(
-                                'debt_balance',
-                                $newDebt
-                            );
-                        }
                     }
 
                     /*
-                    |--------------------------------------------------
-                    | Khách đưa dư để trả nợ cũ
-                    |--------------------------------------------------
+                    |--------------------------------------------------------------------------
+                    | Tiền dư dùng để trả nợ cũ
+                    |--------------------------------------------------------------------------
                     */
 
-                    $extraMoney = max(
+                    $moneyForOldDebt = max(
                         0,
                         $paidAmount - $grandTotal
                     );
 
                     $debtPaid = min(
                         $customer->debt_balance,
-                        $extraMoney
+                        $moneyForOldDebt
                     );
 
                     if ($debtPaid > 0) {

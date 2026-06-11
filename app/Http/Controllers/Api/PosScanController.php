@@ -39,7 +39,8 @@ class PosScanController extends Controller
                 'data' => [
                     'id' => $imei->product->id,
                     'name' => $imei->product->name,
-                    'price' => $imei->product->sell_price,
+                    'sell_price' => $imei->product->sell_price,
+                    'product_type' => 'imei',
                     'imei_id' => $imei->id,
                     'imei' => $imei->imei,
                 ]

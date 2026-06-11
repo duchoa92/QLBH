@@ -69,20 +69,14 @@ Route::delete(
 // Lấy danh sách danh mục
 Route::get('/categories', [CategoryController::class, 'index']);
 
-// Lấy danh sách sản phẩm theo danh mục
+
+// lấy chi tiết Nợ của khách hàng
 Route::get(
     '/customers/{customer}/debts',
     [CustomerController::class, 'debts']
 );
 
-// lấy chi tiết Nợ của khách hàng
-Route::get(
-    '/customers/{customer}/debts',
-    [
-        \App\Http\Controllers\Api\CustomerController::class,
-        'debts'
-    ]
-);
+
 
 
 });

@@ -52,11 +52,15 @@ const formatMoney = (value) => {
                             </th>
 
                             <th class="p-2">
-                                Ghi chú
+                                Nội dung
                             </th>
 
                             <th class="w-[120px] text-right p-2">
-                                Số tiền
+                                Phát sinh
+                            </th>
+
+                            <th class="w-[120px] text-right p-2">
+                                Dư nợ
                             </th>
                         </tr>
 
@@ -79,11 +83,24 @@ const formatMoney = (value) => {
                                 {{ debt.created_at }}
                             </td>
 
-                            <td>
-                                {{ debt.note }}
+                            <td class="p-2">
+
+                                <div>
+                                    {{ debt.note }}
+                                </div>
+
+                                <a
+                                    v-if="debt.source_code"
+                                    :href="`/sales/${debt.sale_id}`"
+                                    target="_blank"
+                                    class="text-xs text-blue-600 hover:underline"
+                                >
+                                    HĐ: {{ debt.source_code }}
+                                </a>
+
                             </td>
 
-                            <td>
+                            <td class="text-right p-2 whitespace-nowrap">
 
                                 <span
                                     v-if="debt.type === 'increase'"
@@ -101,6 +118,9 @@ const formatMoney = (value) => {
                                     {{ formatMoney(debt.amount) }}
                                 </span>
 
+                            </td>
+                            <td class="text-right p-2 whitespace-nowrap">
+                                {{ formatMoney(debt.balance) }}
                             </td>
 
                         </tr>

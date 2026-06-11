@@ -5,6 +5,7 @@ import { productService } from '@/Modules/POS/Product/Services/productService'
 
 const emit = defineEmits([
     'selected',
+    'product-scanned',
 ])
 
 const {
@@ -68,6 +69,8 @@ const scanImei = async () => {
         emit(
             'selected',
             result.data
+                ? result.data
+                : result
         )
 
         keyword.value = ''

@@ -86,7 +86,7 @@ class ProductApiController extends Controller
 
             'barcode' => $product->barcode,
 
-            'price' => $imei && $imei->sell_price > 0
+            'sell_price' => $imei && $imei->sell_price > 0
                 ? $imei->sell_price
                 : $product->sell_price,
 

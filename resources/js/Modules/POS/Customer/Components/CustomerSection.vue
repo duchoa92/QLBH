@@ -22,7 +22,13 @@ const {
 } = useCustomerSearch(emit)
 
 const props = defineProps({
-    customer: Object,
+
+    customer: {
+
+        type: Object,
+
+        default: null,
+    },
 })
 
 // Modal nợ
@@ -91,14 +97,26 @@ const openDebtModal = async () => {
                             - {{ props.customer.phone }}
 
                             <span
-                                v-if="props.customer.debt_balance > 0"
+                                v-if="Number(props.customer.debt_balance) > 0"
                                 @click.stop="openDebtModal"
-                                title="nhấn để xem chi tiết Nợ"
-                                class="ml-2 cursor-pointer font-bold text-red-600"
+                                class="
+                                    ml-2
+                                    px-2
+                                    py-0.5
+                                    rounded-full
+                                    bg-red-100
+                                    text-red-600
+                                    text-xs
+                                    font-bold
+                                    cursor-pointer
+                                "
                             >
-                            (
-                            {{ Number(props.customer.debt_balance).toLocaleString('vi-VN') }}
-                            )
+                                Nợ:
+                                {{
+                                    Number(
+                                        props.customer.debt_balance
+                                    ).toLocaleString('vi-VN')
+                                }}
                             </span>
                         </span>
                         

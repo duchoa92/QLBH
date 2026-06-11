@@ -10,7 +10,7 @@ import {
 
 import { useEventBus } from '@/Composables/useEventBus'
 
-export function useProductSearch() {
+export function useProductSearch(emit) {
 
     /*
     |--------------------------------------------------------------------------
@@ -41,35 +41,64 @@ export function useProductSearch() {
 
     /*
     |--------------------------------------------------------------------------
-    | LOAD PRODUCTS
+    | Tải Sản phẩm
     |--------------------------------------------------------------------------
     */
 
     const loadProducts = async () => {
 
-    loading.value = true
+        loading.value = true
 
-    try {
+        try {
 
-        const response =
-            await productService.search(
+            const response =
+                await productService.search(
+                    keyword.value,
+                    categoryId.value
+                )
 
-                keyword.value,
+            products.value = response
 
-                categoryId.value
-            )
+            /*
+            |--------------------------------------------------------------------------
+            | Không tìm thấy sản phẩm
+            |--------------------------------------------------------------------------
+            */
 
-        products.value = response
+            if (
+                keyword.value &&
+                response.length === 0
+            ) {
 
-    } catch (error) {
+                try {
 
-        console.error(error)
+                    const scanResult =
+                        await productService.scan(
+                            keyword.value
+                        )
 
-    } finally {
+                    emit(
+                        'product-scanned',
+                        scanResult
+                    )
 
-        loading.value = false
+                    keyword.value = ''
+
+                } catch {
+
+                    // IMEI không tồn tại
+                }
+            }
+
+        } catch (error) {
+
+            console.error(error)
+
+        } finally {
+
+            loading.value = false
+        }
     }
-}
 
     /*
     |--------------------------------------------------------------------------

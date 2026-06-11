@@ -81,11 +81,29 @@ class CustomerController extends Controller
         Customer $customer
     )
     {
+        $balance = 0;
+
         $debts = $customer
             ->debts()
-            ->latest()
+            ->with('source')
+            ->orderBy(
+                'created_at',
+                'asc'
+            )
             ->get()
-            ->map(function ($debt) {
+            ->map(function ($debt) use (&$balance) {
+
+                if (
+                    $debt->type === 'increase'
+                ) {
+
+                    $balance +=
+                        (float) $debt->amount;
+                } else {
+
+                    $balance -=
+                        (float) $debt->amount;
+                }
 
                 return [
 
@@ -98,17 +116,28 @@ class CustomerController extends Controller
                     'amount' =>
                         $debt->amount,
 
+                    'balance' =>
+                        $balance,
+
                     'note' =>
                         $debt->note,
+                        
+                    'sale_id' =>
+                        $debt->source_id,
 
                     'source_id' =>
                         $debt->source_id,
+
+                    'source_code' =>
+                        $debt->source?->code,
 
                     'created_at' =>
                         $debt->created_at
                             ->format('d/m/Y H:i'),
                 ];
             });
+
+        $debts = $debts->reverse()->values();
 
         return response()->json([
 
