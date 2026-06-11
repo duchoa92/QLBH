@@ -66,21 +66,44 @@ const scanImei = async () => {
                 value
             )
 
+        const product = {
+
+            id:
+                result.data.id,
+
+            name:
+                result.data.name,
+
+            sell_price:
+                result.data.sell_price
+                ??
+                result.data.price,
+
+            product_type:
+                'imei',
+
+            imei_id:
+                result.data.imei_id,
+
+            imei:
+                result.data.imei,
+        }
+
+
         emit(
             'selected',
-            result.data
-                ? result.data
-                : result
+            product
         )
 
+
         keyword.value = ''
+
 
     } catch (error) {
 
         console.error(error)
     }
 }
-
 const formatPrice = (value) => {
 
     return Number(value).toLocaleString('vi-VN')

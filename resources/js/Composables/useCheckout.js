@@ -71,7 +71,18 @@ export function useCheckout(
             const response =
            
                 await paymentService.checkout({
-                    items: cart.value,
+                    items: cart.value.map(item => ({
+
+                        id: item.id,
+
+                        price: item.price,
+
+                        quantity: item.quantity,
+
+                        imei_id:
+                            item.imei_id ?? null,
+
+                    })),
 
                     customer_id:
                         selectedCustomer.value?.id

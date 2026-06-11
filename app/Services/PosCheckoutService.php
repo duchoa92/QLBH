@@ -105,64 +105,47 @@ class PosCheckoutService
 
             foreach ($items as $item) {
 
-                $sale->items()->create([
 
-                    'product_id' =>
-                        $item['id'],
+                /*
+                |--------------------------------------------------------------------------
+                | Lấy sản phẩm
+                |--------------------------------------------------------------------------
+                */
 
-                    'product_imei_id' =>
-                        $item['imei_id'] ?? null,
-
-                    // DB THẬT
-                    'quantity' =>
-                        (int) $item['quantity'],
-
-                    // DB THẬT
-                    'unit_price' =>
-                        (float) $item['price'],
-
-                    // DB THẬT
-                    'subtotal' =>
-                        (
-                            (float) $item['price']
-                            *
-                            (int) $item['quantity']
-                        ),
-                ]);
-
-                // 
                 $product = Product::query()
                     ->findOrFail(
                         $item['id']
                     );
 
+
                 /*
-                |--------------------------------------------------
-                | IMEI bắt buộc nếu sản phẩm có kiểu IMEI
-                |--------------------------------------------------
+                |--------------------------------------------------------------------------
+                | Kiểm tra IMEI
+                |--------------------------------------------------------------------------
                 */
+
+                $imei = null;
+
+
                 if (
                     $product->product_type === 'imei'
-                    &&
-                    empty($item['imei_id'])
                 ) {
 
-                    throw new \Exception(
-                        "Sản phẩm {$product->name} phải quét IMEI"
-                    );
-                }
-                /*
-                |--------------------------------------------------------------------------
-                | Sản phẩm IMEI
-                |--------------------------------------------------------------------------
-                */
+                    if (
+                        empty($item['imei_id'])
+                    ) {
 
-                if (!empty($item['imei_id'])) {
+                        throw new \Exception(
+                            "Sản phẩm {$product->name} phải quét IMEI"
+                        );
+                    }
+
 
                     $imei = ProductImei::query()
                         ->findOrFail(
                             $item['imei_id']
                         );
+
 
                     if (
                         $imei->status !==
@@ -173,16 +156,19 @@ class PosCheckoutService
                             "IMEI {$imei->imei} không khả dụng"
                         );
                     }
-
-                    
                 }
+
 
                 /*
                 |--------------------------------------------------------------------------
-                | Sản phẩm thường
+                | Kiểm tra tồn kho sản phẩm thường
                 |--------------------------------------------------------------------------
                 */
-                else {
+
+                if (
+                    $product->product_type !== 'imei'
+                ) {
+
 
                     if (
                         $product->stock <
@@ -193,6 +179,49 @@ class PosCheckoutService
                             "Sản phẩm {$product->name} không đủ tồn kho"
                         );
                     }
+                }
+
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Lưu chi tiết hóa đơn
+                |--------------------------------------------------------------------------
+                */
+
+                $sale->items()->create([
+
+                    'product_id' =>
+                        $item['id'],
+
+                    'product_imei_id' =>
+                        $item['imei_id'] ?? null,
+
+                    'quantity' =>
+                        (int) $item['quantity'],
+
+                    'unit_price' =>
+                        (float) $item['price'],
+
+                    'subtotal' =>
+                        (
+                            (float) $item['price']
+                            *
+                            (int) $item['quantity']
+                        ),
+                ]);
+
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Trừ tồn kho sản phẩm thường
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $product->product_type !== 'imei'
+                ) {
 
                     $product->decrement(
                         'stock',
@@ -200,29 +229,40 @@ class PosCheckoutService
                     );
                 }
 
+
+
                 /*
-                |--------------------------------------------------
+                |--------------------------------------------------------------------------
                 | Cộng số lượng đã bán
-                |--------------------------------------------------
+                |--------------------------------------------------------------------------
                 */
+
                 $product->increment(
                     'sold_count',
                     (int) $item['quantity']
                 );
 
-                // Nếu có IMEI thì cập nhật trạng thái đã bán
-                if (!empty($item['imei_id'])) {
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Đánh dấu IMEI đã bán
+                |--------------------------------------------------------------------------
+                */
+
+                if ($imei) {
 
                     $imei->update([
 
                         'status' =>
                             ProductImei::STATUS_SOLD,
 
-                        'sold_at' => now(),
+                        'sold_at' =>
+                            now(),
                     ]);
                 }
-            }
 
+            }
             if (
                 !$payOldDebt
                 &&

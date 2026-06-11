@@ -168,8 +168,8 @@ export function useCart() {
                 name:
                     product.name,
 
-                price:
-                    Number(product.price),
+                 price:
+                    Number(product.sell_price??product.price??0),
 
                 quantity: 1,
             })
@@ -212,6 +212,36 @@ export function useCart() {
 
             quantity: 1,
         })
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE QUANTITY
+    |--------------------------------------------------------------------------
+    */
+
+    const increaseQty = (item) => {
+
+        if (item.imei_id) {
+
+            return
+        }
+
+        item.quantity++
+    }
+
+
+    const decreaseQty = (item) => {
+
+        if (item.imei_id) {
+
+            return
+        }
+
+        if (item.quantity > 1) {
+
+            item.quantity--
+        }
     }
 
     /*
@@ -269,5 +299,9 @@ export function useCart() {
         removeItem,
 
         clearCart,
+
+        increaseQty,
+
+        decreaseQty,
     }
 }

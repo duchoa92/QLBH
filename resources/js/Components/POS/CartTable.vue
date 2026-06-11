@@ -1,5 +1,6 @@
 <script setup>
 
+
 defineProps({
 
     selectedIndex: {
@@ -23,17 +24,6 @@ const format = (number) => {
         .toLocaleString('vi-VN')
 }
 
-const updateQty = (item, event) => {
-
-    let qty = Number(event.target.value)
-
-    if (isNaN(qty) || qty < 1) {
-
-        qty = 1
-    }
-
-    item.quantity = qty
-}
 </script>
 
 <template>
@@ -42,7 +32,7 @@ const updateQty = (item, event) => {
 
     <div
         v-for="item in items"
-        :key="item.id"
+        :key="item.imei_id ? 'imei-' + item.imei_id : 'product-' + item.id"
         class="bg-white border border-gray-300 rounded-xl px-3 py-2 mb-[4px] shadow-sm"
     >
 
@@ -53,24 +43,43 @@ const updateQty = (item, event) => {
                 </div>
 
                 <div class="text-xs text-gray-500">
+                    <span v-if="item.imei">
+                        IMEI:
+                        {{ item.imei }}
+                    </span>
+                </div>
+
+                <div class="text-xs text-gray-500">
                     {{ format(item.price) }} ₫
                 </div>
             </div>
 
             <div class="flex items-center gap-2 ml-3">
 
-                <button class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
-                    @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)" 
+                <button
+                    class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
+                    @click="
+                        item.quantity > 1
+                            ? item.quantity--
+                            : emit('remove', item)
+                    "
+                    :disabled="Boolean(item.imei_id)"
                 >
                     -
                 </button>
 
-                <span class="w-4 text-center text-sm">
-                    {{ item.quantity }}
-                </span>
+                <input
+                    v-model="item.quantity"
+                    :disabled="Boolean(item.imei_id)"
+                    class="w-10 items-center"
+                />
 
                 <button class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
-                    @click="item.quantity++"
+                    @click="
+                        !item.imei_id &&
+                        item.quantity++
+                    "
+                    :disabled="Boolean(item.imei_id)"
                 >
                     +
                 </button>
