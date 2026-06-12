@@ -404,7 +404,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get(
         '/pos/sales',
         function () {
-
+ 
             return Inertia::render(
                 'Modules/POS/Sale/Pages/SaleHistory'
             );

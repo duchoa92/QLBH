@@ -14,13 +14,32 @@ const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    resolve: (name) =>
-        resolvePageComponent(
+    resolve: (name) => {
+        const pages = import.meta.glob(
+            [
+                './Pages/**/*.vue',
+                './Modules/**/*.vue',
+            ]
+        )
+
+
+        return resolvePageComponent(
             `./Pages/${name}.vue`,
-            import.meta.glob('./Pages/**/*.vue'),
-        ).then((page) => {
+            pages
+        )
+        .catch(() => {
+
+            return resolvePageComponent(
+                `./${name}.vue`,
+                pages
+            )
+
+        })
+        .then((page) => {
+
 
             const adminModules = [
+
                 'Brands/',
                 'Categories/',
                 'Customers/',
@@ -30,15 +49,25 @@ createInertiaApp({
                 'Sales/',
             ]
 
+
             if (
                 !page.default.layout &&
-                adminModules.some((module) => name.startsWith(module))
+                adminModules.some(
+                    (module) =>
+                        name.startsWith(module)
+                )
             ) {
-                page.default.layout = AdminLayout
+
+                page.default.layout =
+                    AdminLayout
             }
 
+
             return page
-        }),
+
+        })
+
+    },
     setup({ el, App, props, plugin }) {
 
         createApp({

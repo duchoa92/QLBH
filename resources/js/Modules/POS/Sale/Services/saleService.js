@@ -1,34 +1,21 @@
-import api from '@/Services/api'
-
+import axios from 'axios'
 
 export const saleService = {
 
-
     async getAll()
     {
-
         const response =
-            await api.get(
-                '/api/sales'
-            )
-
+            await axios.get('/api/sales')
 
         return response.data
-
     },
-
 
     async show(id)
     {
-
         const response =
-            await api.get(
-                `/api/sales/${id}`
-            )
-
+            await axios.get(`/api/sales/${id}`)
 
         return response.data
-
-    }
+    },
 
 }
