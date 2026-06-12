@@ -1,8 +1,17 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { 
+        ref, 
+        computed, 
+        onMounted,
+        onBeforeUnmount, 
+    } from 'vue'
+import { Link } from '@inertiajs/vue3'
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import CartTable from '@/Components/POS/CartTable.vue'
 import PaymentMethodSelect from '@/Modules/POS/Payment/Components/PaymentMethodSelect.vue'
+import { useEventBus } from '@/Composables/useEventBus'
+
+
 
 const props = defineProps({
     cart: { type: Array, default: () => [] },
@@ -10,6 +19,38 @@ const props = defineProps({
     holdSales: { type: Array, default: () => [] },
     grandTotal: { type: Number, default: 0 },
     loading: Boolean,
+})
+
+const {
+    onEvent,
+    offEvent,
+} = useEventBus()
+
+const resetPosForm = () => {
+
+    note.value = ''
+
+    paidAmount.value = ''
+
+    payOldDebt.value = false
+
+    paymentMethod.value = 'cash'
+}
+
+onMounted(() => {
+
+    onEvent(
+        'pos:reset',
+        resetPosForm
+    )
+})
+
+onBeforeUnmount(() => {
+
+    offEvent(
+        'pos:reset',
+        resetPosForm
+    )
 })
 
 const emit = defineEmits(['customer-selected', 'open-hold', 'show-hold-list', 'remove-item', 'checkout'])
@@ -83,6 +124,12 @@ const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN')
                 <div class="flex gap-2">
                     <button @click="$emit('open-hold')" class="text-xs text-orange-600 font-bold hover:underline">Lưu (F4)</button>
                     <button @click="$emit('show-hold-list')" class="text-xs text-indigo-600 font-bold hover:underline">HĐ đã lưu ({{ holdSales.length }})</button>
+                    <Link
+                        href="/pos/sales"
+                        class="text-xs text-green-600 font-bold hover:underline"
+                    >
+                        Lịch sử HĐ
+                    </Link>
                 </div>
                 <!-- Tổng tiền -->
                 <div class="text-right">

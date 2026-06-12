@@ -2,10 +2,13 @@ import axios from 'axios'
 
 import {
     ref,
+    onMounted,
+    onBeforeUnmount,
 } from 'vue'
 
-import { useAutocompleteKeyboard }
-    from '@/Composables/useAutocompleteKeyboard'
+import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
+import { useEventBus } from '@/Composables/useEventBus'
+
 
 export function useCustomerSearch(
     emit
@@ -25,6 +28,11 @@ export function useCustomerSearch(
         ref(null)
 
     let timeout = null
+
+    const {
+        onEvent,
+        offEvent,
+    } = useEventBus()
 
     /*
     |--------------------------------------------------------------------------
@@ -119,6 +127,21 @@ export function useCustomerSearch(
         reset()
     }
 
+
+    // Reset ô Khách hàng
+    function resetCustomerSearch() {
+
+        selectedCustomer.value = null
+
+        keyword.value = ''
+
+        customers.value = []
+
+        activeIndex.value = -1
+
+        reset()
+    }
+
     /*
     |--------------------------------------------------------------------------
     | KEYBOARD
@@ -141,6 +164,24 @@ export function useCustomerSearch(
             selectCustomer(customer)
         }
     )
+
+
+    onMounted(() => {
+
+        onEvent(
+            'pos:reset',
+            resetCustomerSearch
+        )
+    })
+
+
+    onBeforeUnmount(() => {
+
+        offEvent(
+            'pos:reset',
+            resetCustomerSearch
+        )
+    })
 
     return {
 

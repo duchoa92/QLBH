@@ -142,6 +142,7 @@ class PosCheckoutService
 
 
                     $imei = ProductImei::query()
+                        ->lockForUpdate()
                         ->findOrFail(
                             $item['imei_id']
                         );

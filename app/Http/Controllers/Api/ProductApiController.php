@@ -72,7 +72,7 @@ class ProductApiController extends Controller
         if (! $product) {
 
             return response()->json([
-                'message' => 'Không tìm thấy sản phẩm',
+                'message' => 'Không tìm thấy sản phẩm, hoặc sản phẩm đã được bán!',
             ], 404);
         }
 

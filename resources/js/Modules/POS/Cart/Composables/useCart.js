@@ -276,6 +276,8 @@ export function useCart() {
         remove('pos_selected_index')
     }
 
+
+
     return {
 
         cart,

@@ -1,12 +1,12 @@
-import { productService } from '@/Modules/POS/Product/Services/productService'
-import { categoryService } from '@/Modules/POS/Product/Services/categoryService'
-
 import {
     ref,
     watch,
     onMounted,
     onBeforeUnmount,
 } from 'vue'
+import { productService } from '@/Modules/POS/Product/Services/productService'
+import { categoryService } from '@/Modules/POS/Product/Services/categoryService'
+
 
 import { useEventBus } from '@/Composables/useEventBus'
 
@@ -138,6 +138,18 @@ export function useProductSearch(emit) {
         }
     }
 
+    // Reset ô tìm sản phẩm
+    const resetProductSearch = async () => {
+
+        keyword.value = ''
+
+        categoryId.value = ''
+
+        products.value = []
+
+        await loadProducts()
+    }
+
     /*
     |--------------------------------------------------------------------------
     | WATCH
@@ -168,6 +180,12 @@ export function useProductSearch(emit) {
             'products:refresh',
             loadProducts
         )
+
+
+        onEvent(
+            'pos:reset',
+            resetProductSearch
+        )
     })
 
     /*
@@ -183,6 +201,11 @@ export function useProductSearch(emit) {
        offEvent(
             'products:refresh',
             loadProducts
+        )
+
+        offEvent(
+            'pos:reset',
+            resetProductSearch
         )
     })
 

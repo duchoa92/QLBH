@@ -106,6 +106,13 @@ export function useCheckout(
 
             clearCart()
 
+
+            // Xóa dữ liệu POS
+            emitEvent(
+                'pos:reset'
+            )
+
+
             /*
             |--------------------------------------------------------------------------
             | Refresh products

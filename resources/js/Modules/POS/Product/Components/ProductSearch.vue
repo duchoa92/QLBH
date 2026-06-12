@@ -9,9 +9,7 @@ const emit = defineEmits([
 ])
 
 const {
-
-    error,
-
+    error: errorToast,
 } = useToast()
 
 const {
@@ -39,7 +37,7 @@ const selectProduct = (
     ) {
 
         error(
-            'San pham nay phai quet IMEI'
+            'Sản phẩm này phải quét IMEI'
         )
 
         return
@@ -102,6 +100,19 @@ const scanImei = async () => {
     } catch (error) {
 
         console.error(error)
+        
+        const message =
+            error.response?.data?.message
+            ??
+            'Không tìm thấy sản phẩm'
+
+
+        errorToast(
+            message
+        )
+
+
+        keyword.value = ''
     }
 }
 const formatPrice = (value) => {
