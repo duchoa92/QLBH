@@ -2,20 +2,25 @@ import axios from 'axios'
 
 export const saleService = {
 
-    async getAll()
+    async getSales(params = {})
     {
         const response =
-            await axios.get('/api/sales')
+            await axios.get(
+                '/api/sales',
+                {
+                    params,
+                }
+            )
 
-        return response.data
+        return response
     },
 
-    async show(id)
+    async getSale(id)
     {
         const response =
             await axios.get(`/api/sales/${id}`)
-
-        return response.data
+ 
+        return response
     },
 
 }

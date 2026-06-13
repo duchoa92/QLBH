@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 
 import { useVietQr }
-from '@/Composables/useVietQr'
+from '@/Modules/POS/Core/Composables/useVietQr'
 
 export function usePaymentQr(
 

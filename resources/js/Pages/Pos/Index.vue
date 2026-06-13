@@ -9,105 +9,65 @@ import { useToast } from '@/Composables/useToast'
 import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
 import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
 import { useCheckout } from '@/Modules/POS/Payment/Composables/useCheckout'
-import { useKeyboardShortcuts } from '@/Composables/useKeyboardShortcuts'
+import { useKeyboardShortcuts } from '@/Modules/POS/Core/Composables/useKeyboardShortcuts'
 import HoldSaleModal from '@/Modules/POS/HoldSale/Components/HoldSaleModal.vue'
 import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
 import PosSidebar from '@/Modules/POS/Core/Components/PosSidebar.vue'
 import PosMainPanel from '@/Modules/POS/Core/Components/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
-import InvoiceDetailModal from '@/Modules/POS/Sale/Components/InvoiceDetailModal.vue'
-
 
 const {
-
     cart,
-
     selectedCustomer,
-
     selectedCartIndex,
-
     grandTotal,
-
     addToCart,
-
     removeItem,
-
     clearCart,
-
 } = useCart()
 
 const {
-
     holdSales,
-
     showHoldModal,
-
     showSaveHoldModal,
-
     holdName,
-
     fetchHoldSales,
-
     openHoldModal,
-
     holdBill,
-
     loadHoldSale,
-
 } = useHoldSale(
-
     cart,
-
     selectedCustomer,
-
     grandTotal,
-
     clearCart,
 )
 
 const {
-
     confirmCheckout,
-
 } = useCheckout(
-
     cart,
-
     selectedCustomer,
-    
     clearCart,
 )
 
 const {
-
     error: errorToast,
-
 } = useToast()
 
 const onCustomerSelected = (customer) => {
     selectedCustomer.value = customer
 }
 
-const showShortcuts = ref(false)
-
-
-// Thanh toán 
-
-const showInvoice = ref(false)
-const invoiceData = ref(null)
-
 // loading khi nhấn checkout để tránh việc click nhiều lần vào nút checkout
 const loading = ref(false)
 
 const handleCheckout = async (data) => {
-
     if (!cart.value.length) {
         errorToast('Giỏ hàng trống')
         return
     }
 
     try {
-
         loading.value = true
 
         const res = await confirmCheckout({
@@ -121,8 +81,10 @@ const handleCheckout = async (data) => {
         showInvoice.value = true
 
     } catch (e) {
-        errorToast('Lỗi thanh toán')
-    } finally {
+        // Để trống hoặc chỉ console.log(e) nếu file cấu hình chung Axios của bạn đã tự bật Toast lỗi
+        console.error(e);
+    }
+    finally {
         loading.value = false
     }
 }
@@ -143,49 +105,25 @@ const checkout = async (data) => {
 }
 
 useKeyboardShortcuts({
-
     cart,
-
     selectedCartIndex,
-
     checkout: handleCheckout,
-
     clearCart,
 })
 
 useBarcodeScanner(
-
     async (barcode) => {
-
         try {
-
-            const result =
-                await productService.scan(
-                    barcode
-                )
-
-            addToCart(
-                result.data
-            )
-
+            const result = await productService.scan(barcode)
+            addToCart(result.data)
         } catch (error) {
-
             console.error(error)
-
-            errorToast(
-                'Không tìm thấy sản phẩm với mã vạch này'
-            )
+            errorToast('Không tìm thấy sản phẩm với mã vạch này')
         }
     }
 )
 
-
-
-
-
-
 onMounted(() => {
-
     fetchHoldSales()
 })
 </script>
@@ -204,12 +142,10 @@ onMounted(() => {
             <PosSidebar
                 :cart="cart"
                 :selected-customer="selectedCustomer"
-                :show-shortcuts="showShortcuts"
                 :hold-sales="holdSales"
                 :grand-total="grandTotal"
                 :loading="loading"
                 @customer-selected="onCustomerSelected"
-                @toggle-shortcuts="showShortcuts = !showShortcuts"
                 @open-hold="openHoldModal"
                 @show-hold-list="showHoldModal = true"
                 @remove-item="removeItem"
@@ -244,12 +180,5 @@ onMounted(() => {
             holdName = $event
         "
     />
-
-<!--     <InvoiceModal
-        v-if="invoiceData"
-        :show="showInvoice"
-        :data="invoiceData"
-        @close="showInvoice = false"
-    /> -->
 
 </template>

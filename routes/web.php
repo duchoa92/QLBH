@@ -400,18 +400,6 @@ Route::middleware(['auth'])->group(function () {
         [ProductImeiController::class, 'show']
     )->name('product-imeis.show');
 
-    // Hiện Hóa đơn bán
-    Route::get(
-        '/pos/sales',
-        function () {
- 
-            return Inertia::render(
-                'Modules/POS/Sale/Pages/SaleHistory'
-            );
-
-        }
-    )->name('pos.sales');
-
 
 
 });

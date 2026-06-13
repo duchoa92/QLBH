@@ -9,7 +9,6 @@ use Inertia\Response;
 use App\Models\Sale;
 use App\Services\PosCheckoutService;
 
-
 class PosController extends Controller
 {
     public function index(): Response
@@ -19,10 +18,8 @@ class PosController extends Controller
         );
     }
 
-    public function scanImei(
-        Request $request
-    ) {
-
+    public function scanImei(Request $request) 
+    {
         $request->validate([
             'imei' => [
                 'required',
@@ -30,18 +27,14 @@ class PosController extends Controller
         ]);
 
         $imei = ProductImei::query()
-
             ->with('product')
-
             ->where(
                 'imei',
                 $request->imei
             )
-
             ->first();
 
         if (! $imei) {
-
             return response()->json([
                 'message' => 'IMEI không tồn tại',
             ], 404);
@@ -51,125 +44,107 @@ class PosController extends Controller
             $imei->status !==
             ProductImei::STATUS_AVAILABLE
         ) {
-
             return response()->json([
                 'message' => 'IMEI không khả dụng',
             ], 422);
         }
 
-       return response()->json([
-
+        return response()->json([
             'id' => $imei->id,
-
-            'product_id' =>
-                $imei->product->id,
-
+            'product_id' => $imei->product->id,
             'imei' => $imei->imei,
-
             'product' => [
-
                 'id' => $imei->product->id,
-
                 'name' => $imei->product->name,
-
                 'sell_price' => $imei->product->sell_price,
-
                 'product_type' => $imei->product->product_type,
             ],
-
         ]);
     }
 
- // Thanh toán
+    // Thanh toán
     public function checkout(
         Request $request,
         PosCheckoutService $service,
     )
     {
+        // 1. THÊM VALIDATE: Kiểm tra dữ liệu đầu vào chặt chẽ
+        $request->validate([
+            'items' => 'required|array',
+            'payment_method' => 'required|string', // Bắt buộc phương thức thanh toán phải là chuỗi
+        ], [
+            'items.required' => 'Giỏ hàng không được để trống.',
+            'payment_method.required' => 'Vui lòng chọn phương thức thanh toán.',
+        ]);
+
+        try {
+            // 2. Gọi Service với giá trị mặc định phòng hờ
+            $sale = $service->checkout(
+                items: $request->items,
+                customerId: $request->customer_id,
+                paidAmount: $request->paid_amount ?? 0,
+                // Nếu $request->payment_method bị null, tự gán mặc định là 'cash' (tiền mặt)
+                paymentMethod: $request->payment_method ?? 'cash', 
+                payOldDebt: (bool) $request->pay_old_debt,
+                userId: auth()->id(),
+            );
+
+            // Load quan hệ để trả về dữ liệu đầy đủ
+            $sale->load([
+                'items.product',
+                'items.productImei',
+                'customer',
+            ]);
+
+        } 
         
+        catch (\Exception $e) 
+        {
 
-        $sale = $service->checkout(
-
-            items: $request->items,
-
-            customerId: $request->customer_id,
-
-            paidAmount: $request->paid_amount ?? 0,
-
-            paymentMethod: $request->payment_method,
-
-            payOldDebt: (bool) $request->pay_old_debt,
-
-            userId: auth()->id(),
-        );
-
-        // Load quan hệ để trả về dữ liệu đầy đủ
-        $sale->load([
-            'items.product',
-            'items.productImei',
-            'customer',
-        ]);
-
-        // Trả về dữ liệu hóa đơn sau khi thanh toán thành công
-       return response()->json([
-            'success' => true,
-
-            'data' => [
-                'id' => $sale->id,
-                'code' => $sale->code,
-
-                'customer' => [
-                    'full_name' => $sale->customer->full_name ?? 'Khách lẻ',
+            // Trả về dữ liệu hóa đơn sau khi thanh toán thành công
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $sale->id,
+                    'code' => $sale->code,
+                    'customer' => [
+                        'full_name' => $sale->customer->full_name ?? 'Khách lẻ',
+                    ],
+                    'items' => $sale->items->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'quantity' => $item->quantity,
+                            'unit_price' => $item->unit_price,
+                            'subtotal' => $item->subtotal,
+                            'imei' => $item->productImei?->imei,
+                            'product' => [
+                                'name' => $item->product->name,
+                            ],
+                        ];
+                    }),
+                    'subtotal' => $sale->subtotal,
+                    'discount' => $sale->discount,
+                    'paid' => (float) $sale->paid_amount,
+                    'change' => (float) $sale->change_amount,
+                    'payment_method' => $sale->payment_method ?? 'cash',
                 ],
-
-                'items' => $sale->items->map(function ($item) {
-                    return [
-
-                        'id' => $item->id,
-
-                        'quantity' => $item->quantity,
-
-                        'unit_price' => $item->unit_price,
-
-                        'subtotal' => $item->subtotal,
-
-                        'imei' => $item->productImei?->imei,
-
-                        'product' => [
-
-                            'name' => $item->product->name,
-                        ],
-                    ];
-                }),
-
-                'subtotal' => $sale->subtotal,
-                'discount' => $sale->discount,
-                'paid' => (float) $sale->paid_amount,
-                'change' => (float) $sale->change_amount,
-
-                'payment_method' => $sale->payment_method ?? 'cash',
-            ],
-        ]);
+            ], 422);
+        }
     }
+
     // Xem hóa đơn bán hàng
-    public function showSale(
-        Sale $sale
-    ): Response {
-
+    public function showSale(Sale $sale): Response 
+    {
         $sale->load([
-
             'items.product',
             'items.productImei',
         ]);
 
         return Inertia::render(
-
             'Pos/SaleInvoice',
-
             [
                 'sale' => $sale,
             ]
         );
     }
-
 }

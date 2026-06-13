@@ -29,279 +29,150 @@ const money = (value) => {
 
 <template>
 
-<div
-    v-if="show"
-    class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
->
+    <div
+        v-if="show"
+        class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    >
 
 
-<div
-    class="bg-white w-[750px] max-h-[85vh] overflow-auto rounded-xl shadow-lg p-5"
->
+    <div
+        class="bg-white w-[750px] max-h-[85vh] overflow-auto rounded-xl shadow-lg p-5"
+    >
 
 
-<div class="flex justify-between mb-4">
+    <div class="flex justify-between mb-4">
 
-<h2 class="font-bold text-lg">
-    Chi tiết hóa đơn
-</h2>
+    <h2 class="font-bold text-lg">
+        Chi tiết hóa đơn
+    </h2>
 
 
-<button
-    @click="emit('close')"
-    class="text-red-500 font-bold"
->
-    X
-</button>
+    <button
+        @click="emit('close')"
+        class="text-red-500 font-bold"
+    >
+        X
+    </button>
 
 
-</div>
+    </div>
 
 
-<div v-if="invoice">
+    <div v-if="invoice">
 
 
-<div class="grid grid-cols-2 gap-2 text-sm">
+    <div class="grid grid-cols-2 gap-2 text-sm">
 
 
-<div>
+    <div>
 
-Mã HĐ:
+    Mã HĐ:
 
-<b>
-{{ invoice.code }}
-</b>
+    <b>
+    {{ invoice.code }}
+    </b>
 
-</div>
+    </div>
 
 
-<div>
+    <div>Ngày:{{ invoice.created_at }}</div>
 
-Ngày:
 
-{{ invoice.created_at }}
+    <div>Khách hàng:<b>{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</b></div>
 
-</div>
 
+    <div>Nhân viên:{{ invoice.user?.name ?? '' }}</div>
 
-<div>
 
-Khách hàng:
+    </div>
 
-<b>
-{{ invoice.customer?.full_name ?? 'Khách lẻ' }}
-</b>
 
-</div>
+    <hr class="my-4">
 
 
-<div>
+    <table
+    class="w-full text-sm"
+    >
 
-Nhân viên:
 
-{{ invoice.user?.name ?? '' }}
+    <thead>
+        <tr class="border-b bg-gray-100">
+            <th class="text-left p-2">Sản phẩm</th>
+            <th>SL</th>
+            <th class="text-right" >Đơn giá</th>
+            <th class="text-right">Thành tiền</th>
+        </tr>
 
-</div>
+    </thead>
 
+        <tbody>
+            <tr
+                v-for="item in invoice.items"
+                :key="item.id"
+                class="border-b"
+            >
 
-</div>
+                <td class="p-2">
 
+                    <div class="font-medium">
+                        {{ item.product?.name }}
+                    </div>
 
-<hr class="my-4">
+                    <div
+                        v-if="item.product_imei"
+                        class="text-xs text-red-600"
+                    >
 
+                        IMEI:
+                        {{ item.product_imei.imei }}
 
-<table
-class="w-full text-sm"
->
+                    </div>
 
-
-<thead>
-
-<tr
-class="border-b bg-gray-100"
->
-
-<th
-class="text-left p-2"
->
-Sản phẩm
-</th>
-
-
-<th>
-SL
-</th>
-
-
-<th
-class="text-right"
->
-Đơn giá
-</th>
-
-
-<th
-class="text-right"
->
-Thành tiền
-</th>
-
-
-</tr>
-
-</thead>
-
-
-
-<tbody>
-
-
-<tr
-v-for="item in invoice.items"
-:key="item.id"
-class="border-b"
->
-
-
-<td class="p-2">
-
-
-<div class="font-medium">
-
-{{ item.product?.name }}
-
-</div>
-
-
-
-<div
-v-if="item.product_imei"
-class="text-xs text-red-600"
->
-
-IMEI:
-{{ item.product_imei.imei }}
-
-</div>
-
-
-</td>
-
-
-
-<td class="text-center">
-
-{{ item.quantity }}
-
-</td>
-
-
-
-<td class="text-right">
-
-{{ money(item.unit_price) }}
-
-</td>
-
-
-
-<td class="text-right">
-
-{{ money(item.subtotal) }}
-
-</td>
-
-
-</tr>
-
-
-</tbody>
-
-
-</table>
-
-
-
-<hr class="my-4">
-
-
-
-<div class="space-y-1 text-right">
-
-
-<div>
-
-Tiền hàng:
-
-<b>
-{{ money(invoice.subtotal) }}
-</b>
-
-</div>
-
-
-
-<div>
-
-Giảm giá:
-
-<b>
-{{ money(invoice.discount) }}
-</b>
-
-</div>
-
-
-
-<div class="text-lg font-bold text-blue-600">
-
-Tổng:
-
-{{ money(invoice.grand_total) }}
-
-</div>
-
-
-
-<div>
-
-Khách trả:
-
-{{ money(invoice.paid_amount) }}
-
-</div>
-
-
-
-<div>
-
-Tiền thừa:
-
-{{ money(invoice.change_amount) }}
-
-</div>
-
-
-
-<div>
-
-Thanh toán:
-
-{{ invoice.payment_method }}
-
-</div>
-
-
-</div>
-
-
-
-</div>
-
-
-</div>
-
-
-</div>
+                </td>
+                <td class="text-center">
+                    {{ item.quantity }}
+                </td>
+
+                <td class="text-right">
+                    {{ money(item.unit_price) }}
+                </td>
+
+                <td class="text-right">
+                    {{ money(item.subtotal) }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <hr class="my-4">
+
+    <div class="space-y-1 text-right">
+        <div>
+            Tiền hàng: <b>{{ money(invoice.subtotal) }}</b>
+        </div>
+
+        <div>
+            Giảm giá: <b>{{ money(invoice.discount) }}</b>
+        </div>
+
+        <div class="text-lg font-bold text-blue-600">
+            Tổng: {{ money(invoice.grand_total) }}
+        </div>
+
+        <div>
+            Khách trả: {{ money(invoice.paid_amount) }}
+        </div>
+
+        <div>
+            Tiền thừa: {{ money(invoice.change_amount) }}
+        </div>
+
+        <div>
+            Thanh toán: {{ invoice.payment_method }}
+        </div>
+    </div>
+    </div>
+    </div>
+    </div>
 
 </template>

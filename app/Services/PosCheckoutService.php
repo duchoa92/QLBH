@@ -17,7 +17,7 @@ class PosCheckoutService
         array $items,
         ?int $customerId,
         float $paidAmount,
-        string $paymentMethod,
+        ?string $paymentMethod, // SỬA LỖI TYPEERROR: Chuyển thành ?string để chấp nhận null
         bool $payOldDebt,
         int $userId,
     ): Sale {
@@ -38,36 +38,16 @@ class PosCheckoutService
             */
 
             $subtotal = collect($items)
-                ->sum(function (
-                    array $item
-                ): float {
-
-                    return
-                        (
-                            (float) $item['price']
-                            *
-                            (int) $item['quantity']
-                        );
+                ->sum(function (array $item): float {
+                    return ((float) $item['price'] * (int) $item['quantity']);
                 });
 
             $discount = 0;
-
-            $grandTotal =
-                $subtotal - $discount;
-
-            // Tạm tính tiền thừa (nếu có)
-            $changeMoney = 0;
+            $grandTotal = $subtotal - $discount;
 
             // Nếu không có khách hàng và tiền thanh toán chưa đủ thì báo lỗi
-            if (
-                !$customerId
-                &&
-                $paidAmount < $grandTotal
-            ) {
-
-                throw new \Exception(
-                    'Khách lẻ phải thanh toán đủ tiền'
-                );
+            if (!$customerId && $paidAmount < $grandTotal) {
+                throw new \Exception('Khách lẻ phải thanh toán đủ tiền');
             }
             
             /*
@@ -77,24 +57,15 @@ class PosCheckoutService
             */
 
             $sale = Sale::query()->create([
-
                 'code' => $this->generateCode(),
-
                 'customer_id' => $customerId,
-
                 'user_id' => $userId,
-
                 'subtotal' => $subtotal,
-
                 'discount' => $discount,
-
                 'grand_total' => $grandTotal,
-
                 'paid_amount' => $paidAmount,
-
-                'change_amount' => $changeMoney,
-
-                'payment_method' => $paymentMethod,
+                'change_amount' => 0, // Sẽ cập nhật lại ở cuối sau khi tính toán chính xác
+                'payment_method' => $paymentMethod ?? 'cash', // Phòng hờ nếu null thì lưu là 'cash'
             ]);
 
             /*
@@ -104,351 +75,156 @@ class PosCheckoutService
             */
 
             foreach ($items as $item) {
-
-
                 /*
                 |--------------------------------------------------------------------------
                 | Lấy sản phẩm
                 |--------------------------------------------------------------------------
                 */
-
-                $product = Product::query()
-                    ->findOrFail(
-                        $item['id']
-                    );
-
+                $product = Product::query()->findOrFail($item['id']);
 
                 /*
                 |--------------------------------------------------------------------------
                 | Kiểm tra IMEI
                 |--------------------------------------------------------------------------
                 */
-
                 $imei = null;
 
-
-                if (
-                    $product->product_type === 'imei'
-                ) {
-
-                    if (
-                        empty($item['imei_id'])
-                    ) {
-
-                        throw new \Exception(
-                            "Sản phẩm {$product->name} phải quét IMEI"
-                        );
+                if ($product->product_type === 'imei') {
+                    if (empty($item['imei_id'])) {
+                        throw new \Exception("Sản phẩm {$product->name} phải quét IMEI");
                     }
-
 
                     $imei = ProductImei::query()
                         ->lockForUpdate()
-                        ->findOrFail(
-                            $item['imei_id']
-                        );
+                        ->findOrFail($item['imei_id']);
 
-
-                    if (
-                        $imei->status !==
-                        ProductImei::STATUS_AVAILABLE
-                    ) {
-
-                        throw new \Exception(
-                            "IMEI {$imei->imei} không khả dụng"
-                        );
+                    if ($imei->status !== ProductImei::STATUS_AVAILABLE) {
+                        throw new \Exception("IMEI {$imei->imei} không khả dụng");
                     }
                 }
-
 
                 /*
                 |--------------------------------------------------------------------------
                 | Kiểm tra tồn kho sản phẩm thường
                 |--------------------------------------------------------------------------
                 */
-
-                if (
-                    $product->product_type !== 'imei'
-                ) {
-
-
-                    if (
-                        $product->stock <
-                        (int) $item['quantity']
-                    ) {
-
-                        throw new \Exception(
-                            "Sản phẩm {$product->name} không đủ tồn kho"
-                        );
+                if ($product->product_type !== 'imei') {
+                    if ($product->stock < (int) $item['quantity']) {
+                        throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho");
                     }
                 }
-
-
 
                 /*
                 |--------------------------------------------------------------------------
                 | Lưu chi tiết hóa đơn
                 |--------------------------------------------------------------------------
                 */
-
                 $sale->items()->create([
-
-                    'product_id' =>
-                        $item['id'],
-
-                    'product_imei_id' =>
-                        $item['imei_id'] ?? null,
-
-                    'quantity' =>
-                        (int) $item['quantity'],
-
-                    'unit_price' =>
-                        (float) $item['price'],
-
-                    'subtotal' =>
-                        (
-                            (float) $item['price']
-                            *
-                            (int) $item['quantity']
-                        ),
+                    'product_id' => $item['id'],
+                    'product_imei_id' => $item['imei_id'] ?? null,
+                    'quantity' => (int) $item['quantity'],
+                    'unit_price' => (float) $item['price'],
+                    'subtotal' => ((float) $item['price'] * (int) $item['quantity']),
                 ]);
-
-
 
                 /*
                 |--------------------------------------------------------------------------
                 | Trừ tồn kho sản phẩm thường
                 |--------------------------------------------------------------------------
                 */
-
-                if (
-                    $product->product_type !== 'imei'
-                ) {
-
-                    $product->decrement(
-                        'stock',
-                        (int) $item['quantity']
-                    );
+                if ($product->product_type !== 'imei') {
+                    $product->decrement('stock', (int) $item['quantity']);
                 }
-
-
 
                 /*
                 |--------------------------------------------------------------------------
                 | Cộng số lượng đã bán
                 |--------------------------------------------------------------------------
                 */
-
-                $product->increment(
-                    'sold_count',
-                    (int) $item['quantity']
-                );
-
-
+                $product->increment('sold_count', (int) $item['quantity']);
 
                 /*
                 |--------------------------------------------------------------------------
                 | Đánh dấu IMEI đã bán
                 |--------------------------------------------------------------------------
                 */
-
                 if ($imei) {
-
                     $imei->update([
-
-                        'status' =>
-                            ProductImei::STATUS_SOLD,
-
-                        'sold_at' =>
-                            now(),
+                        'status' => ProductImei::STATUS_SOLD,
+                        'sold_at' => now(),
                     ]);
                 }
-
             }
-            if (
-                !$payOldDebt
-                &&
-                $customerId
-                &&
-                $paidAmount < $grandTotal
-            ) {
-
-                $newDebt =
-                    $grandTotal - $paidAmount;
-
-                CustomerDebt::query()
-                    ->create([
-
-                        'customer_id' =>
-                            $customerId,
-
-                        'type' =>
-                            'increase',
-
-                        'amount' =>
-                            $newDebt,
-
-                        'source_type' =>
-                            Sale::class,
-
-                        'source_id' =>
-                            $sale->id,
-
-                        'note' =>
-                            'Thanh toán hóa đơn còn thiếu',
-                    ]);
-
-                Customer::query()
-
-                    ->where(
-                        'id',
-                        $customerId
-                    )
-
-                    ->increment(
-                        'debt_balance',
-                        $newDebt
-                    );
-            }
-
 
             /*
             |--------------------------------------------------------------------------
-            | Xử lý nợ cũ
+            | XỬ LÝ CÔNG NỢ & TIỀN THỪA (ĐÃ ĐƯỢC TỐI ƯU TOÀN DIỆN VÀ CHÍNH XÁC)
             |--------------------------------------------------------------------------
             */
+            if ($customerId) {
+                $customer = Customer::query()->lockForUpdate()->find($customerId);
+                
+                if ($customer) {
+                    $debtPaid = 0;
+                    $newDebt = 0;
 
-            $debtPaid = 0;
+                    if ($payOldDebt) {
+                        // Trường hợp giao diện chọn: CÓ thanh toán nợ cũ kèm hóa đơn này
+                        $moneyForInvoice = min($paidAmount, $grandTotal);
+                        $newDebt = max(0.0, $grandTotal - $moneyForInvoice);
 
-            if (
-                $payOldDebt
-                &&
-                $customerId
-            ) {
+                        $moneyForOldDebt = max(0.0, $paidAmount - $grandTotal);
+                        $debtPaid = min($customer->debt_balance, $moneyForOldDebt);
+                    } else {
+                        // Trường hợp giao diện chọn: KHÔNG thanh toán nợ cũ (Tiền đưa chỉ tính cho đơn này)
+                        if ($paidAmount < $grandTotal) {
+                            $newDebt = $grandTotal - $paidAmount;
+                        }
+                    }
 
-                $customer = Customer::query()
-                    ->find($customerId);
-
-                if (
-                    $customer
-                    &&
-                    $customer->debt_balance > 0
-                ) {
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Tiền dành cho hóa đơn mới
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $moneyForInvoice = min(
-                        $paidAmount,
-                        $grandTotal
-                    );
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Thiếu tiền hóa đơn mới
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $newDebt = max(
-                        0,
-                        $grandTotal - $moneyForInvoice
-                    );
-
+                    // 1. Nếu phát sinh nợ mới (Tiền đưa thiếu so với giá trị hóa đơn)
                     if ($newDebt > 0) {
+                        CustomerDebt::query()->create([
+                            'customer_id' => $customerId,
+                            'type' => 'increase',
+                            'amount' => $newDebt,
+                            'source_type' => Sale::class,
+                            'source_id' => $sale->id,
+                            'note' => 'Mua nợ - Tiền hàng còn thiếu của hóa đơn ' . $sale->code,
+                        ]);
 
-                        CustomerDebt::query()
-                            ->create([
-
-                                'customer_id' =>
-                                    $customerId,
-
-                                'type' =>
-                                    'increase',
-
-                                'amount' =>
-                                    $newDebt,
-
-                                'source_type' =>
-                                    Sale::class,
-
-                                'source_id' =>
-                                    $sale->id,
-
-                                'note' =>
-                                    'Thanh toán hóa đơn còn thiếu',
-                            ]);
-
-                        $customer->increment(
-                            'debt_balance',
-                            $newDebt
-                        );
+                        $customer->increment('debt_balance', $newDebt);
                     }
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Tiền dư dùng để trả nợ cũ
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $moneyForOldDebt = max(
-                        0,
-                        $paidAmount - $grandTotal
-                    );
-
-                    $debtPaid = min(
-                        $customer->debt_balance,
-                        $moneyForOldDebt
-                    );
-
+                    // 2. Nếu có khấu trừ trả bớt nợ cũ (Khi tiền đưa vượt quá tiền hóa đơn)
                     if ($debtPaid > 0) {
+                        CustomerDebt::query()->create([
+                            'customer_id' => $customer->id,
+                            'type' => 'decrease',
+                            'amount' => $debtPaid,
+                            'source_type' => Sale::class,
+                            'source_id' => $sale->id,
+                            'note' => 'Trích tiền thừa hóa đơn ' . $sale->code . ' để thanh toán nợ cũ',
+                        ]);
 
-                        CustomerDebt::query()
-                            ->create([
-
-                                'customer_id' =>
-                                    $customer->id,
-
-                                'type' =>
-                                    'decrease',
-
-                                'amount' =>
-                                    $debtPaid,
-
-                                'source_type' =>
-                                    Sale::class,
-
-                                'source_id' =>
-                                    $sale->id,
-
-                                'note' =>
-                                    'Thanh toán Nợ cũ',
-                            ]);
-
-                        $customer->decrement(
-                            'debt_balance',
-                            $debtPaid
-                        );
+                        $customer->decrement('debt_balance', $debtPaid);
                     }
+
+                    // 3. Tính toán tiền trả lại cho khách chính xác
+                    $usedMoney = $grandTotal + $debtPaid;
+                    $changeMoney = max(0.0, $paidAmount - $usedMoney);
+                } else {
+                    // Dự phòng nếu không tìm thấy customer trong database
+                    $changeMoney = max(0.0, $paidAmount - $grandTotal);
                 }
+            } else {
+                // Khách lẻ
+                $changeMoney = max(0.0, $paidAmount - $grandTotal);
             }
 
-            // Tính tiền thừa
-            $usedMoney = $grandTotal + $debtPaid;
-
-        
-
-            $changeMoney =
-                max(
-                    0,
-                    $paidAmount - $usedMoney
-                );
-
+            // Cập nhật lại số tiền thừa thực tế vào hóa đơn
             $sale->update([
-
-                'change_amount' =>
-                    $changeMoney,
+                'change_amount' => $changeMoney,
             ]);
 
             return $sale;
@@ -460,11 +236,8 @@ class PosCheckoutService
     | Generate invoice code
     |--------------------------------------------------------------------------
     */
-
     private function generateCode(): string
     {
-        return 'INV-' . now()->format(
-            'YmdHis'
-        );
+        return 'INV-' . now()->format('YmdHis');
     }
 }

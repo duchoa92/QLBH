@@ -20,18 +20,94 @@ class SaleController extends Controller
     public function index(Request $request)
     {
 
+        $search = $request->get('search');
+
         $sales = Sale::query()
 
             ->with([
                 'customer',
                 'user',
+                'items.product',
+                'items.productImei',
             ])
+
+            ->when(
+
+                $search,
+
+                function ($query) use ($search) {
+
+                    $query
+
+                        ->where(
+                            'code',
+                            'like',
+                            "%{$search}%"
+                        )
+
+                        ->orWhereHas(
+
+                            'customer',
+
+                            function ($customer) use ($search) {
+
+                                $customer
+
+                                    ->where(
+                                        'full_name',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+
+                                    ->orWhere(
+                                        'phone',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                            }
+                        )
+
+                        ->orWhereHas(
+
+                            'items.product',
+
+                            function ($product) use ($search) {
+
+                                $product->where(
+
+                                    'name',
+
+                                    'like',
+
+                                    "%{$search}%"
+                                );
+                            }
+                        )
+
+                        ->orWhereHas(
+
+                            'items.productImei',
+
+                            function ($imei) use ($search) {
+
+                                $imei->where(
+
+                                    'imei',
+
+                                    'like',
+
+                                    "%{$search}%"
+                                );
+                            }
+                        );
+                }
+            )
 
             ->latest()
 
-            ->limit(50)
+            ->paginate(10)
 
-            ->get();
+            ->withQueryString();
 
 
         return response()->json(

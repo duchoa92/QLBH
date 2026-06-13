@@ -1,7 +1,6 @@
 <script setup>
 
 import {
-    ref,
     onMounted,
 } from 'vue'
 
@@ -16,7 +15,6 @@ const {
     openInvoice,
 } = useSaleHistory()
 
-
 const money = (value) => {
 
     return Number(value || 0)
@@ -30,126 +28,64 @@ onMounted(() => {
 
 })
 
+const formatDate = (date) => {
+    return new Date(date).toLocaleString('vi-VN')
+}
 
 </script>
 
 
 <template>
 
+    <div class="p-4">
 
-<div class="p-4">
+        <h2 class="font-bold text-lg mb-4">
+            Danh sách hóa đơn
+        </h2>
 
+        <table class="w-full text-sm border">
+            <thead>
 
-<h2 class="font-bold text-lg mb-4">
+                <tr class="bg-gray-100 text-center">
+                    <th class="p-2">Mã HĐ</th>
+                    <th class="">Khách hàng</th>
+                    <th class="">Tổng tiền</th>
+                    <th class="">Ngày</th>
+                </tr>
 
-Danh sách hóa đơn
+            </thead>
 
-</h2>
+            <div v-if="loading" class="p-4">
+                Đang tải hóa đơn...
+            </div>
+            <div v-if="!loading && invoices.length === 0" class="p-4">
+                Không có hóa đơn nào
+            </div>
 
+            <tbody>
 
+                <tr
+                    v-for="invoice in invoices"
+                    :key="invoice.id"
+                    class="border-b hover:bg-blue-50"
+                >
+                    <td class="p-2 text-blue-600 font-bold cursor-pointer" @click="openInvoice(invoice.id)">{{ invoice.code }}</td>
+                    <td class="text-center">{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</td>
+                    <td class="text-right px-3">{{ money(invoice.grand_total) }}</td>
+                    <td class="px-3">{{ formatDate(invoice.created_at)}}</td>
 
-<table
-class="w-full text-sm border"
->
+                </tr>
 
+                </tbody>
+            </table>
+    </div>
 
-<thead>
+    <InvoiceDetailModal
 
-<tr class="bg-gray-100">
+        :show="showDetail"
+        :invoice="selectedInvoice"
+        @close="showDetail=false"
 
-<th class="p-2 text-left">
-Mã HĐ
-</th>
-
-
-<th>
-Khách hàng
-</th>
-
-
-<th>
-Tổng tiền
-</th>
-
-
-<th>
-Ngày
-</th>
-
-
-</tr>
-
-</thead>
-
-
-
-<tbody>
-
-
-<tr
-v-for="invoice in invoices"
-:key="invoice.id"
-class="border-b hover:bg-blue-50"
->
-
-
-<td
-class="p-2 text-blue-600 font-bold cursor-pointer"
-@click="openInvoice(invoice.id)"
->
-
-{{ invoice.code }}
-
-</td>
-
-
-
-<td>
-
-{{ invoice.customer?.full_name ?? 'Khách lẻ' }}
-
-</td>
-
-
-
-<td class="text-right">
-
-{{ money(invoice.grand_total) }}
-
-</td>
-
-
-
-<td>
-
-{{ invoice.created_at }}
-
-</td>
-
-
-</tr>
-
-
-</tbody>
-
-
-</table>
-
-
-
-</div>
-
-
-
-<InvoiceDetailModal
-
-:show="showDetail"
-
-:invoice="selectedInvoice"
-
-@close="showDetail=false"
-
-/>
-
+    />
 
 </template>
