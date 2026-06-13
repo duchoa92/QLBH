@@ -8,14 +8,15 @@ import { productService } from '@/Modules/POS/Product/Services/productService'
 import { useToast } from '@/Composables/useToast'
 import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
 import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
-import { useCheckout } from '@/Composables/useCheckout'
+import { useCheckout } from '@/Modules/POS/Payment/Composables/useCheckout'
 import { useKeyboardShortcuts } from '@/Composables/useKeyboardShortcuts'
 import HoldSaleModal from '@/Modules/POS/HoldSale/Components/HoldSaleModal.vue'
 import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
-import PosSidebar from '@/Components/POS/PosSidebar.vue'
-import PosMainPanel from '@/Components/POS/PosMainPanel.vue'
+import PosSidebar from '@/Modules/POS/Core/Components/PosSidebar.vue'
+import PosMainPanel from '@/Modules/POS/Core/Components/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
-import InvoiceModal from '@/Components/POS/InvoiceModal.vue'
+import InvoiceDetailModal from '@/Modules/POS/Sale/Components/InvoiceDetailModal.vue'
+
 
 const {
 
@@ -244,11 +245,11 @@ onMounted(() => {
         "
     />
 
-    <InvoiceModal
+<!--     <InvoiceModal
         v-if="invoiceData"
         :show="showInvoice"
         :data="invoiceData"
         @close="showInvoice = false"
-    />
+    /> -->
 
 </template>

@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import CustomerDebtModal from './CustomerDebtModal.vue'
 import { customerDebtService } from '../Services/customerDebtService'
-import { useCustomerSearch } from '@/Composables/useCustomerSearch'
+import { useCustomerSearch } from '@/Modules/POS/Customer/Composables/useCustomerSearch.js'
 
 
 const emit = defineEmits([

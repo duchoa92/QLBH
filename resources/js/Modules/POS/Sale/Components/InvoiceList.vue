@@ -5,16 +5,16 @@ import {
     onMounted,
 } from 'vue'
 
-import { saleService } from '../Services/saleService'
-
 import InvoiceDetailModal from './InvoiceDetailModal.vue'
+import { useSaleHistory } from '../Composables/useSaleHistory'
 
-
-const invoices = ref([])
-
-const selectedInvoice = ref(null)
-
-const showDetail = ref(false)
+const {
+    invoices,
+    selectedInvoice,
+    showDetail,
+    loadInvoices,
+    openInvoice,
+} = useSaleHistory()
 
 
 const money = (value) => {
@@ -23,48 +23,6 @@ const money = (value) => {
         .toLocaleString('vi-VN')
 
 }
-
-
-// Load danh sách
-
-const loadInvoices = async () => {
-
-    try {
-
-        invoices.value =
-            await saleService.getAll()
-
-    } catch(error) {
-
-        console.error(error)
-
-    }
-
-}
-
-
-// Click hóa đơn
-
-const openInvoice = async (id) => {
-
-
-    try {
-
-        selectedInvoice.value =
-            await saleService.show(id)
-
-
-        showDetail.value = true
-
-
-    } catch(error) {
-
-        console.error(error)
-
-    }
-
-}
-
 
 onMounted(() => {
 
