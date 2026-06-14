@@ -5,7 +5,8 @@ import { debounce } from 'lodash'
 
 const props = defineProps({
     products: Object,
-    filters: Object
+    filters: Object,
+    isSearching: Boolean
 })
 
 const keyword = ref(props.filters?.search || '')
@@ -13,19 +14,17 @@ const keyword = ref(props.filters?.search || '')
 const serverSearching = ref(false)
 const loading = ref(false)
 const searchServer = debounce((value) => {
-    serverSearching.value = true
-    
     router.get(route('products.index'), {
-        search: value
+        search: value || null
     }, {
         preserveState: true,
         replace: true,
         preserveScroll: true,
-        onFinish: () => {
-            serverSearching.value = false
-        }
+        only: ['products', 'filters'], // 👈 QUAN TRỌNG
+        onStart: () => loading.value = true,
+        onFinish: () => loading.value = false
     })
-}, 400)
+}, 300)
 
 watch(keyword, (value) => {
     searchServer(value)
@@ -60,17 +59,27 @@ const showImeis = computed(() => {
 
 
 const getImeis = (product) => {
-    return product.imeis ?? []
+    return product?.imeis ?? []
 }
 
 const highlight = (text) => {
-    if (!text) return ''
+    if (!text || !keyword.value.trim()) return text || ''
 
     const kw = keyword.value.trim()
-    if (!kw) return text
 
-    const regex = new RegExp(`(${kw})`, 'gi')
-    return text.replace(regex, '<span class="bg-yellow-200">$1</span>')
+    return String(text).replace(
+        new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        m => `<span class="bg-yellow-200">${m}</span>`
+    )
+}
+
+const matchedImeis = (product) => {
+    const kw = keyword.value.trim()
+    if (!kw) return []
+
+    return (product.imeis || []).filter(i =>
+        i.imei?.toLowerCase().includes(kw.toLowerCase())
+    )
 }
 
 </script>
@@ -181,13 +190,13 @@ const highlight = (text) => {
                                             <span v-html="highlight(product.sku)"></span>
                                         </div>
                                         <!-- CHỈ HIỆN IMEI KHI SEARCH -->
-                                        <div v-if="showImeis && getImeis(product).length">
-                                            <div
-                                                v-for="imei in getImeis(product).slice(0,3)"
-                                                :key="imei.id"
-                                                class="text-xs text-gray-500"
-                                            >
-                                                Imei: <span v-html="highlight(imei.imei)"></span>
+                                        <div v-if="isSearching && matchedImeis(product).length">
+                                        <div
+                                            v-for="imei in matchedImeis(product).slice(0,3)"
+                                            :key="imei.id"
+                                            class="text-xs text-gray-500"
+                                        >
+                                                Imei:<span v-html="highlight(imei.imei)"></span>
                                             </div>
                                         </div>
                                     </div>

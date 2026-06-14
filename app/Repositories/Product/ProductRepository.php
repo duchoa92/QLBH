@@ -41,28 +41,23 @@ class ProductRepository extends BaseRepository
             ])
 
             ->when($search, function ($query) use ($search) {
-
                 $query->where(function ($q) use ($search) {
 
                     $q->where('name', 'like', "%$search%")
                     ->orWhere('sku', 'like', "%$search%")
                     ->orWhere('barcode', 'like', "%$search%")
 
-                    // search theo IMEI
-                    ->orWhereHas('imeis', function ($imeiQuery) use ($search) {
-                        $imeiQuery->where('imei', 'like', "%$search%");
-                    })
-
-                    // search theo category
                     ->orWhereHas('category', function ($catQuery) use ($search) {
                         $catQuery->where('name', 'like', "%$search%");
                     })
 
-                    // search theo brand
                     ->orWhereHas('brand', function ($brandQuery) use ($search) {
                         $brandQuery->where('name', 'like', "%$search%");
-                    });
+                    })
 
+                    ->orWhereHas('imeis', function ($iq) use ($search) {
+                        $iq->where('imei', 'like', "%$search%");
+                    });
                 });
             })
 

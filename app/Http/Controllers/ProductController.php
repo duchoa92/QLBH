@@ -25,7 +25,10 @@ class ProductController extends Controller
             'products' => $this->service->paginate(),
 
             // 👉 thêm 2 cái này
-            'filters' => request()->only(['search', 'category_id', 'brand_id']),
+            'filters' => [
+                'search' => request('search')
+            ],
+            'isSearching' => filled(request('search')),
 
             'categories' => Category::select('id', 'name')->get(),
             'brands' => Brand::select('id', 'name')->get(),
