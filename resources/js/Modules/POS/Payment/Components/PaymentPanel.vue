@@ -1,18 +1,12 @@
 <script setup>
 import {
     ref,
-    computed,
     onMounted,
     onBeforeUnmount,
 } from 'vue'
-import PaymentMethodSelect from './PaymentMethodSelect.vue'
-import { useEventBus } from '@/Composables/useEventBus'
+import PaymentModal from './PaymentModal.vue'
 
-
-const {
-    onEvent,
-    offEvent,
-} = useEventBus()
+const showPaymentModal = ref(false)
 
 const props = defineProps({
 
@@ -42,18 +36,6 @@ const props = defineProps({
     },
 })
 
-// Reset Form
-const resetPosForm = () => {
-
-    note.value = ''
-
-    paidAmount.value = ''
-
-    payOldDebt.value = false
-
-    paymentMethod.value = 'cash'
-}
-
 onMounted(() => {
 
     onEvent(
@@ -69,45 +51,6 @@ onBeforeUnmount(() => {
         resetPosForm
     )
 })
-
-
-const note = ref('')
-// Phương thức thanh toán
-const paymentMethod = ref('cash')
-// tiền khách đưa
-const paidAmount = ref('')
-// thanh toán nợ cũ
-const payOldDebt = ref(false)
-
-// Số tiền thừa trả khách
-const balanceAmount = computed(() => {
-
-    const paid =
-        Number(
-            paidAmount.value
-        ) || 0
-
-    return (
-        paid -
-        totalNeedToPay.value
-    )
-})
-
-// Tổng tiền cần thanh toán (bao gồm nợ cũ nếu có)
-const totalNeedToPay = computed(() => {
-
-    const debt = payOldDebt.value
-        ? Number(
-            props.selectedCustomer?.debt_balance || 0
-        )
-        : 0
-
-    return (
-        Number(props.grandTotal)
-        + debt
-    )
-})
-
 
 // 
 const emit = defineEmits([
@@ -150,99 +93,30 @@ const formatMoney = (value) => {
                             {{ formatMoney(grandTotal) }}
                         </span>
                     </div>
-
-                    <!-- Thanh toán nợ cũ -->
-                    <div
-                        v-if="
-                            selectedCustomer &&
-                            Number(selectedCustomer.debt_balance) > 0
-                        "
-                        class="mt-1 text-right"
-                    >
-
-                        <label
-                            class="inline-flex items-center gap-2 text-sm text-red-600 font-medium cursor-pointer"
-                        >
-
-                            <input
-                                v-model="payOldDebt"
-                                type="checkbox"
-                            >
-
-                            Thanh toán nợ cũ:
-                            {{
-                                formatMoney(
-                                    selectedCustomer.debt_balance
-                                )
-                            }}
-
-                        </label>
-
-                    </div>
-                    <div
-                        class="font-bold text-lg text-green-600"
-                    >
-                        Cần thu:
-                        {{
-                            formatMoney(
-                                totalNeedToPay
-                            )
-                        }}
-                    </div>
                 </div>
             </div>
 
-            <!-- Phương thức thanh toán -->
-           <div class="space-y-2 mb-3">
-                <div class="grid grid-cols-2 gap-3">
-                    <PaymentMethodSelect v-model="paymentMethod" class="h-12 text-sm rounded-xl border border-gray-300" />
-                    <input 
-                        v-model="paidAmount" 
-                        type="number" 
-                        placeholder="Khách đưa" 
-                        class="h-12 px-4 border border-gray-300 rounded-xl text-lg font-bold shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all" 
-                    />
-                </div>
-                
-                <input 
-                    v-model="note" 
-                    type="text" 
-                    placeholder="Ghi chú đơn hàng..." 
-                    class="w-full h-10 px-4 border border-gray-300 rounded-xl text-sm shadow-sm focus:ring-2 focus:ring-blue-500 transition-all" 
-                />
-            </div>
-
-            
             <!-- Thanh toán -->
             <button
                 :disabled="cart.length === 0 || loading"
-                @click="emit('checkout', { 
-                    note: note,
-                    payment_method: paymentMethod,
-                    paid_amount: paidAmount,
-                    pay_old_debt: payOldDebt,
-
-                    })"
+                @click="showPaymentModal = true"
                 class="w-full h-14 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:bg-gray-300"
-            >
-                {{ loading ? 'ĐANG XỬ LÝ...' : `THANH TOÁN (${formatMoney(totalNeedToPay)})` }}
-                <span
-                    v-if="balanceAmount > 0"
-                    class="ml-2 text-green-200 font-normal"
-                >
-                    Thừa:
-                    {{ formatMoney(balanceAmount) }}
-                </span>
-
-                <span
-                    v-else-if="balanceAmount < 0"
-                    class="ml-2 text-red-200 font-normal"
-                >
-                    Thiếu:
-                    {{ formatMoney(
-                        Math.abs(balanceAmount)
-                    ) }}
-                </span>
+            >Thanh toán
             </button>
         </div>
+
+        <PaymentModal
+            :show="showPaymentModal"
+            :grand-total="grandTotal"
+            :customer="selectedCustomer"
+            @close="
+                showPaymentModal = false
+            "
+            @confirm="
+                $emit(
+                    'checkout',
+                    $event
+                )
+            "
+        />
 </template>

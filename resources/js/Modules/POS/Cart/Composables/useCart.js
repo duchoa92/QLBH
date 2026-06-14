@@ -171,7 +171,12 @@ export function useCart() {
                  price:
                     Number(product.sell_price??product.price??0),
 
+                            
                 quantity: 1,
+
+                note: '',
+
+                showNote: false,
             })
 
 

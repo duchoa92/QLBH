@@ -15,6 +15,8 @@ import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
 import PosSidebar from '@/Modules/POS/Core/Components/PosSidebar.vue'
 import PosMainPanel from '@/Modules/POS/Core/Components/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
+import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
+
 
 const {
     cart,
@@ -79,6 +81,7 @@ const handleCheckout = async (data) => {
 
         invoiceData.value = res
         showInvoice.value = true
+        showCheckoutModal.value = false
 
     } catch (e) {
         // Để trống hoặc chỉ console.log(e) nếu file cấu hình chung Axios của bạn đã tự bật Toast lỗi
@@ -126,6 +129,22 @@ useBarcodeScanner(
 onMounted(() => {
     fetchHoldSales()
 })
+
+
+// Hiện popup thanh toán
+const showCheckoutModal = ref(false)
+const openCheckoutModal = () => {
+
+    if (!cart.value.length) {
+
+        errorToast('Giỏ hàng trống')
+
+        return
+    }
+
+    showCheckoutModal.value = true
+}
+
 </script>
 
 <template>
@@ -149,7 +168,7 @@ onMounted(() => {
                 @open-hold="openHoldModal"
                 @show-hold-list="showHoldModal = true"
                 @remove-item="removeItem"
-                @checkout="checkout"
+                @checkout="openCheckoutModal"
             />
         </template>
 
@@ -179,6 +198,15 @@ onMounted(() => {
         @update:holdName="
             holdName = $event
         "
+    />
+
+    <CheckoutModal
+        :show="showCheckoutModal"
+        :grand-total="grandTotal"
+        :selected-customer="selectedCustomer"
+        @close="showCheckoutModal = false"
+        @confirm="checkout($event)"
+
     />
 
 </template>

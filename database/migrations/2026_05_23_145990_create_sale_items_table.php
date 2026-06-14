@@ -73,6 +73,9 @@ return new class extends Migration
                 2
             );
 
+             $table->text('note')
+                ->nullable();
+
             $table->timestamps();
         });
     }

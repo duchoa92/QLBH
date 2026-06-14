@@ -24,6 +24,13 @@ const format = (number) => {
         .toLocaleString('vi-VN')
 }
 
+const toggleNote = (item) => {
+
+    item.showNote =
+        !item.showNote
+
+}
+
 </script>
 
 <template>
@@ -38,8 +45,40 @@ const format = (number) => {
 
         <div class="flex justify-between items-start">
             <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm truncate">
-                    {{ item.name }}
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="font-medium">
+                            {{ item.name }}
+                        </div>
+
+                        <div
+                            v-if="item.note"
+                            class="text-xs text-gray-500 italic mt-1"
+                        >
+                            {{ item.note }}
+                        </div>
+                        </div>
+
+                        <button
+                            @click="toggleNote(item)"
+                            class="text-gray-400 hover:text-blue-600"
+                        >
+                            <i class="fa-solid fa-note-sticky"></i>
+                        </button>
+                    </div>
+
+                <div
+                    v-if="item.showNote"
+                    class="mt-2"
+                >
+
+                    <input
+                        v-model="item.note"
+                        type="text"
+                        placeholder="Ghi chú sản phẩm..."
+                        class="w-full border rounded px-2 py-1 text-xs"
+                    >
+
                 </div>
 
                 <div class="text-xs text-gray-500">

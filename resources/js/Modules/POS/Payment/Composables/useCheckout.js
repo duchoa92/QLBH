@@ -82,6 +82,8 @@ export function useCheckout(
                         imei_id:
                             item.imei_id ?? null,
 
+                        note: item.note,
+
                     })),
 
                     customer_id:
