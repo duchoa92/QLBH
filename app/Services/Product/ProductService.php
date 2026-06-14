@@ -2,6 +2,7 @@
 
 namespace App\Services\Product;
 
+use DB;
 use App\Repositories\Product\ProductRepository;
 use App\Services\Base\BaseService;
 use Illuminate\Database\Eloquent\Model;
@@ -18,44 +19,33 @@ class ProductService extends BaseService
     }
 
     // Tạo mới sản phẩm
-    public function create(array $data): Model {
+    public function create(array $data): Model
+    {
+        return DB::transaction(function () use ($data) {
 
-        $data['slug'] = Str::slug(
-            $data['name']
-        );
+            $data['slug'] = Str::slug($data['name']);
 
-        if (isset($data['image'])) {
-            $data['image'] = $data['image']
-                ->store(
-                    'products',
-                    'public'
-                );
-        }
-
-        $product = $this->repository->create($data);
-
-        if (! empty($data['imeis'])) {
-            $imeis = preg_split(
-                '/\r\n|\r|\n/',
-                trim($data['imeis'])
-            );
-
-            foreach ($imeis as $imei) {
-
-                if (empty($imei)) {
-                    continue;
-                }
-
-                ProductImei::query()->create([
-
-                    'product_id' => $product->id,
-
-                    'imei' => trim($imei),
-                ]);
+            if (isset($data['image'])) {
+                $data['image'] = $data['image']->store('products', 'public');
             }
-        }
-        
+
+            $product = $this->repository->create($data);
+
+            if (!empty($data['imeis'])) {
+                $imeis = preg_split('/\r\n|\r|\n/', trim($data['imeis']));
+
+                foreach ($imeis as $imei) {
+                    if (empty($imei)) continue;
+
+                    ProductImei::create([
+                        'product_id' => $product->id,
+                        'imei' => trim($imei),
+                    ]);
+                }
+            }
+
             return $product;
+        });
     }
 
     // Cập nhập sản phẩm
@@ -102,4 +92,5 @@ class ProductService extends BaseService
         return $this->repository
             ->restore($id);
     }
+    
 }

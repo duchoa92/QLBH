@@ -11,7 +11,6 @@ use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Brand;
-use Illuminate\Http\Request;
 
 
 class ProductController extends Controller
@@ -22,12 +21,15 @@ class ProductController extends Controller
 
     public function index(): Response
     {
-        return Inertia::render(
-            'Products/Index',
-            [
-                'products' => $this->service->paginate(),
-            ]
-        );
+        return Inertia::render('Products/Index', [
+            'products' => $this->service->paginate(),
+
+            // 👉 thêm 2 cái này
+            'filters' => request()->only(['search', 'category_id', 'brand_id']),
+
+            'categories' => Category::select('id', 'name')->get(),
+            'brands' => Brand::select('id', 'name')->get(),
+        ]);
     }
 
     // Hiển thị chi tiết sản phẩm
@@ -164,7 +166,7 @@ class ProductController extends Controller
         return Inertia::render(
             'Products/Trash',
             [
-                'products' => Product::query()
+                'products' => $this->service->trash()
                     ->onlyTrashed()
                     ->latest()
                     ->paginate(10)

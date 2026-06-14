@@ -26,47 +26,49 @@ class ProductRepository extends BaseRepository
             ->withQueryString();
     }
 
-    // Phân trang
-    public function paginate(
-        int $perPage = 10
-    ): LengthAwarePaginator {
+   
+
+    public function paginate(int $perPage = 10): LengthAwarePaginator
+    {
+        $search = request('search');
 
         return $this->model
             ->query()
             ->with([
                 'category:id,name',
                 'brand:id,name',
+                'imeis:id,product_id,imei'
             ])
 
+            ->when($search, function ($query) use ($search) {
 
-            ->when(
-                request('search'),
-                function ($query) {
+                $query->where(function ($q) use ($search) {
 
-                    $query->where(
-                        'name',
-                        'like',
-                        '%' . request('search') . '%'
-                    )
+                    $q->where('name', 'like', "%$search%")
+                    ->orWhere('sku', 'like', "%$search%")
+                    ->orWhere('barcode', 'like', "%$search%")
 
-                    ->orWhere(
-                        'code',
-                        'like',
-                        '%' . request('search') . '%'
-                    )
+                    // search theo IMEI
+                    ->orWhereHas('imeis', function ($imeiQuery) use ($search) {
+                        $imeiQuery->where('imei', 'like', "%$search%");
+                    })
 
-                    ->orWhere(
-                        'barcode',
-                        'like',
-                        '%' . request('search') . '%'
-                    );
-                }
-            )
+                    // search theo category
+                    ->orWhereHas('category', function ($catQuery) use ($search) {
+                        $catQuery->where('name', 'like', "%$search%");
+                    })
+
+                    // search theo brand
+                    ->orWhereHas('brand', function ($brandQuery) use ($search) {
+                        $brandQuery->where('name', 'like', "%$search%");
+                    });
+
+                });
+            })
 
             ->latest()
-
             ->paginate($perPage)
-
             ->withQueryString();
     }
+
 }
