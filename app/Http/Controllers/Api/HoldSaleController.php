@@ -119,21 +119,15 @@ class HoldSaleController
     */
 
     public function destroy(
-    int $holdSale
-): JsonResponse {
+        HoldSale $holdSale
+    ): JsonResponse {
 
-    $deleted = HoldSale::query()
+        $holdSale->delete();
 
-        ->where('id', $holdSale)
-
-        ->delete();
-
-    return response()->json([
-
-        'deleted' => $deleted,
-
-        'id' => $holdSale,
-    ]);
-}
+        return response()->json([
+            'deleted' => true,
+            'id'      => $holdSale->id,
+        ]);
+    }
 
 }

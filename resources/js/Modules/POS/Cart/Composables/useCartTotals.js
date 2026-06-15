@@ -34,14 +34,19 @@ export const useCartTotals = (
     const subTotal = computed(() => {
 
         return cart.value.reduce(
+
             (total, item) => {
 
                 return total +
+
                     (
-                        Number(item.price) *
+                        Number(item.price)
+                        *
                         Number(item.quantity)
                     )
+
             },
+
             0
         )
     })
@@ -54,7 +59,59 @@ export const useCartTotals = (
 
     const discount = computed(() => {
 
-        return 0
+        return cart.value.reduce(
+
+            (total, item) => {
+
+                const lineTotal =
+
+                    Number(item.price)
+                    *
+                    Number(item.quantity)
+
+                /*
+                |--------------------------------------------------
+                | Giảm %
+                |--------------------------------------------------
+                */
+
+                if (
+                    item.discount_type === 'percent'
+                ) {
+
+                    return (
+                        total +
+                        (
+                            lineTotal *
+                            Number(item.discount_value)
+                            / 100
+                        )
+                    )
+                }
+
+                /*
+                |--------------------------------------------------
+                | Giảm tiền
+                |--------------------------------------------------
+                */
+
+                if (
+                    item.discount_type === 'amount'
+                ) {
+
+                    return (
+                        total +
+                        Number(item.discount_value)
+                    )
+                }
+
+                return total
+
+            },
+
+            0
+        )
+
     })
 
     /*

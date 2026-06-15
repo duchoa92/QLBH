@@ -9,6 +9,11 @@ const props = defineProps({
     grandTotal: Number,
 
     customer: Object,
+
+    cart: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const emit = defineEmits([
@@ -82,6 +87,38 @@ const submit = () => {
         }
     )
 }
+
+
+const lineTotal = (item) => {
+
+    let total =
+
+        Number(item.price)
+        *
+        Number(item.quantity)
+
+    if (
+        item.discount_type === 'amount'
+    ) {
+
+        total -=
+            Number(item.discount_value)
+    }
+
+    if (
+        item.discount_type === 'percent'
+    ) {
+
+        total -=
+            (
+                total *
+                Number(item.discount_value)
+                / 100
+            )
+    }
+
+    return total
+}
 </script>
 
 <template>
@@ -111,8 +148,74 @@ const submit = () => {
 
         <div class="space-y-4">
 
-            <div>
+            <div class="max-h-52 overflow-y-auto border rounded-lg p-2 bg-gray-50">
 
+                <div
+                    v-for="item in cart"
+                    :key="item.id + '-' + (item.imei_id || '')"
+                    class="border-b last:border-b-0 py-2"
+                >
+                    <div class="flex justify-between">
+                        <div>
+                            <div class="font-medium text-sm">
+                                {{ item.name }}
+                            </div>
+
+                            <div
+                                v-if="item.imei"
+                                class="text-xs text-blue-600"
+                            >
+                                IMEI:
+                                {{ item.imei }}
+                            </div>
+
+                        </div>
+
+                        <div class="font-semibold">
+                            {{ lineTotal(item).toLocaleString('vi-VN') }}
+                        </div>
+
+                    </div>
+
+                    <!-- giảm giá -->
+
+                    <div v-if="item.discount_value > 0"
+                        class="text-xs text-red-600 mt-1"
+                    >
+                        Giảm giá:
+                        <span v-if="item.discount_type === 'fixed'">
+                            -{{
+                                Number(
+                                    item.discount_value
+                                ).toLocaleString('vi-VN')
+                            }}
+                        </span>
+
+                        <span
+                            v-else
+                        >
+                            -{{
+                                item.discount_value
+                            }}%
+                        </span>
+
+                    </div>
+
+                    <!-- quà tặng -->
+
+                    <div
+                        v-if="item.gift_product_name"
+                        class="text-xs text-green-600"
+                    >
+                        🎁
+                        {{ item.gift_product_name }}
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div>
                 <label class="text-sm">
                     Phương thức thanh toán
                 </label>

@@ -42,7 +42,40 @@ class PosCheckoutService
                     return ((float) $item['price'] * (int) $item['quantity']);
                 });
 
-            $discount = 0;
+            //
+            $discount = collect($items)
+                ->sum(function ($item) {
+
+                    $lineTotal =
+
+                        (float) $item['price']
+                        *
+                        (int) $item['quantity'];
+
+                    if (
+                        ($item['discount_type'] ?? null)
+                        === 'percent'
+                    ) {
+
+                        return
+                            $lineTotal
+                            *
+                            ((float) $item['discount_value'])
+                            / 100;
+                    }
+
+                    if (
+                        ($item['discount_type'] ?? null)
+                        === 'amount'
+                    ) {
+
+                        return
+                            (float) $item['discount_value'];
+                    }
+
+                    return 0;
+                });
+
             $grandTotal = $subtotal - $discount;
 
             // Nếu không có khách hàng và tiền thanh toán chưa đủ thì báo lỗi
@@ -73,6 +106,7 @@ class PosCheckoutService
             | Xử lý từng sản phẩm trong hóa đơn
             |--------------------------------------------------------------------------
             */
+            $totalDiscount = 0;
 
             foreach ($items as $item) {
                 /*
@@ -114,17 +148,63 @@ class PosCheckoutService
                     }
                 }
 
+
+
+                $lineTotal =
+                    (float) $item['price']
+                    *
+                    (int) $item['quantity'];
+
+                $lineDiscount = 0;
+
+                if (
+                    ($item['discount_type'] ?? null)
+                    === 'percent'
+                ) {
+
+                    $lineDiscount =
+
+                        $lineTotal
+                        *
+                        ((float) $item['discount_value'])
+                        / 100;
+                }
+
+                if (
+                    ($item['discount_type'] ?? null)
+                    === 'amount'
+                ) {
+
+                    $lineDiscount =
+                        (float) $item['discount_value'];
+                }
+
+                $totalDiscount +=
+                    $lineDiscount;
                 /*
                 |--------------------------------------------------------------------------
                 | Lưu chi tiết hóa đơn
                 |--------------------------------------------------------------------------
                 */
                 $sale->items()->create([
+
                     'product_id' => $item['id'],
+
                     'product_imei_id' => $item['imei_id'] ?? null,
+
                     'quantity' => (int) $item['quantity'],
+
                     'unit_price' => (float) $item['price'],
-                    'subtotal' => ((float) $item['price'] * (int) $item['quantity']),
+
+                    'subtotal' =>$lineTotal- $lineDiscount,
+
+                    'note' => $item['note'] ?? null,
+
+                    'gift_product_id' => $item['gift_product_id'] ?? null,
+
+                    'discount_type' => $item['discount_type'] ?? null,
+
+                    'discount_value' => (float) ($item['discount_value'] ?? 0),
                 ]);
 
                 /*

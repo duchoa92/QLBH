@@ -113,19 +113,58 @@ const money = (value) => {
             >
 
                 <td class="p-2">
-
                     <div class="font-medium">
                         {{ item.product?.name }}
                     </div>
 
                     <div
                         v-if="item.product_imei"
+                        class="text-xs text-blue-600"
+                    >
+                        IMEI:
+                        {{ item.product_imei.imei }}
+                    </div>
+
+                    <div
+                        v-if="item.gift_product"
+                        class="text-xs text-green-600"
+                    >
+                        🎁
+                        {{ item.gift_product.name }}
+                    </div>
+
+                    <div
+                        v-if="Number(item.discount_value) > 0"
                         class="text-xs text-red-600"
                     >
 
-                        IMEI:
-                        {{ item.product_imei.imei }}
+                        <template
+                            v-if="
+                                item.discount_type === 'percent'
+                            "
+                        >
+                            Giảm
+                            {{ item.discount_value }}%
+                        </template>
 
+                        <template
+                            v-else-if="
+                                item.discount_type === 'amount'
+                            "
+                        >
+                            Giảm
+                            {{ money(item.discount_value) }}
+                            đ
+                        </template>
+
+                    </div>
+
+                    <div
+                        v-if="item.note"
+                        class="text-xs text-gray-500 italic"
+                    >
+                        Ghi chú:
+                        {{ item.note }}
                     </div>
 
                 </td>

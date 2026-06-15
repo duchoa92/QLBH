@@ -22,6 +22,14 @@ class SaleItem extends Model
         'unit_price',
 
         'subtotal',
+        
+        'note',
+
+        'gift_product_id',
+
+        'discount_type',
+
+        'discount_value',
     ];
 
     /*
@@ -49,6 +57,14 @@ class SaleItem extends Model
         return $this->belongsTo(
             ProductImei::class,
             'product_imei_id'
+        );
+    }
+
+    public function giftProduct(): BelongsTo
+    {
+        return $this->belongsTo(
+            Product::class,
+            'gift_product_id'
         );
     }
 }

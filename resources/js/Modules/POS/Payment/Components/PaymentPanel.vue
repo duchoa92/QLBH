@@ -1,8 +1,6 @@
 <script setup>
 import {
     ref,
-    onMounted,
-    onBeforeUnmount,
 } from 'vue'
 import PaymentModal from './PaymentModal.vue'
 
@@ -36,21 +34,6 @@ const props = defineProps({
     },
 })
 
-onMounted(() => {
-
-    onEvent(
-        'pos:reset',
-        resetPosForm
-    )
-})
-
-onBeforeUnmount(() => {
-
-    offEvent(
-        'pos:reset',
-        resetPosForm
-    )
-})
 
 // 
 const emit = defineEmits([
@@ -112,11 +95,7 @@ const formatMoney = (value) => {
             @close="
                 showPaymentModal = false
             "
-            @confirm="
-                $emit(
-                    'checkout',
-                    $event
-                )
-            "
+            @confirm="emit('checkout', $event)"
+            :cart="cart"
         />
 </template>

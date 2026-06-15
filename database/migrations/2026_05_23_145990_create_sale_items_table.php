@@ -73,8 +73,27 @@ return new class extends Migration
                 2
             );
 
-             $table->text('note')
+            $table->text('note')
                 ->nullable();
+            
+            $table->foreignId('gift_product_id')
+                ->nullable()
+                ->constrained('products')
+                ->nullOnDelete();
+
+            $table->enum(
+                'discount_type',
+                [
+                    'amount',
+                    'percent',
+                ]
+            )->nullable();
+
+            $table->decimal(
+                'discount_value',
+                15,
+                2
+            )->default(0);
 
             $table->timestamps();
         });

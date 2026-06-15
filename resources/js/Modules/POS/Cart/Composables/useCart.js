@@ -147,36 +147,22 @@ export function useCart() {
             }
 
             cart.value.push({
-
                 id: product.id,
-
-                imei_id:
-                    product.imei_id ?? null,
-
-                imei:
-                    product.imei ?? null,
-
-                serial:
-                    product.serial ?? null,
-
-                color:
-                    product.color ?? null,
-
-                storage:
-                    product.storage ?? null,
-
-                name:
-                    product.name,
-
-                 price:
-                    Number(product.sell_price??product.price??0),
-
-                            
+                imei_id: product.imei_id ?? null,
+                imei: product.imei ?? null,
+                serial: product.serial ?? null,
+                color: product.color ?? null,
+                storage: product.storage ?? null,
+                name: product.name,
+                price: Number(product.sell_price ?? product.price ?? 0),
                 quantity: 1,
-
                 note: '',
-
                 showNote: false,
+                showPromotion: false,
+                discount_type: null,
+                discount_value: 0,
+                gift_product_id: null,
+                gift_product_name: null,
             })
 
 
@@ -206,16 +192,17 @@ export function useCart() {
         }
 
         cart.value.push({
-
             id: product.id,
-
             name: product.name,
-
-            price: Number(
-                product.price
-            ),
-
+            price: Number(product.price),
             quantity: 1,
+            note: '',
+            showNote: false,
+            showPromotion: false,
+            discount_type: null,
+            discount_value: 0,
+            gift_product_id: null,
+            gift_product_name: null,
         })
     }
 
