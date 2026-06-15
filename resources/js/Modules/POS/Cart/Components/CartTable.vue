@@ -1,5 +1,8 @@
 <script setup>
-
+import {
+    PenSquare,
+    Trash2,
+} from 'lucide-vue-next'
 
 defineProps({
 
@@ -34,107 +37,65 @@ const toggleNote = (item) => {
 </script>
 
 <template>
+  <div
+    v-for="item in items"
+    :key="item.imei_id ? 'imei-' + item.imei_id : 'product-' + item.id"
+    class="bg-white border border-gray-200 rounded-xl p-3 mb-2 shadow-sm"
+  >
+    <div class="flex gap-3">
+      <div class="w-14 h-14 rounded-lg border flex items-center justify-center shrink-0 bg-gray-50 overflow-hidden">
+        <img v-if="item.image" :src="item.image" class="w-full h-full object-cover" />
+        <span v-else class="text-gray-400">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h12"/></svg>
+        </span>
+      </div>
 
-<div>
-
-    <div
-        v-for="item in items"
-        :key="item.imei_id ? 'imei-' + item.imei_id : 'product-' + item.id"
-        class="bg-white border border-gray-300 rounded-xl px-3 py-2 mb-[4px] shadow-sm"
-    >
-
-        <div class="flex justify-between items-start">
-            <div class="flex-1 min-w-0">
-                <div class="flex items-start justify-between">
-                    <div class="flex-1">
-                        <div class="font-medium">
-                            {{ item.name }}
-                        </div>
-
-                        <div
-                            v-if="item.note"
-                            class="text-xs text-gray-500 italic mt-1"
-                        >
-                            {{ item.note }}
-                        </div>
-                        </div>
-
-                        <button
-                            @click="toggleNote(item)"
-                            class="text-gray-400 hover:text-blue-600"
-                        >
-                            <i class="fa-solid fa-note-sticky"></i>
-                        </button>
-                    </div>
-
-                <div
-                    v-if="item.showNote"
-                    class="mt-2"
-                >
-
-                    <input
-                        v-model="item.note"
-                        type="text"
-                        placeholder="Ghi chú sản phẩm..."
-                        class="w-full border rounded px-2 py-1 text-xs"
-                    >
-
-                </div>
-
-                <div class="text-xs text-gray-500">
-                    <span v-if="item.imei">
-                        IMEI:
-                        {{ item.imei }}
-                    </span>
-                </div>
-
-                <div class="text-xs text-gray-500">
-                    {{ format(item.price) }} ₫
-                </div>
-            </div>
-
-            <div class="flex items-center gap-2 ml-3">
-
-                <button
-                    class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
-                    @click="
-                        item.quantity > 1
-                            ? item.quantity--
-                            : emit('remove', item)
-                    "
-                    :disabled="Boolean(item.imei_id)"
-                >
-                    -
-                </button>
-
-                <input
-                    v-model="item.quantity"
-                    :disabled="Boolean(item.imei_id)"
-                    class="w-10 items-center"
-                />
-
-                <button class="w-7 h-7 rounded-full border bg-gray-100 hover:bg-gray-200 shadow-sm"
-                    @click="
-                        !item.imei_id &&
-                        item.quantity++
-                    "
-                    :disabled="Boolean(item.imei_id)"
-                >
-                    +
-                </button>
-
-                <button
-                    class="text-red-500 hover:text-red-600 shadow-sm"
-                    @click="emit('remove', item)"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 size-4" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                </button>
-
-            </div>
+      <div class="flex-1 min-w-0 flex flex-col justify-center">
+        <div class="flex justify-between items-center">
+          <div class="font-semibold text-sm truncate">{{ item.name }}</div>
+          <div class="flex gap-2 shrink-0">
+            <button @click="toggleNote(item)" class="text-gray-400 hover:text-blue-600"><PenSquare class="w-4 h-4" /></button>
+            <button @click="emit('remove', item)" class="text-red-400 hover:text-red-600"><Trash2 class="w-4 h-4" /></button>
+          </div>
         </div>
-
+        <div class="text-xs text-gray-500">{{ item.unit_name ?? 'Cái' }}</div>
+      </div>
     </div>
 
-</div>
+    <div class="flex justify-between items-center mt-3 pt-3 border-t border-dashed border-gray-100">
+      <div class="flex items-center border rounded-lg overflow-hidden h-7">
+        <button class="w-8 bg-gray-50 hover:bg-gray-100 border-r" @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)">-</button>
+        <input 
+          v-model="item.quantity" 
+          type="number" 
+          class="w-12 text-center outline-none bg-transparent border-none focus:ring-0 text-sm no-spinner" 
+        />
+        <button class="w-8 bg-gray-50 hover:bg-gray-100 border-l" @click="item.quantity++">+</button>
+      </div>
 
+      <div class="text-green-600 font-bold text-sm">
+        {{ format(item.price * item.quantity) }}
+      </div>
+    </div>
+
+    <textarea
+      v-if="item.showNote"
+      v-model="item.note"
+      rows="1"
+      placeholder="Ghi chú..."
+      class="w-full mt-3 p-2 border rounded-lg text-sm focus:border-blue-500 outline-none"
+    />
+  </div>
 </template>
+
+<style scoped>
+/* Ẩn mũi tên input */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+}
+</style>
