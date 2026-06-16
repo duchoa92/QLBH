@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount  } from 'vue'
 import {
     PenSquare,
     Trash2,
@@ -8,7 +8,8 @@ import {
 import { productService } from '@/Modules/POS/Product/Services/productService'
 
 
-defineProps({
+
+const props = defineProps({
 
     selectedIndex: {
         type: Number,
@@ -28,6 +29,53 @@ const emit = defineEmits([
 const giftProducts = ref([])
 
 const searchingGift = ref(false)
+const promotionRef = ref(null)
+const promotionPanel = ref(null)
+
+onMounted(() => {
+
+    document.addEventListener(
+        'mousedown',
+        handleClickOutside
+    )
+})
+
+onBeforeUnmount(() => {
+
+    document.removeEventListener(
+        'mousedown',
+        handleClickOutside
+    )
+})
+
+const handleClickOutside = (event) => {
+
+    const insidePromotion =
+
+        event.target.closest(
+            '.promotion-panel'
+        )
+
+    const clickButton =
+
+        event.target.closest(
+            '.promotion-button'
+        )
+
+    if (
+        insidePromotion ||
+        clickButton
+    ) {
+
+        return
+    }
+
+    props.items.forEach(item => {
+
+        item.showPromotion = false
+
+    })
+}
 
 const format = (number) => {
 
@@ -45,9 +93,16 @@ const toggleNote = (item) => {
 //
 const togglePromotion = (item) => {
 
-    item.showPromotion =
-        !item.showPromotion
+    const isOpen =
+        item.showPromotion
 
+    props.items.forEach(i => {
+
+        i.showPromotion = false
+    })
+
+    item.showPromotion =
+        !isOpen
 }
 
 const lineTotal = (item) => {
@@ -84,6 +139,14 @@ const lineTotal = (item) => {
 
 const normalizeDiscount = (item) => {
 
+    if (
+        !item.discount_value
+    ) {
+
+        item.discount_type = null
+
+        return
+    }
     /*
     |--------------------------------------
     | Giảm %
@@ -228,7 +291,6 @@ const selectGiftProduct = (
 
     item.gift_results = []
 
-    item.showPromotion = false
 }
 
 // Xóa quà
@@ -272,7 +334,7 @@ const closeGiftResults = (
 
 <template>
   <div
-    v-for="item in items"
+    v-for="(item,index) in items"
     :key="item.imei_id ? 'imei-' + item.imei_id : 'product-' + item.id"
     class="bg-white border border-gray-200 rounded-xl px-3 py-2 mb-1 shadow-sm"
   >
@@ -293,12 +355,12 @@ const closeGiftResults = (
           <div class="flex gap-2 shrink-0">
 
             <!-- ghi chú -->
-            <button @click="toggleNote(item)" title="Ghi chú" class="text-gray-400 hover:text-blue-600">
+            <button @click.stop="toggleNote(item)" title="Ghi chú" class="text-gray-400 hover:text-blue-600">
                 <PenSquare class="w-4 h-4" />
             </button>
 
             <!-- khuyến mại -->
-            <button @click="togglePromotion(item)" title="Giảm giá, quà tặng" class="text-gray-400 hover:text-amber-600">
+            <button @click.stop="togglePromotion(item)" title="Giảm giá, quà tặng" class="promotion-button text-gray-400 hover:text-amber-600">
                 <Gift class="w-4 h-4" />
             </button>
 
@@ -316,30 +378,47 @@ const closeGiftResults = (
         >
             IMEI: {{ item.imei }}
         </div>
-        <!--Hiện quà tặng-->
+        
+      </div>
+    </div>
+
+    <!--Số lượng và tiền-->
+    <div class="flex justify-between items-center mt-2">
+        <!--Số lượng-->
         <div
-            v-if="
+            class="flex items-center border rounded-lg overflow-hidden h-7"
+            :class="{
+                'opacity-60': item.imei_id
+            }"
+        >
+        <button
+            :disabled="item.imei_id"
+            class="w-8 bg-gray-50 hover:bg-gray-100 border-r" @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)">-</button>
+        <input 
+            v-model="item.quantity" 
+            :disabled="item.imei_id"
+            type="number" 
+            class="w-12 text-center outline-none bg-transparent border-none focus:ring-0 text-sm no-spinner" 
+        />
+        <button    
+            :disabled="item.imei_id"
+            class="w-8 bg-gray-50 hover:bg-gray-100 border-l" @click="item.quantity++">+</button>
+        </div>
+
+        <!--Hiện quà tặng-->
+        <div v-if="
                 item.gifts &&
                 item.gifts.length
             "
-            class="
-                flex
-                flex-wrap
-                gap-1
-                mt-1
-            "
+            class="flex flex-wrap gap-1 mt-1 items-Left"
         >
-
             <div
                 v-for="gift in item.gifts"
                 :key="gift.id"
                 class="bg-green-100 text-green-700 text-[11px] px-2 py-1 rounded-full flex items-center gap-1"
             >
-
                 🎁 {{ gift.name }}
-                <span
-                    class="font-bold"
-                >
+                <span class="font-bold">
                     x{{ gift.quantity }}
                 </span>
 
@@ -350,129 +429,77 @@ const closeGiftResults = (
                             gift.id
                         )
                     "
-                    class="
-                        text-red-500
-                        font-bold
-                    "
+                    class="text-red-500 font-bold"
                 >
                     ×
                 </button>
+            </div>
+        </div>
 
+        
+
+        
+        <!--Tiền-->
+        <div class="text-right">
+            <div class="text-green-600 font-semibold">
+                {{ format(item.price) }}
             </div>
 
-        </div>
-
-        <!--hiện Ghi chú-->
-        <div v-if="item.note"class="mt-1 inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[11px] px-2 py-1 rounded-full">
-
-            Ghi chú: {{ item.note }}
-
-            <button
-                @click="
-                    item.note = ''
+             <!--Giảm giá-->
+            <div
+                v-if="
+                    item.discount_value &&
+                    item.discount_value > 0
                 "
-                class="
-                    text-red-500
-                    font-bold
-                "
+                class="items-right bg-red-100 text-red-700 text-[11px] px-2 py-1"
             >
-                ×
-            </button>
+                -
+                <span v-if="item.discount_type === 'percent'">
+                    {{ item.discount_value }}%
+                </span>
+                <span v-else>
+                    {{ format(item.discount_value) }}đ
+                </span>
+                <button
+                    @click="
+                        item.discount_value = 0
+                    "
+                    title="Hủy giảm giá"
+                    class="text-red-500 font-bold"
+                >
+                    ×
+                </button>
+            </div>
 
-        </div>
-        <!--Giảm giá-->
-        <div
-            v-if="
-                item.discount_value > 0
-            "
-            class="
-                mt-1
-                inline-flex
-                items-center
-                gap-1
-                bg-red-100
-                text-red-700
-                text-[11px]
-                px-2
-                py-1
-                rounded-full
-            "
-        >
-            
-            -
-            <span v-if="item.discount_type === 'percent'">
-                {{ item.discount_value }}%
-            </span>
-
-            <span v-else>
-                {{ format(item.discount_value) }}đ
-            </span>
-
-            <button
-                @click="
-                    item.discount_value = 0
-                "
-                class="
-                    text-red-500
-                    font-bold
-                "
+            <div
+                v-if="item.quantity > 1"
+                class="text-xs text-gray-500"
             >
-                ×
-            </button>
+                <div
+                    v-if="item.discount_value > 0"
+                    class="text-xs text-gray-400 line-through"
+                >
+                    {{ format(item.price * item.quantity) }}
+                </div>
 
+                = {{ format(lineTotal(item)) }}
+            </div>
         </div>
-
-      </div>
     </div>
 
-    <!--Số lượng và tiền-->
-    <div class="flex justify-between items-center mt-2">
-      <div
-          class="flex items-center border rounded-lg overflow-hidden h-7"
-          :class="{
-              'opacity-60': item.imei_id
-          }"
-      >
+    <!--hiện Ghi chú-->
+    <div v-if="item.note"class="mt-1 inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[11px] px-2 py-1 rounded-full">
+        Ghi chú: {{ item.note }}
         <button
-          :disabled="item.imei_id"
-          class="w-8 bg-gray-50 hover:bg-gray-100 border-r" @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)">-</button>
-        <input 
-          v-model="item.quantity" 
-          :disabled="item.imei_id"
-          type="number" 
-          class="w-12 text-center outline-none bg-transparent border-none focus:ring-0 text-sm no-spinner" 
-        />
-        <button    
-          :disabled="item.imei_id"
-          class="w-8 bg-gray-50 hover:bg-gray-100 border-l" @click="item.quantity++">+</button>
-      </div>
-
-      <!--Tiền-->
-      <div class="text-right">
-        <div class="text-green-600 font-semibold">
-            {{ format(item.price) }}
-        </div>
-
-        <div
-            v-if="item.quantity > 1"
-            class="text-xs text-gray-500"
+            @click="
+                item.note = ''
+            "
+            class="text-red-500 font-bold"
         >
-          <div
-              v-if="item.discount_value > 0"
-              class="
-                  text-xs
-                  text-gray-400
-                  line-through
-              "
-          >
-              {{ format(item.price * item.quantity) }}
-          </div>
-
-          = {{ format(lineTotal(item)) }}
-        </div>
+            ×
+        </button>
     </div>
-    </div>
-
+    <!--Ô ghi chú-->
     <textarea
       v-if="item.showNote"
       v-model="item.note"
@@ -483,11 +510,15 @@ const closeGiftResults = (
       placeholder="Ghi chú..."
       class="w-full mt-3 p-2 border rounded-lg text-sm focus:border-blue-500 outline-none"
     />
+
+    <!--Phần quà tặng và giảm giá-->
     <div
-      v-if="item.showPromotion"
-      class="mt-2 p-3 border rounded-lg bg-amber-50 space-y-2 ">
+        v-if="item.showPromotion"
+        
+        @click.stop
+        class="promotion-panel mt-2 p-3 border rounded-lg bg-amber-10 space-y-2"
+        :data-index="index">
       <div>
-        <label class="block text-xs font-medium mb-1">Quà tặng </label>
           <div class="relative">
             <input
                 v-model="item.gift_keyword"
@@ -500,10 +531,9 @@ const closeGiftResults = (
                         200
                     )
                 "
-                placeholder="Nhập tên quà tặng..."
+                placeholder="Nhập tên sản phẩm để tìm"
                 class="w-full border rounded-lg px-2 py-2 text-sm"
             >
-
             <div
                 v-if="
                     item.gift_results
@@ -512,9 +542,7 @@ const closeGiftResults = (
                 "
                 class="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-60 overflow-y-auto"
             >
-
-                <div
-                    v-for="product in item.gift_results"
+                <div v-for="product in item.gift_results"
                     :key="product.id"
                     @click="
                         selectGiftProduct(
@@ -522,59 +550,48 @@ const closeGiftResults = (
                             product
                         )
                     "
-                    class="
-                        px-3
-                        py-2
-                        cursor-pointer
-                        hover:bg-blue-50
-                        border-b
-                    "
-                >
+                    class="px-3 py-2 cursor-pointer hover:bg-blue-50 border-b">
 
-                    <div class="font-medium">
-
-                        {{ product.name }}
-
-                    </div>
-
-                    <div
-                        class="text-xs text-gray-500"
-                    >
-                        {{ product.sku }}
-                    </div>
-
+                    <div class="font-medium">{{ product.name }}</div>
+                    <div class="text-xs text-gray-500">{{ product.sku }}</div>
                 </div>
-
             </div>
-
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-2">
-          <div>
-              <label class="block text-xs font-medium mb-1">
-                  Loại giảm giá
-              </label>
+      <div class="space-y-2">
 
-              <select
-                  v-model="item.discount_type"
-                  class="w-full border rounded-lg px-2 py-1 text-sm">
-                  <option :value="null">Không giảm</option>
-                  <option value="amount">Theo tiền</option>
-                  <option value="percent">Theo % </option>
-              </select>
-          </div>
-
-          <div>
-              <label class="block text-xs font-medium mb-1">Giá trị</label>
-              <input
-                  v-model.number="item.discount_value"
-                  @input="normalizeDiscount(item)"
-                  type="number"
-                  min="0"
-                  class="w-full border rounded-lg px-2 py-1 text-sm"/>
-          </div>
-      </div>
+        <input
+            v-model.number="item.discount_value"
+            @input="normalizeDiscount(item)"
+            type="number"
+            min="0"
+            placeholder="Nhập số tiền muốn giảm"
+            class="w-full border rounded-lg px-2 py-2 text-sm"
+        >
+        <div class="flex gap-4">
+            <label
+                class="flex items-center gap-1 text-sm"
+            >
+                <input
+                    type="radio"
+                    value="amount"
+                    v-model="item.discount_type"
+                >
+                Theo tiền
+            </label>
+            <label
+                class="flex items-center gap-1 text-sm"
+            >
+                <input
+                    type="radio"
+                    value="percent"
+                    v-model="item.discount_type"
+                >
+                Theo %
+            </label>
+        </div>
+    </div>
   </div>
 </div>
 

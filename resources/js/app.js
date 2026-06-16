@@ -8,6 +8,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
+import clickOutside from '@/Directives/clickOutside'
 
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -69,8 +70,7 @@ createInertiaApp({
 
     },
     setup({ el, App, props, plugin }) {
-
-        createApp({
+        const app = createApp({
 
             render: () => [
                 h(App, props),
@@ -80,15 +80,23 @@ createInertiaApp({
                     closeButton: true,
                 }),
             ],
-
         })
-            .component(
-                'Toaster',
-                Toaster
-            )
-            .use(plugin)
-            .use(ZiggyVue)
-            .mount(el)
+
+        app.component(
+            'Toaster',
+            Toaster
+        )
+
+        app.directive(
+            'click-outside',
+            clickOutside
+        )
+
+        app.use(plugin)
+
+        app.use(ZiggyVue)
+
+        app.mount(el)
     },
     progress: {
         color: '#4B5563',
