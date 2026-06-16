@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import {
     PenSquare,
     Trash2,
     Gift,
 } from 'lucide-vue-next'
-import GiftProductModal from '@/Modules/POS/Product/Components/GiftProductModal.vue'
+import { productService } from '@/Modules/POS/Product/Services/productService'
+
 
 defineProps({
 
@@ -23,6 +24,10 @@ defineProps({
 const emit = defineEmits([
     'remove',
 ])
+
+const giftProducts = ref([])
+
+const searchingGift = ref(false)
 
 const format = (number) => {
 
@@ -135,31 +140,133 @@ const normalizeDiscount = (item) => {
 
 }
 
-// Hiện chọn quà tặng
-const showGiftModal = ref(false)
-// Chọn quà
-const selectedGiftItem = ref(null)
+// Tìm quà
+let giftTimer = null
 
-const openGiftModal = (item) => {
+const searchGiftProducts = async (
+    item
+) => {
 
-    selectedGiftItem.value =
-        item
+    clearTimeout(giftTimer)
 
-    showGiftModal.value = true
+    giftTimer = setTimeout(
+        async () => {
+
+            if (
+                !item.gift_keyword ||
+                item.gift_keyword.length < 2
+            ) {
+
+                item.gift_results = []
+
+                return
+            }
+
+            try {
+
+                const results =
+                    await productService.search(
+                        item.gift_keyword
+                    )
+
+                item.gift_results =
+                    results
+                        .filter(product => {
+
+                            return (
+                                product.product_type !== 'imei'
+                            )
+
+                        })
+                        .slice(0, 10)
+
+            } catch (error) {
+
+                console.error(error)
+
+            }
+
+        },
+        300
+    )
 }
 
+// Chọn quà
 const selectGiftProduct = (
+    item,
     product
 ) => {
 
-    selectedGiftItem.value.gift_product_id =
-        product.id
+    if (!item.gifts) {
 
-    selectedGiftItem.value.gift_product_name =
-        product.name
+        item.gifts = []
+    }
 
-    showGiftModal.value = false
+    const gift = item.gifts.find(
+        g => g.id === product.id
+    )
+
+    if (gift) {
+
+        gift.quantity++
+    }
+    else {
+
+        item.gifts.push({
+
+            id: product.id,
+
+            name: product.name,
+
+            sku: product.sku,
+
+            quantity: 1,
+        })
+    }
+
+    item.gift_keyword = ''
+
+    item.gift_results = []
+
+    item.showPromotion = false
 }
+
+// Xóa quà
+const removeGift = (
+    item,
+    giftId
+) => {
+
+    const gift =
+        item.gifts.find(
+            g => g.id === giftId
+        )
+
+    if (!gift) {
+
+        return
+    }
+
+    gift.quantity--
+
+    if (
+        gift.quantity <= 0
+    ) {
+
+        item.gifts =
+            item.gifts.filter(
+                g => g.id !== giftId
+            )
+    }
+}
+
+const closeGiftResults = (
+    item
+) => {
+
+    item.gift_results = []
+}
+
 
 </script>
 
@@ -191,7 +298,7 @@ const selectGiftProduct = (
             </button>
 
             <!-- khuyến mại -->
-            <button @click="openGiftModal(item)" title="Giảm giá, quà tặng" class="text-gray-400 hover:text-amber-600">
+            <button @click="togglePromotion(item)" title="Giảm giá, quà tặng" class="text-gray-400 hover:text-amber-600">
                 <Gift class="w-4 h-4" />
             </button>
 
@@ -209,33 +316,112 @@ const selectGiftProduct = (
         >
             IMEI: {{ item.imei }}
         </div>
+        <!--Hiện quà tặng-->
         <div
-            v-if="item.gift_product_name"
-            class="text-[11px] text-green-600 mt-1"
+            v-if="
+                item.gifts &&
+                item.gifts.length
+            "
+            class="
+                flex
+                flex-wrap
+                gap-1
+                mt-1
+            "
         >
 
-            🎁
+            <div
+                v-for="gift in item.gifts"
+                :key="gift.id"
+                class="bg-green-100 text-green-700 text-[11px] px-2 py-1 rounded-full flex items-center gap-1"
+            >
 
-            {{ item.gift_product_name }}
+                🎁 {{ gift.name }}
+                <span
+                    class="font-bold"
+                >
+                    x{{ gift.quantity }}
+                </span>
+
+                <button
+                    @click="
+                        removeGift(
+                            item,
+                            gift.id
+                        )
+                    "
+                    class="
+                        text-red-500
+                        font-bold
+                    "
+                >
+                    ×
+                </button>
+
+            </div>
 
         </div>
 
-        <div
-            v-if="item.discount_value > 0"
-            class="text-[11px] text-red-500"
-        >
-            <template
-                v-if="item.discount_type === 'percent'"
-            >
-                Giảm {{ item.discount_value }}%
-            </template>
+        <!--hiện Ghi chú-->
+        <div v-if="item.note"class="mt-1 inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[11px] px-2 py-1 rounded-full">
 
-            <template
-                v-else
+            Ghi chú: {{ item.note }}
+
+            <button
+                @click="
+                    item.note = ''
+                "
+                class="
+                    text-red-500
+                    font-bold
+                "
             >
-                Giảm {{ format(item.discount_value) }}đ
-            </template>
+                ×
+            </button>
+
         </div>
+        <!--Giảm giá-->
+        <div
+            v-if="
+                item.discount_value > 0
+            "
+            class="
+                mt-1
+                inline-flex
+                items-center
+                gap-1
+                bg-red-100
+                text-red-700
+                text-[11px]
+                px-2
+                py-1
+                rounded-full
+            "
+        >
+            
+            -
+            <span v-if="item.discount_type === 'percent'">
+                {{ item.discount_value }}%
+            </span>
+
+            <span v-else>
+                {{ format(item.discount_value) }}đ
+            </span>
+
+            <button
+                @click="
+                    item.discount_value = 0
+                "
+                class="
+                    text-red-500
+                    font-bold
+                "
+            >
+                ×
+            </button>
+
+        </div>
+
       </div>
     </div>
 
@@ -290,6 +476,9 @@ const selectGiftProduct = (
     <textarea
       v-if="item.showNote"
       v-model="item.note"
+      @blur="
+            item.showNote = false
+        "
       rows="1"
       placeholder="Ghi chú..."
       class="w-full mt-3 p-2 border rounded-lg text-sm focus:border-blue-500 outline-none"
@@ -299,15 +488,66 @@ const selectGiftProduct = (
       class="mt-2 p-3 border rounded-lg bg-amber-50 space-y-2 ">
       <div>
         <label class="block text-xs font-medium mb-1">Quà tặng </label>
-          <button
-              type="button"
-              @click="openGiftModal(item)"
-              class="w-full border rounded-lg px-2 py-2 text-left text-sm bg-white">
-              {{
-                  item.gift_product_name
-                      ?? 'Chọn quà tặng'
-              }}
-          </button>
+          <div class="relative">
+            <input
+                v-model="item.gift_keyword"
+                @input="
+                    searchGiftProducts(item)
+                "
+                @blur="
+                    setTimeout(
+                        () => closeGiftResults(item),
+                        200
+                    )
+                "
+                placeholder="Nhập tên quà tặng..."
+                class="w-full border rounded-lg px-2 py-2 text-sm"
+            >
+
+            <div
+                v-if="
+                    item.gift_results
+                    &&
+                    item.gift_results.length
+                "
+                class="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-60 overflow-y-auto"
+            >
+
+                <div
+                    v-for="product in item.gift_results"
+                    :key="product.id"
+                    @click="
+                        selectGiftProduct(
+                            item,
+                            product
+                        )
+                    "
+                    class="
+                        px-3
+                        py-2
+                        cursor-pointer
+                        hover:bg-blue-50
+                        border-b
+                    "
+                >
+
+                    <div class="font-medium">
+
+                        {{ product.name }}
+
+                    </div>
+
+                    <div
+                        class="text-xs text-gray-500"
+                    >
+                        {{ product.sku }}
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-2">
@@ -336,7 +576,8 @@ const selectGiftProduct = (
           </div>
       </div>
   </div>
-  </div>
+</div>
+
 </template>
 
 <style scoped>

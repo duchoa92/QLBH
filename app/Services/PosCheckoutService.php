@@ -225,6 +225,44 @@ class PosCheckoutService
 
                 /*
                 |--------------------------------------------------------------------------
+                | Trừ tồn kho quà tặng
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    !empty(
+                        $item['gift_product_id']
+                    )
+                ) {
+
+                    $giftProduct =
+                        Product::query()
+                            ->lockForUpdate()
+                            ->find(
+                                $item['gift_product_id']
+                            );
+
+                    if ($giftProduct) {
+
+                        if (
+                            $giftProduct->stock < 1
+                        ) {
+
+                            throw new \Exception(
+                                'Quà tặng '
+                                . $giftProduct->name
+                                . 'Đã hết quà tặng'
+                            );
+                        }
+
+                        $giftProduct->decrement(
+                            'stock',
+                            1
+                        );
+                    }
+                }
+                /*
+                |--------------------------------------------------------------------------
                 | Đánh dấu IMEI đã bán
                 |--------------------------------------------------------------------------
                 */

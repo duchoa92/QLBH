@@ -162,7 +162,9 @@ export function useCart() {
                 discount_type: null,
                 discount_value: 0,
                 gift_product_id: null,
-                gift_product_name: null,
+                gift_product_name:'',
+                gift_keyword: '',
+                gift_results: [],
             })
 
 
@@ -202,7 +204,9 @@ export function useCart() {
             discount_type: null,
             discount_value: 0,
             gift_product_id: null,
-            gift_product_name: null,
+            gift_product_name:'',
+            gift_keyword: '',
+            gift_results: [],
         })
     }
 
