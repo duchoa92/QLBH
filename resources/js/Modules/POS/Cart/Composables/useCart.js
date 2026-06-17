@@ -246,9 +246,22 @@ export function useCart() {
     |--------------------------------------------------------------------------
     */
 
-    const removeItem = (index) => {
+    const removeItem = (item) => {
 
-        cart.value.splice(index, 1)
+        const index = cart.value.findIndex(cartItem => {
+
+            if (item.imei_id) {
+
+                return cartItem.imei_id === item.imei_id
+            }
+
+            return cartItem.id === item.id
+        })
+
+        if (index !== -1) {
+
+            cart.value.splice(index, 1)
+        }
     }
 
     /*

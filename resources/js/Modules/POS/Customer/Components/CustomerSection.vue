@@ -138,12 +138,12 @@ const openDebtModal = async () => {
             </div>
 
             <div v-else>
-                <input
+                <FloatingInput
                     v-model="keyword"
                     @input="search"
                     @keydown="onKeyDown"
                     type="text"
-                    placeholder="Tên hoặc SĐT khách (F2)..."
+                    label="Tên hoặc SĐT khách (F2)..."
                     class="h-10 w-full rounded-md border-slate-300 px-3 text-sm font-medium shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
 
