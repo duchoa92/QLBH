@@ -1,6 +1,7 @@
 <script setup>
 
 import ProductSearch from '@/Modules/POS/Product/Components/ProductSearch.vue'
+import { PackageSearch } from 'lucide-vue-next';
 
 const emit = defineEmits([
 
@@ -19,6 +20,7 @@ const emit = defineEmits([
 
             <!-- HEADER (không scroll) -->
             <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                <PackageSearch class="" />
                 <h1 class="text-lg font-bold text-slate-900">
                     Chọn sản phẩm
                 </h1>

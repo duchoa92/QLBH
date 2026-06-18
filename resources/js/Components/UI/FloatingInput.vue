@@ -92,8 +92,8 @@ const handleInput = (event) => {
                 rounded-lg
 
                 px-2
-                pt-3
-                pb-3
+                pt-2
+                pb-2
 
                 text-sm
 
@@ -122,7 +122,7 @@ const handleInput = (event) => {
                 -top-2
                 text-xs
 
-                peer-placeholder-shown:top-3
+                peer-placeholder-shown:top-2.5
                 peer-placeholder-shown:text-sm
 
                 peer-focus:-top-2

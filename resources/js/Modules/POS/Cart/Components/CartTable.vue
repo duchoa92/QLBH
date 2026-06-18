@@ -508,18 +508,18 @@ const closeGiftResults = (
                     item.showNote = false
                 "
             rows="1"
-            class="my-3"
+            class="my-2"
             label="Nhập ghi chú"
         />
 
         <!--nơi nhập quà tặng và giảm giá-->
         <div v-if="item.showPromotion"
             @click.stop
-            class="promotion-panel mt-2 p-3 border rounded-lg bg-amber-10 space-y-2"
+            class="promotion-panel "
             :data-index="index">
 
             <!--Phần nhập quà tặng và giảm giá-->
-            <div class="flex gap-2">
+            <div class="flex gap-2 mt-2">
 
                 <!-- Quà tặng -->
                 <div class="flex-[2] relative">
@@ -585,7 +585,7 @@ const closeGiftResults = (
                         @input="normalizeDiscount(item)"
                         type="number"
                         min="0"
-                        class=""
+                        class="min-w-[100px]"
                         label="Nhập số tiền"
                     />
 

@@ -23,7 +23,7 @@ const emit = defineEmits(['customer-selected', 'open-hold', 'show-hold-list', 'r
 </script>
 
 <template>
-    <aside class="flex flex-col h-[calc(100vh-64px)] w-full lg:w-[380px]
+    <aside class="flex flex-col h-[calc(100vh-44px)] w-full lg:w-[430px]
            bg-white border-l shadow-xl shrink-0
            rounded-2xl overflow-hidden">
         <!-- khối khách hàng -->

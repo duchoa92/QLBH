@@ -3,7 +3,8 @@ import { ref } from 'vue'
 import CustomerDebtModal from './CustomerDebtModal.vue'
 import { customerDebtService } from '../Services/customerDebtService'
 import { useCustomerSearch } from '@/Modules/POS/Customer/Composables/useCustomerSearch.js'
-
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import { User, X } from 'lucide-vue-next'
 
 const emit = defineEmits([
     'selected',
@@ -84,10 +85,7 @@ const openDebtModal = async () => {
                 class="flex items-center justify-between w-full h-10 px-3 bg-blue-50 border border-blue-300 rounded-md shadow-sm"
             >
                 <div class="flex items-center gap-2 min-w-0 flex-1">
-                    <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                    </svg>
-                    
+                    <User :size="15" />
                     <span class="font-semibold text-blue-900 text-sm truncate">
                         {{ props.customer.full_name }}
                         <span
@@ -131,9 +129,7 @@ const openDebtModal = async () => {
                     class="ml-2 p-1 text-blue-400 hover:text-rose-600 hover:bg-rose-100 rounded-full transition-colors shrink-0"
                     title="Xóa"
                 >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
+                    <X :size="15" />
                 </button>
             </div>
 
@@ -143,8 +139,7 @@ const openDebtModal = async () => {
                     @input="search"
                     @keydown="onKeyDown"
                     type="text"
-                    label="Tên hoặc SĐT khách (F2)..."
-                    class="h-10 w-full rounded-md border-slate-300 px-3 text-sm font-medium shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    label="Nhập tên hoặc SĐT khách hàng"
                 />
 
                 <div
