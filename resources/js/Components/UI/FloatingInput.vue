@@ -48,61 +48,18 @@ const handleInput = (event) => {
     <div class="relative w-full">
 
         <input
-            for="input-id"
+            v-bind="$attrs" 
             :value="modelValue"
             @input="handleInput"
-            @change="
-                emit(
-                    'change',
-                    $event
-                )
-            "
-            @focus="
-                emit(
-                    'focus',
-                    $event
-                )
-            "
-            @blur="
-                emit(
-                    'blur',
-                    $event
-                )
-            "
-            @keydown="
-                emit(
-                    'keydown',
-                    $event
-                )
-            "
-            @keyup="
-                emit(
-                    'keyup',
-                    $event
-                )
-            "
+            @change="emit('change', $event)"
+            @focus="emit('focus', $event)"
+            @blur="emit('blur', $event)"
+            @keydown="emit('keydown', $event)"
+            @keyup="emit('keyup', $event)"
             :type="type"
             placeholder=" "
-            
-            class="
-                peer
-                w-full
-                border
-                border-gray-300
-                rounded-lg
-
-                px-2
-                pt-2
-                pb-2
-
-                text-sm
-
-                focus:border-blue-500
-                focus:ring-0
-
-                transition-all
-            "
-        >
+            class="peer w-full border border-gray-300 rounded-lg px-2 pt-2 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all"
+/>
 
         <label
             for="input-id"

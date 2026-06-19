@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { productService } from '@/Modules/POS/Product/Services/productService'
-
+import TagBadge from '@/Components/UI/TagBadge.vue'
 
 
 const props = defineProps({
@@ -384,142 +384,115 @@ const closeGiftResults = (
         </div>
 
         <!--Số lượng, hiện quà và tiền-->
-        <div class="flex justify-between items-center mt-2">
-            <!--Số lượng-->
-            <div
-                class="flex items-center border rounded-lg overflow-hidden h-7"
-                :class="{
-                    'opacity-60': item.imei_id
-                }"
-            >
-                <button
-                    :disabled="item.imei_id"
-                    class="w-8 bg-gray-50 hover:bg-gray-100 border-r" @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)">-</button>
-                <input 
-                    v-model="item.quantity" 
-                    :disabled="item.imei_id"
-                    type="number" 
-                    class="w-12 text-center outline-none bg-transparent border-none focus:ring-0 text-sm no-spinner" 
-                />
-                <button    
-                    :disabled="item.imei_id"
-                    class="w-8 bg-gray-50 hover:bg-gray-100 border-l" @click="item.quantity++">+</button>
-            </div>
-
-            <!--nơi hiện quà tặng-->
-            <div v-if="
-                    item.gifts &&
-                    item.gifts.length
-                "
-                class="flex flex-wrap gap-1 mt-1 items-Left"
-            >
-            
-                <span class="text-sm text-blue-700">Tặng kèm:</span>
+        <div class="flex justify-between items-start mt-2">
+            <div class="flex items-center gap-3">
                 <div
-                    v-for="gift in item.gifts"
-                    :key="gift.id"
-                    class="bg-green-100 text-green-700 text-[11px] px-2 py-1 rounded-full flex items-center gap-1"
+                    class="flex items-center border rounded-lg overflow-hidden h-7 shrink-0"
+                    :class="{ 'opacity-60': item.imei_id }"
                 >
-                        {{ gift.name }}
-                    <span class="font-bold text-green-900 ">
-                        x{{ gift.quantity }}
-                    </span>
-
                     <button
-                        @click="
+                        :disabled="item.imei_id"
+                        class="w-8 bg-gray-50 hover:bg-gray-100 border-r"
+                        @click="item.quantity > 1 ? item.quantity-- : emit('remove', item)"
+                    >-</button>
+                    <input 
+                        v-model="item.quantity" 
+                        :disabled="item.imei_id"
+                        type="number" 
+                        class="w-12 text-center outline-none bg-transparent border-none focus:ring-0 text-sm no-spinner" 
+                    />
+                    <button    
+                        :disabled="item.imei_id"
+                        class="w-8 bg-gray-50 hover:bg-gray-100 border-l"
+                        @click="item.quantity++"
+                    >+</button>
+                </div>
+
+                <!--Hiện quà tặng-->
+                <div v-if="item.gifts && item.gifts.length" class="flex flex-wrap gap-1">
+                    <TagBadge
+                        v-for="gift in item.gifts"
+                        :key="gift.id"
+                        removable
+                        @remove="
                             removeGift(
                                 item,
                                 gift.id
                             )
                         "
-                        class="text-red-500 font-bold"
                     >
-                        ×
-                    </button>
+                        {{ gift.name }}
+                        <span class="font-bold text-red-700 px-1">x {{ gift.quantity }}</span>
+                    </TagBadge>
                 </div>
             </div>
 
-            
-            <!--Tiền-->
-            <div class="text-right">
+            <div class="text-right shrink-0">
                 <div class="text-green-600 font-semibold">
                     {{ format(item.price) }}
                 </div>
 
-                <!--Giảm giá-->
                 <div
-                    v-if="
-                        item.discount_value &&
-                        item.discount_value > 0
-                    "
-                    class="items-right bg-red-100 text-red-700 text-[11px] px-2 py-1"
+                    v-if="item.discount_value && item.discount_value > 0"
+                    class="inline-flex items-center bg-red-100 text-red-700 text-[11px] px-2 py-1 rounded"
                 >
                     -
-                    <span v-if="item.discount_type === 'percent'">
-                        {{ item.discount_value }}%
-                    </span>
-                    <span v-else>
-                        {{ format(item.discount_value) }}đ
-                    </span>
+                    <span v-if="item.discount_type === 'percent'">{{ item.discount_value }}%</span>
+                    <span v-else>{{ format(item.discount_value) }}đ</span>
                     <button
-                        @click="
-                            item.discount_value = 0
-                        "
+                        @click="item.discount_value = 0"
                         title="Hủy giảm giá"
-                        class="text-red-500 font-bold"
+                        class="ml-1 text-red-500 font-bold hover:text-red-700"
                     >
                         ×
                     </button>
                 </div>
 
-                <div
-                    v-if="item.quantity > 1"
-                    class="text-xs text-gray-500"
-                >
-                    <div
-                        v-if="item.discount_value > 0"
-                        class="text-xs text-gray-400 line-through"
-                    >
+                <div v-if="item.quantity > 1" class="text-xs text-gray-500">
+                    <div v-if="item.discount_value > 0" class="text-xs text-gray-400 line-through">
                         {{ format(item.price * item.quantity) }}
                     </div>
-
                     = {{ format(lineTotal(item)) }}
                 </div>
             </div>
         </div>
 
         <!--nơi hiện Ghi chú-->
-        <div v-if="item.note"class="mt-1 inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[11px] px-2 py-1 rounded-full">
-            Ghi chú: {{ item.note }}
-            <button
-                @click="
-                    item.note = ''
-                "
-                class="text-red-500 font-bold"
-            >
-                ×
-            </button>
+        <div v-if="item.note" class="bg-white rounded-lg flex items-center w-full mt-2 border overflow-hidden">
+            <div class="bg-gray-100 px-3 py-1 font-semibold text-blue-900 text-sm border-r flex items-center self-stretch">
+                Ghi chú:
+            </div>
+            
+            <div class="flex-1 px-3 py-1 flex justify-between items-center bg-white">
+                <span class="truncate">{{ item.note }}</span>
+                <button
+                    @click="item.note = ''"
+                    class="ml-1 px-1 text-blue-400 hover:text-rose-600 hover:bg-rose-100 rounded-full transition-colors shrink-0"
+                >
+                    ×
+                </button>
+            </div>
         </div>
         <!--Ô nhập ghi chú-->
-        <FloatingInput
-            v-if="item.showNote"
-            v-model="item.note"
-            @blur="
-                    item.showNote = false
-                "
-            rows="1"
-            class="my-2"
-            label="Nhập ghi chú"
-        />
-
+        <div v-if="item.showNote" class="mt-2">
+            <FloatingInput
+                v-model="item.note"
+                @blur="
+                        item.showNote = false
+                    "
+                rows="1"
+                class=""
+                label="Nhập ghi chú"
+            />
+        </div>
         <!--nơi nhập quà tặng và giảm giá-->
         <div v-if="item.showPromotion"
             @click.stop
-            class="promotion-panel "
+            class="promotion-panel mt-3"
             :data-index="index">
 
             <!--Phần nhập quà tặng và giảm giá-->
-            <div class="flex gap-2 mt-2">
+            <div class="flex gap-2">
 
                 <!-- Quà tặng -->
                 <div class="flex-[2] relative">
@@ -579,23 +552,23 @@ const closeGiftResults = (
                 </div>
 
                 <!-- Giảm giá -->
-                <div class="flex flex-1">
+                <div class="flex flex-1 relative">
                     <FloatingInput
                         v-model.number="item.discount_value"
                         @input="normalizeDiscount(item)"
                         type="number"
                         min="0"
-                        class="min-w-[100px]"
+                        class="w-full no-spinner" 
                         label="Nhập số tiền"
                     />
 
                     <button
                         type="button"
                         @click="item.discount_type = item.discount_type === 'percent' ? 'amount' : 'percent'"
-                        class="px-3 border rounded-r-lg bg-gray-50 text-sm font-medium min-w-[50px]"
+                        class="absolute right-0 top-0 bottom-0 px-3 min-w-9 border-l bg-transparent text-sm font-medium z-10 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                        style="height: 100%; margin-top: 0px;"
                     >
-                        {{item.discount_type === 'percent' ? '%' : 'đ'}}
-
+                        {{ item.discount_type === 'percent' ? '%' : 'đ' }}
                     </button>
                 </div>
             </div>

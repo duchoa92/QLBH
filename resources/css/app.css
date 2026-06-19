@@ -75,3 +75,15 @@
         margin: 0;
     }
 }
+
+/* Ẩn mũi tên input number */
+/* Sử dụng selector đặc thù để đảm bảo độ ưu tiên cao */
+input.no-spinner::-webkit-inner-spin-button,
+input.no-spinner::-webkit-outer-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+}
+
+input.no-spinner {
+    -moz-appearance: textfield !important;
+}
