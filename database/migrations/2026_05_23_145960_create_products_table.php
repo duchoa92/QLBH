@@ -44,9 +44,9 @@ return new class extends Migration
 
             $table->string('name');
 
-            $table->string('search_text')
-                ->nullable()
-                ->index();
+            $table->string('search_text')->nullable();
+
+            $table->fullText('search_text');
 
             $table->string('slug')
                 ->unique();

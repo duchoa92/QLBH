@@ -32,6 +32,17 @@ class ProductRepository extends BaseRepository
     {
         $search = request('search');
 
+        $booleanSearch = null;
+
+        if ($search) {
+            $terms = explode(' ', $search);
+
+            $booleanSearch = collect($terms)
+                ->filter()
+                ->map(fn($t) => '+' . $t . '*')
+                ->implode(' ');
+        }
+
         return $this->model
             ->query()
             ->with([
@@ -40,24 +51,35 @@ class ProductRepository extends BaseRepository
                 'imeis:id,product_id,imei'
             ])
 
-            ->when($search, function ($query) use ($search) {
-                $query->where(function ($q) use ($search) {
+            ->when($search, function ($query) use ($search, $booleanSearch) {
+                $query->where(function ($q) use ($search, $booleanSearch) {
 
-                    $q->where('name', 'like', "%$search%")
-                    ->orWhere('sku', 'like', "%$search%")
-                    ->orWhere('barcode', 'like', "%$search%")
+                    // FULLTEXT
+                    if ($booleanSearch) {
+                        $q->whereRaw(
+                            "MATCH(search_text) AGAINST(? IN BOOLEAN MODE)",
+                            [$booleanSearch]
+                        );
+                    }
 
-                    ->orWhereHas('category', function ($catQuery) use ($search) {
+                    // barcode (fallback)
+                    $q->orWhere('barcode', 'like', "%$search%");
+
+                    // category
+                    $q->orWhereHas('category', function ($catQuery) use ($search) {
                         $catQuery->where('name', 'like', "%$search%");
-                    })
+                    });
 
-                    ->orWhereHas('brand', function ($brandQuery) use ($search) {
+                    // brand
+                    $q->orWhereHas('brand', function ($brandQuery) use ($search) {
                         $brandQuery->where('name', 'like', "%$search%");
-                    })
+                    });
 
-                    ->orWhereHas('imeis', function ($iq) use ($search) {
+                    // IMEI (quan trọng)
+                    $q->orWhereHas('imeis', function ($iq) use ($search) {
                         $iq->where('imei', 'like', "%$search%");
                     });
+
                 });
             })
 

@@ -12,9 +12,60 @@ use Inertia\Response;
 
 class SupplierController extends Controller
 {
-    public function index(): Response
-    {
+    public function index(
+        Request $request
+    ): Response {
+
+        $search = (string) $request->get(
+            'search',
+            ''
+        );
+
+        $keyword =
+            Supplier::normalizeSearch(
+                $search
+            );
+
         $suppliers = Supplier::query()
+
+            ->when(
+                $search,
+                function ($query)
+                use (
+                    $search,
+                    $keyword
+                ) {
+
+                    $query->where(
+                        function ($sub)
+                        use (
+                            $search,
+                            $keyword
+                        ) {
+
+                            $sub
+
+                                ->where(
+                                    'search_text',
+                                    'like',
+                                    "%{$keyword}%"
+                                )
+
+                                ->orWhere(
+                                    'phone',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'email',
+                                    'like',
+                                    "%{$search}%"
+                                );
+                        }
+                    );
+                }
+            )
 
             ->latest()
 
@@ -24,6 +75,10 @@ class SupplierController extends Controller
             'Suppliers/Index',
             [
                 'suppliers' => $suppliers,
+
+                'filters' => [
+                    'search' => $search,
+                ],
             ]
         );
     }

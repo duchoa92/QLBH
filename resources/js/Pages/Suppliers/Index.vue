@@ -1,12 +1,30 @@
 <script setup>
 
-import { Link } from '@inertiajs/vue3'
+import { Link, router } from '@inertiajs/vue3'
+import { ref } from 'vue'
 
-defineProps({
-
+const props = defineProps({
     suppliers: Array,
-
+    filters: Object,
 })
+
+const search = ref(
+    props.filters?.search ?? ''
+)
+
+const searchSupplier = () => {
+
+    router.get(
+        '/suppliers',
+        {
+            search: search.value,
+        },
+        {
+            preserveState: true,
+            replace: true,
+        }
+    )
+}
 
 </script>
 
@@ -44,6 +62,17 @@ defineProps({
             >
                 Thêm mới
             </Link>
+
+        </div>
+<!--ô Tìm kiếm nhà cung cấp-->
+        <div class="mb-4">
+            <input
+                v-model="search"
+                @input="searchSupplier"
+                type="text"
+                placeholder="Tìm tên, điện thoại, email"
+                class="w-full border rounded px-3 py-2"
+            />
 
         </div>
 

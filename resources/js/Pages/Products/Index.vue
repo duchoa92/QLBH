@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { debounce } from 'lodash'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 const props = defineProps({
     products: Object,
@@ -48,19 +49,11 @@ const money = (value) => {
 }
 
 
-const isSearching = computed(() => {
-    return keyword.value.trim().length > 0
+const isImeiSearch = computed(() => {
+    const kw = keyword.value.trim()
+    return kw.length >= 6 && /\d/.test(kw)
 })
 
-
-const showImeis = computed(() => {
-    return serverSearching.value || keyword.value.trim().length > 0
-})
-
-
-const getImeis = (product) => {
-    return product?.imeis ?? []
-}
 
 const highlight = (text) => {
     if (!text || !keyword.value.trim()) return text || ''
@@ -75,7 +68,9 @@ const highlight = (text) => {
 
 const matchedImeis = (product) => {
     const kw = keyword.value.trim()
-    if (!kw) return []
+
+    // ❗ CHỈ chạy khi đúng IMEI search
+    if (!kw || !isImeiSearch.value) return []
 
     return (product.imeis || []).filter(i =>
         i.imei?.toLowerCase().includes(kw.toLowerCase())
@@ -123,25 +118,40 @@ const matchedImeis = (product) => {
 
             <div class="overflow-x-auto">
 
-                <div class="p-4 border-b">
-                    <input
-                        v-model="keyword"
-                        placeholder="Tìm sản phẩm..."
-                        class="w-full rounded-md border px-3 py-2 text-sm focus:ring focus:ring-blue-200"
-                    />
-                </div>
+                <div class="p-4 border-b relative">
 
-                <div v-if="loading" class="p-2 text-sm text-blue-500">
-                    🔍 Đang tìm...
-                </div>
-                <div v-if="keyword" class="text-sm text-gray-500">
-                    kết quả tìm với: <b>{{ keyword }}</b>
-                    <button 
+                    <FloatingInput
+                        v-model="keyword"
+                        label="Tìm sản phẩm, SKU, IMEI..."
+                        
+                    />
+
+                    <!-- clear button -->
+                    <button
                         v-if="keyword"
                         @click="keyword = ''"
-                        class="ml-2 text-sm text-red-500 hover:text-black"
-                    >xóa</button>
+                        class="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+                    >
+                        ✕
+                    </button>
+                    <div
+                        v-if="loading"
+                        class="absolute right-3 top-1/2 -translate-y-1/2"
+                    >
+                        <div class="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+
                 </div>
+
+                <div v-if="keyword" class="px-4 py-2 text-sm text-gray-500 flex items-center gap-2">
+                    <span>🔎 Kết quả cho:</span>
+                    <b class="text-blue-600">{{ keyword }}</b>
+
+                    <span v-if="products.total !== undefined">
+                        ({{ products.total }} sản phẩm)
+                    </span>
+                </div>
+                    
 
                 <table class="w-full min-w-[920px] text-sm">
 
@@ -190,7 +200,7 @@ const matchedImeis = (product) => {
                                             <span v-html="highlight(product.sku)"></span>
                                         </div>
                                         <!-- CHỈ HIỆN IMEI KHI SEARCH -->
-                                        <div v-if="isSearching && matchedImeis(product).length">
+                                        <div v-if="isImeiSearch && matchedImeis(product).length">
                                         <div
                                             v-for="imei in matchedImeis(product).slice(0,3)"
                                             :key="imei.id"

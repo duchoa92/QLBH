@@ -96,17 +96,16 @@ class Product extends Model
         );
     }
 
-    protected static function booted(): void
+    protected static function booted()
     {
-        static::saving(function (
-            Product $product
-        ): void {
-
-            $product->search_text =
-                self::normalizeSearch(
-                    $product->name ?? ''
-                );
-
+        static::saving(function ($product) {
+            $product->search_text = implode(' ', [
+                $product->name,
+                $product->sku,
+                $product->barcode,
+                optional($product->category)->name,
+                optional($product->brand)->name,
+            ]);
         });
     }
 
