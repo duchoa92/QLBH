@@ -28,6 +28,11 @@ return new class extends Migration
 
             $table->string('name');
 
+
+            $table->string('search_text')
+                ->nullable()
+                ->index();
+                
             $table->string('contact_person')
                 ->nullable();
 

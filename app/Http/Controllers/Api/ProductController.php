@@ -102,25 +102,79 @@ class ProductController extends Controller
             | SEARCH
             |--------------------------------------------------
             */
-            ->when($keyword, function ($query) use ($keyword) {
+            ->when(
+                $keyword,
+                function ($query) use ($keyword) {
 
-                $query->where(function ($sub) use ($keyword) {
-
-                    $sub->where('name', 'like', "%{$keyword}%")
-                        ->orWhere('sku', 'like', "%{$keyword}%")
-                        ->orWhere('barcode', 'like', "%{$keyword}%")
-                        ->orWhereHas('imeis',
-                            function ($q) use ($keyword) {
-
-                                $q->where(
-                                    'imei',
-                                    'like',
-                                    "%{$keyword}%"
-                                );
-                            }
+                    $normalizedKeyword =
+                        Product::normalizeSearch(
+                            $keyword
                         );
-                });
-            })
+
+                    $query->where(function ($sub)
+                    use (
+                        $keyword,
+                        $normalizedKeyword
+                    ) {
+
+                        $sub
+
+                            /*
+                            |--------------------------------------------------
+                            | BARCODE
+                            |--------------------------------------------------
+                            */
+                            ->where(
+                                'barcode',
+                                $keyword
+                            )
+
+                            /*
+                            |--------------------------------------------------
+                            | SKU
+                            |--------------------------------------------------
+                            */
+                            ->orWhere(
+                                'sku',
+                                'like',
+                                $keyword . '%'
+                            )
+
+                            /*
+                            |--------------------------------------------------
+                            | TÊN KHÔNG DẤU
+                            |--------------------------------------------------
+                            */
+                            ->orWhere(
+                                'search_text',
+                                'like',
+                                '%' .
+                                $normalizedKeyword .
+                                '%'
+                            )
+
+                            /*
+                            |--------------------------------------------------
+                            | IMEI
+                            |--------------------------------------------------
+                            */
+                            ->orWhereHas(
+                                'imeis',
+                                function ($q)
+                                use (
+                                    $keyword
+                                ) {
+
+                                    $q->where(
+                                        'imei',
+                                        'like',
+                                        "%{$keyword}%"
+                                    );
+                                }
+                            );
+                    });
+                }
+            )
 
             /*
             |--------------------------------------------------
@@ -134,16 +188,32 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------
-            | BEST SELLER FIRST
+            | 
             |--------------------------------------------------
             */
+           ->orderByRaw(
+                "
+                CASE
+
+                    WHEN barcode = ? THEN 1
+
+                    WHEN sku = ? THEN 2
+
+                    WHEN sku LIKE ? THEN 3
+
+                    ELSE 4
+
+                END
+                ",
+                [
+                    $keyword,
+                    $keyword,
+                    $keyword . '%',
+                ]
+            )
+
             ->orderByDesc('sold_count')
 
-            /*
-            |--------------------------------------------------
-            | NEWEST
-            |--------------------------------------------------
-            */
             ->orderByDesc('id')
 
             /*

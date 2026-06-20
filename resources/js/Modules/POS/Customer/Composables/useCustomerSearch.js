@@ -63,7 +63,7 @@ export function useCustomerSearch(
                             '/api/customers/search',
                             {
                                 params: {
-                                    q: keyword.value,
+                                    search: keyword.value,
                                 },
                             }
                         )

@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Support\Searchable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, Searchable;
 
     protected $fillable = [
 
@@ -57,21 +59,21 @@ class Product extends Model
         );
     }
 
-    public function brand()
+   public function brand(): BelongsTo
     {
         return $this->belongsTo(
             Brand::class
         );
     }
 
-    public function unit()
+    public function unit(): BelongsTo
     {
         return $this->belongsTo(
             Unit::class
         );
     }
 
-    public function imeis()
+    public function imeis(): HasMany
     {
         return $this->hasMany(
             ProductImei::class
@@ -93,4 +95,54 @@ class Product extends Model
             'storage/' . $this->image
         );
     }
+
+    protected static function booted(): void
+    {
+        static::saving(function (
+            Product $product
+        ): void {
+
+            $product->search_text =
+                self::normalizeSearch(
+                    $product->name ?? ''
+                );
+
+        });
+    }
+
+    public function scopeSearch(
+        $query,
+        string $keyword
+    )
+    {
+        $normalizedKeyword =
+            self::normalizeSearch(
+                $keyword
+            );
+
+        return $query->where(function ($sub)
+        use (
+            $keyword,
+            $normalizedKeyword
+        ) {
+
+            $sub
+                ->where('barcode', $keyword)
+
+                ->orWhere(
+                    'sku',
+                    'like',
+                    $keyword . '%'
+                )
+
+                ->orWhere(
+                    'search_text',
+                    'like',
+                    '%' .
+                    $normalizedKeyword .
+                    '%'
+                );
+        });
+    }
+
 }

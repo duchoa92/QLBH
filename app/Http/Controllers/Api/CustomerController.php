@@ -40,38 +40,53 @@ class CustomerController extends Controller
     */
     public function search(Request $request)
     {
-        $q = $request->get('q');
+        $search = (string) $request->get(
+            'search',
+            ''
+        );
+
+        $keyword =
+            Customer::normalizeSearch(
+                $search
+            );
 
         $customers = Customer::query()
-            ->when($q, function ($query) use ($q) {
-                $query->where('phone', 'like', "%{$q}%")
-                      ->orWhere('full_name', 'like', "%{$q}%");
+
+            ->select([
+                'id',
+                'full_name',
+                'phone',
+            ])
+
+            ->where(function ($q)
+            use (
+                $keyword,
+                $search
+            ) {
+
+                $q
+
+                    ->where(
+                        'search_text',
+                        'like',
+                        "%{$keyword}%"
+                    )
+
+                    ->orWhere(
+                        'phone',
+                        'like',
+                        "%{$search}%"
+                    );
             })
+
             ->limit(10)
-            ->get()
-            ->map(function (
-            Customer $customer
-        ) {
 
-            return [
+            ->get();
 
-                'id' =>
-                    $customer->id,
-
-                'full_name' =>
-                    $customer->full_name,
-
-                'phone' =>
-                    $customer->phone,
-
-                'debt_balance' =>
-                    $customer->debt_balance,
-            ];
-        });
-
-        return response()->json($customers);
+        return response()->json(
+            $customers
+        );
     }
-
     /*
     |---------------------------------------
     | Lấy danh sách Nợ của khách hàng

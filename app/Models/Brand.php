@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Support\Searchable;
 
 class Brand extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, Searchable;
 
     protected $fillable = [
 
@@ -27,4 +28,18 @@ class Brand extends Model
             Product::class
         );
     }
+
+    protected static function booted(): void
+    {
+        static::saving(function (
+            Brand $brand
+        ): void {
+
+            $brand->search_text =
+                self::normalizeSearch(
+                    $brand->name
+                );
+        });
+    }
+
 }

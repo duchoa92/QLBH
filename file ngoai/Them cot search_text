@@ -1,0 +1,4 @@
+ALTER TABLE customers 
+ADD COLUMN search_text VARCHAR(255) NULL AFTER full_name;
+
+CREATE INDEX customers_search_text_index ON customers (search_text);

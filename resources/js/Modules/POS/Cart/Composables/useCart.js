@@ -118,7 +118,8 @@ export function useCart() {
     */
 
     const addToCart = (product) => {
-
+        // debug
+console.log('ADD TO CART', product)
 
         /*
         |--------------------------------------------------

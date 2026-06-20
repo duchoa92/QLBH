@@ -14,6 +14,7 @@ use App\Http\Controllers\SaleController;
 use App\Http\Controllers\RepairController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SaleReceiptController;
+use App\Http\Controllers\SupplierController;
 
 /*
 |--------------------------------------------------------------------------
@@ -401,6 +402,11 @@ Route::middleware(['auth'])->group(function () {
     )->name('product-imeis.show');
 
 
+    // Nhà cung cấp
+    Route::resource(
+        'suppliers',
+        SupplierController::class
+    );
 
 });
 

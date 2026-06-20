@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Builder;
+use App\Support\Searchable;
 
 class Customer extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, Searchable;
 
     protected $fillable = [
         'code',
@@ -85,14 +87,55 @@ class Customer extends Model
     |--------------------------------------------------
     */
 
-    public function scopeActive($query)
+    public function scopeActive(
+        Builder $query
+    ): Builder
     {
-        return $query->where('is_active', true);
+        return $query->where(
+            'is_active',
+            true
+        );
     }
 
-    public function scopeSearch($query, string $keyword)
+    public function scopeSearch(
+        Builder $query,
+        string $keyword
+    )
     {
-        return $query->where('phone', 'like', "%$keyword%")
-            ->orWhere('full_name', 'like', "%$keyword%");
+        $keyword = self::normalizeVietnamese(
+            $keyword
+        );
+
+        return $query->where(function ($q) use ($keyword) {
+
+            $q->where(
+                'search_text',
+                'like',
+                "%{$keyword}%"
+            )
+
+            ->orWhere(
+                'phone',
+                'like',
+                "%{$keyword}%"
+            );
+
+        });
     }
+
+    protected static function booted(): void
+    {
+        static::saving(function (
+            Customer $customer
+        ): void {
+
+            $customer->search_text =
+                self::normalizeSearch(
+                    $customer->full_name ?? ''
+                );
+
+        });
+    }
+
+
 }

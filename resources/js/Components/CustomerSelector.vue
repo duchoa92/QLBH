@@ -20,7 +20,7 @@ const searchCustomer = () => {
 
         try {
             const res = await axios.get('/api/customers/search', {
-                params: { q: keyword.value }
+                params: { search: keyword.value }
             })
 
             results.value = res.data

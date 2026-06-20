@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('code')->unique();
 
             $table->string('full_name');
-
+            $table->string('search_text')->nullable()->index();
             $table->string('phone')->nullable()->index();
             $table->string('email')->nullable()->index();
 

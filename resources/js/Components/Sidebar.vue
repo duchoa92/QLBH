@@ -57,58 +57,67 @@ const menuGroups = [
         ],
     },
     {
-        title: 'Van hanh',
+        title: 'Vận hành',
         items: [
             {
-                label: 'Dashboard',
+                label: 'Tổng quan',
                 href: '/dashboard',
                 paths: ['/dashboard'],
             },
             {
-                label: 'Khach hang',
+                label: 'Khách hàng',
                 href: '/customers',
                 paths: ['/customers'],
             },
+
             {
-                label: 'Sua chua',
+                label: 'Nhà cung cấp',
+                href: '/suppliers',
+                paths: ['/suppliers'],
+            },
+
+            {
+                label: 'Sửa chữa',
                 href: '/repairs',
                 paths: ['/repairs'],
             },
+
+            
         ],
     },
     {
-        title: 'Kho hang',
+        title: 'Kho hàng',
         items: [
             {
-                label: 'San pham',
+                label: 'Sản phẩm',
                 href: '/products',
                 paths: ['/products', '/products-trash', '/product-imeis', '/imeis'],
                 permission: 'products.view',
             },
             {
-                label: 'Danh muc',
+                label: 'Danh mục',
                 href: '/categories',
                 paths: ['/categories'],
                 permission: 'categories.view',
             },
             {
-                label: 'Thuong hieu',
+                label: 'Thương hiệu',
                 href: '/brands',
                 paths: ['/brands', '/brands-trash'],
             },
         ],
     },
     {
-        title: 'He thong',
+        title: 'Hệ thống',
         items: [
             {
-                label: 'Nhan vien',
+                label: 'Nhân viên',
                 href: '/users',
                 paths: ['/users'],
                 permission: 'users.view',
             },
             {
-                label: 'Tai khoan',
+                label: 'Tài khoản',
                 href: '/profile',
                 paths: ['/profile'],
             },
