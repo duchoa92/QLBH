@@ -33,8 +33,8 @@ class ProductRepository extends BaseRepository
         $search = request('search');
         $categoryId = request('category_id');
         $brandId = request('brand_id');
-        $stock = request('stock'); // in_stock | out_stock
-        $status = request('status'); // active | inactive
+        $stock = request('stock');
+        $status = request('status');
 
         return $this->model
             ->query()
@@ -45,9 +45,9 @@ class ProductRepository extends BaseRepository
             ])
 
             /*
-            |--------------------------------------------------------------------------
-            | FILTER (CHẠY TRƯỚC SEARCH)
-            |--------------------------------------------------------------------------
+            |------------------------------------------------------------------
+            | FILTER
+            |------------------------------------------------------------------
             */
 
             ->when($categoryId, fn($q) =>
@@ -63,7 +63,7 @@ class ProductRepository extends BaseRepository
             )
 
             ->when($stock === 'out_stock', fn($q) =>
-                $q->where('stock', '=', 0)
+                $q->where('stock', 0)
             )
 
             ->when($status === 'active', fn($q) =>
@@ -75,43 +75,41 @@ class ProductRepository extends BaseRepository
             )
 
             /*
-            |--------------------------------------------------------------------------
-            | SEARCH (GIỮ NGUYÊN LOGIC CỦA BẠN)
-            |--------------------------------------------------------------------------
+            |------------------------------------------------------------------
+            | SEARCH (FIX CHUẨN)
+            |------------------------------------------------------------------
             */
 
             ->when($search, function ($query) use ($search) {
 
                 $search = trim($search);
 
-                // 👉 IMEI
-                if (preg_match('/^\d{6,}$/', $search)) {
-                    $query->whereHas('imeis', function ($q) use ($search) {
-                        $q->where('imei', 'like', "%$search%");
-                    });
-                    return;
-                }
+                $query->where(function ($q) use ($search) {
 
-                // 👉 FULLTEXT
-                $terms = explode(' ', $search);
+                    // 👉 IMEI (không return nữa)
+                    if (preg_match('/^\d{6,}$/', $search)) {
+                        $q->orWhereHas('imeis', function ($imeiQuery) use ($search) {
+                            $imeiQuery->where('imei', 'like', "%$search%");
+                        });
+                    }
 
-                $booleanSearch = collect($terms)
-                    ->filter()
-                    ->map(fn($t) => '+' . $t . '*')
-                    ->implode(' ');
+                    // 👉 FULLTEXT
+                    $terms = explode(' ', $search);
 
-                $query->where(function ($q) use ($search, $booleanSearch) {
+                    $booleanSearch = collect($terms)
+                        ->filter()
+                        ->map(fn($t) => '+' . $t . '*')
+                        ->implode(' ');
 
                     if ($booleanSearch) {
-                        $q->whereRaw(
+                        $q->orWhereRaw(
                             "MATCH(search_text) AGAINST(? IN BOOLEAN MODE)",
                             [$booleanSearch]
                         );
                     }
 
-                    // fallback cho từ ngắn
+                    // 👉 fallback (RẤT QUAN TRỌNG)
                     $q->orWhere('search_text', 'like', "%$search%");
-
                     $q->orWhere('barcode', 'like', "%$search%");
 
                     $q->orWhereHas('category', function ($catQuery) use ($search) {
@@ -123,10 +121,34 @@ class ProductRepository extends BaseRepository
                     });
 
                 });
-
             })
 
-            ->latest()
+
+            // Sắp xếp
+            // SORT (fix chuẩn)
+            ->when(request('sort_by'), function ($q) {
+
+                $allowedSorts = [
+                    'name',
+                    'sell_price',
+                    'stock',
+                    'created_at'
+                ];
+
+                $sortBy = request('sort_by');
+                $sortOrder = request('sort_order', 'asc');
+
+                if (in_array($sortBy, $allowedSorts)) {
+                    $q->orderBy($sortBy, $sortOrder);
+                }
+
+            }, function ($q) {
+                // default sort
+                $q->orderByDesc('created_at');
+            })
+
+            
+            
             ->paginate($perPage)
             ->withQueryString();
     }

@@ -14,7 +14,7 @@ const props = defineProps({
 
 /*
 |--------------------------------------------------------------------------
-| FILTER STATE (CHỈ DÙNG 1 OBJECT)
+| STATE
 |--------------------------------------------------------------------------
 */
 const filters = ref({
@@ -22,16 +22,19 @@ const filters = ref({
     category_id: props.filters?.category_id || '',
     brand_id: props.filters?.brand_id || '',
     stock: props.filters?.stock || '',
-    status: props.filters?.status || ''
+    status: props.filters?.status || '',
+    sort_by: props.filters?.sort_by || 'id',
+    sort_order: props.filters?.sort_order || 'desc'
 })
+
+const selected = ref([]) // checkbox hàng loạt
+const loading = ref(false)
 
 /*
 |--------------------------------------------------------------------------
-| SEARCH SERVER (REALTIME KHÔNG RELOAD)
+| SEARCH REALTIME
 |--------------------------------------------------------------------------
 */
-const loading = ref(false)
-
 const searchServer = debounce(() => {
     router.get(route('products.index'), filters.value, {
         preserveState: true,
@@ -43,31 +46,39 @@ const searchServer = debounce(() => {
     })
 }, 300)
 
-// 👇 WATCH TOÀN BỘ FILTER
-watch(filters, () => {
-    searchServer()
-}, { deep: true })
+watch(filters, searchServer, { deep: true })
+
+/*
+|--------------------------------------------------------------------------
+| SORT
+|--------------------------------------------------------------------------
+*/
+const sort = (field) => {
+    if (filters.value.sort_by === field) {
+        filters.value.sort_order =
+            filters.value.sort_order === 'asc' ? 'desc' : 'asc'
+    } else {
+        filters.value.sort_by = field
+        filters.value.sort_order = 'asc'
+    }
+}
 
 /*
 |--------------------------------------------------------------------------
 | HELPERS
 |--------------------------------------------------------------------------
 */
-const money = (value) => {
-    return Number(value || 0).toLocaleString('vi-VN')
-}
+const money = (value) => Number(value || 0).toLocaleString('vi-VN')
 
 const destroy = (id) => {
-    if (!confirm('Xóa sản phẩm này?')) return
+    if (!confirm('Xóa sản phẩm?')) return
     router.delete(route('products.destroy', id))
 }
 
-// highlight nhiều từ
 const highlight = (text) => {
     if (!text || !filters.value.search) return text || ''
 
     const words = filters.value.search.trim().split(' ').filter(Boolean)
-
     let result = text
 
     words.forEach(word => {
@@ -81,11 +92,6 @@ const highlight = (text) => {
     return result
 }
 
-/*
-|--------------------------------------------------------------------------
-| CHỈ HIỂN THỊ IMEI MATCH (QUAN TRỌNG)
-|--------------------------------------------------------------------------
-*/
 const matchedImeis = (product) => {
     const kw = filters.value.search?.trim().toLowerCase()
     if (!kw) return []
@@ -94,6 +100,21 @@ const matchedImeis = (product) => {
         i.imei?.toLowerCase().includes(kw)
     )
 }
+
+/*
+|--------------------------------------------------------------------------
+| SELECT ALL
+|--------------------------------------------------------------------------
+*/
+const toggleAll = (e) => {
+    if (e.target.checked) {
+        selected.value = props.products.data.map(p => p.id)
+    } else {
+        selected.value = []
+    }
+}
+
+
 </script>
 
 <template>
@@ -101,123 +122,142 @@ const matchedImeis = (product) => {
 
     <!-- HEADER -->
     <div class="flex justify-between items-center">
-        <h1 class="text-2xl font-bold">Sản phẩm</h1>
+        <div>
+            <h1 class="text-2xl font-bold">Hàng hóa</h1>
+            <p class="text-sm text-gray-500">Quản lý hàng hóa của bạn</p>
+        </div>
 
         <div class="flex gap-2">
-            <Link :href="route('products.trash')" class="px-3 py-2 bg-red-100 text-red-700 rounded">
-                Thùng rác
-            </Link>
-            <Link :href="route('products.create')" class="px-3 py-2 bg-blue-600 text-white rounded">
-                Thêm
-            </Link>
+            <Link :href="route('products.create')" class="btn-green">+ Thêm</Link>
+            <button class="btn-green">Nhập Excel</button>
+            <button class="btn-green">Xuất Excel</button>
+            <button class="btn-green">In tem</button>
+            <Link :href="route('products.trash')" class="btn-green">Thùng rác</Link>
         </div>
     </div>
 
     <!-- SEARCH -->
-    <div class="relative">
-        <FloatingInput
-            v-model="filters.search"
-            label="Tìm sản phẩm, SKU, IMEI..."
-        />
+    <div class="bg-white p-4 rounded shadow">
+        <FloatingInput v-model="filters.search" label="Tìm sản phẩm, SKU, IMEI..." />
 
-        <div v-if="loading" class="absolute right-3 top-1/2 -translate-y-1/2">
-            <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <div v-if="loading" class="mt-2 text-xs text-blue-500">Đang tìm...</div>
+
+        <!-- FILTER -->
+        <div class="flex gap-2 mt-3">
+            <select v-model="filters.category_id" class="input">
+                <option value="">Danh mục</option>
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+
+            <select v-model="filters.brand_id" class="input">
+                <option value="">Thương hiệu</option>
+                <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+            </select>
+
+            <select v-model="filters.stock" class="input">
+                <option value="">Tồn kho</option>
+                <option value="in_stock">Còn hàng</option>
+                <option value="out_stock">Hết hàng</option>
+            </select>
         </div>
     </div>
 
-    <!-- FILTER -->
-    <div class="flex gap-2">
-        <select v-model="filters.category_id">
-            <option value="">Danh mục</option>
-            <option v-for="c in categories" :key="c.id" :value="c.id">
-                {{ c.name }}
-            </option>
-        </select>
-
-        <select v-model="filters.brand_id">
-            <option value="">Thương hiệu</option>
-            <option v-for="b in brands" :key="b.id" :value="b.id">
-                {{ b.name }}
-            </option>
-        </select>
-
-        <select v-model="filters.stock">
-            <option value="">Tồn kho</option>
-            <option value="in_stock">Còn hàng</option>
-            <option value="out_stock">Hết hàng</option>
-        </select>
-
-        <select v-model="filters.status">
-            <option value="">Trạng thái</option>
-            <option value="active">Đang bán</option>
-            <option value="inactive">Ngưng</option>
-        </select>
-    </div>
-
-    <!-- RESULT INFO -->
-    <div v-if="filters.search" class="text-sm text-gray-500 flex items-center gap-2">
-        <ScanSearch />
-        <span>Kết quả:</span>
-        <b>{{ filters.search }}</b>
-        <span>({{ products.total }})</span>
+    <!-- BULK ACTION -->
+    <div v-if="selected.length" class="bg-yellow-100 p-2 rounded text-sm">
+        Đã chọn {{ selected.length }} sản phẩm
+        <button class="ml-3 text-red-600">Xóa hàng loạt</button>
     </div>
 
     <!-- TABLE -->
-    <table class="w-full text-sm border">
-        <thead class="bg-gray-100">
-            <tr>
-                <th class="p-2 text-left">Sản phẩm</th>
-                <th>Danh mục</th>
-                <th>Brand</th>
-                <th>Giá</th>
-                <th>Tồn</th>
-                <th></th>
-            </tr>
-        </thead>
+    <div class="bg-white rounded shadow overflow-hidden">
+        <table class="w-full text-sm">
 
-        <tbody>
-            <tr v-for="product in products.data" :key="product.id">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="p-2">
+                        <input type="checkbox" @change="toggleAll">
+                    </th>
 
-                <td class="p-2">
-                    <div v-html="highlight(product.name)"></div>
+                    <th @click="sort('id')" class="cursor-pointer">ID</th>
+                    <th @click="sort('name')" class="cursor-pointer text-left">Tên hàng hóa</th>
+                    <th @click="sort('sell_price')" class="cursor-pointer">Giá bán</th>
+                    <th>Tồn kho</th>
+                    <th></th>
+                </tr>
+            </thead>
 
-                    <div class="text-xs text-gray-500">
-                        SKU: <span v-html="highlight(product.sku)"></span>
-                    </div>
+            <tbody>
+                <tr v-for="p in products.data" :key="p.id" class="border-t hover:bg-gray-50">
 
-                    <!-- ✅ CHỈ HIỆN IMEI MATCH -->
-                    <div v-if="matchedImeis(product).length">
-                        <div v-for="imei in matchedImeis(product)" :key="imei.id" class="text-xs text-gray-500">
-                            IMEI:
-                            <span v-html="highlight(imei.imei)"></span>
+                    <td class="p-2">
+                        <input type="checkbox" v-model="selected" :value="p.id">
+                    </td>
+
+                    <td>{{ p.id }}</td>
+
+                    <td class="p-2">
+                        <div v-html="highlight(p.name)"></div>
+
+                        <div class="text-xs text-gray-500">
+                            SKU: <span v-html="highlight(p.sku)"></span>
                         </div>
-                    </div>
-                </td>
 
-                <td v-html="highlight(product.category?.name)"></td>
-                <td v-html="highlight(product.brand?.name)"></td>
+                        <!-- IMEI MATCH ONLY -->
+                        <div v-if="filters.search && matchedImeis(p).length">
+                            <div
+                                v-for="imei in matchedImeis(p)"
+                                :key="imei.id"
+                                class="text-xs text-gray-500"
+                            >
+                                IMEI:
+                                <span v-html="highlight(imei.imei)"></span>
+                            </div>
+                        </div>
+                    </td>
 
-                <td>{{ money(product.sell_price) }}</td>
+                    <td>{{ money(p.sell_price) }}</td>
 
-                <td>{{ product.stock }}</td>
+                    <td>
+                        <span class="px-2 py-1 text-xs rounded"
+                              :class="p.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                            {{ p.stock }}
+                        </span>
+                    </td>
 
-                <td>
-                    <div class="flex gap-2">
-                        <Link :href="route('products.show', product.id)">
-                            <Eye size="16"/>
-                        </Link>
-                        <Link :href="route('products.edit', product.id)">
-                            <Pencil size="16"/>
-                        </Link>
-                        <button @click="destroy(product.id)">
-                            <Trash size="16"/>
-                        </button>
-                    </div>
-                </td>
+                    <td>
+                        <div class="flex gap-2">
+                            <Link :href="route('products.show', p.id)">
+                                <Eye size="16"/>
+                            </Link>
+                            <Link :href="route('products.edit', p.id)">
+                                <Pencil size="16"/>
+                            </Link>
+                            <button @click="destroy(p.id)">
+                                <Trash size="16"/>
+                            </button>
+                        </div>
+                    </td>
 
-            </tr>
-        </tbody>
-    </table>
+                </tr>
+
+                <tr v-if="!products.data.length">
+                    <td colspan="6" class="text-center p-4 text-gray-500">
+                        Không có dữ liệu
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 
 </div>
 </template>
+
+<style scoped>
+.btn-green {
+    @apply px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700;
+}
+
+.input {
+    @apply border px-2 py-1 rounded text-sm;
+}
+</style>
