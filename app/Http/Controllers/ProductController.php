@@ -11,27 +11,30 @@ use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Brand;
+use App\Repositories\Product\ProductRepository;
 
 
 class ProductController extends Controller
 {
     public function __construct(
-        protected ProductService $service
-    ) {}
+    protected ProductService $service,
+    protected ProductRepository $productRepository
+) {}
 
-    public function index(): Response
+    public function index()
     {
         return Inertia::render('Products/Index', [
-            'products' => $this->service->paginate(),
+            'products' => $this->productRepository->paginate(),
 
-            // 👉 thêm 2 cái này
-            'filters' => [
-                'search' => request('search')
-            ],
-            'isSearching' => filled(request('search')),
+            'filters' => request()->only([
+                'search',
+                'category_id',
+                'brand_id',
+                'stock'
+            ]),
 
-            'categories' => Category::select('id', 'name')->get(),
-            'brands' => Brand::select('id', 'name')->get(),
+            'categories' => Category::select('id','name')->get(),
+            'brands' => Brand::select('id','name')->get(),
         ]);
     }
 

@@ -99,13 +99,12 @@ class Product extends Model
     protected static function booted()
     {
         static::saving(function ($product) {
-            $product->search_text = implode(' ', [
-                $product->name,
-                $product->sku,
-                $product->barcode,
-                optional($product->category)->name,
-                optional($product->brand)->name,
-            ]);
+            $product->search_text = strtolower(
+            $product->name . ' ' .
+            $product->sku . ' ' .
+            optional($product->category)->name . ' ' .
+            optional($product->brand)->name
+        );
         });
     }
 
