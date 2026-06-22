@@ -160,7 +160,8 @@ const bulkDelete = () => {
     if (!confirm(`Xóa ${selectedIds.value.length} sản phẩm?`)) return
 
     router.post(route('products.bulkForceDelete'), {
-        data: { ids: selectedIds.value },
+        ids: selectedIds.value // ✅ ĐÚNG
+    }, {
         preserveScroll: true,
         onSuccess: () => selectedIds.value = []
     })

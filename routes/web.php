@@ -174,10 +174,7 @@ Route::middleware(['auth'])->group(function () {
         ->name('products.update');
         
     // Chuyển vào thùng rác
-    Route::delete(
-        '/products/{product}',
-        [ProductController::class, 'destroy']
-    )
+    Route::delete('/products/{product}',[ProductController::class, 'destroy'])
         ->middleware('permission:products.delete')
         ->name('products.destroy');
 
