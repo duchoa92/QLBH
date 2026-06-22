@@ -16,6 +16,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SupplierController;
 
+
 /*
 |--------------------------------------------------------------------------
 | Welcome
@@ -171,27 +172,40 @@ Route::middleware(['auth'])->group(function () {
     )
         ->middleware('permission:products.edit')
         ->name('products.update');
-    // Xóa sản phẩm
+        
+    // Chuyển vào thùng rác
     Route::delete(
         '/products/{product}',
         [ProductController::class, 'destroy']
     )
         ->middleware('permission:products.delete')
         ->name('products.destroy');
-    // Hiển thị sản phẩm đã xóa
+
+    // Hiển thị sản phẩm trong thùng rác
     Route::get(
         '/products-trash',
         [ProductController::class, 'trash']
     )
         ->middleware('permission:products.view')
         ->name('products.trash');
+
+    // Chuyển nhiều sản phẩm vào thùng rác
+    Route::delete('/products/bulk-delete', [ProductController::class, 'bulkDelete'])
+        ->name('products.bulkDelete');
     // Khôi phục sản phẩm
-    Route::post(
-        '/products/{id}/restore',
-        [ProductController::class, 'restore']
-    )
+    Route::post('/products/{id}/restore', [ProductController::class, 'restore'])
         ->middleware('permission:products.edit')
         ->name('products.restore');
+    // Xóa hẳn sản phẩm
+    Route::delete('/products/{id}/force-delete', [ProductController::class, 'forceDelete'])
+        ->name('products.forceDelete');
+    // Khôi phục nhiều sản phẩm
+    Route::post('/products/bulk-restore', [ProductController::class, 'bulkRestore'])
+        ->name('products.bulkRestore');
+    // Xóa Nhiều
+    Route::post('/products/bulk-force-delete', [ProductController::class, 'bulkForceDelete'])
+        ->name('products.bulkForceDelete');
+    
     // Hiển thị chi tiết sản phẩm
     Route::get(
         '/products/{product}',
@@ -199,6 +213,13 @@ Route::middleware(['auth'])->group(function () {
     )
         ->middleware('permission:products.view')
         ->name('products.show');
+
+    // In tem sp
+    Route::post('/products/print-imei', [ProductController::class, 'printImei'])
+    ->name('products.printImei');
+
+
+
 
     /*
     |--------------------------------------------------------------------------

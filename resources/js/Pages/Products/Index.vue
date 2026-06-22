@@ -3,7 +3,8 @@ import { ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { debounce } from 'lodash'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
-import { Trash, ScanSearch, Eye, Pencil } from 'lucide-vue-next'
+import SortHeader from '@/Components/UI/SortHeader.vue'
+import { Trash, Eye, Pencil } from 'lucide-vue-next'
 
 const props = defineProps({
     products: Object,
@@ -11,6 +12,8 @@ const props = defineProps({
     categories: Array,
     brands: Array
 })
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -27,8 +30,8 @@ const filters = ref({
     sort_order: props.filters?.sort_order || 'desc'
 })
 
-const selected = ref([]) // checkbox hàng loạt
 const loading = ref(false)
+const bulkAction = ref('')
 
 /*
 |--------------------------------------------------------------------------
@@ -53,14 +56,38 @@ watch(filters, searchServer, { deep: true })
 | SORT
 |--------------------------------------------------------------------------
 */
+const sortBy = ref(props.filters?.sort_by || '')
+const sortOrder = ref(props.filters?.sort_order || 'asc')
+
+// Check trạng thái sort
+const isSorted = (field) => {
+    return filters.value.sort_by === field
+}
+
+
+const sortIcon = (field) => {
+    if (!isSorted(field)) return 'default'
+    return filters.value.sort_order === 'asc' ? 'asc' : 'desc'
+}
+
+
 const sort = (field) => {
-    if (filters.value.sort_by === field) {
-        filters.value.sort_order =
-            filters.value.sort_order === 'asc' ? 'desc' : 'asc'
+    if (sortBy.value === field) {
+        sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
     } else {
-        filters.value.sort_by = field
-        filters.value.sort_order = 'asc'
+        sortBy.value = field
+        sortOrder.value = 'asc'
     }
+
+    filters.value.sort_by = sortBy.value
+    filters.value.sort_order = sortOrder.value
+
+    searchServer()
+}
+
+const handleSort = (data) => {
+    filters.value.sort_by = data.sort_by
+    filters.value.sort_order = data.sort_order
 }
 
 /*
@@ -103,17 +130,50 @@ const matchedImeis = (product) => {
 
 /*
 |--------------------------------------------------------------------------
-| SELECT ALL
+| SELECT
 |--------------------------------------------------------------------------
 */
+const selectedIds = ref([])
+
+// chọn tất cả
 const toggleAll = (e) => {
     if (e.target.checked) {
-        selected.value = props.products.data.map(p => p.id)
+        selectedIds.value = props.products.data.map(p => p.id)
     } else {
-        selected.value = []
+        selectedIds.value = []
     }
 }
 
+// chọn từng dòng
+const toggleOne = (id) => {
+    if (selectedIds.value.includes(id)) {
+        selectedIds.value = selectedIds.value.filter(i => i !== id)
+    } else {
+        selectedIds.value.push(id)
+    }
+}
+
+// Xóa
+const bulkDelete = () => {
+    if (!selectedIds.value.length) return
+
+    if (!confirm(`Xóa ${selectedIds.value.length} sản phẩm?`)) return
+
+    router.post(route('products.bulkForceDelete'), {
+        data: { ids: selectedIds.value },
+        preserveScroll: true,
+        onSuccess: () => selectedIds.value = []
+    })
+}
+
+// In Tem
+const printImei = () => {
+    if (!selectedIds.value.length) return
+
+    router.post(route('products.printImei'), {
+        ids: selectedIds.value
+    })
+}
 
 </script>
 
@@ -163,36 +223,79 @@ const toggleAll = (e) => {
     </div>
 
     <!-- BULK ACTION -->
-    <div v-if="selected.length" class="bg-yellow-100 p-2 rounded text-sm">
-        Đã chọn {{ selected.length }} sản phẩm
-        <button class="ml-3 text-red-600">Xóa hàng loạt</button>
+   <div v-if="selectedIds.length" class="bg-blue-50 border p-2 flex justify-between items-center">
+        <div class="text-sm">
+            Đã chọn <b>{{ selectedIds.length }}</b> sản phẩm
+        </div>
+
+        <div class="flex gap-2">
+            <button @click="bulkDelete" class="px-3 py-1 bg-red-500 text-white rounded">
+                Xóa
+            </button>
+
+            <button
+                @click="printImei"
+                class="px-3 py-1 bg-purple-600 text-white rounded"
+            >
+                In tem IMEI
+            </button>
+        </div>
     </div>
 
     <!-- TABLE -->
     <div class="bg-white rounded shadow overflow-hidden">
         <table class="w-full text-sm">
 
-            <thead class="bg-gray-100">
-                <tr>
-                    <th class="p-2">
-                        <input type="checkbox" @change="toggleAll">
-                    </th>
+            <thead class="bg-gray-100 text-sm">
+            <tr>
+                <th class="p-2">
+                    <input type="checkbox" @change="toggleAll">
+                </th>
 
-                    <th @click="sort('id')" class="cursor-pointer">ID</th>
-                    <th @click="sort('name')" class="cursor-pointer text-left">Tên hàng hóa</th>
-                    <th @click="sort('sell_price')" class="cursor-pointer">Giá bán</th>
-                    <th>Tồn kho</th>
-                    <th></th>
-                </tr>
+                <SortHeader
+                    label="ID"
+                    field="id"
+                    :currentSort="filters.sort_by"
+                    :currentOrder="filters.sort_order"
+                    @sort="handleSort"
+                />
+
+                <SortHeader
+                    label="Tên hàng"
+                    field="name"
+                    :currentSort="filters.sort_by"
+                    :currentOrder="filters.sort_order"
+                    @sort="handleSort"
+                />
+
+                <SortHeader
+                    label="Giá"
+                    field="sell_price"
+                    :currentSort="filters.sort_by"
+                    :currentOrder="filters.sort_order"
+                    @sort="handleSort"
+                />
+
+                <SortHeader
+                    label="Tồn kho"
+                    field="stock"
+                    :currentSort="filters.sort_by"
+                    :currentOrder="filters.sort_order"
+                    @sort="handleSort" />
+                <th></th>
+            </tr>
+
             </thead>
 
             <tbody>
                 <tr v-for="p in products.data" :key="p.id" class="border-t hover:bg-gray-50">
-
-                    <td class="p-2">
-                        <input type="checkbox" v-model="selected" :value="p.id">
+                   <td class="p-2">
+                        <input
+                            type="checkbox"
+                            :checked="selectedIds.includes(p.id)"
+                            @change="toggleOne(p.id)"
+                        >
                     </td>
-
                     <td>{{ p.id }}</td>
 
                     <td class="p-2">

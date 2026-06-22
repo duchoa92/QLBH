@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Support\Searchable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+
 class Product extends Model
 {
     use SoftDeletes, Searchable;
@@ -141,6 +142,18 @@ class Product extends Model
                     '%'
                 );
         });
+    }
+
+
+    // Check xem có quan hệ DB nào không
+    public function canForceDelete(): bool
+    {
+        // check quan hệ (tùy DB của bạn)
+        return !(
+            $this->saleItems()->exists()
+            || $this->purchaseItems()->exists()
+            || $this->imeis()->whereNotNull('sold_at')->exists()
+        );
     }
 
 }

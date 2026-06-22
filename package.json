@@ -23,6 +23,7 @@
     "dependencies": {
         "@headlessui/vue": "^1.7.23",
         "@zxing/browser": "^0.2.0",
+        "jsbarcode": "^3.12.3",
         "lodash": "^4.18.1",
         "lucide-vue-next": "^1.0.0",
         "mitt": "^3.0.1",

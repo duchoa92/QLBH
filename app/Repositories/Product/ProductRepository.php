@@ -13,19 +13,19 @@ class ProductRepository extends BaseRepository
         $this->model = $model;
     }
 
-    // Hiển thị sản phẩm đã xóa
+    // Thùng rác
     public function trash($perPage = 10)
     {
         return $this->model
             ->onlyTrashed()
-
+            ->with([
+                'category:id,name',
+                'brand:id,name'
+            ])
             ->latest()
-
             ->paginate($perPage)
-
             ->withQueryString();
     }
-
    
 
     public function paginate(int $perPage = 10): LengthAwarePaginator
@@ -125,28 +125,24 @@ class ProductRepository extends BaseRepository
 
 
             // Sắp xếp
-            // SORT (fix chuẩn)
             ->when(request('sort_by'), function ($q) {
 
-                $allowedSorts = [
-                    'name',
-                    'sell_price',
-                    'stock',
-                    'created_at'
-                ];
+                $allowed = ['id', 'name', 'sell_price', 'stock'];
 
                 $sortBy = request('sort_by');
-                $sortOrder = request('sort_order', 'asc');
 
-                if (in_array($sortBy, $allowedSorts)) {
-                    $q->orderBy($sortBy, $sortOrder);
+                if (!in_array($sortBy, $allowed)) {
+                    return;
                 }
 
-            }, function ($q) {
-                // default sort
-                $q->orderByDesc('created_at');
-            })
+                $q->orderBy(
+                    $sortBy,
+                    request('sort_order', 'asc')
+                );
 
+            }, function ($q) {
+                $q->latest();
+            })
             
             
             ->paginate($perPage)

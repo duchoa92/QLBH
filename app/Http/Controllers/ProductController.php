@@ -166,33 +166,93 @@ class ProductController extends Controller
             );
     }
 
-    // Hiển thị sản phẩm đã xóa
+    // Thùng rác
     public function trash(): Response
     {
-        return Inertia::render(
-            'Products/Trash',
-            [
-                'products' => $this->service->trash()
-                    ->onlyTrashed()
-                    ->latest()
-                    ->paginate(10)
-                    ->withQueryString(),
-            ]
-        );
+        return Inertia::render('Products/Trash', [
+            'products' => $this->productRepository->trash()
+        ]);
     }
 
     // Khôi phục sản phẩm
-    public function restore(
-        int $id
-    ): RedirectResponse {
+    public function restore(int $id): RedirectResponse
+    {
+        Product::onlyTrashed()->findOrFail($id)->restore();
 
-        $this->service->restore($id);
+        return back()->with('success', 'Đã khôi phục');
+    }
 
-        return redirect()
-            ->back()
-            ->with(
-                'success',
-                'Khôi phục thành công'
-            );
+    // Kiểm tra an toàn trước khi xóa
+    public function forceDelete(int $id)
+    {
+        $product = Product::withTrashed()->findOrFail($id);
+
+        if (!$product->canForceDelete()) {
+            return back()->with('error', 'Sản phẩm đã phát sinh dữ liệu, không thể xóa vĩnh viễn');
+        }
+
+        $product->forceDelete();
+
+        return back()->with('success', 'Đã xóa vĩnh viễn');
+    }
+
+    // Bulk restore
+    public function bulkRestore()
+    {
+        request()->validate([
+            'ids' => 'required|array'
+        ]);
+
+        Product::onlyTrashed()
+            ->whereIn('id', request('ids'))
+            ->restore();
+
+        return back()->with('success', 'Khôi phục thành công');
+    }
+
+    public function bulkForceDelete()
+    {
+        $ids = request('ids', []);
+
+        foreach ($ids as $id) {
+            $product = Product::withTrashed()->find($id);
+
+            if ($product && $product->canForceDelete()) {
+                $product->forceDelete();
+            }
+        }
+
+        return back()->with('success', 'Đã xóa vĩnh viễn (các sản phẩm hợp lệ)');
+    }
+
+    // Xóa nhiều SP
+    public function bulkDelete()
+    {
+        $ids = request('ids', []);
+
+        foreach ($ids as $id) {
+            $product = Product::find($id);
+            if ($product) {
+                $this->service->delete($product); // 👉 dùng lại logic cũ
+            }
+        }
+
+        return back()->with('success', 'Đã chuyển các mục vào thùng rác');
+    }
+
+
+
+    // In tem
+    public function printImei()
+    {
+        $ids = request('ids', []);
+
+        $products = Product::with('imeis')
+            ->whereIn('id', $ids)
+            ->get();
+
+        return Inertia::render('Products/PrintImei', [
+            'products' => $products
+        ]);
     }
 }
