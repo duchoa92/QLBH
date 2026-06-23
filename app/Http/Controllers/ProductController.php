@@ -151,7 +151,7 @@ class ProductController extends Controller
 
 
 
-   // Xóa sản phẩm
+   // Chuyển vào thùng rác
     public function destroy(
         Product $product
     ): RedirectResponse {
@@ -162,7 +162,7 @@ class ProductController extends Controller
             ->back()
             ->with(
                 'success',
-                'Xóa thành công'
+                'Đã chuyển vào thùng rác!'
             );
     }
 

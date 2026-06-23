@@ -48,6 +48,7 @@ createInertiaApp({
                 'Products/',
                 'Repairs/',
                 'Sales/',
+                'Suppliers/',
             ]
 
 

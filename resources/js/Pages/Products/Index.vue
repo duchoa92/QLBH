@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { debounce } from 'lodash'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -49,7 +49,10 @@ const searchServer = debounce(() => {
 }, 300)
 
 watch(filters, searchServer, { deep: true })
-
+watch(() => props.products.data, (newData) => {
+    const validIds = newData.map(p => p.id)
+    selectedIds.value = selectedIds.value.filter(id => validIds.includes(id))
+})
 
 
 // Check trạng thái sort
@@ -68,8 +71,16 @@ const handleSort = (data) => {
 const money = (value) => Number(value || 0).toLocaleString('vi-VN')
 
 const destroy = (id) => {
-    if (!confirm('Xóa sản phẩm?')) return
-    router.delete(route('products.destroy', id))
+    if (!confirm('Chuyển sản phẩm vào thùng rác?')) return
+
+    router.delete(route('products.destroy', id), {
+        preserveScroll: true,
+        only: ['products', 'flash'],
+        onSuccess: () => {
+            // ❗ XÓA ID khỏi selectedIds
+            selectedIds.value = selectedIds.value.filter(i => i !== id)
+        }
+    })
 }
 
 const highlight = (text) => {
@@ -105,12 +116,36 @@ const matchedImeis = (product) => {
 */
 const selectedIds = ref([])
 
+// tất cả id của page hiện tại
+const pageIds = computed(() => props.products.data.map(p => p.id))
+
+// đã chọn hết chưa
+const isAllSelected = computed(() =>
+    pageIds.value.length > 0 &&
+    pageIds.value.every(id => selectedIds.value.includes(id))
+)
+
+// chọn 1 phần
+const allSelected = computed(() => {
+    return props.products.data.length &&
+        props.products.data.every(p => selectedIds.value.includes(p.id))
+})
+
+const isIndeterminate = computed(() => {
+    return selectedIds.value.length > 0 && !allSelected.value
+})
+
 // chọn tất cả
-const toggleAll = (e) => {
-    if (e.target.checked) {
-        selectedIds.value = props.products.data.map(p => p.id)
+const toggleAll = () => {
+    if (allSelected.value) {
+        // bỏ chọn tất cả trong page
+        selectedIds.value = selectedIds.value.filter(
+            id => !props.products.data.some(p => p.id === id)
+        )
     } else {
-        selectedIds.value = []
+        // thêm tất cả trong page
+        const ids = props.products.data.map(p => p.id)
+        selectedIds.value = [...new Set([...selectedIds.value, ...ids])]
     }
 }
 
@@ -119,7 +154,7 @@ const toggleOne = (id) => {
     if (selectedIds.value.includes(id)) {
         selectedIds.value = selectedIds.value.filter(i => i !== id)
     } else {
-        selectedIds.value.push(id)
+        selectedIds.value = [...selectedIds.value, id]
     }
 }
 
@@ -133,6 +168,7 @@ const bulkDelete = () => {
         ids: selectedIds.value
     }, {
         preserveScroll: true,
+        only: ['products', 'flash'], // 👈 thêm dòng này
         onSuccess: () => {
             selectedIds.value = []
 
@@ -151,6 +187,7 @@ const printImei = () => {
         ids: selectedIds.value
     })
 }
+
 
 </script>
 
@@ -226,7 +263,12 @@ const printImei = () => {
             <thead class="bg-gray-100 text-sm">
             <tr>
                 <th class="p-2">
-                    <input type="checkbox" @change="toggleAll">
+                    <input
+                        type="checkbox"
+                        :checked="allSelected"
+                        :indeterminate="isIndeterminate"
+                        @change="toggleAll"
+                    />
                 </th>
 
                 <SortHeader
@@ -265,11 +307,12 @@ const printImei = () => {
             </thead>
 
             <tbody>
-                <tr v-for="p in products.data" :key="p.id"  class="border-t hover:bg-gray-50"  :class="selectedIds.includes(p.id) ? 'bg-blue-50' : ''">
+                <tr v-for="p in products.data" @click="toggleOne(p.id)" :key="p.id"  :class="['border-t hover:bg-gray-50', selectedIds.includes(p.id) ? 'bg-blue-50' : '']">
                    <td class="p-2">
                         <input
                             type="checkbox"
                             :checked="selectedIds.includes(p.id)"
+                            @click.stop
                             @change="toggleOne(p.id)"
                         >
                     </td>

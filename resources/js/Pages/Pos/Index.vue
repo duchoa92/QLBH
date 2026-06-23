@@ -1,8 +1,5 @@
 <script setup>
-import {
-    ref,
-    onMounted,
-} from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { useToast } from '@/Composables/useToast'
@@ -60,6 +57,10 @@ const onCustomerSelected = (customer) => {
     selectedCustomer.value = customer
 }
 
+const invoiceData = ref(null)
+
+const showInvoice = ref(false)
+
 // loading khi nhấn checkout để tránh việc click nhiều lần vào nút checkout
 const loading = ref(false)
 
@@ -107,11 +108,42 @@ const checkout = async (data) => {
     })
 }
 
+
+// Hiện popup thanh toán
+const showCheckoutModal = ref(false)
+
+// debug
+watch(
+    showCheckoutModal,
+    (value) => {
+
+        console.log(
+            'showCheckoutModal =',
+            value
+        )
+
+        console.trace()
+    }
+)
+
+const openCheckoutModal = () => {
+
+    if (!cart.value.length) {
+
+        errorToast('Giỏ hàng trống')
+
+        return
+    }
+
+    showCheckoutModal.value = true
+}
+
 useKeyboardShortcuts({
     cart,
     selectedCartIndex,
-    checkout: handleCheckout,
     clearCart,
+    showPaymentModal: showCheckoutModal,
+    checkout: openCheckoutModal,
 })
 
 useBarcodeScanner(
@@ -131,19 +163,7 @@ onMounted(() => {
 })
 
 
-// Hiện popup thanh toán
-const showCheckoutModal = ref(false)
-const openCheckoutModal = () => {
 
-    if (!cart.value.length) {
-
-        errorToast('Giỏ hàng trống')
-
-        return
-    }
-
-    showCheckoutModal.value = true
-}
 
 </script>
 

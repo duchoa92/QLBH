@@ -1,6 +1,6 @@
 <<script setup>
 
-import { ref, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 
 const props = defineProps({
@@ -56,23 +56,42 @@ const formatMoney = (value) => {
     ).toLocaleString('vi-VN')
 }
 
+const submitting = ref(false)
+
+
+
 const submit = () => {
+
+    if (submitting.value) {
+
+        return
+    }
+
+    submitting.value = true
 
     emit(
         'confirm',
         {
             payment_method: paymentMethod.value,
-
             paid_amount: Number(
                 paidAmount.value || 0
             ),
-
             note: note.value,
-
             pay_old_debt: payOldDebt.value,
         }
     )
 }
+
+watch(
+    () => props.show,
+    (value) => {
+
+        if (!value) {
+
+            submitting.value = false
+        }
+    }
+)
 
 </script>
 

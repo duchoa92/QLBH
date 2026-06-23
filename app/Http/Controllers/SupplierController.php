@@ -16,39 +16,30 @@ class SupplierController extends Controller
         Request $request
     ): Response {
 
-        $search = (string) $request->get(
-            'search',
-            ''
-        );
-
-        $keyword =
-            Supplier::normalizeSearch(
-                $search
-            );
+        $search = $request->string(
+            'search'
+        )->toString();
 
         $suppliers = Supplier::query()
 
             ->when(
                 $search,
-                function ($query)
-                use (
-                    $search,
-                    $keyword
+                function ($query) use (
+                    $search
                 ) {
 
                     $query->where(
-                        function ($sub)
+                        function ($subQuery)
                         use (
-                            $search,
-                            $keyword
+                            $search
                         ) {
 
-                            $sub
+                            $subQuery
 
                                 ->where(
-                                    'search_text',
+                                    'name',
                                     'like',
-                                    "%{$keyword}%"
+                                    "%{$search}%"
                                 )
 
                                 ->orWhere(
@@ -59,6 +50,12 @@ class SupplierController extends Controller
 
                                 ->orWhere(
                                     'email',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'code',
                                     'like',
                                     "%{$search}%"
                                 );
