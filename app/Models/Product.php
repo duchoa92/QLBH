@@ -144,16 +144,12 @@ class Product extends Model
         });
     }
 
-
     // Check xem có quan hệ DB nào không
-    public function canForceDelete(): bool
+    public function canForceDelete()
     {
-        // check quan hệ (tùy DB của bạn)
-        return !(
-            $this->saleItems()->exists()
-            || $this->purchaseItems()->exists()
-            || $this->imeis()->whereNotNull('sold_at')->exists()
-        );
+        return !\DB::table('sale_items')
+            ->where('product_id', $this->id)
+            ->exists();
     }
 
 }

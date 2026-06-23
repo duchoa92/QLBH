@@ -31,7 +31,6 @@ const filters = ref({
 })
 
 const loading = ref(false)
-const bulkAction = ref('')
 
 /*
 |--------------------------------------------------------------------------
@@ -51,39 +50,10 @@ const searchServer = debounce(() => {
 
 watch(filters, searchServer, { deep: true })
 
-/*
-|--------------------------------------------------------------------------
-| SORT
-|--------------------------------------------------------------------------
-*/
-const sortBy = ref(props.filters?.sort_by || '')
-const sortOrder = ref(props.filters?.sort_order || 'asc')
+
 
 // Check trạng thái sort
-const isSorted = (field) => {
-    return filters.value.sort_by === field
-}
 
-
-const sortIcon = (field) => {
-    if (!isSorted(field)) return 'default'
-    return filters.value.sort_order === 'asc' ? 'asc' : 'desc'
-}
-
-
-const sort = (field) => {
-    if (sortBy.value === field) {
-        sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
-    } else {
-        sortBy.value = field
-        sortOrder.value = 'asc'
-    }
-
-    filters.value.sort_by = sortBy.value
-    filters.value.sort_order = sortOrder.value
-
-    searchServer()
-}
 
 const handleSort = (data) => {
     filters.value.sort_by = data.sort_by
@@ -157,13 +127,19 @@ const toggleOne = (id) => {
 const bulkDelete = () => {
     if (!selectedIds.value.length) return
 
-    if (!confirm(`Xóa ${selectedIds.value.length} sản phẩm?`)) return
+    if (!confirm(`Chuyển ${selectedIds.value.length} sản phẩm vào thùng rác?`)) return
 
-    router.post(route('products.bulkForceDelete'), {
-        ids: selectedIds.value // ✅ ĐÚNG
+    router.post(route('products.bulkDelete'), {
+        ids: selectedIds.value
     }, {
         preserveScroll: true,
-        onSuccess: () => selectedIds.value = []
+        onSuccess: () => {
+            selectedIds.value = []
+
+            router.reload({
+                only: ['products']
+            })
+        }
     })
 }
 
@@ -231,7 +207,7 @@ const printImei = () => {
 
         <div class="flex gap-2">
             <button @click="bulkDelete" class="px-3 py-1 bg-red-500 text-white rounded">
-                Xóa
+                Chuyển vào thùng rác
             </button>
 
             <button
@@ -289,7 +265,7 @@ const printImei = () => {
             </thead>
 
             <tbody>
-                <tr v-for="p in products.data" :key="p.id" class="border-t hover:bg-gray-50">
+                <tr v-for="p in products.data" :key="p.id"  class="border-t hover:bg-gray-50"  :class="selectedIds.includes(p.id) ? 'bg-blue-50' : ''">
                    <td class="p-2">
                         <input
                             type="checkbox"

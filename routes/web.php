@@ -187,8 +187,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('products.trash');
 
     // Chuyển nhiều sản phẩm vào thùng rác
-    Route::delete('/products/bulk-delete', [ProductController::class, 'bulkDelete'])
-        ->name('products.bulkDelete');
+    Route::post('/products/bulk-delete', [ProductController::class, 'bulkDelete'])
+    ->name('products.bulkDelete');
     // Khôi phục sản phẩm
     Route::post('/products/{id}/restore', [ProductController::class, 'restore'])
         ->middleware('permission:products.edit')

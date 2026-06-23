@@ -212,34 +212,34 @@ class ProductController extends Controller
 
     public function bulkForceDelete()
     {
-        $ids = request('ids', []);
+        request()->validate([
+            'ids' => 'required|array'
+        ]);
 
-        foreach ($ids as $id) {
-            $product = Product::withTrashed()->find($id);
+        $products = Product::withTrashed()
+            ->whereIn('id', request('ids'))
+            ->get();
 
-            if ($product && $product->canForceDelete()) {
+        foreach ($products as $product) {
+            if ($product->canForceDelete()) {
                 $product->forceDelete();
             }
         }
 
-        return back()->with('success', 'Đã xóa vĩnh viễn (các sản phẩm hợp lệ)');
+        return back()->with('success', 'Đã xóa vĩnh viễn');
     }
 
     // Xóa nhiều SP
     public function bulkDelete()
     {
-        $ids = request('ids', []);
+        request()->validate([
+            'ids' => 'required|array'
+        ]);
 
-        foreach ($ids as $id) {
-            $product = Product::find($id);
-            if ($product) {
-                $this->service->delete($product); // 👉 dùng lại logic cũ
-            }
-        }
+        Product::whereIn('id', request('ids'))->delete();
 
-        return back()->with('success', 'Đã chuyển các mục vào thùng rác');
+        return back()->with('success', 'Đã chuyển vào thùng rác');
     }
-
 
 
     // In tem
