@@ -1,11 +1,11 @@
 import '../css/app.css';
 import './bootstrap';
 
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp} from '@inertiajs/vue3';
 import { Toaster } from 'vue-sonner';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
-import { createApp, h } from 'vue';
+import { createApp, h} from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
@@ -71,17 +71,22 @@ createInertiaApp({
 
     },
     setup({ el, App, props, plugin }) {
-        const app = createApp({
 
-            render: () => [
-                h(App, props),
-                h(Toaster, {
-                    richColors: true,
-                    position: 'top-right',
-                    closeButton: true,
-                }),
-            ],
-        })
+        const Root = {
+            setup() {
+
+                return () => [
+                    h(App, props),
+                    h(Toaster, {
+                        richColors: true,
+                        position: 'top-right',
+                        closeButton: true,
+                    }),
+                ]
+            }
+        }
+
+    const app = createApp(Root)
 
         app.component(
             'Toaster',

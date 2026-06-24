@@ -1,11 +1,9 @@
 <script setup>
-
 import { computed, ref, watch } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
-import { Toaster, toast } from 'vue-sonner'
+import { toast } from 'vue-sonner'
 import Sidebar from '@/Components/Sidebar.vue'
 
-const page = usePage()
 const sidebarOpen = ref(false)
 
 const currentTitle = computed(() => {
@@ -26,24 +24,17 @@ const currentTitle = computed(() => {
     return 'Dashboard'
 })
 
-watch(
-    () => page.props.flash?.success,
-    (message) => {
-
-        if (message) {
-            toast.success(message)
-        }
-    }
-)
+const page = usePage()
 
 watch(
-    () => page.props.flash?.error,
-    (message) => {
+    () => page.props.flash,
+    (flash) => {
+        if (!flash) return
 
-        if (message) {
-            toast.error(message)
-        }
-    }
+        if (flash.success) toast.success(flash.success)
+        if (flash.error) toast.error(flash.error)
+    },
+    { deep: true }
 )
 </script>
 
@@ -142,11 +133,11 @@ watch(
 
         </div>
 
-        <Toaster
+        <!-- <Toaster
             richColors
             position="top-right"
             closeButton
-        />
+        /> -->
 
     </div>
 

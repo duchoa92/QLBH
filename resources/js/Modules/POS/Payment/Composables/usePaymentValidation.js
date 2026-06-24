@@ -6,7 +6,7 @@ from '@/Modules/POS/Payment/Validators/paymentValidator'
 
 export function usePaymentValidation() {
 
-    const toast = useToast()
+   
 
     const validatePayment =
         ({

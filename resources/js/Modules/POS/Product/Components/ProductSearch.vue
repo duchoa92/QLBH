@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
-import { useToast } from '@/Composables/useToast'
+import { toast } from 'vue-sonner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -11,9 +11,6 @@ const emit = defineEmits([
     'product-scanned',
 ])
 
-const {
-    error: errorToast,
-} = useToast()
 
 const {
 
@@ -39,7 +36,7 @@ const selectProduct = (
         product.product_type === 'imei'
     ) {
 
-        errorToast(
+        toast.error(
             'Sản phẩm này phải quét IMEI'
         )
 
@@ -110,7 +107,7 @@ const scanImei = async () => {
             'Không tìm thấy sản phẩm'
 
 
-        errorToast(
+        toast.error(
             message
         )
 

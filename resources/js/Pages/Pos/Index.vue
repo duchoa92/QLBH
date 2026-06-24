@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
-import { useToast } from '@/Composables/useToast'
+import { toast } from 'vue-sonner'
 import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
 import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
 import { useCheckout } from '@/Modules/POS/Payment/Composables/useCheckout'
@@ -49,10 +49,6 @@ const {
     clearCart,
 )
 
-const {
-    error: errorToast,
-} = useToast()
-
 const onCustomerSelected = (customer) => {
     selectedCustomer.value = customer
 }
@@ -66,53 +62,46 @@ const loading = ref(false)
 
 const handleCheckout = async (data) => {
 
-    // debug
-    console.log('HANDLE START')
-
     if (!cart.value.length) {
-        errorToast('Giỏ hàng trống')
+
+        toast.error('Giỏ hàng trống')
+
         return
     }
 
     try {
+
         loading.value = true
 
         const res = await confirmCheckout({
             ...data,
             cart: cart.value
         })
-// debug
-console.log('AFTER API', res)
-        
-        if(!res) return
-        
-        //debug
-        console.log('BEFORE CLOSE')
+
         showCheckoutModal.value = false
 
-        // debug
-        console.log('AFTER CLOSE')
+        if (!res) {
+            return
+        }
 
         invoiceData.value = res
         showInvoice.value = true
 
+    } catch (error) {
 
-    } catch (e) {
-        // Để trống hoặc chỉ console.log(e) nếu file cấu hình chung Axios của bạn đã tự bật Toast lỗi
-        console.error(e);
-    }
-    finally {
+        console.error(error)
+
+    } finally {
+
         loading.value = false
     }
 }
 
+
 const checkout = async (data) => {
 
-    // debug
-     console.log('CHECKOUT')
-
     if (!cart.value.length) {
-        errorToast('Giỏ hàng trống')
+        toast.error('Giỏ hàng trống')
         return
     }
 
@@ -133,7 +122,7 @@ const openCheckoutModal = () => {
 
     if (!cart.value.length) {
 
-        errorToast('Giỏ hàng trống')
+        toast.error('Giỏ hàng trống')
 
         return
     }
@@ -156,7 +145,7 @@ useBarcodeScanner(
             addToCart(result.data)
         } catch (error) {
             console.error(error)
-            errorToast('Không tìm thấy sản phẩm với mã vạch này')
+            toast.error('Không tìm thấy sản phẩm với mã vạch này')
         }
     }
 )
@@ -230,6 +219,7 @@ watch(showCheckoutModal, (value) => {
     />
 
     <CheckoutModal
+        :loading="loading"
         :show="showCheckoutModal"
         :cart="cart"
         :grand-total="grandTotal"

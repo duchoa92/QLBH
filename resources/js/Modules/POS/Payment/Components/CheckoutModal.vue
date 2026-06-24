@@ -1,9 +1,10 @@
 <script setup>
 
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 
 const props = defineProps({
+    loading: Boolean,
     show: Boolean,
     grandTotal: Number,
     selectedCustomer: Object,
@@ -58,22 +59,9 @@ const formatMoney = (value) => {
     ).toLocaleString('vi-VN')
 }
 
-const submitting = ref(false)
-
 
 
 const submit = () => {
-
-    // debug
-    alert('submit clicked')
-    console.log('submit clicked')
-
-    if (submitting.value) {
-
-        return
-    }
-
-    submitting.value = true
 
     emit(
         'confirm',
@@ -119,17 +107,6 @@ const lineTotal = (item) => {
     return total
 }
 
-
-watch(
-    () => props.show,
-    (value) => {
-
-        if (!value) {
-
-            submitting.value = false
-        }
-    }
-)
 
 </script>
 
@@ -294,12 +271,11 @@ watch(
             </div>
 
             <button
+                :disabled="loading"
                 @click="submit"
                 class="w-full h-12 bg-green-600 text-white rounded-xl font-bold"
             >
-
-                Xác nhận thanh toán
-
+                {{ loading ? 'Đang xử lý...' : 'Xác nhận thanh toán' }}
             </button>
 
         </div>

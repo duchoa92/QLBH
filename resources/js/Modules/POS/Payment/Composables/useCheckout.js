@@ -1,4 +1,4 @@
-import { useToast } from '@/Composables/useToast'
+import { toast } from 'vue-sonner'
 import { useEventBus } from '@/Composables/useEventBus'
 import { paymentService } from '@/Modules/POS/Payment/Services/paymentService'
 
@@ -12,7 +12,7 @@ export function useCheckout(
     clearCart,
 ) {
 
-    const toast = useToast()
+
     const {
 
         emitEvent,

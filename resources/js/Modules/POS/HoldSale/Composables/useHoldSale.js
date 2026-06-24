@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 
-import { useToast }
-from '@/Composables/useToast'
+import { toast } from 'vue-sonner'
 import { holdSaleService } from '@/Modules/POS/HoldSale/Services/holdSaleService'
 
 
@@ -17,7 +16,7 @@ export function useHoldSale(
     clearCart,
 ) {
 
-    const toast = useToast()
+
 
     /*
     |--------------------------------------------------------------------------

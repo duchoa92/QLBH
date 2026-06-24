@@ -78,39 +78,32 @@ class PosController extends Controller
         ]);
 
         try {
-            // 2. Gọi Service với giá trị mặc định phòng hờ
+
             $sale = $service->checkout(
                 items: $request->items,
                 customerId: $request->customer_id,
                 paidAmount: $request->paid_amount ?? 0,
-                // Nếu $request->payment_method bị null, tự gán mặc định là 'cash' (tiền mặt)
-                paymentMethod: $request->payment_method ?? 'cash', 
+                paymentMethod: $request->payment_method ?? 'cash',
                 payOldDebt: (bool) $request->pay_old_debt,
                 userId: auth()->id(),
             );
 
-            // Load quan hệ để trả về dữ liệu đầy đủ
             $sale->load([
                 'items.product',
                 'items.productImei',
                 'customer',
             ]);
 
-        } 
-        
-        catch (\Exception $e) 
-        {
-
-            // Trả về dữ liệu hóa đơn sau khi thanh toán thành công
             return response()->json([
                 'success' => true,
                 'data' => [
                     'id' => $sale->id,
                     'code' => $sale->code,
                     'customer' => [
-                        'full_name' => $sale->customer->full_name ?? 'Khách lẻ',
+                        'full_name' => $sale->customer?->full_name ?? 'Khách lẻ',
                     ],
                     'items' => $sale->items->map(function ($item) {
+
                         return [
                             'id' => $item->id,
                             'quantity' => $item->quantity,
@@ -128,6 +121,15 @@ class PosController extends Controller
                     'change' => (float) $sale->change_amount,
                     'payment_method' => $sale->payment_method ?? 'cash',
                 ],
+            ]);
+
+        } catch (\Exception $e) {
+
+            \Log::error($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
             ], 422);
         }
     }

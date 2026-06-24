@@ -168,13 +168,8 @@ const bulkDelete = () => {
         ids: selectedIds.value
     }, {
         preserveScroll: true,
-        only: ['products', 'flash'], // 👈 thêm dòng này
         onSuccess: () => {
             selectedIds.value = []
-
-            router.reload({
-                only: ['products']
-            })
         }
     })
 }
