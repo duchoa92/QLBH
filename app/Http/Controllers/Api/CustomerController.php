@@ -56,6 +56,7 @@ class CustomerController extends Controller
                 'id',
                 'full_name',
                 'phone',
+                'debt_balance',
             ])
 
             ->where(function ($q)

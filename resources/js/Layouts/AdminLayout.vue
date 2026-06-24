@@ -12,16 +12,16 @@ const currentTitle = computed(() => {
 
     const path = page.url.split('?')[0]
 
-    if (path.startsWith('/pos')) return 'POS ban hang'
-    if (path.startsWith('/products')) return 'San pham'
+    if (path.startsWith('/pos')) return 'POS bán hàng'
+    if (path.startsWith('/products')) return 'Sản phẩm'
     if (path.startsWith('/product-imeis') || path.startsWith('/imeis')) return 'IMEI'
-    if (path.startsWith('/categories')) return 'Danh muc'
-    if (path.startsWith('/brands')) return 'Thuong hieu'
-    if (path.startsWith('/customers')) return 'Khach hang'
-    if (path.startsWith('/sales')) return 'Hoa don'
-    if (path.startsWith('/repairs')) return 'Sua chua'
-    if (path.startsWith('/users')) return 'Nhan vien'
-    if (path.startsWith('/profile')) return 'Tai khoan'
+    if (path.startsWith('/categories')) return 'Danh mục'
+    if (path.startsWith('/brands')) return 'Thương hiệu'
+    if (path.startsWith('/customers')) return 'Khách hàng'
+    if (path.startsWith('/sales')) return 'Hóa đơn'
+    if (path.startsWith('/repairs')) return 'Sửa chữa'
+    if (path.startsWith('/users')) return 'Nhân viên'
+    if (path.startsWith('/profile')) return 'Tài khoản'
 
     return 'Dashboard'
 })
@@ -78,7 +78,7 @@ watch(
                             type="button"
                             class="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 lg:hidden"
                             @click="sidebarOpen = true"
-                            aria-label="Mo menu"
+                            aria-label="Mở menu"
                         >
                             <span class="text-xl font-bold leading-none">
                                 =
@@ -88,7 +88,7 @@ watch(
                         <div>
 
                             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                He thong quan ly
+                                Hệ thống quản lý
                             </div>
 
                             <h1 class="text-lg font-black text-slate-950">
@@ -105,14 +105,14 @@ watch(
                             href="/pos"
                             class="hidden rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 sm:inline-flex"
                         >
-                            Mo POS
+                            Mở POS
                         </Link>
 
                         <Link
                             href="/profile"
                             class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                         >
-                            {{ page.props.auth?.user?.name || 'Tai khoan' }}
+                            {{ page.props.auth?.user?.name || 'Tài khoản' }}
                         </Link>
 
                         <Link
@@ -121,7 +121,7 @@ watch(
                             as="button"
                             class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
                         >
-                            Dang xuat
+                            Đăng xuất
                         </Link>
 
                     </div>

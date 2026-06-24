@@ -2,9 +2,7 @@
 import {
     ref,
 } from 'vue'
-import PaymentModal from './PaymentModal.vue'
 
-const showPaymentModal = ref(false)
 
 const props = defineProps({
 
@@ -82,20 +80,11 @@ const formatMoney = (value) => {
             <!-- Thanh toán -->
             <button
                 :disabled="cart.length === 0 || loading"
-                @click="showPaymentModal = true"
+                @click="emit('checkout')"
                 class="w-full h-14 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:bg-gray-300"
             >Thanh toán
             </button>
         </div>
 
-        <PaymentModal
-            :show="showPaymentModal"
-            :grand-total="grandTotal"
-            :customer="selectedCustomer"
-            @close="
-                showPaymentModal = false
-            "
-            @confirm="emit('checkout', $event)"
-            :cart="cart"
-        />
+        
 </template>

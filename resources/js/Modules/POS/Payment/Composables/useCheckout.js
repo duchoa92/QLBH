@@ -149,7 +149,7 @@ export function useCheckout(
                 'Thanh toán thành công'
             )
 
-            return response.data
+            return response
 
         } catch (error) {
 

@@ -1,10 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import CustomerDebtModal from './CustomerDebtModal.vue'
 import { customerDebtService } from '../Services/customerDebtService'
 import { useCustomerSearch } from '@/Modules/POS/Customer/Composables/useCustomerSearch.js'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
-import { User, X } from 'lucide-vue-next'
+import { User, UserRoundPlus, X } from 'lucide-vue-next'
+import CreateCustomerModal from './CreateCustomerModal.vue'
+import { customerService } from '../Services/customerService'
 
 const emit = defineEmits([
     'selected',
@@ -71,6 +73,51 @@ const openDebtModal = async () => {
     }
 }
 
+// Mở modal tạo KH
+const showCreateCustomerModal = ref(false)
+
+
+// Hiện nút tạo KH
+const showCreateButton = computed(() => {
+
+    return (
+
+        keyword.value?.trim()
+
+        &&
+
+        customers.value.length === 0
+
+    )
+})
+
+// Lưu KH
+const saveCustomer = async (
+    data
+) => {
+
+    try {
+
+        const customer =
+
+            await customerService.create(
+                data
+            )
+
+        selectCustomer(
+            customer
+        )
+
+        showCreateCustomerModal.value =
+            false
+
+    } catch (error) {
+
+        console.error(error)
+    }
+}
+
+
 </script>
 
 <template>
@@ -97,17 +144,7 @@ const openDebtModal = async () => {
                             <span
                                 v-if="Number(props.customer.debt_balance) > 0"
                                 @click.stop="openDebtModal"
-                                class="
-                                    ml-2
-                                    px-2
-                                    py-0.5
-                                    rounded-full
-                                    bg-red-100
-                                    text-red-600
-                                    text-xs
-                                    font-bold
-                                    cursor-pointer
-                                "
+                                class="ml-2 px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-xs font-bold cursor-pointer"
                             >
                                 Nợ:
                                 {{
@@ -134,14 +171,32 @@ const openDebtModal = async () => {
             </div>
 
             <div v-else>
-                <FloatingInput
-                    v-model="keyword"
-                    @input="search"
-                    @keydown="onKeyDown"
-                    type="text"
-                    label="Nhập tên hoặc SĐT khách hàng"
-                />
+                <div class="relative">
+                    <FloatingInput
+                        v-model="keyword"
+                        @input="search"
+                        @keydown="onKeyDown"
+                        type="text"
+                        label="Nhập tên hoặc SĐT khách hàng"
+                    />
 
+                    <button
+                        v-if="keyword.trim()"
+                        type="button"
+                        title="Thêm KH mới"
+                        @click="showCreateCustomerModal = true"
+                        class="absolute right-0 top-1/2 -translate-y-1/2
+                            px-3 py-1.5
+                            text-cyan-600
+                            hover:text-cyan-900
+                            rounded"
+                    >
+                        <UserRoundPlus />
+                    </button>
+
+                </div>
+
+                <!--Danh sách KH-->
                 <div
                     v-if="customers.length"
                     class="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg custom-scrollbar"
@@ -166,7 +221,7 @@ const openDebtModal = async () => {
                         </div>
                     </button>
                 </div>
-            </div>
+            </div>            
         </div>
     </div>
 
@@ -181,6 +236,13 @@ const openDebtModal = async () => {
     @close="
         showDebtModal = false
     "
+/>
+
+<CreateCustomerModal
+    :show="showCreateCustomerModal"
+    :keyword="keyword"
+    @close="showCreateCustomerModal = false"
+    @save="saveCustomer"
 />
 
 </template>

@@ -11,7 +11,7 @@ export function useKeyboardShortcuts({
 
     checkout,
 
-    showPaymentModal,
+    showCheckoutModal,
 
     clearCart,
 }) {
@@ -50,8 +50,7 @@ export function useKeyboardShortcuts({
 
         if (event.key === 'Escape') {
 
-            showPaymentModal.value =
-                false
+           showCheckoutModal.value = false
         }
 
         /*

@@ -65,6 +65,10 @@ const showInvoice = ref(false)
 const loading = ref(false)
 
 const handleCheckout = async (data) => {
+
+    // debug
+    console.log('HANDLE START')
+
     if (!cart.value.length) {
         errorToast('Giỏ hàng trống')
         return
@@ -77,12 +81,21 @@ const handleCheckout = async (data) => {
             ...data,
             cart: cart.value
         })
+// debug
+console.log('AFTER API', res)
         
         if(!res) return
+        
+        //debug
+        console.log('BEFORE CLOSE')
+        showCheckoutModal.value = false
+
+        // debug
+        console.log('AFTER CLOSE')
 
         invoiceData.value = res
         showInvoice.value = true
-        showCheckoutModal.value = false
+
 
     } catch (e) {
         // Để trống hoặc chỉ console.log(e) nếu file cấu hình chung Axios của bạn đã tự bật Toast lỗi
@@ -94,6 +107,9 @@ const handleCheckout = async (data) => {
 }
 
 const checkout = async (data) => {
+
+    // debug
+     console.log('CHECKOUT')
 
     if (!cart.value.length) {
         errorToast('Giỏ hàng trống')
@@ -112,19 +128,6 @@ const checkout = async (data) => {
 // Hiện popup thanh toán
 const showCheckoutModal = ref(false)
 
-// debug
-watch(
-    showCheckoutModal,
-    (value) => {
-
-        console.log(
-            'showCheckoutModal =',
-            value
-        )
-
-        console.trace()
-    }
-)
 
 const openCheckoutModal = () => {
 
@@ -142,7 +145,7 @@ useKeyboardShortcuts({
     cart,
     selectedCartIndex,
     clearCart,
-    showPaymentModal: showCheckoutModal,
+    showCheckoutModal,
     checkout: openCheckoutModal,
 })
 
@@ -163,7 +166,13 @@ onMounted(() => {
 })
 
 
+watch(showCheckoutModal, (value) => {
 
+    console.log(
+        'showCheckoutModal =',
+        value
+    )
+})
 
 </script>
 
@@ -222,11 +231,14 @@ onMounted(() => {
 
     <CheckoutModal
         :show="showCheckoutModal"
+        :cart="cart"
         :grand-total="grandTotal"
         :selected-customer="selectedCustomer"
         @close="showCheckoutModal = false"
         @confirm="checkout($event)"
-
     />
 
+
 </template>
+
+

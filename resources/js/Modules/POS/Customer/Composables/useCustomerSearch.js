@@ -68,8 +68,7 @@ export function useCustomerSearch(
                             }
                         )
 
-                    customers.value =
-                        response.data
+                    customers.value = response.data
 
                     reset()
 
@@ -189,9 +188,9 @@ export function useCustomerSearch(
 
         customers,
 
-        selectedCustomer,
-
         search,
+
+        selectedCustomer,
 
         selectCustomer,
 
@@ -206,5 +205,6 @@ export function useCustomerSearch(
         onKeyDown,
 
         setActive,
+        
     }
 }

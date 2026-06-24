@@ -1,15 +1,17 @@
-<<script setup>
+<script setup>
 
 import { ref, watch, computed } from 'vue'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 
 const props = defineProps({
-
     show: Boolean,
-
     grandTotal: Number,
-
     selectedCustomer: Object,
+
+    cart: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const emit = defineEmits([
@@ -62,6 +64,10 @@ const submitting = ref(false)
 
 const submit = () => {
 
+    // debug
+    alert('submit clicked')
+    console.log('submit clicked')
+
     if (submitting.value) {
 
         return
@@ -81,6 +87,38 @@ const submit = () => {
         }
     )
 }
+
+const lineTotal = (item) => {
+
+    let total =
+
+        Number(item.price)
+        *
+        Number(item.quantity)
+
+    if (
+        item.discount_type === 'fixed'
+    ) {
+
+        total -=
+            Number(item.discount_value)
+    }
+
+    if (
+        item.discount_type === 'percent'
+    ) {
+
+        total -=
+            (
+                total *
+                Number(item.discount_value)
+                / 100
+            )
+    }
+
+    return total
+}
+
 
 watch(
     () => props.show,

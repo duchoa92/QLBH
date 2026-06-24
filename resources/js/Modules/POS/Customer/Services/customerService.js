@@ -26,4 +26,15 @@ export const customerService = {
 
         return response.data
     },
+
+    // tạo khách hàng
+    async create(data) {
+
+        const response = await api.post(
+            '/api/customers',
+            data
+        )
+
+        return response.data.data
+    },
 }
