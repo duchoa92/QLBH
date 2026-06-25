@@ -39,29 +39,6 @@ Route::middleware(['web', 'auth'])->group(function ()
     // Thêm khách hàng mới
     Route::post('/customers', [CustomerController::class, 'store']);
 
-    // Danh sách hóa đơn giữ
-    Route::get(
-        '/hold-sales',
-        [HoldSaleController::class, 'index']
-    );
-    // Lưu hóa đơn giữ
-    Route::post(
-        '/hold-sales',
-        [HoldSaleController::class, 'store']
-    );
-
-    // Lấy chi tiết hóa đơn giữ
-    Route::get(
-        '/hold-sales/{holdSale}',
-        [HoldSaleController::class, 'show']
-    );
-
-    // Xóa hóa đơn giữ
-    Route::delete(
-        '/hold-sales/{holdSale}',
-        [HoldSaleController::class, 'destroy']
-    );
-
     // Lấy danh sách danh mục
     Route::get('/categories', [CategoryController::class, 'index']);
 

@@ -20,7 +20,6 @@ const props = defineProps({
     },
     cart: { type: Array, default: () => [] },
     selectedCustomer: { type: Object, default: null },
-    holdSales: { type: Array, default: () => [] },
     grandTotal: { type: Number, default: 0 },
     loading: Boolean,
 })
@@ -31,10 +30,6 @@ const showSaleHistory = ref(false)
 const emit = defineEmits([
 
     'customer-selected',
-
-    'open-hold',
-
-    'show-hold-list',
 
     'remove-item',
 
@@ -87,13 +82,7 @@ const emit = defineEmits([
             :cart="cart"
             :grand-total="grandTotal"
             :selected-customer="selectedCustomer"
-            :hold-sales="holdSales"
             :loading="loading"
-
-            @open-hold="$emit('open-hold')"
-
-            @show-hold-list="$emit('show-hold-list')"
-
             @checkout="$emit('checkout', $event)"
 
             @show-sale-history="showSaleHistory = true"

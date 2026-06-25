@@ -16,11 +16,6 @@ const props = defineProps({
         default: null,
     },
 
-    holdSales: {
-        type: Array,
-        default: () => [],
-    },
-
     loading: {
         type: Boolean,
         default: false,
@@ -36,8 +31,6 @@ const props = defineProps({
 // 
 const emit = defineEmits([
     'checkout',
-    'open-hold',
-    'show-hold-list',
     'show-sale-history',
 ])
 
@@ -55,8 +48,6 @@ const formatMoney = (value) => {
         <div class="shrink-0 border-t border-gray-200 bg-white p-2">
             <div class="flex justify-between items-center mb-2 px-1">
                 <div class="flex gap-2">
-                    <button @click="emit('open-hold')" class="text-xs text-orange-600 font-bold hover:underline">Lưu (F4)</button>
-                    <button @click="emit('show-hold-list')" class="text-xs text-indigo-600 font-bold hover:underline">HĐ đã lưu ({{ holdSales.length }})</button>
                     <button
                         @click="emit('show-sale-history')"
                         class="text-xs text-indigo-600 font-bold hover:underline"

@@ -24,9 +24,6 @@ export function useCustomerSearch(
 
     const customers = ref([])
 
-    const selectedCustomer =
-        ref(null)
-
     let timeout = null
 
     const {
@@ -91,9 +88,6 @@ export function useCustomerSearch(
         customer
     ) => {
 
-        selectedCustomer.value =
-            customer
-
         keyword.value =
             customer.full_name
 
@@ -113,9 +107,6 @@ export function useCustomerSearch(
 
     const clearCustomer = () => {
 
-        selectedCustomer.value =
-            null
-
         keyword.value = ''
 
         emit(
@@ -129,8 +120,6 @@ export function useCustomerSearch(
 
     // Reset ô Khách hàng
     function resetCustomerSearch() {
-
-        selectedCustomer.value = null
 
         keyword.value = ''
 
@@ -189,8 +178,6 @@ export function useCustomerSearch(
         customers,
 
         search,
-
-        selectedCustomer,
 
         selectCustomer,
 

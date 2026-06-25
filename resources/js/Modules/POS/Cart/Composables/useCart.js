@@ -35,13 +35,23 @@ export function useCart() {
             [
                 {
                     id: 1,
+                    default_name: 'Đơn 1',
                     name: 'Đơn 1',
                     cart: [],
                     customer: null,
-                },
+                }
             ]
         )
     )
+
+    tabs.value.forEach(tab => {
+
+        if (!tab.default_name) {
+
+            tab.default_name =
+                tab.name
+        }
+    })
 
 
     const activeTabId = ref(
@@ -91,26 +101,36 @@ export function useCart() {
 
     watch(
         selectedCustomer,
-        (customer) => {
+
+        customer => {
 
             if (!currentTab.value) {
+
                 return
             }
+
+            /*
+            |----------------------------------
+            | Không có khách
+            |----------------------------------
+            */
 
             if (!customer) {
 
-                const index =
-                    tabs.value.findIndex(
-                        tab => tab.id === currentTab.value.id
-                    )
-
                 currentTab.value.name =
-                    `Đơn ${index + 1}`
+                    currentTab.value.default_name
 
                 return
             }
 
+            /*
+            |----------------------------------
+            | Có khách
+            |----------------------------------
+            */
+
             const fullName =
+
                 customer.full_name
                 ??
                 customer.name
@@ -118,6 +138,7 @@ export function useCart() {
                 ''
 
             const firstName =
+
                 fullName
                     .trim()
                     .split(' ')
@@ -126,6 +147,7 @@ export function useCart() {
             currentTab.value.name =
                 firstName
         },
+
         {
             deep: true,
         }
@@ -195,53 +217,133 @@ export function useCart() {
 
     // Hàm tạo tab
     const createTab = () => {
-
         const id = Date.now()
+        const usedNumbers =
+            tabs.value
+                .map(tab => {
+
+                    const match =
+                        tab.default_name?.match(/\d+/)
+
+                    return match
+                        ? Number(match[0])
+                        : null
+                })
+                .filter(Boolean)
+        let nextNumber = 1
+        while (
+            usedNumbers.includes(
+                nextNumber
+            )
+        ) {
+
+            nextNumber++
+        }
+
+        const defaultName =
+            `Đơn ${nextNumber}`
 
         tabs.value.push({
-
             id,
-
-            name:
-                `Đơn ${tabs.value.length + 1}`,
-
+            default_name: defaultName,
+            name: defaultName,
             cart: [],
-
             customer: null,
         })
-
         activeTabId.value = id
     }
-
     // Đóng tab
     const removeTab = (
         tabId
     ) => {
-
         if (
             tabs.value.length <= 1
         ) {
-
             return
         }
-
         const index =
             tabs.value.findIndex(
                 tab => tab.id === tabId
             )
-
         tabs.value.splice(
             index,
             1
         )
-
         if (
             activeTabId.value === tabId
         ) {
-
             activeTabId.value =
                 tabs.value[0].id
         }
+    }
+
+    // Dọn tab rông
+    const cleanupEmptyTabs = () => {
+
+        const tabsHasData = tabs.value.filter(tab => {
+
+            return (
+                tab.cart.length > 0
+                ||
+                tab.customer
+            )
+        })
+
+        /*
+        |----------------------------------
+        | Có tab chứa dữ liệu
+        |----------------------------------
+        */
+
+        if (tabsHasData.length > 0) {
+
+            tabs.value = [...tabsHasData]
+
+            return
+        }
+
+        /*
+        |----------------------------------
+        | Không còn tab nào
+        |----------------------------------
+        */
+
+        const id = Date.now()
+
+        tabs.value = [
+            {
+                id,
+                default_name: 'Đơn 1',
+                name: 'Đơn 1',
+                cart: [],
+                customer: null,
+            },
+        ]
+
+        activeTabId.value = id
+    }
+
+    // dò tab có dữ liệu
+    const switchToNextTab = () => {
+
+        const tabHasItems = tabs.value.find(tab => {
+
+            return (
+                tab.id !== activeTabId.value
+                &&
+                tab.cart.length > 0
+            )
+        })
+
+        if (tabHasItems) {
+
+            activeTabId.value =
+                tabHasItems.id
+
+            return
+        }
+
+        createTab()
     }
 
 
@@ -424,6 +526,10 @@ export function useCart() {
         createTab,
 
         removeTab,
+
+        switchToNextTab,
+        
+        cleanupEmptyTabs,
 
         cart,
 

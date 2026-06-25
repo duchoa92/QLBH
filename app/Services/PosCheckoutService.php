@@ -187,26 +187,27 @@ class PosCheckoutService
                 |--------------------------------------------------------------------------
                 */
                 $sale->items()->create([
-
                     'product_id' => $item['id'],
-
                     'product_imei_id' => $item['imei_id'] ?? null,
-
                     'quantity' => (int) $item['quantity'],
-
                     'unit_price' => (float) $item['price'],
 
-                    'subtotal' =>$lineTotal- $lineDiscount,
+                    // ✅ GIẢM GIÁ
+                    'discount_type' => $item['discount_type'] ?? null,
+                    'discount_value' => (float) ($item['discount_value'] ?? 0),
+
+                    'discount_amount' => $lineDiscount, // 🔥 THÊM DÒNG NÀY
+
+                    // subtotal chuẩn hiển thị
+                    'subtotal' => $lineTotal - $lineDiscount,
 
                     'note' => $item['note'] ?? null,
 
+                    // ✅ QUÀ TẶNG
                     'gift_product_id' => $item['gift_product_id'] ?? null,
-
-                    'discount_type' => $item['discount_type'] ?? null,
-
-                    'discount_value' => (float) ($item['discount_value'] ?? 0),
+                    'is_gift' => !empty($item['gift_product_id']), // 🔥 THÊM
+                    'gift_price' => !empty($item['gift_product_id']) ? 0 : null,
                 ]);
-
                 /*
                 |--------------------------------------------------------------------------
                 | Trừ tồn kho sản phẩm thường
@@ -235,28 +236,30 @@ class PosCheckoutService
                     )
                 ) {
 
-                    $giftProduct =
-                        Product::query()
-                            ->lockForUpdate()
-                            ->find(
-                                $item['gift_product_id']
-                            );
+                    $giftProduct = Product::query()
+                        ->lockForUpdate()
+                        ->find(
+                            $item['gift_product_id']
+                        );
 
                     if ($giftProduct) {
 
-                        if (
-                            $giftProduct->stock < 1
-                        ) {
+                        if ($giftProduct->stock <= 0) {
 
                             throw new \Exception(
                                 'Quà tặng '
                                 . $giftProduct->name
-                                . 'Đã hết quà tặng'
+                                . ' đã hết'
                             );
                         }
 
                         $giftProduct->decrement(
                             'stock',
+                            1
+                        );
+
+                        $giftProduct->increment(
+                            'sold_count',
                             1
                         );
                     }

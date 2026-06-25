@@ -4,6 +4,7 @@ import {
     computed,
     onMounted,
     onBeforeUnmount,
+    watch ,
 } from 'vue'
 import CustomerDebtModal from './CustomerDebtModal.vue'
 import { customerDebtService } from '../Services/customerDebtService'
@@ -38,6 +39,27 @@ const props = defineProps({
         default: null,
     },
 })
+
+watch(
+    () => props.customer,
+
+    customer => {
+
+        if (customer) {
+
+            keyword.value =
+                customer.full_name
+
+            return
+        }
+
+        keyword.value = ''
+    },
+
+    {
+        immediate: true,
+    }
+)
 
 // Modal nợ
 const showDebtModal = ref(false)

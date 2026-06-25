@@ -41,16 +41,16 @@ const isActive = (paths) => {
 
 const menuGroups = [
     {
-        title: 'Ban hang',
+        title: 'Bán Hàng',
         items: [
             {
-                label: 'POS ban hang',
+                label: 'POS bán hàng',
                 href: '/pos',
                 paths: ['/pos'],
                 badge: 'Nhanh',
             },
             {
-                label: 'Hoa don',
+                label: 'Hóa đơn',
                 href: '/sales',
                 paths: ['/sales'],
             },
@@ -147,7 +147,7 @@ const visibleItems = (items) => {
                 </div>
 
                 <div class="mt-1 text-xs font-medium text-slate-400">
-                    Quan ly ban hang
+                    Quản lý bán hàng
                 </div>
             </Link>
 
@@ -200,7 +200,7 @@ const visibleItems = (items) => {
             <div class="rounded-md bg-white/10 p-3">
 
                 <div class="text-sm font-bold">
-                    {{ page.props.auth?.user?.name || 'Tai khoan' }}
+                    {{ page.props.auth?.user?.name || 'Tài khoản' }}
                 </div>
 
                 <div class="mt-1 truncate text-xs text-slate-400">

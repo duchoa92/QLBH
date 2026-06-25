@@ -1,14 +1,11 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { toast } from 'vue-sonner'
 import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
-import { useHoldSale } from '@/Modules/POS/HoldSale/Composables/useHoldSale'
 import { useCheckout } from '@/Modules/POS/Payment/Composables/useCheckout'
 import { useKeyboardShortcuts } from '@/Modules/POS/Core/Composables/useKeyboardShortcuts'
-import HoldSaleModal from '@/Modules/POS/HoldSale/Components/HoldSaleModal.vue'
-import SaveHoldModal from '@/Modules/POS/HoldSale/Components/SaveHoldModal.vue'
 import PosSidebar from '@/Modules/POS/Core/Components/PosSidebar.vue'
 import PosMainPanel from '@/Modules/POS/Core/Components/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
@@ -20,6 +17,8 @@ const {
     activeTabId,
     createTab,
     removeTab,
+    switchToNextTab,
+    cleanupEmptyTabs,
     cart,
     selectedCustomer,
     selectedCartIndex,
@@ -29,22 +28,6 @@ const {
     clearCart,
 } = useCart()
 
-
-const {
-    holdSales,
-    showHoldModal,
-    showSaveHoldModal,
-    holdName,
-    fetchHoldSales,
-    openHoldModal,
-    holdBill,
-    loadHoldSale,
-} = useHoldSale(
-    cart,
-    selectedCustomer,
-    grandTotal,
-    clearCart,
-)
 
 const {
     confirmCheckout,
@@ -101,6 +84,10 @@ const handleCheckout = async (data) => {
 
         invoiceData.value = res
         showInvoice.value = true
+        // sau khi TT thành công chuyển về tab có DL
+        switchToNextTab()
+        // Dọn tab rỗng
+        cleanupEmptyTabs()
 
     } catch (error) {
 
@@ -165,9 +152,6 @@ useBarcodeScanner(
     }
 )
 
-onMounted(() => {
-    fetchHoldSales()
-})
 
 
 watch(showCheckoutModal, (value) => {
@@ -196,47 +180,18 @@ watch(showCheckoutModal, (value) => {
                 :active-tab-id="activeTabId"
                 :cart="cart"
                 :selected-customer="selectedCustomer"
-                :hold-sales="holdSales"
                 :grand-total="grandTotal"
                 :loading="loading"
                 @select-tab="selectTab"
                 @create-tab="createTab"
                 @remove-tab="removeTab"
                 @customer-selected="onCustomerSelected"
-                @open-hold="openHoldModal"
-                @show-hold-list="showHoldModal = true"
                 @remove-item="removeItem"
                 @checkout="openCheckoutModal"
             />
         </template>
 
     </PosLayout>
-
-    <HoldSaleModal
-
-        :show="showHoldModal"
-
-        :hold-sales="holdSales"
-
-        @close="showHoldModal = false"
-
-        @load="loadHoldSale"
-    />
-
-    <SaveHoldModal
-
-        :show="showSaveHoldModal"
-
-        :hold-name="holdName"
-
-        @close="showSaveHoldModal = false"
-
-        @save="holdBill"
-
-        @update:holdName="
-            holdName = $event
-        "
-    />
 
     <CheckoutModal
         :loading="loading"
