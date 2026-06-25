@@ -78,6 +78,10 @@ class ProductController extends Controller
                         'category_id' => $product->category_id,
 
                         'product_type' => $product->product_type,
+
+                        'sold_count' => $product->sold_count ?? 0,
+
+                        'image_url' => $product->image_url,
                     ];
                 });
 
@@ -250,6 +254,10 @@ class ProductController extends Controller
                     'category_id' => $product->category_id,
 
                     'product_type' => $product->product_type,
+                    
+                    'sold_count' => $product->sold_count ?? 0,
+
+                    'image_url' => $product->image_url,
                 ];
             });
 

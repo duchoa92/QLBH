@@ -16,6 +16,10 @@ import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
 
 
 const {
+    tabs,
+    activeTabId,
+    createTab,
+    removeTab,
     cart,
     selectedCustomer,
     selectedCartIndex,
@@ -24,6 +28,7 @@ const {
     removeItem,
     clearCart,
 } = useCart()
+
 
 const {
     holdSales,
@@ -49,8 +54,18 @@ const {
     clearCart,
 )
 
+// tab đang chọn
 const onCustomerSelected = (customer) => {
     selectedCustomer.value = customer
+}
+
+// Hàm chuyển tab
+const selectTab = (
+    tabId
+) => {
+
+    activeTabId.value =
+        tabId
 }
 
 const invoiceData = ref(null)
@@ -177,11 +192,16 @@ watch(showCheckoutModal, (value) => {
 
         <template #sidebar>
             <PosSidebar
+                :tabs="tabs"
+                :active-tab-id="activeTabId"
                 :cart="cart"
                 :selected-customer="selectedCustomer"
                 :hold-sales="holdSales"
                 :grand-total="grandTotal"
                 :loading="loading"
+                @select-tab="selectTab"
+                @create-tab="createTab"
+                @remove-tab="removeTab"
                 @customer-selected="onCustomerSelected"
                 @open-hold="openHoldModal"
                 @show-hold-list="showHoldModal = true"

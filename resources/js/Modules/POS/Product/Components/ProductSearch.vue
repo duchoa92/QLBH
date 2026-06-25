@@ -76,6 +76,8 @@ const scanImei = async () => {
                 result.data.sell_price
                 ??
                 result.data.price,
+                
+            image_url: result.data.image_url,
 
             product_type:
                 'imei',
@@ -208,55 +210,68 @@ const categoryOptions = computed(() => [
                     v-for="product in products"
                     :key="product.id"
                     type="button"
-                    class="group flex min-h-[148px] flex-col rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+                    class="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                     @click="selectProduct(product)"
                 >
 
-                    <div class="flex items-start justify-between gap-2">
+                    <!-- ẢNH -->
+                    <div class="relative h-44 bg-slate-100">
 
-                        <div class="min-w-0">
+                        <img
+                            v-if="product.image_url"
+                            :src="product.image_url"
+                            class="h-full w-full object-cover"
+                        >
 
-                            <div class="h-10 overflow-hidden text-sm font-bold leading-5 text-slate-900">
-                                {{ product.name }}
-                            </div>
-
-                            <div class="mt-1 truncate text-xs text-slate-500">
-                                SKU: {{ product.sku }}
-                            </div>
-
+                        <div
+                            v-else
+                            class="flex h-full items-center justify-center text-slate-400"
+                        >
+                            No Image
                         </div>
 
-                        <span
-                            v-if="product.product_type === 'imei'"
-                            class="shrink-0 rounded bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600"
+                        <!-- GIÁ ĐÈ LÊN ẢNH -->
+                        <div
+                            class="absolute bottom-2 left-2
+                                rounded-md
+                                bg-red-600
+                                px-3 py-1
+                                text-sm
+                                font-bold
+                                text-white"
                         >
-                            IMEI
-                        </span>
-
-                    </div>
-
-                    <div class="mt-auto pt-4">
-
-                        <div class="text-lg font-black text-rose-600">
                             {{ formatPrice(product.price) }}
                         </div>
 
-                        <div class="mt-2 flex items-center justify-between text-xs">
+                    </div>
 
-                            <span
-                                class="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-600"
-                                :class="{
-                                    'bg-rose-50 text-rose-600':
-                                        product.stock <= 0
-                                }"
-                            >
+                    <!-- TÊN -->
+                    <div class="p-3">
+
+                        <div
+                            class="line-clamp-2
+                                min-h-[40px]
+                                text-sm
+                                font-semibold"
+                        >
+                            {{ product.name }}
+                        </div>
+
+                        <!-- TỒN + ĐÃ BÁN -->
+                        <div
+                            class="mt-3
+                                flex
+                                items-center
+                                justify-between
+                                text-xs"
+                        >
+                            <span class="text-green-600 font-bold">
                                 Tồn: {{ product.stock }}
                             </span>
 
                             <span class="text-slate-500">
-                                Đã bán: {{ product.sold_count }}
+                                Đã bán: {{ product.sold_count || 0 }}
                             </span>
-
                         </div>
 
                     </div>

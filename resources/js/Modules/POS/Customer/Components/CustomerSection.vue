@@ -1,5 +1,10 @@
 <script setup>
-import { ref, computed } from 'vue'
+import {
+    ref,
+    computed,
+    onMounted,
+    onBeforeUnmount,
+} from 'vue'
 import CustomerDebtModal from './CustomerDebtModal.vue'
 import { customerDebtService } from '../Services/customerDebtService'
 import { useCustomerSearch } from '@/Modules/POS/Customer/Composables/useCustomerSearch.js'
@@ -76,6 +81,9 @@ const openDebtModal = async () => {
 // Mở modal tạo KH
 const showCreateCustomerModal = ref(false)
 
+// Tạo ref cho vùng tìm kiếm
+const customerSearchRef = ref(null)
+
 
 // Hiện nút tạo KH
 const showCreateButton = computed(() => {
@@ -116,6 +124,37 @@ const saveCustomer = async (
         console.error(error)
     }
 }
+
+// Thêm hàm click ngoài
+const handleClickOutside = (event) => {
+
+    if (
+        customerSearchRef.value &&
+        !customerSearchRef.value.contains(
+            event.target
+        )
+    ) {
+
+        customers.value = []
+    }
+}
+
+
+// Đăng ký sự kiện
+onMounted(() => {
+
+    document.addEventListener(
+        'click',
+        handleClickOutside
+    )
+})
+onBeforeUnmount(() => {
+
+    document.removeEventListener(
+        'click',
+        handleClickOutside
+    )
+})
 
 
 </script>
@@ -171,7 +210,7 @@ const saveCustomer = async (
             </div>
 
             <div v-else>
-                <div class="relative">
+                <div ref="customerSearchRef" class="relative">
                     <FloatingInput
                         v-model="keyword"
                         @input="search"

@@ -141,6 +141,9 @@ return new class extends Migration
             $table->unsignedInteger('stock')
                 ->default(0);
 
+            $table->unsignedBigInteger('sold_count')
+                ->default(0);
+
             $table->unsignedInteger('alert_stock')
                 ->default(0);
 

@@ -1,8 +1,4 @@
-import {
-    ref,
-    watch,
-} from 'vue'
-
+import { ref, watch, computed, } from 'vue'
 import { useLocalStorage } from '@/Composables/useLocalStorage'
 import { useCartTotals } from '@/Modules/POS/Cart/Composables/useCartTotals'
 
@@ -32,12 +28,107 @@ export function useCart() {
     |--------------------------------------------------------------------------
     */
 
-    const cart = ref(
-        load('pos_cart', [])
+    // Tạo Tab giỏ hàng
+    const tabs = ref(
+        load(
+            'pos_tabs',
+            [
+                {
+                    id: 1,
+                    name: 'Đơn 1',
+                    cart: [],
+                    customer: null,
+                },
+            ]
+        )
     )
 
-    const selectedCustomer = ref(
-        load('pos_customer', null)
+
+    const activeTabId = ref(
+        load(
+            'pos_active_tab',
+            1
+        )
+    )
+
+    const currentTab = computed(() => {
+        return (
+            tabs.value.find(
+                tab => tab.id === activeTabId.value
+            )
+            ??
+            tabs.value[0]
+        )
+    })
+
+    
+    const cart = computed({
+        get() {
+
+            return currentTab.value.cart
+        },
+
+        set(value) {
+
+            currentTab.value.cart = value
+        },
+    })
+
+
+    // 
+    const selectedCustomer = computed({
+
+        get() {
+
+            return currentTab.value.customer
+        },
+
+        set(value) {
+
+            currentTab.value.customer = value
+        },
+    })
+
+    watch(
+        selectedCustomer,
+        (customer) => {
+
+            if (!currentTab.value) {
+                return
+            }
+
+            if (!customer) {
+
+                const index =
+                    tabs.value.findIndex(
+                        tab => tab.id === currentTab.value.id
+                    )
+
+                currentTab.value.name =
+                    `Đơn ${index + 1}`
+
+                return
+            }
+
+            const fullName =
+                customer.full_name
+                ??
+                customer.name
+                ??
+                ''
+
+            const firstName =
+                fullName
+                    .trim()
+                    .split(' ')
+                    .pop()
+
+            currentTab.value.name =
+                firstName
+        },
+        {
+            deep: true,
+        }
     )
 
     const selectedCartIndex = ref(
@@ -64,13 +155,12 @@ export function useCart() {
     | AUTO SAVE
     |--------------------------------------------------------------------------
     */
-
     watch(
-        cart,
-        (value) => {
+        tabs,
+        value => {
 
             save(
-                'pos_cart',
+                'pos_tabs',
                 value
             )
         },
@@ -80,26 +170,17 @@ export function useCart() {
     )
 
     watch(
-        selectedCustomer,
-        (value) => {
-
-            if (!value) {
-
-                remove('pos_customer')
-
-                return
-            }
+        activeTabId,
+        value => {
 
             save(
-                'pos_customer',
+                'pos_active_tab',
                 value
             )
-        },
-        {
-            deep: true,
         }
     )
 
+  
     watch(
         selectedCartIndex,
         (value) => {
@@ -110,6 +191,61 @@ export function useCart() {
             )
         }
     )
+
+
+    // Hàm tạo tab
+    const createTab = () => {
+
+        const id = Date.now()
+
+        tabs.value.push({
+
+            id,
+
+            name:
+                `Đơn ${tabs.value.length + 1}`,
+
+            cart: [],
+
+            customer: null,
+        })
+
+        activeTabId.value = id
+    }
+
+    // Đóng tab
+    const removeTab = (
+        tabId
+    ) => {
+
+        if (
+            tabs.value.length <= 1
+        ) {
+
+            return
+        }
+
+        const index =
+            tabs.value.findIndex(
+                tab => tab.id === tabId
+            )
+
+        tabs.value.splice(
+            index,
+            1
+        )
+
+        if (
+            activeTabId.value === tabId
+        ) {
+
+            activeTabId.value =
+                tabs.value[0].id
+        }
+    }
+
+
+
 
     /*
     |--------------------------------------------------------------------------
@@ -147,6 +283,7 @@ export function useCart() {
 
             cart.value.push({
                 id: product.id,
+                image_url: product.image_url ?? null,
                 imei_id: product.imei_id ?? null,
                 imei: product.imei ?? null,
                 serial: product.serial ?? null,
@@ -194,6 +331,7 @@ export function useCart() {
 
         cart.value.push({
             id: product.id,
+            image_url: product.image_url ?? null,
             name: product.name,
             price: Number(product.price),
             quantity: 1,
@@ -271,22 +409,21 @@ export function useCart() {
 
     const clearCart = () => {
 
-        cart.value = []
-
-        selectedCustomer.value = null
-
-        selectedCartIndex.value = 0
-
-        remove('pos_cart')
-
-        remove('pos_customer')
-
-        remove('pos_selected_index')
+        currentTab.value.cart = []
+        currentTab.value.customer = null
     }
 
 
 
     return {
+
+        tabs,
+
+        activeTabId,
+
+        createTab,
+
+        removeTab,
 
         cart,
 

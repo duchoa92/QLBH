@@ -342,7 +342,7 @@ const closeGiftResults = (
         <!--Thông tin SP, và Chức năng-->
         <div class="flex gap-3">
             <div class="w-12 h-12 rounded-lg border flex items-center justify-center shrink-0 bg-gray-50 overflow-hidden">
-                <img v-if="item.image" :src="item.image" class="w-full h-full object-cover" />
+                <img v-if="item.image_url" :src="item.image_url" class="w-full h-full object-cover" />
                 <span v-else class="text-gray-400">
                 <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h12"/></svg>
                 </span>

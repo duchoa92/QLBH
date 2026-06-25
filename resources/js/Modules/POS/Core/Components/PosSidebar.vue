@@ -5,9 +5,19 @@ import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.v
 import CartTable from '@/Modules/POS/Cart/Components/CartTable.vue'
 import PaymentPanel from '@/Modules/POS/Payment/Components/PaymentPanel.vue'
 import SaleHistoryModal from '@/Modules/POS/Sale/Components/SaleHistoryModal.vue'
+import CartTabs from './CartTabs.vue'
 
 
 const props = defineProps({
+    tabs: {
+        type: Array,
+        default: () => [],
+    },
+
+    activeTabId: {
+        type: Number,
+        default: null,
+    },
     cart: { type: Array, default: () => [] },
     selectedCustomer: { type: Object, default: null },
     holdSales: { type: Array, default: () => [] },
@@ -15,10 +25,28 @@ const props = defineProps({
     loading: Boolean,
 })
 
+// Ghi chú đơn hàng
 const showSaleHistory = ref(false)
 
-const emit = defineEmits(['customer-selected', 'open-hold', 'show-hold-list', 'remove-item', 'checkout'])
-// Ghi chú đơn hàng
+const emit = defineEmits([
+
+    'customer-selected',
+
+    'open-hold',
+
+    'show-hold-list',
+
+    'remove-item',
+
+    'checkout',
+
+    'select-tab',
+
+    'create-tab',
+
+    'remove-tab',
+])
+
 
 </script>
 
@@ -28,6 +56,14 @@ const emit = defineEmits(['customer-selected', 'open-hold', 'show-hold-list', 'r
            rounded-2xl overflow-hidden">
         <!-- khối khách hàng -->
         <div class="shrink-0 border-b border-gray-200 bg-white p-2">
+            <CartTabs
+                :tabs="tabs"
+                :active-tab-id="activeTabId"
+                @select="$emit('select-tab', $event)"
+                @create="$emit('create-tab')"
+                @remove="$emit('remove-tab', $event)"
+            />
+            
             <CustomerSection
                 :customer="selectedCustomer"
                 @selected="$emit('customer-selected', $event)"
