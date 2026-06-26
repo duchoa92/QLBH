@@ -76,7 +76,10 @@ const money = (value) => {
                                         IMEI: {{ item.product_imei.imei }}
                                     </div>
 
-                                    <div v-if="Nutmbe = Number(item.discount_value) > 0" class="text-xs text-red-500 mt-0.5 font-medium">
+                                    <div
+                                        v-if="Number(item.discount_value) > 0"
+                                        class="text-xs text-red-500 mt-0.5 font-medium"
+                                    >
                                         <template v-if="item.discount_type === 'percent'">
                                             Giảm {{ item.discount_value }}%
                                         </template>
@@ -159,7 +162,7 @@ const money = (value) => {
                         <span class="font-medium">-{{ money(invoice.discount) }} đ</span>
                     </div>
 
-                    <div class="flex justify-between pl-10 text-base font-bold text-blue-600 pt-1 border-t border-dashed mt-1">
+                    <div class="flex justify-between pl-10 text-base font-bold text-red-600 pt-1 border-t border-dashed mt-1">
                         <span>Tổng thanh toán:</span>
                         <span>{{ money(invoice.grand_total) }} đ</span>
                     </div>
