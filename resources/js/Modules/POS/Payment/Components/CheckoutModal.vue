@@ -85,7 +85,7 @@ const lineTotal = (item) => {
         Number(item.quantity)
 
     if (
-        item.discount_type === 'fixed'
+        item.discount_type === 'amount'
     ) {
 
         total -=

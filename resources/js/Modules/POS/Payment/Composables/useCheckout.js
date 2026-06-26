@@ -65,13 +65,19 @@ export function useCheckout(
             | API
             |--------------------------------------------------------------------------
             */
-
-        
+// Debug
+console.log(
+    JSON.parse(
+        JSON.stringify(
+            cart.value
+        )
+    )
+)
 
             const response =
            
                 await paymentService.checkout({
-                    items: cart.value.map(item => ({
+                   items: cart.value.map(item => ({
 
                         id: item.id,
 
@@ -82,7 +88,19 @@ export function useCheckout(
                         imei_id:
                             item.imei_id ?? null,
 
-                        note: item.note,
+                        note:
+                            item.note,
+
+                        discount_type:
+                            item.discount_type ?? null,
+
+                        discount_value:
+                            Number(
+                                item.discount_value ?? 0
+                            ),
+
+                        gifts:
+                            item.gifts ?? [],
 
                     })),
 

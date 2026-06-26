@@ -91,6 +91,7 @@ class SaleController extends Controller
 
             'items.product',
             'items.productImei',
+            'items.gifts.product',
         ]);
 
         return Inertia::render(
@@ -111,6 +112,7 @@ class SaleController extends Controller
         $sale->load([
             'items.product',
             'items.productImei',
+            'items.gifts.product',
         ]);
 
         return inertia(

@@ -276,6 +276,15 @@ const selectGiftProduct = (
     }
     else {
 
+        // Debug
+        console.log(
+        'Gift selected',
+        product.id
+    )
+
+        item.gift_product_id =
+            product.id
+
         item.gifts.push({
 
             id: product.id,
@@ -320,6 +329,9 @@ const removeGift = (
             item.gifts.filter(
                 g => g.id !== giftId
             )
+
+        item.gift_product_id =
+            null
     }
 }
 

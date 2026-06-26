@@ -98,6 +98,46 @@ window.onload = () => {
                 {{ item.product?.name }}
 
             </div>
+            <!--Hiện giảm giá-->
+            <div
+                v-if="item.discount_value > 0"
+                class="text-xs text-red-600"
+            >
+                Giảm:
+
+                <span
+                    v-if="
+                        item.discount_type === 'percent'
+                    "
+                >
+                    {{ item.discount_value }}%
+                </span>
+
+                <span v-else>
+                    {{ format(item.discount_value) }}đ
+                </span>
+
+            </div>
+
+            <div
+                v-if="
+                    item.gifts &&
+                    item.gifts.length
+                "
+                class="mt-1 text-xs text-green-700"
+            >
+
+                <div
+                    v-for="gift in item.gifts"
+                    :key="gift.id"
+                >
+                    🎁
+                    {{ gift.product?.name }}
+                    x{{ gift.quantity }}
+                </div>
+
+            </div>
+
 
             <div
                 v-if="
@@ -118,19 +158,13 @@ window.onload = () => {
             >
 
                 <div>
-                    {{
-                        item.qty
-                    }}
+                    {{ item.quantity }}
                     x
-                    {{
-                        format(item.price)
-                    }}
+                    {{ format(item.unit_price) }}
                 </div>
 
                 <div>
-                    {{
-                        format(item.grand_total)
-                    }}
+                    {{ format(item.subtotal) }}
                 </div>
 
             </div>

@@ -10,6 +10,7 @@ use App\Models\Sale;
 use Illuminate\Support\Facades\DB;
 use App\Models\Customer;
 use App\Models\CustomerDebt;
+use App\Models\SaleItemGift;
 
 class PosCheckoutService
 {
@@ -186,28 +187,46 @@ class PosCheckoutService
                 | Lưu chi tiết hóa đơn
                 |--------------------------------------------------------------------------
                 */
-                $sale->items()->create([
+                $saleItem = $sale->items()->create([
                     'product_id' => $item['id'],
-                    'product_imei_id' => $item['imei_id'] ?? null,
-                    'quantity' => (int) $item['quantity'],
-                    'unit_price' => (float) $item['price'],
 
-                    // ✅ GIẢM GIÁ
-                    'discount_type' => $item['discount_type'] ?? null,
-                    'discount_value' => (float) ($item['discount_value'] ?? 0),
+                    'product_imei_id' =>
+                        $item['imei_id'] ?? null,
 
-                    'discount_amount' => $lineDiscount, // 🔥 THÊM DÒNG NÀY
+                    'quantity' =>
+                        (int) $item['quantity'],
 
-                    // subtotal chuẩn hiển thị
-                    'subtotal' => $lineTotal - $lineDiscount,
+                    'unit_price' =>
+                        (float) $item['price'],
 
-                    'note' => $item['note'] ?? null,
+                    'discount_type' =>
+                        $item['discount_type'] ?? null,
 
-                    // ✅ QUÀ TẶNG
-                    'gift_product_id' => $item['gift_product_id'] ?? null,
-                    'is_gift' => !empty($item['gift_product_id']), // 🔥 THÊM
-                    'gift_price' => !empty($item['gift_product_id']) ? 0 : null,
+                    'discount_value' =>
+                        (float) ($item['discount_value'] ?? 0),
+
+                    'discount_amount' =>
+                        $lineDiscount,
+
+                    'subtotal' =>
+                        $lineTotal - $lineDiscount,
+
+                    'note' =>
+                        $item['note'] ?? null,
                 ]);
+
+
+                if (!empty($item['gifts'])) {
+                    foreach ($item['gifts'] as $gift) {
+                        SaleItemGift::create([
+                            'sale_item_id' => $saleItem->id,
+                            'product_id' => $gift['id'],
+                            'quantity' => (int) (
+                                $gift['quantity'] ?? 1
+                            ),
+                        ]);
+                    }
+                }
                 /*
                 |--------------------------------------------------------------------------
                 | Trừ tồn kho sản phẩm thường
@@ -230,37 +249,29 @@ class PosCheckoutService
                 |--------------------------------------------------------------------------
                 */
 
-                if (
-                    !empty(
-                        $item['gift_product_id']
-                    )
-                ) {
-
-                    $giftProduct = Product::query()
-                        ->lockForUpdate()
-                        ->find(
-                            $item['gift_product_id']
-                        );
-
-                    if ($giftProduct) {
-
-                        if ($giftProduct->stock <= 0) {
-
+                if (!empty($item['gifts'])) {
+                    foreach ($item['gifts'] as $gift) {
+                        $giftProduct = Product::query()
+                            ->lockForUpdate()
+                            ->find($gift['id']);
+                        if (!$giftProduct) {
+                            continue;
+                        }
+                        $qty = (int) ($gift['quantity'] ?? 1);
+                        if ($giftProduct->stock < $qty) {
                             throw new \Exception(
                                 'Quà tặng '
                                 . $giftProduct->name
-                                . ' đã hết'
+                                . ' không đủ tồn kho'
                             );
                         }
-
                         $giftProduct->decrement(
                             'stock',
-                            1
+                            $qty
                         );
-
                         $giftProduct->increment(
                             'sold_count',
-                            1
+                            $qty
                         );
                     }
                 }

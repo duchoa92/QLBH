@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SaleItem extends Model
 {
@@ -67,4 +68,12 @@ class SaleItem extends Model
             'gift_product_id'
         );
     }
+
+    public function gifts(): HasMany
+    {
+        return $this->hasMany(
+            SaleItemGift::class
+        );
+    }
+    
 }

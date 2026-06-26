@@ -70,9 +70,19 @@ class PosController extends Controller
     {
         // 1. THÊM VALIDATE: Kiểm tra dữ liệu đầu vào chặt chẽ
         $request->validate([
+
             'items' => 'required|array',
-            'payment_method' => 'required|string', // Bắt buộc phương thức thanh toán phải là chuỗi
-        ], [
+
+            'payment_method' => 'required|string',
+
+            'items.*.discount_type' => 'nullable|string',
+
+            'items.*.discount_value' => 'nullable|numeric',
+
+            'items.*.gift_product_id' => 'nullable|integer',
+
+        ],
+        [
             'items.required' => 'Giỏ hàng không được để trống.',
             'payment_method.required' => 'Vui lòng chọn phương thức thanh toán.',
         ]);
@@ -91,6 +101,7 @@ class PosController extends Controller
             $sale->load([
                 'items.product',
                 'items.productImei',
+                'items.gifts.product',
                 'customer',
             ]);
 
@@ -140,6 +151,7 @@ class PosController extends Controller
         $sale->load([
             'items.product',
             'items.productImei',
+            'items.gifts.product',
         ]);
 
         return Inertia::render(

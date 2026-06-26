@@ -17,6 +17,8 @@ class SaleReceiptController extends Controller
             'items.product',
 
             'items.productImei',
+            
+            'items.gifts.product',
 
             'customer',
 
