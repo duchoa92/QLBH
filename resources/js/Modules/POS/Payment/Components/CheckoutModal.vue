@@ -2,6 +2,7 @@
 
 import { ref, computed } from 'vue'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 const props = defineProps({
     loading: Boolean,
@@ -156,17 +157,10 @@ const lineTotal = (item) => {
             </div>
 
             <div>
-
-                <label class="font-medium">
-
-                    Khách đưa
-
-                </label>
-
-                <input
+                <FloatingInput
                     v-model="paidAmount"
                     type="number"
-                    class="w-full border rounded-lg p-3"
+                    label="Khách đưa"
                 />
 
             </div>
@@ -201,19 +195,11 @@ const lineTotal = (item) => {
             </div>
 
             <div>
-
-                <label class="font-medium">
-
-                    Ghi chú hóa đơn
-
-                </label>
-
-                <textarea
+                <FloatingInput
                     v-model="note"
-                    rows="3"
-                    class="w-full border rounded-lg p-3"
-                />
+                    label="Ghi chú hóa đơn"
 
+                />
             </div>
 
             <div

@@ -17,6 +17,13 @@ const money = (value) => {
         .toLocaleString('vi-VN')
 }
 
+// Ngày tháng
+const formatDate = (date) => {
+
+    return new Date(date)
+        .toLocaleString('vi-VN')
+}
+
 </script>
 
 
@@ -43,7 +50,7 @@ const money = (value) => {
             <div v-if="invoice">
                 <div class="grid grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg border border-gray-100">
                     <div>Mã HĐ: <b class="text-blue-600">{{ invoice.code }}</b></div>
-                    <div>Ngày: <span class="text-gray-600">{{ invoice.created_at }}</span></div>
+                    <div>Ngày: <span class="text-gray-600">{{ formatDate(invoice.created_at) }}</span></div>
                     <div>Khách hàng: <b>{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</b></div>
                     <div>Nhân viên: <span class="text-gray-600">{{ invoice.user?.name ?? '' }}</span></div>
                 </div>
