@@ -26,8 +26,6 @@ class SaleItem extends Model
         
         'note',
 
-        'gift_product_id',
-
         'discount_type',
 
         'discount_value',
@@ -61,13 +59,6 @@ class SaleItem extends Model
         );
     }
 
-    public function giftProduct(): BelongsTo
-    {
-        return $this->belongsTo(
-            Product::class,
-            'gift_product_id'
-        );
-    }
 
     public function gifts(): HasMany
     {

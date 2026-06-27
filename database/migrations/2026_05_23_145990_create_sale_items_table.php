@@ -76,10 +76,6 @@ return new class extends Migration
             $table->text('note')
                 ->nullable();
             
-/*             $table->foreignId('gift_product_id')
-                ->nullable()
-                ->constrained('products')
-                ->nullOnDelete(); */
 
             $table->enum(
                 'discount_type',

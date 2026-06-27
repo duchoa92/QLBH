@@ -385,24 +385,46 @@ export function useCart() {
 
             cart.value.push({
                 id: product.id,
-                image_url: product.image_url ?? null,
-                imei_id: product.imei_id ?? null,
-                imei: product.imei ?? null,
-                serial: product.serial ?? null,
-                color: product.color ?? null,
-                storage: product.storage ?? null,
-                name: product.name,
-                price: Number(product.sell_price ?? product.price ?? 0),
+
+                image_url:
+                    product.image_url ?? null,
+
+                imei_id:
+                    product.imei_id ?? null,
+
+                imei:
+                    product.imei ?? null,
+
+                serial:
+                    product.serial ?? null,
+
+                color:
+                    product.color ?? null,
+
+                storage:
+                    product.storage ?? null,
+
+                name:
+                    product.name,
+
+                price:
+                    Number(
+                        product.sell_price
+                        ??
+                        product.price
+                        ??
+                        0
+                    ),
+
                 quantity: 1,
+
                 note: '',
-                showNote: false,
-                showPromotion: false,
-                discount_type: 'amount',
+
+                discount_type: null,
+
                 discount_value: 0,
-                gift_product_id: null,
-                gift_product_name:'',
-                gift_keyword: '',
-                gift_results: [],
+
+                gifts: [],
             })
 
 
@@ -433,19 +455,27 @@ export function useCart() {
 
         cart.value.push({
             id: product.id,
-            image_url: product.image_url ?? null,
-            name: product.name,
-            price: Number(product.price),
+
+            image_url:
+                product.image_url ?? null,
+
+            name:
+                product.name,
+
+            price:
+                Number(
+                    product.price
+                ),
+
             quantity: 1,
+
             note: '',
-            showNote: false,
-            showPromotion: false,
-            discount_type: 'amount',
+
+            discount_type: null,
+
             discount_value: 0,
-            gift_product_id: null,
-            gift_product_name:'',
-            gift_keyword: '',
-            gift_results: [],
+
+            gifts: [],
         })
     }
 
