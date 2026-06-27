@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 
 import { useMoney }
-from '@/Modules/POS/Core/Utils/useMoney'
+from '@/Modules/POS/Core/Composables/useMoney'
 
 export function usePaymentSummary(
 

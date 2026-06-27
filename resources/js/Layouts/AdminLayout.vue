@@ -132,13 +132,6 @@ watch(
             </main>
 
         </div>
-
-        <!-- <Toaster
-            richColors
-            position="top-right"
-            closeButton
-        /> -->
-
     </div>
 
 </template>

@@ -5,6 +5,8 @@ import { debounce } from 'lodash'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import SortHeader from '@/Components/UI/SortHeader.vue'
 import { Trash, Eye, Pencil } from 'lucide-vue-next'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+
 
 const props = defineProps({
     products: Object,
@@ -209,14 +211,33 @@ const printImei = () => {
     <div class="bg-white p-4 rounded shadow">
         <FloatingInput v-model="filters.search" label="Tìm sản phẩm, SKU, IMEI..." />
 
-        <div v-if="loading" class="mt-2 text-xs text-blue-500">Đang tìm...</div>
 
         <!-- FILTER -->
         <div class="flex gap-2 mt-3">
-            <select v-model="filters.category_id" class="input">
-                <option value="">Danh mục</option>
-                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+            <FloatingSelect
+                v-model="filters.category_id"
+                label="Danh mục"
+                :options="categories"
+                option-label="name"
+                option-value="id"
+            />
+            <FloatingSelect
+                v-model="filters.brand_id"
+                label="Thương hiệu"
+                :options="brand"
+                option-label="name"
+                option-value="id"
+            />
+            <FloatingSelect
+                v-model="filters.stock"
+                label="Tồn kho"
+                :options="categories"
+                option-label="name"
+                option-value="id"
+            >
+                <option value="in_stock">Còn hàng</option>
+                <option value="out_stock">Hết hàng</option>
+                </FloatingSelect>
 
             <select v-model="filters.brand_id" class="input">
                 <option value="">Thương hiệu</option>
@@ -228,6 +249,9 @@ const printImei = () => {
                 <option value="in_stock">Còn hàng</option>
                 <option value="out_stock">Hết hàng</option>
             </select>
+        </div>
+        <div class="py-4">
+            <div v-if="loading" class="text-xs text-blue-500">Đang tìm...</div>
         </div>
     </div>
 

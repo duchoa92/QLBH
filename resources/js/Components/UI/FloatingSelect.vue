@@ -16,6 +16,17 @@ defineProps({
         type: Array,
         default: () => [],
     },
+
+    optionLabel: {
+        type: String,
+        default: 'label',
+    },
+
+    optionValue: {
+        type: String,
+        default: 'value',
+    },
+
 })
 
 const emit = defineEmits([
@@ -57,10 +68,10 @@ const emit = defineEmits([
 
             <option
                 v-for="item in options"
-                :key="item.value"
-                :value="item.value"
+                :key="item[optionValue]"
+                :value="item[optionValue]"
             >
-                {{ item.label }}
+                {{ item[optionLabel] }}
             </option>
 
         </select>
