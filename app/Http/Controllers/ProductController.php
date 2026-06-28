@@ -34,7 +34,14 @@ class ProductController extends Controller
             ]),
 
             'categories' => Category::select('id','name')->get(),
-            'brands' => Brand::select('id','name')->get(),
+            
+            'brands' => Brand::query()
+                ->select('id','name','category_id')
+                ->when(request('category_id'), function ($q) {
+                    $q->where('category_id', request('category_id'));
+                })
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 

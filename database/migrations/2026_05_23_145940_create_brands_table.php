@@ -23,6 +23,8 @@ return new class extends Migration
             $table->string('slug')
                 ->unique();
 
+            $table->foreignId('category_id')->nullable()->constrained()->cascadeOnDelete();
+
             $table->integer('sort_order')
                 ->default(0);
 
