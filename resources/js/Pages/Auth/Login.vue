@@ -6,6 +6,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import FloatingInput from '@/Components/UI/FloatingInput.vue';
 
 defineProps({
     canResetPassword: {
@@ -39,9 +40,7 @@ const submit = () => {
 
         <form @submit.prevent="submit">
             <div>
-                <InputLabel for="login" value="Tên đăng nhập hoặc số điện thoại"/>
-
-                <TextInput
+                <FloatingInput
                     id="login"
                     type="text"
                     class="mt-1 block w-full"
@@ -49,21 +48,22 @@ const submit = () => {
                     required
                     autofocus
                     autocomplete="username"
+                    label="Tên đăng nhập hoặc số điện thoại"
                 />
 
                 <InputError class="mt-2" :message="form.errors.email" />
             </div>
 
             <div class="mt-4">
-                <InputLabel for="password" value="Password" />
 
-                <TextInput
+                <FloatingInput
                     id="password"
                     type="password"
                     class="mt-1 block w-full"
                     v-model="form.password"
                     required
                     autocomplete="current-password"
+                    label="Nhập mật khẩu"
                 />
 
                 <InputError class="mt-2" :message="form.errors.password" />

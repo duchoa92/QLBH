@@ -12,7 +12,8 @@ const emit = defineEmits(['update:filters'])
 
 const update = (key, value) => {
     emit('update:filters', {
-        [key]: value
+        ...props.filters,
+        [key]: value ?? ''
     })
 }
 </script>

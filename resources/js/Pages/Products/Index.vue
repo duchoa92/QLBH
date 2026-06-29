@@ -6,6 +6,7 @@ import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
 import ProductBulkBar from './Components/ProductBulkBar.vue'
 import ProductModal from './Components/ProductModal.vue'
+import ProductCreateModal from './Components/ProductCreateModal.vue'
 
 const props = defineProps({
     products: Object,
@@ -44,7 +45,7 @@ watch(
         clearTimeout(timeout)
 
         timeout = setTimeout(() => {
-            router.get(route('products.index'), { ...filters.value }, {
+            router.get(route('products.index'), filters.value, {
                 preserveState: true,
                 replace: true,
                 preserveScroll: true,
@@ -141,10 +142,8 @@ const updateProduct = () => {
     )
 }
 
-// debug
-watch(filters, () => {
-    console.log('FILTER CHANGED', filters.value)
-}, { deep: true })
+const showCreate = ref(false)
+
 </script>
 
 <template>
@@ -158,7 +157,9 @@ watch(filters, () => {
         </div>
 
         <div class="flex gap-2">
-            <Link :href="route('products.create')" class="btn-green">+ Thêm</Link>
+            <button @click="showCreate" class="btn-green">
+                + Thêm
+            </button>
             <Link :href="route('products.trash')" class="btn-green">Thùng rác</Link>
         </div>
     </div>
@@ -168,7 +169,10 @@ watch(filters, () => {
         :filters="filters"
         :categories="categories"
         :brands="brands"
-        @update:filters="v => filters.value = { ...filters.value, ...v }"
+        @update:filters="v => {
+            if (!v || typeof v !== 'object') return
+            Object.assign(filters, v)
+        }"
     />
 
     <!-- BULK -->
@@ -196,6 +200,16 @@ watch(filters, () => {
     :product="selectedProduct"
     @close="showModal = false"
     @save="updateProduct"
+/>
+
+<ProductCreateModal
+    :show="showCreate"
+    :categories="categories"
+    :brands="brands"
+    @close="() => {
+        showCreate = false
+        router.reload({ only: ['products'] })
+    }"
 />
 
 </template>

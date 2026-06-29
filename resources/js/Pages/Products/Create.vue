@@ -6,11 +6,13 @@ import {
 } from '@inertiajs/vue3';
 
 const props = defineProps({
-
     categories: Array,
-
     brands: Array,
-});
+    isModal: {
+        type: Boolean,
+        default: false
+    }
+})
 
 const form = useForm({
 
@@ -34,11 +36,15 @@ const form = useForm({
 });
 
 const submit = () => {
+    form.post(route('products.store'), {
+        onSuccess: () => {
+            emit('success')
+        }
+    })
+}
 
-    form.post(
-        route('products.store')
-    );
-};
+const emit = defineEmits(['success'])
+
 
 </script>
 
@@ -49,12 +55,15 @@ const submit = () => {
                 Thêm sản phẩm
             </h1>
 
-            <Link
-                :href="route('products.index')"
-                class="px-4 py-2 bg-gray-200 rounded"
-            >
-                Quay lại
-            </Link>
+            <div v-if="!isModal">
+                <Link
+                    :href="route('products.index')"
+                    class="px-4 py-2 bg-gray-200 rounded"
+                >
+                    Quay lại
+                </Link>
+
+            </div>
         </div>
 
         <form
