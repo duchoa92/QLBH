@@ -25,21 +25,35 @@ class ProductService extends BaseService
 
             $data['slug'] = Str::slug($data['name']);
 
+            // ✅ đảm bảo barcode luôn tồn tại
+            $data['barcode'] = $data['barcode'] ?? null;
+
+            // upload ảnh
             if (isset($data['image'])) {
                 $data['image'] = $data['image']->store('products', 'public');
             }
 
             $product = $this->repository->create($data);
 
+            // ✅ XỬ LÝ IMEI CHUẨN HƠN (KHÔNG PHÁ CODE CŨ)
             if (!empty($data['imeis'])) {
+
                 $imeis = preg_split('/\r\n|\r|\n/', trim($data['imeis']));
 
                 foreach ($imeis as $imei) {
-                    if (empty($imei)) continue;
+
+                    $imei = trim($imei);
+
+                    // bỏ rỗng
+                    if (!$imei) continue;
+
+                    // ❗ tránh trùng IMEI trong DB
+                    $exists = ProductImei::where('imei', $imei)->exists();
+                    if ($exists) continue;
 
                     ProductImei::create([
                         'product_id' => $product->id,
-                        'imei' => trim($imei),
+                        'imei' => $imei,
                     ]);
                 }
             }

@@ -157,7 +157,7 @@ const showCreate = ref(false)
         </div>
 
         <div class="flex gap-2">
-            <button @click="showCreate" class="btn-green">
+            <button @click="showCreate = true" class="btn-green">
                 + Thêm
             </button>
             <Link :href="route('products.trash')" class="btn-green">Thùng rác</Link>

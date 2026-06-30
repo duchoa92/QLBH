@@ -1,5 +1,4 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount  } from 'vue'
 import CartItem from './CartItem.vue'
 
 const props = defineProps({
