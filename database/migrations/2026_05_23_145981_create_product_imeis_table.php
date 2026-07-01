@@ -60,6 +60,9 @@ return new class extends Migration
             $table->string('storage')
                 ->nullable();
 
+
+
+            
             /*
             |--------------------------------------------------------------------------
             | Device Condition

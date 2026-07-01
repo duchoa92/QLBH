@@ -262,4 +262,54 @@ class ProductController extends Controller
             'products' => $products
         ]);
     }
+
+    // Tạo API Scan
+    public function scan()
+    {
+        $code = request('code');
+
+        // 1. tìm theo IMEI
+        $imei = \App\Models\ProductImei::with('variant.product')
+            ->where('imei', $code)
+            ->first();
+
+        if ($imei) {
+            return response()->json([
+                'type' => 'imei',
+                'product' => $imei->variant->product,
+                'variant' => $imei->variant
+            ]);
+        }
+
+        // 2. tìm theo barcode variant
+        $variant = \App\Models\ProductVariant::with('product')
+            ->where('barcode', $code)
+            ->first();
+
+        if ($variant) {
+            return response()->json([
+                'type' => 'variant',
+                'product' => $variant->product,
+                'variant' => $variant
+            ]);
+        }
+
+        // 3. fallback product
+        $product = \App\Models\Product::where('barcode', $code)->first();
+
+        if ($product) {
+            return response()->json([
+                'type' => 'product',
+                'product' => $product
+            ]);
+        }
+
+        return response()->json([
+            'error' => 'Không tìm thấy'
+        ], 404);
+    }
+
+    
+
+
 }

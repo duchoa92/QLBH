@@ -62,4 +62,10 @@ class ProductImei extends Model
             'product_imei_id'
         );
     }
+
+    // Quan hệ với Variant
+    public function variant()
+    {
+        return $this->belongsTo(ProductVariant::class);
+    }
 }

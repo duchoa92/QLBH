@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch  } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -36,7 +36,9 @@ const form = useForm({
     has_variant: false,
     color: '',
     storage: '',
-    version: ''
+    version: '',
+
+    variants: [],
 })
 
 /*
@@ -55,6 +57,44 @@ const handleImage = (e) => {
 }
 
 
+// Biến thể
+const variants = ref([
+    {
+        color: '',
+        storage: '',
+        version: '',
+        sku: '',
+        barcode: '',
+        cost_price: 0,
+        sell_price: 0,
+        stock: 0,
+        imeis: ''
+    }
+])
+
+// Thêm xóa biến thể
+const addVariant = () => {
+    variants.value.push({
+        color: '',
+        storage: '',
+        version: '',
+        sku: '',
+        barcode: '',
+        cost_price: 0,
+        sell_price: 0,
+        stock: 0,
+        imeis: ''
+    })
+}
+
+const removeVariant = (index) => {
+    variants.value.splice(index, 1)
+}
+
+
+
+
+// Tạo barcode
 const generateBarcode = () => {
     // dạng 13 số (EAN-like)
     const code = Date.now().toString().slice(-10) +
@@ -63,20 +103,39 @@ const generateBarcode = () => {
     form.barcode = code
 }
 
-/*
-|--------------------------------------------------------------------------
-| SUBMIT
-|--------------------------------------------------------------------------
-*/
-const submit = () => {
-    form.post(route('products.store'), {
-        onSuccess: () => {
-            emit('close')
-            form.reset()
-            preview.value = null
-        }
+// Tạo biến thể
+const generateVariants = () => {
+
+    const colors = form.color ? [form.color] : ['']
+    const storages = form.storage ? [form.storage] : ['']
+    const versions = form.version ? [form.version] : ['']
+
+    const result = []
+
+    colors.forEach(c => {
+        storages.forEach(s => {
+            versions.forEach(v => {
+                result.push({
+                    color: c,
+                    storage: s,
+                    version: v,
+
+                    sku: '',
+                    barcode: '',
+                    cost_price: form.cost_price || 0,
+                    sell_price: form.sell_price || 0,
+                    stock: form.stock || 0
+                })
+            })
+        })
     })
+
+    form.variants = result
+
+    console.log('VARIANTS', form.variants)
 }
+
+
 
 // hiện scan
 const showCamera = ref(false)
@@ -124,6 +183,55 @@ window.addEventListener('keydown', (e) => {
         buffer += e.key
     }
 })
+
+watch(
+    () => [form.color, form.storage, form.version, form.has_variant],
+    () => {
+        if (form.has_variant) {
+            generateVariants()
+        }
+    }
+)
+
+// Hàm scan
+const handleScan = async (code) => {
+
+    if (!code) return
+
+    try {
+        const res = await axios.post('/scan', { code })
+
+        const data = res.data
+
+        if (data.type === 'imei') {
+            console.log('IMEI → đúng máy', data.variant)
+        }
+
+        if (data.type === 'variant') {
+            console.log('Barcode → đúng biến thể', data.variant)
+        }
+
+        if (data.type === 'product') {
+            console.log('Product thường', data.product)
+        }
+
+    } catch (e) {
+        console.log('Không tìm thấy')
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SUBMIT
+|--------------------------------------------------------------------------
+*/
+const submit = () => {
+    form.transform(data => ({
+        ...data,
+        variants: variants.value
+    })).post(route('products.store'))
+}
 
 
 </script>
@@ -254,6 +362,10 @@ window.addEventListener('keydown', (e) => {
                         ref="imeiInput"
                         v-model="form.imeis"
                         rows="5"
+                        @keyup.enter="() => {
+                            handleScan(form.imeis)
+                            form.imeis = ''
+                        }"
                         class="w-full border rounded p-2 focus:ring focus:ring-blue-200"
                         placeholder="Quét hoặc nhập IMEI..."
                     />
@@ -271,51 +383,91 @@ window.addEventListener('keydown', (e) => {
             <!-- ===================== -->
             <div class="border-t pt-4">
 
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" v-model="form.has_variant" />
-                    <span class="font-medium">Có thuộc tính (biến thể)</span>
-                </label>
+                <div class="flex justify-between items-center">
+                    <h3 class="font-semibold">Biến thể</h3>
+
+                    <button
+                        type="button"
+                        class="px-3 py-2 bg-gray-200 rounded text-sm"
+                        @click="addVariant"
+                    >
+                        + Thêm biến thể
+                    </button>
+                </div>
 
                 <div
-                    v-if="form.has_variant"
-                    class="grid grid-cols-3 gap-3 mt-4"
+                    v-for="(v, i) in variants"
+                    :key="i"
+                    class="border rounded p-3 mt-3 space-y-3"
                 >
 
-                    <FloatingSelect
-                        v-model="form.color"
-                        label="Màu sắc"
-                        :options="[
-                            { id: 'black', name: 'Đen' },
-                            { id: 'white', name: 'Trắng' },
-                            { id: 'blue', name: 'Xanh' }
-                        ]"
-                        option-label="name"
-                        option-value="id"
+                    <!-- THUỘC TÍNH -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <FloatingInput v-model="v.color" label="Màu" />
+                        <FloatingInput v-model="v.storage" label="Bộ nhớ" />
+                        <FloatingInput v-model="v.version" label="Phiên bản" />
+                    </div>
+
+                    <!-- SKU + BARCODE -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <FloatingInput v-model="v.sku" label="SKU" />
+                        <FloatingInput v-model="v.barcode" label="Barcode" />
+                    </div>
+
+                    <!-- GIÁ + TỒN -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <FloatingInput v-model="v.cost_price" label="Giá nhập" type="number"/>
+                        <FloatingInput v-model="v.sell_price" label="Giá bán" type="number"/>
+                        <FloatingInput v-model="v.stock" label="Tồn kho" type="number"/>
+                    </div>
+
+                    <!-- IMEI -->
+                    <textarea
+                        v-model="v.imeis"
+                        rows="3"
+                        class="w-full border rounded p-2"
+                        placeholder="IMEI riêng cho biến thể"
                     />
 
-                    <FloatingSelect
-                        v-model="form.storage"
-                        label="Bộ nhớ"
-                        :options="[
-                            { id: '64', name: '64GB' },
-                            { id: '128', name: '128GB' },
-                            { id: '256', name: '256GB' }
-                        ]"
-                        option-label="name"
-                        option-value="id"
-                    />
+                    <button
+                        type="button"
+                        class="text-red-500 text-sm"
+                        @click="removeVariant(i)"
+                    >
+                        Xóa biến thể
+                    </button>
 
-                    <FloatingSelect
-                        v-model="form.version"
-                        label="Phiên bản"
-                        :options="[
-                            { id: 'vn', name: 'VN/A' },
-                            { id: 'll', name: 'LL/A' },
-                            { id: 'jp', name: 'J/A' }
-                        ]"
-                        option-label="name"
-                        option-value="id"
-                    />
+                </div>
+
+            </div>
+
+
+            <!--Biến Thể-->
+            <div v-if="form.has_variant && form.variants.length" class="mt-4">
+
+                <h3 class="font-semibold mb-2">Danh sách biến thể</h3>
+
+                <div class="space-y-2">
+
+                    <div
+                        v-for="(v, i) in form.variants"
+                        :key="i"
+                        class="grid grid-cols-6 gap-2 items-center"
+                    >
+
+                        <div>{{ v.color }} - {{ v.storage }} - {{ v.version }}</div>
+
+                        <input v-model="v.sku" placeholder="SKU" class="border p-1 rounded" />
+
+                        <input v-model="v.barcode" placeholder="Barcode" class="border p-1 rounded" />
+
+                        <input v-model="v.cost_price" type="number" class="border p-1 rounded" />
+
+                        <input v-model="v.sell_price" type="number" class="border p-1 rounded" />
+
+                        <input v-model="v.stock" type="number" class="border p-1 rounded" />
+
+                    </div>
 
                 </div>
 

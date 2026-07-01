@@ -11,10 +11,18 @@ const props = defineProps({
 const emit = defineEmits(['update:filters'])
 
 const update = (key, value) => {
-    emit('update:filters', {
+
+    let newFilters = {
         ...props.filters,
         [key]: value ?? ''
-    })
+    }
+
+    // reset brand khi đổi category
+    if (key === 'category_id') {
+        newFilters.brand_id = ''
+    }
+
+    emit('update:filters', newFilters)
 }
 </script>
 

@@ -2,123 +2,49 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Routing\Controllers\HasMiddleware;
-use Illuminate\Routing\Controllers\Middleware;
-use Inertia\Inertia;
-use App\Services\Category\CategoryService;
-use App\Repositories\Category\CategoryRepository;
-use App\Http\Requests\Category\StoreCategoryRequest;
 use App\Models\Category;
-use App\Http\Requests\Category\UpdateCategoryRequest;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Illuminate\Support\Str;
 
-class CategoryController extends Controller implements HasMiddleware
+class CategoryController extends Controller
 {
-    public function __construct(
-        protected CategoryRepository $repository,
-        protected CategoryService $service,
-    ) {
-    }
-
-    public static function middleware(): array
-    {
-        return [
-
-            new Middleware(
-                'permission:categories.view',
-                only: ['index']
-            ),
-
-            new Middleware(
-                'permission:categories.create',
-                only: ['create', 'store']
-            ),
-
-            new Middleware(
-                'permission:categories.edit',
-                only: ['edit', 'update']
-            ),
-
-            new Middleware(
-                'permission:categories.delete',
-                only: ['destroy', 'restore']
-            ),
-
-        ];
-    }
-
     public function index()
     {
-        $categories = $this->repository->paginate();
+       return Inertia::render('Categories/Index', [
+            'categories' => Category::with('parent:id,name')
+                ->withTrashed()
+                ->paginate(10),
 
-        return Inertia::render('Categories/Index', [
-            'categories' => $categories,
-
-            'filters' => [
-                'search' => request('search')
-            ]
+            'filters' => request()->only('search')
         ]);
     }
 
-    public function create()
+    public function store(Request $request)
     {
-        return Inertia::render('Categories/Create');
-    }
-
-    public function store(StoreCategoryRequest $request)
-    {
-        $this->service->create(
-            $request->validated()
-        );
-
-        return redirect()
-            ->route('categories.index')
-            ->with('success', 'Tạo danh mục thành công');
-    }
-
-    public function edit(Category $category)
-    {
-        return Inertia::render('Categories/Edit', [
-            'category' => $category
+        Category::create([
+            'name' => $request->name,
+            'slug' => Str::slug($request->name),
+            'parent_id' => $request->parent_id
         ]);
+
+        return back()->with('success', 'Đã thêm danh mục');
     }
 
-    public function update(UpdateCategoryRequest $request, Category $category) 
+    public function update(Request $request, Category $category)
     {
+        $category->update([
+            'name' => $request->name,
+            'slug' => Str::slug($request->name),
+            'parent_id' => $request->parent_id
+        ]);
 
-        $this->service->update(
-            $category,
-            $request->validated()
-        );
-
-        return redirect()
-            ->route('categories.index')
-            ->with(
-                'success',
-                'Cập nhật thành công'
-            );
+        return back()->with('success', 'Đã cập nhật');
     }
 
     public function destroy(Category $category)
     {
-        $this->service->delete($category);
-
-        return redirect()
-            ->back()
-            ->with(
-                'success',
-                'Xóa thành công'
-            );
-    }
-
-    public function restore($id)
-    {
-        $this->service->restore($id);
-
-        return redirect()
-            ->back()
-            ->with(
-                'success',
-                'Khôi phục thành công'
-            );
+        $category->delete();
+        return back()->with('success', 'Đã xóa');
     }
 }

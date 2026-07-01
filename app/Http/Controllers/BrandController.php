@@ -2,130 +2,61 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Brand\StoreBrandRequest;
-use App\Http\Requests\Brand\UpdateBrandRequest;
 use App\Models\Brand;
-use App\Services\Brand\BrandService;
-use Illuminate\Http\RedirectResponse;
+use App\Models\Category;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\Support\Str;
 
 class BrandController extends Controller
 {
-    public function __construct(
-        protected BrandService $service
-    ) {}
-
-    // Hiển thị danh sách thương hiệu
-    public function index(): Response
+    public function index(Request $request)
     {
-        return Inertia::render(
-            'Brands/Index',
-            [
-                'brands' => $this->service
-                    ->paginate(),
-            ]
-        );
+        $brands = Brand::with('category')
+            ->when($request->search, function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->search . '%');
+            })
+            ->when($request->category_id, function ($q) use ($request) {
+                $q->where('category_id', $request->category_id);
+            })
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
+
+        $categories = Category::select('id', 'name')->get();
+
+        return Inertia::render('Brands/Index', [
+            'brands' => $brands,
+            'filters' => $request->only('search', 'category_id'),
+            'categories' => $categories
+        ]);
     }
 
-    // Hiển thị form tạo thương hiệu
-    public function create(): Response
+    public function store(Request $request)
     {
-        return Inertia::render(
-            'Brands/Create'
-        );
+        Brand::create([
+            'name' => $request->name,
+            'slug' => Str::slug($request->name),
+            'category_id' => $request->category_id
+        ]);
+
+        return back()->with('success', 'Đã thêm brand');
     }
 
-    // Xử lý tạo mới thương hiệu
-    public function store(
-        StoreBrandRequest $request
-    ): RedirectResponse {
-
-        $this->service->create(
-            $request->validated()
-        );
-
-        return redirect()
-            ->route('brands.index')
-            ->with(
-                'success',
-                'Thêm thương hiệu thành công'
-            );
-    }
-
-    // Hiển thị form chỉnh sửa thương hiệu
-    public function edit(
-        Brand $brand
-    ): Response {
-
-        return Inertia::render(
-            'Brands/Edit',
-            [
-                'brand' => $brand,
-            ]
-        );
-    }
-
-    // Xử lý cập nhật thương hiệu
-    public function update(
-        UpdateBrandRequest $request,
-        Brand $brand
-    ): RedirectResponse {
-
-        $this->service->update(
-            $brand,
-            $request->validated()
-        );
-
-        return redirect()
-            ->route('brands.index')
-            ->with(
-                'success',
-                'Cập nhật thành công'
-            );
-    }
-
-    // Xử lý xóa thương hiệu
-    public function destroy(
-        Brand $brand
-    ): RedirectResponse {
-
-        $this->service->delete(
-            $brand
-        );
-
-        return redirect()
-            ->back()
-            ->with(
-                'success',
-                'Xóa thành công'
-            );
-    }
-
-    // Xử lý khôi phục thương hiệu đã xóa
-    public function restore(
-        int $id
-    ): RedirectResponse {
-
-        $this->service->restore($id);
-
-        return redirect()
-            ->back()
-            ->with(
-                'success',
-                'Khôi phục thành công'
-            );
-    }
-
-    // Hiển thị thương hiệu đã xóa
-    public function trash(): Response
+    public function update(Request $request, Brand $brand)
     {
-        return Inertia::render(
-            'Brands/Trash',
-            [
-                'brands' => $this->service
-                    ->trash(),
-            ]
-        );
+        $brand->update([
+            'name' => $request->name,
+            'slug' => Str::slug($request->name),
+            'category_id' => $request->category_id
+        ]);
+
+        return back()->with('success', 'Đã cập nhật');
+    }
+
+    public function destroy(Brand $brand)
+    {
+        $brand->delete();
+        return back()->with('success', 'Đã xóa');
     }
 }

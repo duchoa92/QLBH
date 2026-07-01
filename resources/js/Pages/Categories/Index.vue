@@ -47,21 +47,33 @@ const restore = (id) => {
     )
 
 }
-
+// FIX FILTER SEARCH
 watch(search, (value) => {
-
     router.get(
-        '/categories',
-        {
-            search: value
-        },
+        route('categories.index'),
+        { search: value },
         {
             preserveState: true,
             replace: true
         }
     )
-
 })
+
+const showModal = ref(false)
+
+const form = ref({
+    name: '',
+    parent_id: ''
+})
+
+const submit = () => {
+    router.post('/categories', form.value, {
+        onSuccess: () => {
+            showModal.value = false
+            form.value = { name: '', parent_id: '' }
+        }
+    })
+}
 
 </script>
 
@@ -83,12 +95,12 @@ watch(search, (value) => {
 
             </div>
 
-            <a
-                href="/categories/create"
+           <button
+                @click="showModal = true"
                 class="px-4 py-2 bg-black text-white rounded"
             >
                 Thêm mới
-            </a>
+            </button>
 
         </div>
 
@@ -118,6 +130,10 @@ watch(search, (value) => {
                     </th>
 
                     <th class="border p-2">
+                        Danh mục cha
+                    </th>
+                    
+                    <th class="border p-2">
                         Slug
                     </th>
 
@@ -146,6 +162,10 @@ watch(search, (value) => {
 
                     <td class="border p-2">
                         {{ item.name }}
+                    </td>
+
+                    <td class="border p-2">
+                        {{ item.parent?.name || '-' }}
                     </td>
 
                     <td class="border p-2">
@@ -201,6 +221,45 @@ watch(search, (value) => {
             </tbody>
 
         </table>
+
+        <div v-if="showModal" class="fixed inset-0 bg-black/40 flex items-center justify-center">
+
+            <div class="bg-white p-5 rounded-xl w-[400px] space-y-3">
+
+                <h2 class="font-bold">Thêm danh mục</h2>
+
+                <input
+                    v-model="form.name"
+                    placeholder="Tên danh mục"
+                    class="w-full border p-2 rounded"
+                />
+
+                <select
+                    v-model="form.parent_id"
+                    class="w-full border p-2 rounded"
+                >
+                    <option value="">Không có</option>
+
+                    <option
+                        v-for="c in categories.data"
+                        :key="c.id"
+                        :value="c.id"
+                    >
+                        {{ c.name }}
+                    </option>
+
+                </select>
+
+                <div class="flex justify-end gap-2">
+                    <button @click="showModal = false">Hủy</button>
+                    <button @click="submit" class="bg-black text-white px-3 py-1 rounded">
+                        Lưu
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
 
     </div>
 

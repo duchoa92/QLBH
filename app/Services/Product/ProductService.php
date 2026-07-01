@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ProductImei;
+use App\Models\ProductVariant;
 
 class ProductService extends BaseService
 {
@@ -34,6 +35,53 @@ class ProductService extends BaseService
             }
 
             $product = $this->repository->create($data);
+
+            // ==========================
+            // VARIANTS + IMEI (CHUẨN POS)
+            // ==========================
+            if (!empty($data['variants'])) {
+
+                foreach ($data['variants'] as $v) {
+
+                    $variant = ProductVariant::create([
+                        'product_id' => $product->id,
+
+                        'sku' => $v['sku'] ?? null,
+                        'barcode' => $v['barcode'] ?? null,
+
+                        'color' => $v['color'] ?? null,
+                        'storage' => $v['storage'] ?? null,
+                        'version' => $v['version'] ?? null,
+
+                        'cost_price' => $v['cost_price'] ?? 0,
+                        'sell_price' => $v['sell_price'] ?? 0,
+                        'stock' => $v['stock'] ?? 0,
+                    ]);
+
+                    // 🔥 IMEI theo từng VARIANT
+                    if (!empty($v['imeis'])) {
+
+                        $imeis = preg_split('/\r\n|\r|\n/', trim($v['imeis']));
+
+                        foreach ($imeis as $imei) {
+
+                            $imei = trim($imei);
+                            if (!$imei) continue;
+
+                            // tránh trùng
+                            $exists = ProductImei::where('imei', $imei)->exists();
+                            if ($exists) continue;
+
+                            ProductImei::create([
+                                'product_id' => $product->id,
+                                'variant_id' => $variant->id, // 🔥 CHÌA KHÓA
+                                'imei' => $imei,
+                            ]);
+                        }
+                    }
+                }
+            }
+
 
             // ✅ XỬ LÝ IMEI CHUẨN HƠN (KHÔNG PHÁ CODE CŨ)
             if (!empty($data['imeis'])) {

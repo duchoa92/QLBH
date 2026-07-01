@@ -152,4 +152,10 @@ class Product extends Model
             ->exists();
     }
 
+    // Biến thể
+    public function variants()
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
 }
