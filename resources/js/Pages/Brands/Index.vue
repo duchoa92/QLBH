@@ -1,9 +1,13 @@
 <script setup>
-import { router } from '@inertiajs/vue3'
-import { ref, watch } from 'vue'
+import { router, useForm, usePage   } from '@inertiajs/vue3'
+import { ref, watch, nextTick  } from 'vue'
 import Swal from 'sweetalert2'
-
+import { toast } from 'vue-sonner'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import Modal from '@/Components/Modal.vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+
 
 defineOptions({
     layout: AdminLayout
@@ -15,29 +19,44 @@ const props = defineProps({
     categories: Array
 })
 
-const search = ref(props.filters?.search || '')
-const category_id = ref(props.filters?.category_id || '')
+const page = usePage()
 
-// watch giống categories
+watch(
+    () => page.props.flash?.success,
+    (msg) => {
+        if (msg) {
+            toast.success(msg)
+        }
+    }
+)
+
+/* ================= FILTER ================= */
+const search = ref(props.filters?.search || '')
+const category_id = ref(props.filters?.category_id ?? null)
+
+let timeout = null
+
 watch([search, category_id], ([s, c]) => {
-    router.get('/brands', {
-        search: s,
-        category_id: c
-    }, {
-        preserveState: true,
-        replace: true
-    })
+    clearTimeout(timeout)
+
+    timeout = setTimeout(() => {
+        router.get('/brands', {
+            search: s,
+            category_id: c
+        }, {
+            preserveState: true,
+            replace: true
+        })
+    }, 300)
 })
 
-// delete giống categories (Swal)
+/* ================= DELETE ================= */
 const destroy = (id) => {
     Swal.fire({
         title: 'Xác nhận xóa?',
-        text: 'Dữ liệu sẽ được đưa vào thùng rác',
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: 'Xóa',
-        cancelButtonText: 'Hủy',
+        confirmButtonText: 'Xóa'
     }).then((result) => {
         if (result.isConfirmed) {
             router.delete(`/brands/${id}`)
@@ -45,21 +64,90 @@ const destroy = (id) => {
     })
 }
 
+/* ================= MODAL ================= */
 const showModal = ref(false)
+const isEdit = ref(false)
 
-const form = ref({
+const form = useForm({
+    id: null,
     name: '',
-    category_id: ''
+    category_id: null
 })
 
-const submit = () => {
-    router.post('/brands', form.value, {
-        onSuccess: () => {
-            showModal.value = false
-            form.value = { name: '', category_id: '' }
-        }
-    })
+/* 👉 MỞ CREATE */
+const openCreate = async () => {
+    isEdit.value = false
+    form.reset()
+    form.clearErrors()
+    form.id = null
+
+    showModal.value = true
+
+    await nextTick()
+    document.querySelector('[name="name"]')?.focus()
 }
+
+/* 👉 MỞ EDIT */
+const openEdit = (brand) => {
+    isEdit.value = true
+
+    form.id = brand.id
+    form.name = brand.name
+    form.category_id = brand.category_id
+
+    form.clearErrors()
+    showModal.value = true
+}
+
+const handleError = async (errors) => {
+
+    const messages = Object.values(errors)
+
+    // 👉 hiện lần lượt
+    for (let i = 0; i < messages.length; i++) {
+        toast.error(messages[i])
+
+        // delay 1 chút cho dễ nhìn
+        await new Promise(r => setTimeout(r, 500))
+    }
+
+    // 👉 focus lỗi đầu tiên
+    await nextTick()
+
+    const first = Object.keys(errors)[0]
+    const el = document.querySelector(`[name="${first}"]`)
+
+    if (el) {
+        el.focus()
+        el.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        })
+    }
+}
+
+
+/* 👉 SUBMIT */
+const submit = () => {
+    if (isEdit.value) {
+        form.put(`/brands/${form.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                showModal.value = false
+            },
+            onError: handleError
+        })
+    } else {
+        form.post('/brands', {
+            preserveScroll: true,
+            onSuccess: () => {
+                showModal.value = false
+            },
+            onError: handleError
+        })
+    }
+}
+
 
 </script>
 
@@ -73,10 +161,7 @@ const submit = () => {
             <p class="text-gray-500">Quản lý thương hiệu</p>
         </div>
 
-        <button
-            @click="showModal = true"
-            class="px-4 py-2 bg-black text-white rounded"
-        >
+        <button @click="openCreate" class="px-4 py-2 bg-black text-white rounded">
             Thêm mới
         </button>
     </div>
@@ -84,20 +169,22 @@ const submit = () => {
     <!-- FILTER -->
     <div class="flex gap-3 mb-5">
 
-        <input
+        <FloatingInput
+            name="search"
             v-model="search"
-            type="text"
-            placeholder="Tìm kiếm..."
-            class="border rounded p-2 w-64"
-        >
+            label="Tìm kiếm..."
+            class="w-64"
+        />
 
-        <select v-model="category_id" class="border rounded p-2">
-            <option value="">Tất cả danh mục</option>
+        <FloatingSelect
+            name="category_id"
+            v-model="category_id"
+            label="Danh mục"
+            :options="categories.map(c => ({ value: c.id, label: c.name }))"
+            class="w-64"
+        />
 
-            <option v-for="c in categories" :key="c.id" :value="c.id">
-                {{ c.name }}
-            </option>
-        </select>
+        
 
     </div>
 
@@ -138,11 +225,12 @@ const submit = () => {
                 <td class="border p-2">
                     <div class="flex gap-2">
 
-                        <a :href="`/brands/${brand.id}/edit`"
-                           class="px-3 py-1 bg-blue-500 text-white rounded">
+                        <button
+                            @click="openEdit(brand)"
+                            class="px-3 py-1 bg-blue-500 text-white rounded"
+                        >
                             Sửa
-                        </a>
-
+                        </button>
                         <button
                             @click="destroy(brand.id)"
                             class="px-3 py-1 bg-red-500 text-white rounded">
@@ -164,31 +252,37 @@ const submit = () => {
 
     </table>
 
-    <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center">
+   <Modal
+        :show="showModal"
+        :title="isEdit ? 'Cập nhật thương hiệu' : 'Thêm thương hiệu'"
+        @close="showModal = false"
+    >
 
-    <div class="bg-white w-96 p-5 rounded shadow">
+        <!-- BODY -->
+        <template #default>
 
-        <h2 class="text-lg font-bold mb-4">
-            Thêm thương hiệu
-        </h2>
+            <FloatingInput
+                name="name"
+                v-model="form.name"
+                label="Tên thương hiệu"
+                class="mb-3"
+                :disabled="form.processing"
+            />
+        
 
-        <!-- Name -->
-        <input
-            v-model="form.name"
-            placeholder="Tên thương hiệu"
-            class="border w-full p-2 mb-3 rounded"
-        >
+            <FloatingSelect
+                name="category_id"
+                v-model="form.category_id"
+                label="Danh mục"
+                :options="categories.map(c => ({ value: c.id, label: c.name }))"
+                :disabled="form.processing"
+                class="mb-3"
+            />
+            
+        </template>
 
-        <!-- Category -->
-        <select v-model="form.category_id" class="border w-full p-2 mb-3 rounded">
-            <option value="">Chọn danh mục</option>
-            <option v-for="c in categories" :key="c.id" :value="c.id">
-                {{ c.name }}
-            </option>
-        </select>
-
-        <!-- Action -->
-        <div class="flex justify-end gap-2">
+        <!-- FOOTER -->
+        <template #footer>
 
             <button
                 @click="showModal = false"
@@ -199,16 +293,19 @@ const submit = () => {
 
             <button
                 @click="submit"
-                class="px-3 py-1 bg-blue-600 text-white rounded"
+                :disabled="form.processing"
+                class="btn-blue"
             >
-                Lưu
+                <span v-if="form.processing">Đang xử lý...</span>
+                <span v-else>{{ isEdit ? 'Cập nhật' : 'Lưu' }}</span>
             </button>
 
-        </div>
+        </template>
 
-    </div>
-
-</div>
+    </Modal>
 
 </div>
+
+
+
 </template>

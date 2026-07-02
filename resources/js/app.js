@@ -81,6 +81,9 @@ createInertiaApp({
                         richColors: true,
                         position: 'top-right',
                         closeButton: true,
+                        style: {
+                            zIndex: 99999, 
+                            position: 'fixed' },
                     }),
                 ]
             }

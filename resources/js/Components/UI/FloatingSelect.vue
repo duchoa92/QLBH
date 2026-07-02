@@ -26,12 +26,15 @@ defineProps({
         type: String,
         default: 'value',
     },
+    name: String
 
 })
 
 const emit = defineEmits([
     'update:modelValue',
 ])
+
+
 
 </script>
 
@@ -40,13 +43,11 @@ const emit = defineEmits([
     <div class="relative w-full">
 
         <select
+            :name="name"
+            :id="name"
+            ref="input"
             :value="modelValue"
-            @change="
-                emit(
-                    'update:modelValue',
-                    $event.target.value
-                )
-            "
+            @change="emit('update:modelValue', Number($event.target.value))"
             class="
                 peer
                 w-full
@@ -75,6 +76,10 @@ const emit = defineEmits([
             </option>
 
         </select>
+        <!-- Lỗi-->
+        <p v-if="error" class="text-red-500 text-sm mt-1">
+            {{ error }}
+        </p>
 
         <label
             class="

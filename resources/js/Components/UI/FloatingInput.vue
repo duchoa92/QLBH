@@ -16,6 +16,7 @@ defineProps({
         type: String,
         default: 'text',
     },
+    name: String
 })
 
 const emit = defineEmits([
@@ -48,6 +49,9 @@ const handleInput = (event) => {
     <div class="relative w-full">
 
         <input
+            :name="name"
+            :id="name"
+            ref="input"
             v-bind="$attrs" 
             :value="modelValue"
             @input="handleInput"
@@ -59,7 +63,11 @@ const handleInput = (event) => {
             :type="type"
             placeholder=" "
             class="peer w-full border border-gray-300 rounded-lg px-2 pt-2 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all"
-/>
+        />
+        <!-- Lỗi-->
+        <p v-if="error" class="text-red-500 text-sm mt-1">
+            {{ error }} 
+        </p>
 
         <label
             for="input-id"

@@ -7,6 +7,7 @@ use App\Models\Category;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class BrandController extends Controller
 {
@@ -34,6 +35,18 @@ class BrandController extends Controller
 
     public function store(Request $request)
     {
+        $request->validate([
+            'name' => [
+                'required',
+                Rule::unique('brands', 'name')
+            ],
+            'category_id' => 'required'
+        ], [
+            'name.required' => 'Vui lòng nhập tên thương hiệu',
+            'name.unique' => 'Tên thương hiệu đã tồn tại',
+            'category_id.required' => 'Vui lòng chọn danh mục'
+        ]);
+
         Brand::create([
             'name' => $request->name,
             'slug' => Str::slug($request->name),
@@ -45,6 +58,13 @@ class BrandController extends Controller
 
     public function update(Request $request, Brand $brand)
     {
+         $request->validate([
+            'name' => [
+                'required',
+                Rule::unique('brands', 'name')->ignore($brand->id)
+            ],
+            'category_id' => 'nullable|exists:categories,id'
+        ]);
         $brand->update([
             'name' => $request->name,
             'slug' => Str::slug($request->name),
