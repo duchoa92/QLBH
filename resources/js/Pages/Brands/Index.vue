@@ -127,6 +127,63 @@ const handleError = async (errors) => {
 }
 
 
+const showTrash = ref(false)
+const trashData = ref([])
+const loadingTrash = ref(false)
+
+// Mở thùng rác
+const openTrash = async () => {
+    showTrash.value = true
+    loadingTrash.value = true
+
+    try {
+        const res = await fetch('/brands/trash', {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        trashData.value = await res.json()
+    } catch (e) {
+        toast.error('Không tải được thùng rác')
+    } finally {
+        loadingTrash.value = false
+    }
+}
+
+// Khôi phục thương hiệu
+const restore = (id) => {
+    router.post(`/brands/${id}/restore`, {}, {
+        onSuccess: () => {
+            trashData.value = trashData.value.filter(i => i.id !== id)
+        }
+    })
+}
+
+// Xóa vĩnh viễn thương hiệu
+const forceDelete = (id) => {
+    
+    Swal.fire({
+        title: 'Xóa vĩnh viễn?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Xóa'
+    }).then((r) => {
+        if (r.isConfirmed) {
+            router.delete(`/brands/${id}/force`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    openTrash() // reload lại danh sách thùng rác
+                },
+                onError: (errors) => {
+                     Object.values(errors).forEach(msg => {
+                        if (msg) toast.error(msg)
+                    })
+                }
+            })
+        }
+    })
+}
+
 /* 👉 SUBMIT */
 const submit = () => {
     if (isEdit.value) {
@@ -134,16 +191,14 @@ const submit = () => {
             preserveScroll: true,
             onSuccess: () => {
                 showModal.value = false
-            },
-            onError: handleError
+            }
         })
     } else {
         form.post('/brands', {
             preserveScroll: true,
             onSuccess: () => {
                 showModal.value = false
-            },
-            onError: handleError
+            }
         })
     }
 }
@@ -161,9 +216,21 @@ const submit = () => {
             <p class="text-gray-500">Quản lý thương hiệu</p>
         </div>
 
-        <button @click="openCreate" class="px-4 py-2 bg-black text-white rounded">
-            Thêm mới
-        </button>
+        <div class="flex gap-2">
+            <button
+                @click="openTrash"
+                class="px-4 py-2 bg-gray-600 text-white rounded"
+            >
+                Thùng rác
+            </button>
+
+            <button
+                @click="openCreate"
+                class="px-4 py-2 bg-black text-white rounded"
+            >
+                Thêm mới
+            </button>
+        </div>
     </div>
 
     <!-- FILTER -->
@@ -252,6 +319,7 @@ const submit = () => {
 
     </table>
 
+    <!-- Thêm mới -->
    <Modal
         :show="showModal"
         :title="isEdit ? 'Cập nhật thương hiệu' : 'Thêm thương hiệu'"
@@ -299,6 +367,73 @@ const submit = () => {
                 <span v-if="form.processing">Đang xử lý...</span>
                 <span v-else>{{ isEdit ? 'Cập nhật' : 'Lưu' }}</span>
             </button>
+
+        </template>
+
+    </Modal>
+
+    <!-- THÙNG RÁC -->
+    <Modal
+        :show="showTrash"
+        title="Thùng rác"
+        maxWidth="2xl"
+        @close="showTrash = false"
+    >
+
+        <template #default>
+
+            <div v-if="loadingTrash" class="text-center p-5">
+                Đang tải...
+            </div>
+
+            <table v-else class="w-full border">
+
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="p-2">ID</th>
+                        <th class="p-2">Tên</th>
+                        <th class="p-2">Danh mục</th>
+                        <th class="p-2">Hành động</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    <tr v-for="b in trashData" :key="b.id">
+                        <td class="p-2">{{ b.id }}</td>
+                        <td class="p-2">{{ b.name }}</td>
+                        <td class="p-2">
+                            {{ b.category?.name || '---' }}
+                        </td>
+
+                        <td class="p-2 flex gap-2">
+
+                            <button
+                                @click="restore(b.id)"
+                                class="px-2 py-1 bg-green-600 text-white rounded"
+                            >
+                                Khôi phục
+                            </button>
+
+                            <button
+                                @click="forceDelete(b.id)"
+                                class="px-2 py-1 bg-red-600 text-white rounded"
+                            >
+                                Xóa
+                            </button>
+
+                        </td>
+                    </tr>
+
+                    <tr v-if="trashData.length === 0">
+                        <td colspan="4" class="text-center p-4 text-gray-500">
+                            Thùng rác trống
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
 
         </template>
 

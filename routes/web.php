@@ -272,31 +272,19 @@ Route::middleware(['auth'])->group(function () {
     | Brands
     |--------------------------------------------------------------------------
     */
-    Route::resource(
-        'brands',
-        BrandController::class
-    );
 
-    Route::get('/brands-by-category', function () {
-        return \App\Models\Brand::where('category_id', request('category_id'))->get();
-    });
-
-
-
-
-
-    // Hiển thị thương hiệu đã xóa
-    Route::get(
-        '/brands-trash',
-        [BrandController::class, 'trash']
-    )->name('brands.trash');
 
     // Khôi phục thương hiệu
-    Route::post(
-        '/brands/{id}/restore',
-        [BrandController::class, 'restore']
-    )->name('brands.restore');
+    Route::post('/brands/{id}/restore', [BrandController::class, 'restore'])
+        ->name('brands.restore');
+    // chuyển vào thung rác
+    Route::get('/brands/trash', [BrandController::class, 'trash'])
+        ->name('brands.trash');
+       // xóa vĩnh viễn 
+    Route::delete('/brands/{id}/force', [BrandController::class, 'forceDelete'])
+        ->name('brands.forceDelete');
 
+    Route::resource('brands', BrandController::class);
 
     // hiển thị POS 
     Route::prefix('pos')

@@ -1,11 +1,11 @@
 import '../css/app.css';
 import './bootstrap';
 
-import { createInertiaApp} from '@inertiajs/vue3';
-import { Toaster } from 'vue-sonner';
+import { createApp, h} from 'vue';
+import { createInertiaApp, router} from '@inertiajs/vue3';
+import { Toaster, toast  } from 'vue-sonner';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
-import { createApp, h} from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
@@ -82,7 +82,7 @@ createInertiaApp({
                         position: 'top-right',
                         closeButton: true,
                         style: {
-                            zIndex: 99999, 
+                            zIndex: 9999, 
                             position: 'fixed' },
                     }),
                 ]
@@ -104,6 +104,45 @@ createInertiaApp({
         app.use(plugin)
 
         app.use(ZiggyVue)
+
+        // 🔥 GLOBAL ERROR HANDLER
+        router.on('error', (errors) => {
+            if (!errors) return
+
+            Object.values(errors).forEach(msg => {
+                toast.error(msg)
+            })
+
+            // focus field lỗi đầu tiên
+            setTimeout(() => {
+                const first = Object.keys(errors)[0]
+                const el = document.querySelector(`[name="${first}"]`)
+
+                if (el) {
+                    el.focus()
+                    el.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    })
+                }
+            }, 100)
+        })
+
+
+        // 🔥 GLOBAL SUCCESS HANDLER (flash)
+        router.on('success', (event) => {
+            const flash = event.detail.page.props.flash
+
+            if (!flash) return
+
+            if (flash.success) {
+                toast.success(flash.success)
+            }
+
+            if (flash.error) {
+                toast.error(flash.error)
+            }
+        })
 
         app.mount(el)
     },

@@ -25,12 +25,13 @@ class BrandController extends Controller
             ->withQueryString();
 
         $categories = Category::select('id', 'name')->get();
-
+    
         return Inertia::render('Brands/Index', [
             'brands' => $brands,
             'filters' => $request->only('search', 'category_id'),
             'categories' => $categories
         ]);
+
     }
 
     public function store(Request $request)
@@ -78,5 +79,43 @@ class BrandController extends Controller
     {
         $brand->delete();
         return back()->with('success', 'Đã xóa');
+    }
+
+    public function trash()
+    {
+        $brands = Brand::onlyTrashed()
+            ->with('category')
+            ->latest()
+            ->get();
+
+        return response()->json($brands);
+    }
+
+    public function restore($id)
+    {
+        Brand::withTrashed()->findOrFail($id)->restore();
+        return back()->with('success', 'Đã khôi phục');
+    }
+
+    public function forceDelete($id)
+    {
+        $brand = Brand::onlyTrashed()->find($id);
+
+        if (!$brand) {
+            return back()->withErrors([
+                'error' => 'Thương hiệu không tồn tại hoặc chưa bị xóa'
+            ]);
+        }
+
+        // check quan hệ
+        if ($brand->products()->exists()) {
+            return back()->withErrors([
+                'error' => 'Không thể xóa vì còn dữ liệu liên quan'
+            ]);
+        }
+
+        $brand->forceDelete();
+
+        return back()->with('success', 'Đã xóa vĩnh viễn');
     }
 }

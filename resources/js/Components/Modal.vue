@@ -19,23 +19,13 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const showSlot = ref(props.show);
+
 
 watch(
     () => props.show,
-    () => {
-        if (props.show) {
-            document.body.style.overflow = 'hidden';
-            showSlot.value = true;
-
-        } else {
-            document.body.style.overflow = '';
-
-            setTimeout(() => {
-                showSlot.value = false;
-            }, 200);
-        }
-    },
+    (val) => {
+        document.body.style.overflow = val ? 'hidden' : ''
+    }
 );
 
 const close = () => {
@@ -54,7 +44,15 @@ const closeOnEscape = (e) => {
     }
 };
 
-onMounted(() => document.addEventListener('keydown', closeOnEscape));
+onMounted(() => {
+    document.addEventListener('keydown', closeOnEscape)
+
+    if (props.show) {
+        setTimeout(() => {
+            document.querySelector('input, select, textarea')?.focus()
+        }, 100)
+    }
+})
 
 onUnmounted(() => {
     document.removeEventListener('keydown', closeOnEscape);
@@ -74,58 +72,55 @@ const maxWidthClass = computed(() => {
 </script>
 
 <template>
-    <div v-if="show" class="fixed inset-0 z-[9998] flex items-center justify-center">
+<div v-show="show" class="fixed inset-0 z-[1000] flex items-center justify-center">
 
-        <!-- overlay -->
-        <Transition
-            enter-active-class="ease-out duration-300"
-            enter-from-class="opacity-0"
-            enter-to-class="opacity-100"
-            leave-active-class="ease-in duration-200"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
+    <!-- overlay -->
+    <Transition
+        enter-active-class="ease-out duration-300"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="ease-in duration-200"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+    >
+        <div
+            v-if="show"
+            class="absolute inset-0 bg-black/50"
+            @click="close"
+        />
+    </Transition>
+
+    <!-- modal -->
+    <Transition
+        enter-active-class="ease-out duration-300"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="ease-in duration-200"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+    >
+        <div
+            v-if="show"
+            class="relative bg-white rounded-lg shadow-xl w-full mx-4"
+            :class="maxWidthClass"
         >
-            <div
-                class="absolute inset-0 bg-black/50"
-                @click="close"
-            />
-        </Transition>
-
-        <!-- modal -->
-        <Transition
-            enter-active-class="ease-out duration-300"
-            enter-from-class="opacity-0 scale-95"
-            enter-to-class="opacity-100 scale-100"
-            leave-active-class="ease-in duration-200"
-            leave-from-class="opacity-100 scale-100"
-            leave-to-class="opacity-0 scale-95"
-        >
-            <div
-                class="relative bg-white rounded-lg shadow-xl w-full mx-4"
-                :class="maxWidthClass"
-            >
-
-                <!-- HEADER -->
-                <div class="flex justify-between items-center p-4 border-b">
-                    <slot name="header">
-                        <h2 class="text-lg font-bold">{{ title }}</h2>
-                    </slot>
-
-                    <button @click="close" class="text-gray-500">✕</button>
-                </div>
-
-                <!-- BODY -->
-                <div class="p-4">
-                    <slot v-if="showSlot" />
-                </div>
-
-                <!-- FOOTER -->
-                <div class="p-4 border-t flex justify-end gap-2">
-                    <slot name="footer" />
-                </div>
-
+            <!-- HEADER -->
+            <div class="flex justify-between items-center p-4 border-b">
+                <h2 class="text-lg font-bold">{{ title }}</h2>
+                <button @click="close">✕</button>
             </div>
-        </Transition>
 
-    </div>
+            <!-- BODY -->
+            <div class="p-4">
+                <slot />
+            </div>
+
+            <!-- FOOTER -->
+            <div class="p-4 border-t flex justify-end gap-2">
+                <slot name="footer" />
+            </div>
+        </div>
+    </Transition>
+
+</div>
 </template>
