@@ -1,7 +1,6 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
-import { toast } from 'vue-sonner'
 import Sidebar from '@/Components/Sidebar.vue'
 
 const sidebarOpen = ref(false)
@@ -26,16 +25,6 @@ const currentTitle = computed(() => {
 
 const page = usePage()
 
-watch(
-    () => page.props.flash,
-    (flash) => {
-        if (!flash) return
-
-        if (flash.success) toast.success(flash.success)
-        if (flash.error) toast.error(flash.error)
-    },
-    { deep: true }
-)
 </script>
 
 <template>

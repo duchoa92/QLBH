@@ -280,9 +280,12 @@ Route::middleware(['auth'])->group(function () {
     // chuyển vào thung rác
     Route::get('/brands/trash', [BrandController::class, 'trash'])
         ->name('brands.trash');
-       // xóa vĩnh viễn 
+    // xóa vĩnh viễn 
     Route::delete('/brands/{id}/force', [BrandController::class, 'forceDelete'])
         ->name('brands.forceDelete');
+    // Toggle trạng thái thương hiệu
+    Route::patch('/brands/{id}/toggle-status', [BrandController::class, 'toggleStatus'])
+    ->name('brands.toggleStatus');
 
     Route::resource('brands', BrandController::class);
 

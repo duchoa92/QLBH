@@ -106,11 +106,13 @@ createInertiaApp({
         app.use(ZiggyVue)
 
         // 🔥 GLOBAL ERROR HANDLER
-        router.on('error', (errors) => {
+        router.on('error', (event) => {
+            const errors = event.detail.errors
+
             if (!errors) return
 
             Object.values(errors).forEach(msg => {
-                toast.error(msg)
+                if (msg) toast.error(msg)
             })
 
             // focus field lỗi đầu tiên
@@ -130,10 +132,23 @@ createInertiaApp({
 
 
         // 🔥 GLOBAL SUCCESS HANDLER (flash)
+       let lastFlash = null
+
         router.on('success', (event) => {
             const flash = event.detail.page.props.flash
 
             if (!flash) return
+
+            const key = JSON.stringify(flash)
+
+            if (key === lastFlash) return // Chặn trùng lặp tức thì trong cùng 1 request
+
+            lastFlash = key
+
+            // Reset lại biến chặn trùng sau 500ms để các thao tác tiếp theo vẫn hiển thị được
+            setTimeout(() => {
+                lastFlash = null
+            }, 500)
 
             if (flash.success) {
                 toast.success(flash.success)
@@ -144,6 +159,7 @@ createInertiaApp({
             }
         })
 
+        
         app.mount(el)
     },
     progress: {

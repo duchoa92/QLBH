@@ -26,7 +26,8 @@ defineProps({
         type: String,
         default: 'value',
     },
-    name: String
+    name: String,
+    error: String,
 
 })
 

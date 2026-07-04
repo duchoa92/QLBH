@@ -15,10 +15,10 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 -- Dumping data for table qlbh.brands: ~3 rows (approximately)
-REPLACE INTO `brands` (`id`, `name`, `slug`, `sort_order`, `is_active`, `deleted_at`, `created_at`, `updated_at`) VALUES
-	(1, 'Samsung', 'samsung', 0, 1, NULL, '2026-06-19 09:03:23', '2026-06-19 09:03:23'),
-	(2, 'Apple', 'apple', 0, 1, NULL, '2026-06-19 09:03:30', '2026-06-19 09:03:30'),
-	(3, 'OEM', 'oem', 0, 1, NULL, '2026-06-19 09:03:38', '2026-06-19 09:03:38');
+REPLACE INTO `brands` (`id`, `name`, `search_text`, `slug`, `category_id`, `sort_order`, `is_active`, `deleted_at`, `created_at`, `updated_at`) VALUES
+	(1, 'Samsung', 'samsung', 'samsung', 1, 0, 1, NULL, '2026-06-19 09:03:23', '2026-07-03 16:11:29'),
+	(2, 'Apple', 'apple', 'apple', 1, 0, 1, NULL, '2026-06-19 09:03:30', '2026-07-03 16:11:28'),
+	(3, 'OEM', 'oem', 'oem', 2, 0, 1, NULL, '2026-06-19 09:03:38', '2026-07-03 16:11:26');
 
 -- Dumping data for table qlbh.cache: ~0 rows (approximately)
 
@@ -40,7 +40,7 @@ REPLACE INTO `customers` (`id`, `code`, `full_name`, `search_text`, `phone`, `em
 
 -- Dumping data for table qlbh.customer_devices: ~0 rows (approximately)
 
--- Dumping data for table qlbh.customer_images: ~1 rows (approximately)
+-- Dumping data for table qlbh.customer_images: ~0 rows (approximately)
 REPLACE INTO `customer_images` (`id`, `customer_id`, `type`, `path`, `mime_type`, `size`, `is_primary`, `uploaded_by`, `created_at`, `updated_at`) VALUES
 	(1, 1, 'portrait', 'customers/1/SrwZ0VGRc7mkOQbmScK0A1JsoC0ADgjUar8Qae3m.jpg', 'image/jpeg', 11243, 1, NULL, '2026-06-19 09:10:43', '2026-06-19 09:10:43');
 
@@ -56,7 +56,7 @@ REPLACE INTO `customer_images` (`id`, `customer_id`, `type`, `path`, `mime_type`
 
 -- Dumping data for table qlbh.job_batches: ~0 rows (approximately)
 
--- Dumping data for table qlbh.migrations: ~24 rows (approximately)
+-- Dumping data for table qlbh.migrations: ~26 rows (approximately)
 REPLACE INTO `migrations` (`id`, `migration`, `batch`) VALUES
 	(1, '0001_01_01_000000_create_users_table', 1),
 	(2, '0001_01_01_000001_create_cache_table', 1),
@@ -81,7 +81,9 @@ REPLACE INTO `migrations` (`id`, `migration`, `batch`) VALUES
 	(21, '2026_05_23_146120_create_repair_timelines_table', 1),
 	(22, '2026_05_25_123656_create_hold_sales_table', 1),
 	(23, '2026_05_25_151943_create_personal_access_tokens_table', 1),
-	(24, '2026_05_26_230107_add_sold_count_to_products_table', 1);
+	(24, '2026_05_26_230107_add_sold_count_to_products_table', 1),
+	(25, '2026_06_30_142427_create_product_variants_table', 1),
+	(26, '2026_06_30_145316_add_variant_id_to_product_imeis_table', 1);
 
 -- Dumping data for table qlbh.model_has_permissions: ~0 rows (approximately)
 
@@ -124,17 +126,19 @@ REPLACE INTO `products` (`id`, `category_id`, `brand_id`, `unit_id`, `name`, `se
 	(7, 2, 3, NULL, 'Củ sạc 20w', 'cu sac 20w', 'cu-sac-20w', 'CS20W', NULL, 'normal', 'products/6fqRfYcyfjk4aXUGxNuR4YFWFZoFnes0llTyS7CL.jpg', 0, 0, 30000.00, 50000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:10:10', '2026-06-19 09:10:10');
 
 -- Dumping data for table qlbh.product_imeis: ~10 rows (approximately)
-REPLACE INTO `product_imeis` (`id`, `product_id`, `supplier_id`, `customer_id`, `sale_id`, `imei`, `serial`, `color`, `storage`, `condition`, `battery_health`, `purchase_price`, `cost_price`, `sell_price`, `warranty_expired_at`, `imported_at`, `sold_at`, `status`, `note`, `deleted_at`, `created_at`, `updated_at`) VALUES
-	(1, 1, NULL, NULL, NULL, '0000', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
-	(2, 1, NULL, NULL, NULL, '1111', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
-	(3, 2, NULL, NULL, NULL, '2222', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
-	(4, 2, NULL, NULL, NULL, '3333', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
-	(5, 3, NULL, NULL, NULL, '4444', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
-	(6, 3, NULL, NULL, NULL, '5555', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
-	(7, 4, NULL, NULL, NULL, '6666', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(8, 4, NULL, NULL, NULL, '7777', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(9, 4, NULL, NULL, NULL, '8888', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(10, 5, NULL, NULL, NULL, '9999', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:58', '2026-06-19 09:08:58');
+REPLACE INTO `product_imeis` (`id`, `product_id`, `variant_id`, `supplier_id`, `customer_id`, `sale_id`, `imei`, `serial`, `color`, `storage`, `condition`, `battery_health`, `purchase_price`, `cost_price`, `sell_price`, `warranty_expired_at`, `imported_at`, `sold_at`, `status`, `note`, `deleted_at`, `created_at`, `updated_at`) VALUES
+	(1, 1, NULL, NULL, NULL, NULL, '0000', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
+	(2, 1, NULL, NULL, NULL, NULL, '1111', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
+	(3, 2, NULL, NULL, NULL, NULL, '2222', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
+	(4, 2, NULL, NULL, NULL, NULL, '3333', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
+	(5, 3, NULL, NULL, NULL, NULL, '4444', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
+	(6, 3, NULL, NULL, NULL, NULL, '5555', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
+	(7, 4, NULL, NULL, NULL, NULL, '6666', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
+	(8, 4, NULL, NULL, NULL, NULL, '7777', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
+	(9, 4, NULL, NULL, NULL, NULL, '8888', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
+	(10, 5, NULL, NULL, NULL, NULL, '9999', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:58', '2026-06-19 09:08:58');
+
+-- Dumping data for table qlbh.product_variants: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.repairs: ~0 rows (approximately)
 
@@ -181,10 +185,18 @@ REPLACE INTO `role_has_permissions` (`permission_id`, `role_id`) VALUES
 	(17, 2);
 
 -- Dumping data for table qlbh.sales: ~0 rows (approximately)
+REPLACE INTO `sales` (`id`, `code`, `customer_id`, `user_id`, `subtotal`, `discount`, `tax`, `grand_total`, `paid_amount`, `change_amount`, `payment_method`, `status`, `note`, `created_at`, `updated_at`) VALUES
+	(1, 'INV-20260702231134', 1, 1, 5500000.00, 0.00, 0.00, 5500000.00, 5500000.00, 0.00, 'cash', 'completed', NULL, '2026-07-02 16:11:34', '2026-07-02 16:11:34');
 
 -- Dumping data for table qlbh.sale_items: ~0 rows (approximately)
+REPLACE INTO `sale_items` (`id`, `sale_id`, `product_id`, `product_imei_id`, `quantity`, `unit_price`, `discount`, `tax`, `subtotal`, `note`, `discount_type`, `discount_value`, `created_at`, `updated_at`) VALUES
+	(1, 1, 4, NULL, 1, 5500000.00, 0.00, 0.00, 5500000.00, NULL, NULL, 0.00, '2026-07-02 16:11:34', '2026-07-02 16:11:34');
+
+-- Dumping data for table qlbh.sale_item_gifts: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.sessions: ~0 rows (approximately)
+
+-- Dumping data for table qlbh.suppliers: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.units: ~0 rows (approximately)
 
