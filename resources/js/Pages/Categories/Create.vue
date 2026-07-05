@@ -1,58 +1,96 @@
 <script setup>
-
-import { useForm } from '@inertiajs/vue3'
+import { Link, useForm } from '@inertiajs/vue3';
 
 const form = useForm({
+
     name: '',
+
     sort_order: 0,
+
     is_active: true,
-})
+});
 
 const submit = () => {
-    form.post('/categories')
-}
 
+    form.post(
+        route('brands.store')
+    );
+};
 </script>
 
 <template>
+    <div class="p-6 max-w-3xl">
 
-    <div class="p-6">
+        <div
+            class="flex items-center justify-between mb-6"
+        >
+            <h1 class="text-2xl font-bold">
+                Thêm thương hiệu
+            </h1>
 
-        <h1 class="text-2xl font-bold mb-5">
-            Thêm danh mục
-        </h1>
+            <Link
+                :href="route('brands.index')"
+                class="px-4 py-2 bg-gray-200 rounded"
+            >
+                Quay lại
+            </Link>
+        </div>
 
-        <form @submit.prevent="submit">
+        <form
+            @submit.prevent="submit"
+            class="space-y-4"
+        >
 
-            <div class="mb-4">
-
-                <label>
-                    Tên danh mục
+            <div>
+                <label class="block mb-1">
+                    Tên thương hiệu
                 </label>
 
                 <input
                     v-model="form.name"
                     type="text"
-                    class="border w-full p-2 rounded"
+                    class="w-full border rounded p-2"
                 >
 
                 <div
                     v-if="form.errors.name"
-                    class="text-red-500 mt-1"
+                    class="text-red-500 text-sm mt-1"
                 >
                     {{ form.errors.name }}
                 </div>
+            </div>
 
+            <div>
+                <label class="block mb-1">
+                    Thứ tự sắp xếp
+                </label>
+
+                <input
+                    v-model="form.sort_order"
+                    type="number"
+                    class="w-full border rounded p-2"
+                >
+            </div>
+
+            <div class="flex items-center gap-2">
+
+                <input
+                    v-model="form.is_active"
+                    type="checkbox"
+                >
+
+                <label>
+                    Hoạt động
+                </label>
             </div>
 
             <button
-                class="px-4 py-2 bg-black text-white rounded"
+                type="submit"
+                class="bg-blue-600 text-white px-5 py-2 rounded"
             >
                 Lưu
             </button>
 
         </form>
-
     </div>
-
 </template>

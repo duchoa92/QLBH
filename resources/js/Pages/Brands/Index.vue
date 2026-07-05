@@ -1,16 +1,15 @@
 <script setup>
-import { router, useForm } from '@inertiajs/vue3'
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { router } from '@inertiajs/vue3'
+import { ref, watch, onMounted } from 'vue'
 import Swal from 'sweetalert2'
-import { toast } from 'vue-sonner'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import Modal from '@/Components/Modal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import { openModal } from '@/Stores/modal'
+import BrandForm from './Form.vue'
+import Trash from './Trash.vue'
 
-defineOptions({
-    layout: AdminLayout
-})
+defineOptions({ layout: AdminLayout })
 
 const props = defineProps({
     brands: Object,
@@ -18,7 +17,7 @@ const props = defineProps({
     categories: Array
 })
 
-/* ================= FILTER ================= */
+/* FILTER */
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id ?? null)
 
@@ -27,164 +26,81 @@ let timeout = null
 watch([search, category_id], ([s, c]) => {
     clearTimeout(timeout)
     timeout = setTimeout(() => {
-        router.get('/brands', {
-            search: s,
-            category_id: c
-        }, {
+        router.get('/brands', { search: s, category_id: c }, {
             preserveState: true,
             replace: true
         })
     }, 300)
 })
 
-/* ================= DELETE ================= */
+/* TRASH COUNT */
+const trashCount = ref(0)
+
+const getTrashCount = async () => {
+    const res = await fetch('/brands/trash')
+    const data = await res.json()
+    trashCount.value = data.length
+}
+
+onMounted(getTrashCount)
+
+/* RELOAD */
+const loadData = () => {
+    router.reload({ only: ['brands'] })
+    getTrashCount()
+}
+
+/* DELETE */
 const destroy = (id) => {
     Swal.fire({
         title: 'Xác nhận chuyển vào thùng rác?',
         icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Đồng ý',
-        cancelButtonText: 'Hủy'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            router.delete(`/brands/${id}`, {
-                preserveScroll: true,
-                onSuccess: () => {
-                    // Cập nhật lại số lượng hàng trong thùng rác sau khi xóa tạm
-                    getTrashCount()
-                }
-            })
-        }
-    })
-}
-
-/* ================= MODAL ================= */
-const showModal = ref(false)
-const isEdit = ref(false)
-
-const form = useForm({
-    id: null,
-    name: '',
-    category_id: null
-})
-
-const openCreate = async () => {
-    isEdit.value = false
-    form.reset()
-    form.clearErrors()
-    form.id = null
-    showModal.value = true
-
-    await nextTick()
-    document.querySelector('[name="name"]')?.focus()
-}
-
-const openEdit = (brand) => {
-    isEdit.value = true
-    form.id = brand.id
-    form.name = brand.name
-    form.category_id = brand.category_id
-    form.clearErrors()
-    showModal.value = true
-}
-
-/* ================= TRASH (THÙNG RÁC) ================= */
-const showTrash = ref(false)
-const trashData = ref([])
-const loadingTrash = ref(false)
-
-// Hàm lấy dữ liệu thùng rác (để tái sử dụng và gọi khi load trang)
-const getTrashCount = async () => {
-    try {
-        const res = await fetch('/brands/trash', {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        trashData.value = await res.json()
-    } catch (e) {
-        console.error('Không tải được số lượng thùng rác')
-    }
-}
-
-// Tự động gọi khi trang vừa load để hiển thị đúng số lượng trên nút Thùng rác
-onMounted(() => {
-    getTrashCount()
-})
-
-const openTrash = async () => {
-    showTrash.value = true
-    loadingTrash.value = true
-    await getTrashCount()
-    loadingTrash.value = false
-}
-
-// Sửa logic Khôi phục: Bỏ gọi toast thủ công nếu hệ thống đã tự bắt Flash Message từ Backend
-const restore = (id) => {
-    router.post(`/brands/${id}/restore`, {}, {
-        preserveScroll: true,
-        onSuccess: () => {
-            // Xóa phần tử khỏi danh sách hiển thị trong Modal thùng rác
-            trashData.value = trashData.value.filter(i => i.id !== id)
-            
-            // LƯU Ý: Nếu giao diện vẫn bị hiện 2 Toast, hãy XÓA dòng dưới đây đi:
-            // toast.success('Khôi phục thành công') 
-        }
-    })
-}
-
-const forceDelete = (id) => {
-    Swal.fire({
-        title: 'Xóa vĩnh viễn thương hiệu này?',
-        text: 'Thao tác này hoàn toàn không thể hoàn tác!',
-        icon: 'error', // Đổi từ 'danger' thành 'error' cho đúng chuẩn của SweetAlert2
-        showCancelButton: true,
-        confirmButtonText: 'Xóa vĩnh viễn',
-        cancelButtonText: 'Hủy'
+        showCancelButton: true
     }).then((r) => {
         if (r.isConfirmed) {
-            router.delete(`/brands/${id}/force`, {
-                preserveScroll: true,
-                onSuccess: () => {
-                    // Xóa trực tiếp trên mảng client để mượt mà thay vì gọi reload toàn bộ hàm openTrash
-                    trashData.value = trashData.value.filter(i => i.id !== id)
-                },
-                onError: (errors) => {
-                    if(errors.error) toast.error(errors.error)
-                }
+            router.delete(`/brands/${id}`, {
+                onSuccess: loadData
             })
         }
     })
 }
 
-const loadingStatus = ref(null)
-const toggleStatus = (id) => {
-    loadingStatus.value = id
-    router.patch(`/brands/${id}/toggle-status`, {}, {
-        preserveScroll: true,
-        onFinish: () => {
-            loadingStatus.value = null
-        }
+/* MODAL */
+const openCreate = () => {
+    
+    console.log('CLICK OK')
+    openModal(BrandForm, {
+        title: 'Thêm thương hiệu',
+        onUpdated: loadData
     })
 }
 
-/* 👉 SUBMIT FORM */
-const submit = () => {
-    if (isEdit.value) {
-        form.put(`/brands/${form.id}`, {
-            preserveScroll: true,
-            onSuccess: () => {
-                showModal.value = false
-                form.reset()
-            }
-        })
-    } else {
-        form.post('/brands', {
-            preserveScroll: true,
-            onSuccess: () => {
-                showModal.value = false
-                form.reset()
-            }
-        })
-    }
+const openEdit = (item) => {
+    openModal(BrandForm, {
+        title: 'Sửa thương hiệu',
+        props: { item },
+        onUpdated: loadData
+    })
+}
+
+const openTrash = () => {
+    openModal(Trash, {
+        title: 'Thùng rác',
+        onUpdated: getTrashCount
+    })
+}
+
+/* STATUS */
+const loadingStatus = ref(null)
+
+const toggleStatus = (id) => {
+    if (loadingStatus.value) return
+
+    loadingStatus.value = id
+
+    router.patch(`/brands/${id}/toggle-status`, {}, {
+        onFinish: () => loadingStatus.value = null
+    })
 }
 </script>
 
@@ -197,7 +113,7 @@ const submit = () => {
         </div>
         <div class="flex gap-2">
             <button @click="openTrash" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
-                Thùng rác ({{ trashData.length }})
+                Thùng rác ({{ trashCount }})
             </button>
             <button @click="openCreate" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition">
                 Thêm mới
@@ -230,9 +146,18 @@ const submit = () => {
                     </span>
                 </td>
                 <td class="border p-2 text-center">
-                    <button @click.stop="toggleStatus(brand.id)" class="px-3 py-1 rounded text-white text-xs font-semibold shadow-sm" :disabled="loadingStatus === brand.id" :class="brand.is_active ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 hover:bg-gray-500'">
-                        {{ brand.is_active ? 'Hoạt động' : 'Tạm khóa' }}
-                    </button>
+                    <div class="flex items-center gap-2 justify-center">
+                        <button
+                            @click="toggleStatus(brand.id)"
+                            class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                            :class="brand.is_active ? 'bg-green-500' : 'bg-gray-300'"
+                        >
+                            <span
+                                class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                                :class="brand.is_active ? 'translate-x-6' : 'translate-x-1'"
+                            />
+                        </button>
+                    </div>
                 </td>
                 <td class="border p-2 text-center">
                     <div class="flex gap-2 justify-center">
@@ -247,7 +172,7 @@ const submit = () => {
         </tbody>
     </table>
 
-    <Modal :show="showModal" :title="isEdit ? 'Cập nhật thương hiệu' : 'Thêm thương hiệu mới'" @close="showModal = false">
+    <!-- <Modal :show="showModal" :title="isEdit ? 'Cập nhật thương hiệu' : 'Thêm thương hiệu mới'" @close="showModal = false">
         <template #default>
             <FloatingInput 
                 name="name" 
@@ -306,6 +231,6 @@ const submit = () => {
                 </tbody>
             </table>
         </template>
-    </Modal>
+    </Modal> -->
 </div>
 </template>

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import Sidebar from '@/Components/Sidebar.vue'
+import Modal from '@/Components/Modal.vue'
 
 const sidebarOpen = ref(false)
 
@@ -121,6 +122,13 @@ const page = usePage()
             </main>
 
         </div>
+    </div>
+
+     <div>
+        <slot />
+
+        <!-- 🔥 GLOBAL MODAL -->
+        <Modal />
     </div>
 
 </template>

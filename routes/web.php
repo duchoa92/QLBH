@@ -226,47 +226,22 @@ Route::middleware(['auth'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get(
-        '/categories',
-        [CategoryController::class, 'index']
-    )
-        ->middleware('permission:categories.view')
-        ->name('categories.index');
+    // Khôi phục danh mục
+    Route::post('/categories/{id}/restore', [CategoryController::class, 'restore'])
+        ->name('categories.restore');
+    // chuyển vào thung rác
+    Route::get('/categories/trash', [CategoryController::class, 'trash'])
+        ->name('categories.trash');
+    // xóa vĩnh viễn 
+    Route::delete('/categories/{id}/force', [CategoryController::class, 'forceDelete'])
+        ->name('categories.forceDelete');
+    // Toggle trạng thái danh mục
+    Route::patch('/categories/{id}/toggle-status', [CategoryController::class, 'toggleStatus'])
+    ->name('categories.toggleStatus');
 
-    Route::get(
-        '/categories/create',
-        [CategoryController::class, 'create']
-    )
-        ->middleware('permission:categories.create')
-        ->name('categories.create');
+    Route::resource('categories', CategoryController::class);
 
-    Route::post(
-        '/categories',
-        [CategoryController::class, 'store']
-    )
-        ->middleware('permission:categories.create')
-        ->name('categories.store');
 
-    Route::get(
-        '/categories/{category}/edit',
-        [CategoryController::class, 'edit']
-    )
-        ->middleware('permission:categories.edit')
-        ->name('categories.edit');
-
-    Route::put(
-        '/categories/{category}',
-        [CategoryController::class, 'update']
-    )
-        ->middleware('permission:categories.edit')
-        ->name('categories.update');
-
-    Route::delete(
-        '/categories/{category}',
-        [CategoryController::class, 'destroy']
-    )
-        ->middleware('permission:categories.delete')
-        ->name('categories.destroy');
         
     /*|--------------------------------------------------------------------------
     | Brands

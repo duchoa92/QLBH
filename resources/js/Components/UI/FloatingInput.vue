@@ -17,6 +17,7 @@ defineProps({
         default: 'text',
     },
     name: String
+    
 })
 
 const emit = defineEmits([

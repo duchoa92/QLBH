@@ -1,5 +1,7 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
+import { modalState, closeModal } from '@/Stores/modal';
+
 
 const props = defineProps({
     show: {
@@ -45,6 +47,11 @@ const closeOnEscape = (e) => {
 };
 
 onMounted(() => {
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal()
+    })
+
     document.addEventListener('keydown', closeOnEscape)
 
     if (props.show) {
@@ -72,55 +79,34 @@ const maxWidthClass = computed(() => {
 </script>
 
 <template>
-<div v-show="show" class="fixed inset-0 z-[1000] flex items-center justify-center">
-
-    <!-- overlay -->
-    <Transition
-        enter-active-class="ease-out duration-300"
-        enter-from-class="opacity-0"
-        enter-to-class="opacity-100"
-        leave-active-class="ease-in duration-200"
-        leave-from-class="opacity-100"
-        leave-to-class="opacity-0"
+    <div 
+        v-if="modalState.show" 
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        @click.self="closeModal"
     >
-        <div
-            v-if="show"
-            class="absolute inset-0 bg-black/50"
-            @click="close"
-        />
-    </Transition>
+        <div class="bg-white w-full max-w-md rounded shadow-lg p-4 relative">
 
-    <!-- modal -->
-    <Transition
-        enter-active-class="ease-out duration-300"
-        enter-from-class="opacity-0 scale-95"
-        enter-to-class="opacity-100 scale-100"
-        leave-active-class="ease-in duration-200"
-        leave-from-class="opacity-100 scale-100"
-        leave-to-class="opacity-0 scale-95"
-    >
-        <div
-            v-if="show"
-            class="relative bg-white rounded-lg shadow-xl w-full mx-4"
-            :class="maxWidthClass"
-        >
-            <!-- HEADER -->
-            <div class="flex justify-between items-center p-4 border-b">
-                <h2 class="text-lg font-bold">{{ title }}</h2>
-                <button @click="close">✕</button>
-            </div>
+            <!-- ❌ NÚT ĐÓNG -->
+            <button 
+                @click="closeModal"
+                class="absolute top-2 right-2 text-gray-500 hover:text-black text-xl"
+            >
+                ✕
+            </button>
 
-            <!-- BODY -->
-            <div class="p-4">
-                <slot />
-            </div>
+            <!-- TITLE -->
+            <h2 class="text-lg font-bold mb-3">
+                {{ modalState.title }}
+            </h2>
 
-            <!-- FOOTER -->
-            <div class="p-4 border-t flex justify-end gap-2">
-                <slot name="footer" />
-            </div>
+            <!-- CONTENT -->
+            <component 
+                :is="modalState.component" 
+                v-bind="modalState.props"
+                @close="closeModal"
+                @updated="modalState.onUpdated && modalState.onUpdated()"
+            />
+
         </div>
-    </Transition>
-
-</div>
+    </div>
 </template>
