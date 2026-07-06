@@ -1,6 +1,7 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3'
 import { defineProps, defineEmits } from 'vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 const props = defineProps({
     item: Object
