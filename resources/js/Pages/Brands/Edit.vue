@@ -3,6 +3,8 @@ import { Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps({
     brand: Object,
+    
+    categories: Array
 });
 
 const form = useForm({

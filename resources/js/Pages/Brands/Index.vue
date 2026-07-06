@@ -22,8 +22,11 @@ const props = defineProps({
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id ?? null)
 
+let timeout = null
 onBeforeUnmount(() => {
-    clearTimeout(timeout)
+    if (timeout) {
+        clearTimeout(timeout)
+    }
 })
 
 watch([search, category_id], ([s, c]) => {
@@ -43,6 +46,7 @@ const handleTrashUpdated = async () => {
 /* RELOAD */
 const loadData = () => {
     router.reload({ only: ['brands'] })
+    loadTrashCount()
 }
 
 /* DELETE */
@@ -64,6 +68,9 @@ const destroy = (id) => {
 const openCreate = () => {
     openModal(BrandForm, {
         title: 'Thêm thương hiệu',
+        props: {
+            categories: props.categories || []
+        },
         onUpdated: handleTrashUpdated
     })
 }
@@ -71,7 +78,10 @@ const openCreate = () => {
 const openEdit = (item) => {
     openModal(BrandForm, {
         title: 'Sửa thương hiệu',
-        props: { item },
+        props: {
+            brand: item,
+            categories: props.categories
+        },
         onUpdated: handleTrashUpdated
     })
 }
@@ -145,7 +155,14 @@ const toggleStatus = (id) => {
 
     <div class="flex gap-3 mb-5">
         <FloatingInput name="search" v-model="search" label="Tìm kiếm..." class="w-64" />
-        <FloatingSelect name="category_id" v-model="category_id" label="Danh mục" :options="categories.map(c => ({ value: c.id, label: c.name }))" class="w-64" />
+        <FloatingSelect 
+            name="category_id"
+            v-model="category_id" 
+            label="Danh mục"
+            :options="[
+                { value: '', label: 'Tất cả' },
+                ...categories.map(c => ({ value: c.id, label: c.name }))
+            ]" class="w-64" />
     </div>
 
     <table class="w-full bg-white border collapse-separate">

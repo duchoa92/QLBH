@@ -2,10 +2,14 @@
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 
 const props = defineProps({
-    brand: Object
+    brand: Object,
+    categories: Array
 })
+
+const emit = defineEmits(['close', 'updated'])
 
 const form = useForm({
     id: props.brand?.id || null,
@@ -27,9 +31,24 @@ const submit = () => {
 </script>
 
 <template>
-    <div>
-        <FloatingInput v-model="form.name" label="Tên danh mục" />
+    <div class="flex">
+        <FloatingInput v-model="form.name" label="Tên thương hiệu" class="mb-3 px-1" />
+        <FloatingSelect
+            v-model="form.category_id"
+            label="Danh mục"
+            :options="props.categories.map(c => ({
+                value: c.id,
+                label: c.name
+            }))"
+            class="mb-3 w-1/2 px-1"
+        />
 
+    </div>
+    
+    <div class="flex justify-end mt-4">
+        <button @click="emit('close')" class="bg-gray-300 text-black px-4 py-2 mr-2">
+            Hủy
+        </button>
         <button @click="submit" class="bg-green-600 text-white px-4 py-2">
             Lưu
         </button>

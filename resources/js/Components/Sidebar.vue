@@ -168,7 +168,6 @@ const visibleItems = (items) => {
                 </div>
 
                 <div class="space-y-1">
-
                     <Link
                         v-for="item in visibleItems(group.items)"
                         :key="item.href"

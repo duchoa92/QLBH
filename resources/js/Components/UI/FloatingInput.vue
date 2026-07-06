@@ -64,7 +64,7 @@ const handleInput = (event) => {
             @keyup="emit('keyup', $event)"
             :type="type"
             placeholder=" "
-            class="peer w-full border border-gray-300 rounded-lg px-2 pt-2 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all"
+            class="peer w-full border border-gray-300 rounded-lg px-2 pt-2.5 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all"
         />
         <!-- Lỗi-->
         <p v-if="error" class="text-red-500 text-sm mt-1">

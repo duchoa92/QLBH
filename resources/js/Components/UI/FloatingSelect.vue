@@ -29,6 +29,8 @@ defineProps({
     name: String,
     error: String,
 
+    
+
 })
 
 const emit = defineEmits([
@@ -52,13 +54,13 @@ const emit = defineEmits([
             class="
                 peer
                 w-full
-                h-10
+            
 
                 border
                 border-gray-300
                 rounded-lg
 
-                px-3
+                px-2 pt-2.5 pb-2
 
                 bg-white
                 text-sm

@@ -34,8 +34,13 @@ const submit = () => {
 
 <template>
     <div>
-        <FloatingInput v-model="form.name" label="Tên danh mục" />
+        <FloatingInput v-model="form.name" label="Tên danh mục" class="mb-3 px-1" />
 
+    </div>
+    <div class="flex justify-end mt-4">
+        <button @click="emit('close')" class="bg-gray-300 text-black px-4 py-2 mr-2">
+            Hủy
+        </button>
         <button @click="submit" class="bg-green-600 text-white px-4 py-2">
             Lưu
         </button>

@@ -46,15 +46,9 @@ const page = usePage()
         </div>
 
         <div class="min-h-screen lg:pl-72">
-
-            <header
-                class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur"
-            >
-
+            <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
                 <div class="flex h-16 items-center justify-between px-4 sm:px-6">
-
                     <div class="flex items-center gap-3">
-
                         <button
                             type="button"
                             class="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 lg:hidden"
@@ -67,21 +61,16 @@ const page = usePage()
                         </button>
 
                         <div>
-
                             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 Hệ thống quản lý
                             </div>
-
                             <h1 class="text-lg font-black text-slate-950">
                                 {{ currentTitle }}
                             </h1>
-
                         </div>
-
                     </div>
 
                     <div class="flex items-center gap-2">
-
                         <Link
                             href="/pos"
                             class="hidden rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 sm:inline-flex"
@@ -104,28 +93,20 @@ const page = usePage()
                         >
                             Đăng xuất
                         </Link>
-
                     </div>
-
                 </div>
-
             </header>
 
             <main class="p-4 sm:p-6">
-
                 <div class="mx-auto max-w-[1600px]">
-
                     <slot />
-
                 </div>
-
             </main>
 
         </div>
     </div>
 
      <div>
-        <slot />
 
         <!-- GLOBAL MODAL -->
         <Modal />

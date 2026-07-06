@@ -14,7 +14,7 @@ export const openModal = (component, options = {}) => {
     modalState.show = true
     modalState.component = markRaw(component)
     modalState.title = options.title || ''
-    modalState.props = options.props || {}
+    modalState.props = options.props ?? options
     modalState.onUpdated = options.onUpdated || null
 }
 
