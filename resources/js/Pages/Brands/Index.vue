@@ -1,13 +1,14 @@
 <script setup>
 import { router } from '@inertiajs/vue3'
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount  } from 'vue'
 import Swal from 'sweetalert2'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { openModal } from '@/Stores/modal'
 import BrandForm from './Form.vue'
-import Trash from './Trash.vue'
+import TrashModal from '@/Components/TrashModal.vue'
+
 
 defineOptions({ layout: AdminLayout })
 
@@ -21,7 +22,9 @@ const props = defineProps({
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id ?? null)
 
-let timeout = null
+onBeforeUnmount(() => {
+    clearTimeout(timeout)
+})
 
 watch([search, category_id], ([s, c]) => {
     clearTimeout(timeout)
@@ -33,21 +36,13 @@ watch([search, category_id], ([s, c]) => {
     }, 300)
 })
 
-/* TRASH COUNT */
-const trashCount = ref(0)
-
-const getTrashCount = async () => {
-    const res = await fetch('/brands/trash')
-    const data = await res.json()
-    trashCount.value = data.length
+const handleTrashUpdated = async () => {
+    await loadTrashCount()
 }
-
-onMounted(getTrashCount)
 
 /* RELOAD */
 const loadData = () => {
     router.reload({ only: ['brands'] })
-    getTrashCount()
 }
 
 /* DELETE */
@@ -67,11 +62,9 @@ const destroy = (id) => {
 
 /* MODAL */
 const openCreate = () => {
-    
-    console.log('CLICK OK')
     openModal(BrandForm, {
         title: 'Thêm thương hiệu',
-        onUpdated: loadData
+        onUpdated: handleTrashUpdated
     })
 }
 
@@ -79,15 +72,44 @@ const openEdit = (item) => {
     openModal(BrandForm, {
         title: 'Sửa thương hiệu',
         props: { item },
-        onUpdated: loadData
+        onUpdated: handleTrashUpdated
     })
 }
 
+/* TRASH COUNT */
+
+onMounted(() => {
+    loadTrashCount()
+})
+
 const openTrash = () => {
-    openModal(Trash, {
+    openModal(TrashModal, {
         title: 'Thùng rác',
-        onUpdated: getTrashCount
+         props: {
+            endpoint: 'brands'
+        },
+        onUpdated: () => {
+            loadData()
+            router.reload({ only: ['brands'] }) // Reload lại danh sách trang chính khi trong thùng rác thay đổi
+        }
     })
+}
+
+const trashCount = ref(0)
+const loadTrashCount = async () => {
+    try {
+        const res = await fetch('/brands/trash', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+
+        if (!res.ok) throw new Error('API lỗi')
+
+        const data = await res.json()
+        trashCount.value = data.length
+    } catch (e) {
+        console.error('Load trash count lỗi', e)
+        trashCount.value = 0
+    }
 }
 
 /* STATUS */
@@ -149,6 +171,7 @@ const toggleStatus = (id) => {
                     <div class="flex items-center gap-2 justify-center">
                         <button
                             @click="toggleStatus(brand.id)"
+                            :disabled="loadingStatus === brand.id"
                             class="relative inline-flex h-6 w-11 items-center rounded-full transition"
                             :class="brand.is_active ? 'bg-green-500' : 'bg-gray-300'"
                         >
@@ -171,66 +194,5 @@ const toggleStatus = (id) => {
             </tr>
         </tbody>
     </table>
-
-    <!-- <Modal :show="showModal" :title="isEdit ? 'Cập nhật thương hiệu' : 'Thêm thương hiệu mới'" @close="showModal = false">
-        <template #default>
-            <FloatingInput 
-                name="name" 
-                v-model="form.name" 
-                label="Thương hiệu" 
-                class="mb-3" 
-                :disabled="form.processing" 
-                :error="form.errors.name" 
-            />
-            <FloatingSelect 
-                name="category_id" 
-                v-model="form.category_id" 
-                label="Danh mục" 
-                :options="categories.map(c => ({ value: c.id, label: c.name }))" 
-                :disabled="form.processing" 
-                :error="form.errors.category_id" 
-                class="mb-3" 
-            />
-        </template>
-        <template #footer>
-            <button @click="showModal = false" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Hủy</button>
-            <button @click="submit" :disabled="form.processing" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 ml-2 shadow-sm">
-                <span v-if="form.processing">Đang xử lý...</span>
-                <span v-else>{{ isEdit ? 'Cập nhật ngay' : 'Lưu dữ liệu' }}</span>
-            </button>
-        </template>
-    </Modal>
-
-    <Modal :show="showTrash" title="Thùng rác quản lý thương hiệu" maxWidth="2xl" @close="showTrash = false">
-        <template #default>
-            <div v-if="loadingTrash" class="text-center p-5 text-gray-600 font-medium">Đang đồng bộ dữ liệu...</div>
-            <table v-else class="w-full border">
-                <thead>
-                    <tr class="bg-gray-100 text-left">
-                        <th class="p-2 w-16 text-center">ID</th>
-                        <th class="p-2">Tên</th>
-                        <th class="p-2">Danh mục</th>
-                        <th class="p-2 w-48 text-center">Hành động</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="b in trashData" :key="b.id" class="border-b hover:bg-gray-50">
-                        <td class="p-2 text-center">{{ b.id }}</td>
-                        <td class="p-2 font-medium">{{ b.name }}</td>
-                        <td class="p-2">{{ b.category?.name || '---' }}</td>
-                        <td class="p-2 text-center">
-                            <div class="flex gap-2 justify-center">
-                                <button @click.stop="restore(b.id)" class="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">Khôi phục</button>
-                                <button @click.stop="forceDelete(b.id)" class="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">Xóa vĩnh viễn</button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr v-if="trashData.length === 0">
-                        <td colspan="4" class="text-center p-6 text-gray-400 bg-gray-50">Thùng rác hiện tại trống.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </template>
-    </Modal> -->
 </div>
 </template>

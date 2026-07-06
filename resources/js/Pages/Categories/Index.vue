@@ -6,7 +6,7 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { openModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
-import Trash from './Trash.vue'
+import TrashModal from '@/Components/TrashModal.vue'
 
 defineOptions({
     layout: AdminLayout
@@ -67,9 +67,7 @@ const openCreate = () => {
 const openEdit = (item) => {
     openModal(CategoryForm, {
         title: 'Sửa danh mục',
-        props: {
-            item
-        },
+        item,
         onUpdated: loadData
     })
 }
@@ -81,10 +79,10 @@ onMounted(() => {
     loadCount()
 })
 
-const openTrash = async () => {
-    openModal(Trash, {
-        title: 'Thùng rác',
-        onUpdated: () => loadCount() // 🔥 reload count
+const openTrash = () => {
+    openModal(TrashModal, {
+        endpoint: 'categories',
+        onUpdated: loadCount
     })
 }
 

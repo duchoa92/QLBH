@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, markRaw } from 'vue'
 
 export const modalState = reactive({
     show: false,
@@ -9,11 +9,13 @@ export const modalState = reactive({
 })
 
 export const openModal = (component, options = {}) => {
+    console.log('OPEN MODAL', component) // 👈 debug
+
     modalState.show = true
-    modalState.component = component
+    modalState.component = markRaw(component)
     modalState.title = options.title || ''
     modalState.props = options.props || {}
-    modalState.onUpdated = options.onUpdated || null 
+    modalState.onUpdated = options.onUpdated || null
 }
 
 export const closeModal = () => {

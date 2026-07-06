@@ -127,7 +127,7 @@ const page = usePage()
      <div>
         <slot />
 
-        <!-- 🔥 GLOBAL MODAL -->
+        <!-- GLOBAL MODAL -->
         <Modal />
     </div>
 

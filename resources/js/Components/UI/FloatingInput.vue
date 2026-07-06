@@ -16,7 +16,8 @@ defineProps({
         type: String,
         default: 'text',
     },
-    name: String
+    name: String,
+    error: String
     
 })
 
