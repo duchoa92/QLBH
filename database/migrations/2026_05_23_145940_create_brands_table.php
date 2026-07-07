@@ -8,10 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('brands', function (
-            Blueprint $table
-        ) {
-
+        Schema::create('brands', function (Blueprint $table) {
             $table->id();
 
             $table->string('name');
@@ -23,7 +20,11 @@ return new class extends Migration
             $table->string('slug')
                 ->unique();
 
-            $table->foreignId('category_id')->nullable()->constrained()->cascadeOnDelete();
+            // ✅ SỬA: cascadeOnDelete → nullOnDelete
+            $table->foreignId('category_id')
+                ->nullable()
+                ->constrained()
+                ->nullOnDelete();
 
             $table->integer('sort_order')
                 ->default(0);

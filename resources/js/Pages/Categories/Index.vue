@@ -84,6 +84,7 @@ const openEdit = (item) => {
     })
 }
 
+
 /* TRASH COUNT */
 onMounted(() => {
     loadTrashCount()
