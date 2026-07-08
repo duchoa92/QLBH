@@ -226,18 +226,28 @@ Route::middleware(['auth'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
+    /* Route::delete(
+        '/categories/{category}',
+        [CategoryController::class, 'destroy']
+    )
+        ->middleware('permission:categories.delete')
+        ->name('categories.destroy'); */
+
     // Khôi phục danh mục
     Route::post('/categories/{id}/restore', [CategoryController::class, 'restore'])
+        ->middleware('permission:categories.edit')    
         ->name('categories.restore');
     // chuyển vào thung rác
     Route::get('/categories/trash', [CategoryController::class, 'trash'])
+        ->middleware('permission:categories.view')
         ->name('categories.trash');
     // xóa vĩnh viễn 
     Route::delete('/categories/{id}/force', [CategoryController::class, 'forceDelete'])
         ->name('categories.forceDelete');
     // Toggle trạng thái danh mục
     Route::patch('/categories/{id}/toggle-status', [CategoryController::class, 'toggleStatus'])
-    ->name('categories.toggleStatus');
+        ->middleware('permission:categories.edit')
+        ->name('categories.toggleStatus');
 
     Route::resource('categories', CategoryController::class);
 
@@ -249,21 +259,37 @@ Route::middleware(['auth'])->group(function () {
     */
 
 
-    // Khôi phục thương hiệu
-    Route::post('/brands/{id}/restore', [BrandController::class, 'restore'])
-        ->name('brands.restore');
-    // chuyển vào thung rác
+    // Thùng rác & restore (Brand)
     Route::get('/brands/trash', [BrandController::class, 'trash'])
+        ->middleware('permission:brands.view')
         ->name('brands.trash');
-    // xóa vĩnh viễn 
+
+    Route::post('/brands/{id}/restore', [BrandController::class, 'restore'])
+        ->middleware('permission:brands.edit')
+        ->name('brands.restore');
+
     Route::delete('/brands/{id}/force', [BrandController::class, 'forceDelete'])
         ->name('brands.forceDelete');
-    // Toggle trạng thái thương hiệu
+
     Route::patch('/brands/{id}/toggle-status', [BrandController::class, 'toggleStatus'])
-    ->name('brands.toggleStatus');
+        ->middleware('permission:brands.edit')
+        ->name('brands.toggleStatus');
 
-    Route::resource('brands', BrandController::class);
+    // CRUD chính - có permission
+    Route::resource('brands', BrandController::class)
+        ->middleware([
+            'index'   => 'permission:brands.view',
+            'create'  => 'permission:brands.create',
+            'store'   => 'permission:brands.create',
+            'show'    => 'permission:brands.view',
+            'edit'    => 'permission:brands.edit',
+            'update'  => 'permission:brands.edit',
+            'destroy' => 'permission:brands.delete',
+        ]);
 
+
+
+        
     // hiển thị POS 
     Route::prefix('pos')
 

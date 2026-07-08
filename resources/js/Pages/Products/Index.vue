@@ -1,12 +1,13 @@
 <script setup>
 import { ref, watch } from 'vue'
-import { Link, router } from '@inertiajs/vue3'
-
+import { router } from '@inertiajs/vue3'
+import { openModal } from '@/Stores/modal'
+import Form from './Form.vue'
 import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
 import ProductBulkBar from './Components/ProductBulkBar.vue'
-import ProductModal from './Components/ProductModal.vue'
-import ProductCreateModal from './Components/ProductCreateModal.vue'
+import { Plus } from 'lucide-vue-next'
+
 
 const props = defineProps({
     products: Object,
@@ -30,7 +31,6 @@ const filters = ref({
     sort_order: props.filters?.sort_order || 'desc'
 })
 
-const loading = ref(false)
 
 /*
 |--------------------------------------------------------------------------
@@ -50,13 +50,21 @@ watch(
                 replace: true,
                 preserveScroll: true,
                 only: ['products', 'filters', 'brands', 'categories'],
-                onStart: () => loading.value = true,
-                onFinish: () => loading.value = false
             })
         }, 400)
     },
     { deep: true }
 )
+
+
+const loadData=()=>{
+    router.reload({
+        only:['products']
+    })
+}
+
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -116,33 +124,64 @@ const printImei = () => {
 | MODAL
 |--------------------------------------------------------------------------
 */
-const showModal = ref(false)
-const selectedProduct = ref(null)
-const saving = ref(false)
+// mở modal sửa sản phẩm
+const openEdit = (product) => {
 
-const openModal = (product) => {
-    selectedProduct.value = JSON.parse(JSON.stringify(product))
-    showModal.value = true
+    openModal(Form, {
+
+        title: 'Sửa sản phẩm',
+
+        props: {
+
+            product,
+
+            categories: props.categories,
+
+            brands: props.brands
+
+        },
+
+        onUpdated: loadData
+
+    })
+
+}
+// mở modal tạo sản phẩm
+const openCreate = () => {
+
+    openModal(Form, {
+
+        title: 'Thêm sản phẩm',
+
+        props: {
+
+            categories: props.categories,
+
+            brands: props.brands
+
+        },
+
+        onUpdated: loadData
+
+    })
+
 }
 
-const updateProduct = () => {
-    saving.value = true
+const openTrash = () => {
 
-    router.put(
-        route('products.update', selectedProduct.value.id),
-        selectedProduct.value,
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                showModal.value = false
-                router.reload({ only: ['products'] })
-            },
-            onFinish: () => saving.value = false
-        }
-    )
+    openModal(TrashModal, {
+
+        title: 'Thùng rác',
+
+        props: {
+            endpoint: 'products'
+        },
+
+        onUpdated: loadData
+
+    })
+
 }
-
-const showCreate = ref(false)
 
 </script>
 
@@ -157,10 +196,15 @@ const showCreate = ref(false)
         </div>
 
         <div class="flex gap-2">
-            <button @click="showCreate = true" class="btn-green">
-                + Thêm
+            <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <Plus /> Thêm
             </button>
-            <Link :href="route('products.trash')" class="btn-green">Thùng rác</Link>
+            <button
+                @click="openTrash"
+                class="btn-gray"
+            >
+                Thùng rác
+            </button>
         </div>
     </div>
 
@@ -189,33 +233,9 @@ const showCreate = ref(false)
         :filters="filters"
         @toggleOne="toggleOne"
         @toggleAll="toggleAll"
-        @open="openModal"
+        @open="openEdit"
     />
 
 </div>
 
-<!-- MODAL -->
-<ProductModal
-    :show="showModal"
-    :product="selectedProduct"
-    @close="showModal = false"
-    @save="updateProduct"
-/>
-
-<ProductCreateModal
-    :show="showCreate"
-    :categories="categories"
-    :brands="brands"
-    @close="() => {
-        showCreate = false
-        router.reload({ only: ['products'] })
-    }"
-/>
-
 </template>
-
-<style scoped>
-.btn-green {
-    @apply px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700;
-}
-</style>

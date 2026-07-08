@@ -50,7 +50,7 @@ const emit = defineEmits([
             :id="name"
             ref="input"
             :value="modelValue"
-            @change="emit('update:modelValue', Number($event.target.value))"
+            @change="emit('update:modelValue', $event.target.value ? Number($event.target.value) : null)"
             class="
                 peer
                 w-full

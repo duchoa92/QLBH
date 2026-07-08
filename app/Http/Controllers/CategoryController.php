@@ -3,18 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Http\Requests\Category\StoreCategoryRequest;
+use App\Http\Requests\Category\UpdateCategoryRequest;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class CategoryController extends Controller
 {
     public function index(Request $request)
     {
-        $categories = Category::query()
-            ->when($request->search, fn($q) =>
-                $q->where('name', 'like', "%{$request->search}%")
+        $categories = Category::with('parent:id,name')
+            ->when($request->filled('search'), fn ($q) =>
+                $q->where('name', 'like', '%' . $request->search . '%')
             )
             ->latest()
             ->paginate(10)
@@ -22,87 +23,104 @@ class CategoryController extends Controller
 
         return Inertia::render('Categories/Index', [
             'categories' => $categories,
-            'filters' => $request->only('search')
+            'filters'    => $request->only('search'),
         ]);
     }
 
-    public function store(Request $request)
+    public function create()
     {
-        $request->validate([
-            'name' => ['required', Rule::unique('categories')]
+        $categories = Category::select('id', 'name')->get();
+        return Inertia::render('Categories/Create', [
+            'categories' => $categories,
         ]);
-
-        Category::create([
-            'name' => $request->name,
-            'slug' => Str::slug($request->name),
-            'is_active' => true
-        ]);
-
-        return back()->with('success', 'Đã thêm danh mục');
     }
 
-    public function update(Request $request, Category $category)
+    public function store(StoreCategoryRequest $request)
     {
-        $request->validate([
-            'name' => [
-                'required',
-                Rule::unique('categories')->ignore($category->id)
-            ]
-        ]);
+        $data = $request->validated();
+        $data['slug'] = Str::slug($data['name']);
+        $data['is_active'] = $data['is_active'] ?? true;
 
-        $category->update([
-            'name' => $request->name,
-            'slug' => Str::slug($request->name)
-        ]);
+        Category::create($data);
 
-        return back()->with('success', 'Đã cập nhật');
+        return redirect()
+            ->route('categories.index')
+            ->with('success', 'Đã thêm danh mục');
+    }
+
+    public function edit(Category $category)
+    {
+        $categories = Category::where('id', '!=', $category->id)
+            ->select('id', 'name')
+            ->get();
+
+        return Inertia::render('Categories/Edit', [
+            'category'   => $category,
+            'categories' => $categories,
+        ]);
+    }
+
+    public function update(UpdateCategoryRequest $request, Category $category)
+    {
+        $data = $request->validated();
+        $data['slug'] = Str::slug($data['name']);
+
+        $category->update($data);
+
+        return redirect()
+            ->route('categories.index')
+            ->with('success', 'Đã cập nhật danh mục');
     }
 
     public function destroy(Category $category)
     {
-        $category->delete();
-        return back()->with('success', 'Đã chuyển vào thùng rác');
-    }
+        if ($category->children()->exists()) {
+            return back()->withErrors([
+                'error' => 'Không thể xóa vì còn danh mục con',
+            ]);
+        }
 
-    /* ================= TRASH ================= */
+        if ($category->products()->exists()) {
+            return back()->withErrors([
+                'error' => 'Không thể xóa vì còn sản phẩm thuộc danh mục này',
+            ]);
+        }
+
+        $category->delete();
+        return back()->with('success', 'Đã chuyển danh mục vào thùng rác');
+    }
 
     public function trash()
     {
-        return response()->json(
-            Category::onlyTrashed()->latest()->get()
-        );
+        $categories = Category::onlyTrashed()
+            ->with('parent:id,name')
+            ->latest()
+            ->get();
+
+        return response()->json($categories);
     }
 
     public function restore($id)
     {
         Category::withTrashed()->findOrFail($id)->restore();
-
-        return back()->with('success', 'Khôi phục thành công');
+        return back()->with('success', 'Đã khôi phục danh mục thành công');
     }
 
     public function forceDelete($id)
     {
-        $item = Category::withTrashed()->findOrFail($id);
+        $category = Category::withTrashed()->find($id);
 
-        // optional: check ràng buộc
-        if ($item->products()->exists()) {
-            return back()->withErrors([
-                'error' => 'Không thể xóa vì còn sản phẩm'
-            ]);
+        if (! $category) {
+            return back()->withErrors(['error' => 'Danh mục không tồn tại']);
         }
 
-        $item->forceDelete();
-
-        return back()->with('success', 'Đã xóa vĩnh viễn');
+        $category->forceDelete();
+        return back()->with('success', 'Đã xóa vĩnh viễn danh mục');
     }
 
-    public function toggleStatus($id)
+    public function toggleStatus(Category $category)
     {
-        $item = Category::findOrFail($id);
-
-        $item->is_active = !$item->is_active;
-        $item->save();
-
-        return back();
+        $category->update(['is_active' => ! $category->is_active]);
+        return back()->with('success', 'Đã cập nhật trạng thái hoạt động');
     }
 }

@@ -1,19 +1,17 @@
 <script setup>
-import { ref, watch  } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
-
+import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { ScanSearch } from 'lucide-vue-next'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 
 const props = defineProps({
-    show: Boolean,
+    product: Object,
     categories: Array,
     brands: Array
 })
-
-const emit = defineEmits(['close'])
 
 /*
 |--------------------------------------------------------------------------
@@ -21,24 +19,49 @@ const emit = defineEmits(['close'])
 |--------------------------------------------------------------------------
 */
 const form = useForm({
-    name: '',
-    category_id: '',
-    brand_id: '',
-    sku: '',
-    barcode: '',
-    cost_price: '',
-    sell_price: '',
-    stock: 0,
+
+    id: props.product?.id ?? null,
+
+    name: props.product?.name ?? '',
+
+    category_id: props.product?.category_id ?? null,
+
+    brand_id: props.product?.brand_id ?? null,
+
+    sku: props.product?.sku ?? '',
+
+    barcode: props.product?.barcode ?? '',
+
+    cost_price: props.product?.cost_price ?? '',
+
+    sell_price: props.product?.sell_price ?? '',
+
+    stock: props.product?.stock ?? 0,
+
     imeis: '',
+
     image: null,
 
-    // thuộc tính
-    has_variant: false,
-    color: '',
-    storage: '',
-    version: '',
+    variants: props.product?.variants ?? []
 
-    variants: [],
+})
+
+// reset form khi props.product thay đổi (chọn sửa sản phẩm khác)
+watch(() => props.product, (p) => {
+    if (!p) return
+
+    form.reset()
+
+    form.id = p.id
+    form.name = p.name
+    form.category_id = p.category_id
+    form.brand_id = p.brand_id
+    form.sku = p.sku
+    form.barcode = p.barcode
+    form.cost_price = p.cost_price
+    form.sell_price = p.sell_price
+    form.stock = p.stock
+    form.variants = p.variants ?? []
 })
 
 /*
@@ -48,6 +71,18 @@ const form = useForm({
 */
 const preview = ref(null)
 
+// nếu là edit → hiển thị ảnh cũ
+if (props.product?.image_url) {
+    preview.value = props.product.image_url
+}
+watch(() => props.product, (p) => {
+    if (p?.image_url) {
+        preview.value = p.image_url
+    } else {
+        preview.value = null
+    }
+})
+
 const handleImage = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -56,25 +91,9 @@ const handleImage = (e) => {
     preview.value = URL.createObjectURL(file)
 }
 
-
-// Biến thể
-const variants = ref([
-    {
-        color: '',
-        storage: '',
-        version: '',
-        sku: '',
-        barcode: '',
-        cost_price: 0,
-        sell_price: 0,
-        stock: 0,
-        imeis: ''
-    }
-])
-
 // Thêm xóa biến thể
 const addVariant = () => {
-    variants.value.push({
+    form.variants.push({
         color: '',
         storage: '',
         version: '',
@@ -88,11 +107,8 @@ const addVariant = () => {
 }
 
 const removeVariant = (index) => {
-    variants.value.splice(index, 1)
+    form.variants.splice(index, 1)
 }
-
-
-
 
 // Tạo barcode
 const generateBarcode = () => {
@@ -103,37 +119,6 @@ const generateBarcode = () => {
     form.barcode = code
 }
 
-// Tạo biến thể
-const generateVariants = () => {
-
-    const colors = form.color ? [form.color] : ['']
-    const storages = form.storage ? [form.storage] : ['']
-    const versions = form.version ? [form.version] : ['']
-
-    const result = []
-
-    colors.forEach(c => {
-        storages.forEach(s => {
-            versions.forEach(v => {
-                result.push({
-                    color: c,
-                    storage: s,
-                    version: v,
-
-                    sku: '',
-                    barcode: '',
-                    cost_price: form.cost_price || 0,
-                    sell_price: form.sell_price || 0,
-                    stock: form.stock || 0
-                })
-            })
-        })
-    })
-
-    form.variants = result
-
-    console.log('VARIANTS', form.variants)
-}
 
 
 
@@ -173,7 +158,8 @@ const stopCamera = () => {
 
 let buffer = ''
 
-window.addEventListener('keydown', (e) => {
+
+let handler = (e) => {
     if (e.key === 'Enter') {
         if (buffer.length > 5) {
             form.imeis += (form.imeis ? '\n' : '') + buffer
@@ -182,16 +168,17 @@ window.addEventListener('keydown', (e) => {
     } else {
         buffer += e.key
     }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', handler)
 })
 
-watch(
-    () => [form.color, form.storage, form.version, form.has_variant],
-    () => {
-        if (form.has_variant) {
-            generateVariants()
-        }
-    }
-)
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handler)
+})
+
+
 
 // Hàm scan
 const handleScan = async (code) => {
@@ -227,17 +214,34 @@ const handleScan = async (code) => {
 |--------------------------------------------------------------------------
 */
 const submit = () => {
-    form.transform(data => ({
-        ...data,
-        variants: variants.value
-    })).post(route('products.store'))
+
+    const options = {
+
+        onSuccess: () => {
+
+            closeModal()
+
+        }
+
+    }
+
+    if (form.id) {
+
+        form.put(route('products.update', form.id), options)
+
+    } else {
+
+        form.post(route('products.store'), options)
+
+    }
+
 }
 
 
 </script>
 
 <template>
-<div v-if="show" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+<div class="flex bg-white">
 
     <div class="bg-white w-[1100px] rounded-xl shadow-xl flex overflow-hidden">
 
@@ -265,12 +269,6 @@ const submit = () => {
 
         <!-- RIGHT -->
         <div class="flex-1 p-6 space-y-4 overflow-y-auto max-h-[90vh]">
-
-            <!-- HEADER -->
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-bold">Thêm hàng hóa</h2>
-                <button @click="emit('close')">✕</button>
-            </div>
 
             <!-- FORM -->
             <div class="grid grid-cols-2 gap-4">
@@ -396,7 +394,7 @@ const submit = () => {
                 </div>
 
                 <div
-                    v-for="(v, i) in variants"
+                    v-for="(v, i) in form.variants"
                     :key="i"
                     class="border rounded p-3 mt-3 space-y-3"
                 >
@@ -442,45 +440,21 @@ const submit = () => {
             </div>
 
 
-            <!--Biến Thể-->
-            <div v-if="form.has_variant && form.variants.length" class="mt-4">
-
-                <h3 class="font-semibold mb-2">Danh sách biến thể</h3>
-
-                <div class="space-y-2">
-
-                    <div
-                        v-for="(v, i) in form.variants"
-                        :key="i"
-                        class="grid grid-cols-6 gap-2 items-center"
-                    >
-
-                        <div>{{ v.color }} - {{ v.storage }} - {{ v.version }}</div>
-
-                        <input v-model="v.sku" placeholder="SKU" class="border p-1 rounded" />
-
-                        <input v-model="v.barcode" placeholder="Barcode" class="border p-1 rounded" />
-
-                        <input v-model="v.cost_price" type="number" class="border p-1 rounded" />
-
-                        <input v-model="v.sell_price" type="number" class="border p-1 rounded" />
-
-                        <input v-model="v.stock" type="number" class="border p-1 rounded" />
-
-                    </div>
-
-                </div>
-
-            </div>
+            
 
             <!-- ACTION -->
             <div class="flex justify-end gap-2 pt-4">
-                <button @click="emit('close')" class="btn-gray">Hủy</button>
+                <button
+                    type="button"
+                    @click="closeModal()"
+                    class="btn-gray"
+                >
+                    Hủy
+                </button>
                 <button @click="submit" class="btn-green">
                     Lưu
                 </button>
             </div>
-
         </div>
     </div>
 </div>

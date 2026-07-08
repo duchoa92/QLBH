@@ -4,77 +4,50 @@ namespace App\Http\Controllers;
 
 use App\Models\Brand;
 use App\Models\Category;
-use App\Services\Brand\BrandService; // Thêm Service
+use App\Services\Brand\BrandService;
+use App\Http\Requests\Brand\StoreBrandRequest;
+use App\Http\Requests\Brand\UpdateBrandRequest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Validation\Rule;
 
 class BrandController extends Controller
 {
-    protected $brandService;
-
-    // Khởi tạo và Inject Service vào đây
-    public function __construct(BrandService $brandService)
+    public function __construct(protected BrandService $brandService)
     {
-        $this->brandService = $brandService;
     }
 
     public function index(Request $request)
     {
-        // Kiểm tra xem request có thực sự có giá trị filter hay không
         $brands = Brand::with('category')
-            ->when($request->filled('search'), function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%');
-            })
-            ->when($request->filled('category_id'), function ($q) use ($request) {
-                $q->where('category_id', $request->category_id);
-            })
+            ->when($request->filled('search'), fn ($q) =>
+                $q->where('name', 'like', '%' . $request->search . '%')
+            )
+            ->when($request->filled('category_id'), fn ($q) =>
+                $q->where('category_id', $request->category_id)
+            )
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
         $categories = Category::select('id', 'name')->get();
-    
+
         return Inertia::render('Brands/Index', [
-            'brands' => $brands,
-            'filters' => $request->only('search', 'category_id'),
-            'categories' => $categories
+            'brands'     => $brands,
+            'filters'    => $request->only('search', 'category_id'),
+            'categories' => $categories,
         ]);
     }
 
-    public function store(Request $request)
+    public function store(StoreBrandRequest $request)
     {
-        $request->validate([
-            'name' => ['required', Rule::unique('brands', 'name')],
-            'category_id' => 'required|exists:categories,id'
-        ], [
-            'name.required' => 'Vui lòng nhập tên thương hiệu',
-            'name.unique' => 'Tên thương hiệu đã tồn tại',
-            'category_id.required' => 'Vui lòng chọn danh mục'
-        ]);
-
-        // SỬ DỤNG SERVICE ĐÃ VIẾT
-        $this->brandService->create($request->all());
+        $this->brandService->create($request->validated());
 
         return back()->with('success', 'Đã thêm thương hiệu thành công');
     }
 
-    public function update(Request $request, Brand $brand)
+    public function update(UpdateBrandRequest $request, Brand $brand)
     {
-         $request->validate([
-            'name' => [
-                'required',
-                Rule::unique('brands', 'name')->ignore($brand->id)
-            ],
-            'category_id' => 'required|exists:categories,id'
-        ], [
-            'name.required' => 'Vui lòng nhập tên thương hiệu',
-            'name.unique' => 'Tên thương hiệu đã tồn tại',
-            'category_id.required' => 'Vui lòng chọn danh mục'
-        ]);
-
-        // SỬ DỤNG SERVICE ĐÃ VIẾT
-        $this->brandService->update($brand, $request->all());
+        $this->brandService->update($brand, $request->validated());
 
         return back()->with('success', 'Đã cập nhật thương hiệu thành công');
     }
@@ -87,7 +60,6 @@ class BrandController extends Controller
 
     public function trash()
     {
-        // Lấy dữ liệu qua mối quan hệ từ Soft Delete
         $brands = Brand::onlyTrashed()->with('category')->latest()->get();
         return response()->json($brands);
     }
@@ -95,7 +67,6 @@ class BrandController extends Controller
     public function restore($id)
     {
         Brand::withTrashed()->findOrFail($id)->restore();
-        // Dùng Inertia reload để cập nhật bảng chính ở ngoài màn hình luôn
         return back()->with('success', 'Đã khôi phục thương hiệu thành công');
     }
 
@@ -103,7 +74,7 @@ class BrandController extends Controller
     {
         $brand = Brand::withTrashed()->find($id);
 
-        if (!$brand) {
+        if (! $brand) {
             return back()->withErrors(['error' => 'Thương hiệu không tồn tại']);
         }
 
@@ -118,9 +89,7 @@ class BrandController extends Controller
     public function toggleStatus($id)
     {
         $brand = Brand::findOrFail($id);
-        $brand->is_active = !$brand->is_active;
-        $brand->save();
-
+        $brand->update(['is_active' => ! $brand->is_active]);
         return back()->with('success', 'Đã cập nhật trạng thái hoạt động');
     }
 }

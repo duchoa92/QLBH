@@ -13,29 +13,41 @@ class UpdateCategoryRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $categoryId = $this->route('category');
 
+        return [
+            // Không được chọn chính nó làm cha
             'parent_id' => [
                 'nullable',
-                'exists:categories,id'
+                'integer',
+                'exists:categories,id',
+                function ($attribute, $value, $fail) use ($categoryId) {
+                    if ($value && (int) $value === (int) $categoryId) {
+                        $fail('Danh mục cha không được là chính nó');
+                    }
+                },
             ],
-
             'name' => [
                 'required',
                 'string',
-                'max:255'
+                'max:255',
             ],
-
             'sort_order' => [
                 'nullable',
-                'integer'
+                'integer',
+                'min:0',
             ],
-
             'is_active' => [
-                'nullable',
-                'boolean'
+                'boolean',
             ],
+        ];
+    }
 
+    public function messages(): array
+    {
+        return [
+            'name.required'    => 'Vui lòng nhập tên danh mục',
+            'parent_id.exists' => 'Danh mục cha không hợp lệ',
         ];
     }
 }

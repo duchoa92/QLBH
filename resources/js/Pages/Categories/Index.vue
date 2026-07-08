@@ -7,6 +7,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { openModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
 import TrashModal from '@/Components/TrashModal.vue'
+import { Plus, Trash2 } from 'lucide-vue-next'
 
 defineOptions({ layout: AdminLayout })
 
@@ -142,11 +143,11 @@ const toggleStatus = (id) => {
             <p class="text-gray-500">Quản lý danh mục sản phẩm</p>
         </div>
         <div class="flex gap-2">
-            <button @click="openTrash" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
-                Thùng rác ({{ trashCount }})
+            <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <Plus /> Thêm mới
             </button>
-            <button @click="openCreate" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition">
-                Thêm mới
+            <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white">
+                <Trash2 /> Xóa ({{ trashCount }})
             </button>
         </div>
     </div>

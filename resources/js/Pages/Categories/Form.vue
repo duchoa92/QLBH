@@ -1,32 +1,28 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3'
+import { closeModal } from '@/Stores/modal'
 import { defineProps, defineEmits } from 'vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 const props = defineProps({
-    item: Object
+    category: Object
 })
 
 const emit = defineEmits(['close', 'updated'])
 
 const form = useForm({
-    name: props.item?.name || ''
+    id: props.category?.id || null,
+    name: props.category?.name || ''
 })
 
 const submit = () => {
-    if (props.item) {
-        form.put(`/categories/${props.item.id}`, {
-            onSuccess: () => {
-                emit('updated')
-                emit('close')
-            }
+    if (form.id) {
+        form.put(`/categories/${form.id}`, {
+            onSuccess: closeModal
         })
     } else {
         form.post('/categories', {
-            onSuccess: () => {
-                emit('updated')
-                emit('close')
-            }
+            onSuccess: closeModal
         })
     }
 }
