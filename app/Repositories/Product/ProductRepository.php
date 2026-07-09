@@ -27,9 +27,10 @@ class ProductRepository extends BaseRepository
             ->withQueryString();
     }
    
-
+    
     public function paginate(int $perPage = 10): LengthAwarePaginator
     {
+        $perPage = request('per_page', $perPage);
         $search = request('search');
         $categoryId = request('category_id');
         $brandId = request('brand_id');
@@ -76,7 +77,7 @@ class ProductRepository extends BaseRepository
 
             /*
             |------------------------------------------------------------------
-            | SEARCH (FIX CHUẨN)
+            | SEARCH
             |------------------------------------------------------------------
             */
 
@@ -86,14 +87,12 @@ class ProductRepository extends BaseRepository
 
                 $query->where(function ($q) use ($search) {
 
-                    // 👉 IMEI (không return nữa)
                     if (preg_match('/^\d{6,}$/', $search)) {
                         $q->orWhereHas('imeis', function ($imeiQuery) use ($search) {
                             $imeiQuery->where('imei', 'like', "%$search%");
                         });
                     }
 
-                    // 👉 FULLTEXT
                     $terms = explode(' ', $search);
 
                     $booleanSearch = collect($terms)
@@ -108,32 +107,33 @@ class ProductRepository extends BaseRepository
                         );
                     }
 
-                    // 👉 fallback (RẤT QUAN TRỌNG)
                     $q->orWhere('search_text', 'like', "%$search%");
                     $q->orWhere('barcode', 'like', "%$search%");
 
-                    $q->orWhereHas('category', function ($catQuery) use ($search) {
-                        $catQuery->where('name', 'like', "%$search%");
-                    });
+                    $q->orWhereHas('category', fn($q2) =>
+                        $q2->where('name', 'like', "%$search%")
+                    );
 
-                    $q->orWhereHas('brand', function ($brandQuery) use ($search) {
-                        $brandQuery->where('name', 'like', "%$search%");
-                    });
+                    $q->orWhereHas('brand', fn($q2) =>
+                        $q2->where('name', 'like', "%$search%")
+                    );
 
                 });
             })
 
+            /*
+            |------------------------------------------------------------------
+            | SORT
+            |------------------------------------------------------------------
+            */
 
-            // Sắp xếp
             ->when(request('sort_by'), function ($q) {
 
                 $allowed = ['id', 'name', 'sell_price', 'stock'];
 
                 $sortBy = request('sort_by');
 
-                if (!in_array($sortBy, $allowed)) {
-                    return;
-                }
+                if (!in_array($sortBy, $allowed)) return;
 
                 $q->orderBy(
                     $sortBy,
@@ -143,8 +143,13 @@ class ProductRepository extends BaseRepository
             }, function ($q) {
                 $q->latest();
             })
-            
-            
+
+            /*
+            |------------------------------------------------------------------
+            | PAGINATION
+            |------------------------------------------------------------------
+            */
+
             ->paginate($perPage)
             ->withQueryString();
     }

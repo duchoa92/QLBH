@@ -5,8 +5,7 @@ import { openModal } from '@/Stores/modal'
 import Form from './Form.vue'
 import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
-import ProductBulkBar from './Components/ProductBulkBar.vue'
-import { Plus } from 'lucide-vue-next'
+import { Plus, Trash2 } from 'lucide-vue-next'
 
 
 const props = defineProps({
@@ -28,7 +27,8 @@ const filters = ref({
     stock: props.filters?.stock || '',
     status: props.filters?.status || '',
     sort_by: props.filters?.sort_by || 'id',
-    sort_order: props.filters?.sort_order || 'desc'
+    sort_order: props.filters?.sort_order || 'desc',
+    per_page: props.filters?.per_page || 10
 })
 
 
@@ -45,6 +45,8 @@ watch(
         clearTimeout(timeout)
 
         timeout = setTimeout(() => {
+
+            filters.value.page = 1
             router.get(route('products.index'), filters.value, {
                 preserveState: true,
                 replace: true,
@@ -183,6 +185,27 @@ const openTrash = () => {
 
 }
 
+const trashCount = ref(0)
+const loadTrashCount = async () => {
+    try {
+        const res = await fetch('/products/trash', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+
+        if (!res.ok) throw new Error('API lỗi')
+
+        const data = await res.json()
+        trashCount.value = data.length
+    } catch (e) {
+        console.error('Load trash count lỗi', e)
+        trashCount.value = 0
+    }
+}
+
+const handleSort = (sort) => {
+    Object.assign(filters.value, sort)
+}
+
 </script>
 
 <template>
@@ -199,11 +222,8 @@ const openTrash = () => {
             <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
                 <Plus /> Thêm
             </button>
-            <button
-                @click="openTrash"
-                class="btn-gray"
-            >
-                Thùng rác
+            <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
+                <Trash2 /> ({{ trashCount }})
             </button>
         </div>
     </div>
@@ -217,11 +237,7 @@ const openTrash = () => {
             if (!v || typeof v !== 'object') return
             Object.assign(filters, v)
         }"
-    />
-
-    <!-- BULK -->
-    <ProductBulkBar
-        :selectedIds="selectedIds"
+        :selectedCount="selectedIds.length"
         @delete="bulkDelete"
         @print="printImei"
     />
@@ -234,6 +250,7 @@ const openTrash = () => {
         @toggleOne="toggleOne"
         @toggleAll="toggleAll"
         @open="openEdit"
+        @sort="handleSort"
     />
 
 </div>

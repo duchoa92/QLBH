@@ -23,18 +23,23 @@ class ProductController extends Controller
 
     public function index()
     {
+        $filters = request()->only([
+            'search',
+            'category_id',
+            'brand_id',
+            'stock',
+            'sort_by',
+            'sort_order',
+            'per_page'
+        ]);
+
         return Inertia::render('Products/Index', [
             'products' => $this->productRepository->paginate(),
 
-            'filters' => request()->only([
-                'search',
-                'category_id',
-                'brand_id',
-                'stock'
-            ]),
+            'filters' => $filters,
 
             'categories' => Category::select('id','name')->get(),
-            
+
             'brands' => Brand::query()
                 ->select('id','name','category_id')
                 ->when(request('category_id'), function ($q) {
@@ -309,7 +314,7 @@ class ProductController extends Controller
         ], 404);
     }
 
-    
+
 
 
 }
