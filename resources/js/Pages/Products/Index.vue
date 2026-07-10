@@ -1,18 +1,25 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { openModal } from '@/Stores/modal'
 import Form from './Form.vue'
 import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-
+import TrashModal from '@/Components/TrashModal.vue'
+import Swal from 'sweetalert2'
 
 const props = defineProps({
     products: Object,
     filters: Object,
     categories: Array,
     brands: Array
+})
+
+
+
+onMounted(() => {
+    loadTrashCount()
 })
 
 /*
@@ -101,14 +108,20 @@ const toggleAll = () => {
 const bulkDelete = () => {
     if (!selectedIds.value.length) return
 
-    if (!confirm(`Chuyển ${selectedIds.value.length} sản phẩm vào thùng rác?`)) return
-
-    router.post(route('products.bulkDelete'), {
-        ids: selectedIds.value
-    }, {
-        preserveScroll: true,
-        onSuccess: () => {
-            selectedIds.value = []
+    Swal.fire({
+        title: `Xóa ${selectedIds.value.length} sản phẩm?`,
+        icon: 'warning',
+        showCancelButton: true
+    }).then((r) => {
+        if (r.isConfirmed) {
+            router.post(route('products.bulkDelete'), {
+                ids: selectedIds.value
+            }, {
+                onSuccess: () => {
+                    selectedIds.value = []
+                    loadTrashCount()
+                }
+            })
         }
     })
 }
@@ -128,61 +141,39 @@ const printImei = () => {
 */
 // mở modal sửa sản phẩm
 const openEdit = (product) => {
-
     openModal(Form, {
-
         title: 'Sửa sản phẩm',
-
         props: {
-
             product,
-
             categories: props.categories,
-
             brands: props.brands
-
         },
-
         onUpdated: loadData
-
     })
-
 }
 // mở modal tạo sản phẩm
 const openCreate = () => {
-
     openModal(Form, {
-
         title: 'Thêm sản phẩm',
-
         props: {
-
             categories: props.categories,
-
             brands: props.brands
-
         },
-
         onUpdated: loadData
-
     })
-
 }
 
 const openTrash = () => {
-
     openModal(TrashModal, {
-
-        title: 'Thùng rác',
-
+        title: 'Thùng rác sản phẩm',
         props: {
             endpoint: 'products'
         },
-
-        onUpdated: loadData
-
+        onUpdated: () => {
+            loadData()
+            loadTrashCount()
+        }
     })
-
 }
 
 const trashCount = ref(0)
@@ -192,18 +183,33 @@ const loadTrashCount = async () => {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
 
-        if (!res.ok) throw new Error('API lỗi')
-
         const data = await res.json()
         trashCount.value = data.length
     } catch (e) {
-        console.error('Load trash count lỗi', e)
         trashCount.value = 0
     }
 }
 
 const handleSort = (sort) => {
     Object.assign(filters.value, sort)
+}
+
+
+const deleteOne = (id) => {
+    Swal.fire({
+        title: 'Xác nhận chuyển vào thùng rác?',
+        icon: 'warning',
+        showCancelButton: true
+    }).then((r) => {
+        if (r.isConfirmed) {
+            router.delete(route('products.destroy', id), {
+                onSuccess: () => {
+                    loadData()
+                    loadTrashCount()
+                }
+            })
+        }
+    })
 }
 
 </script>
@@ -251,6 +257,8 @@ const handleSort = (sort) => {
         @toggleAll="toggleAll"
         @open="openEdit"
         @sort="handleSort"
+        @delete="deleteOne"
+        @print="printOne"
     />
 
 </div>

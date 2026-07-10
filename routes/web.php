@@ -133,10 +133,7 @@ Route::middleware(['auth'])->group(function () {
         ->name('products.destroy');
 
     // Hiển thị sản phẩm trong thùng rác
-    Route::get(
-        '/products-trash',
-        [ProductController::class, 'trash']
-    )
+    Route::get('/products/trash', [ProductController::class, 'trash'])
         ->middleware('permission:products.view')
         ->name('products.trash');
 

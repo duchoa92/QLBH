@@ -31,22 +31,9 @@ const searchSupplier = () => {
 <template>
 
     <div class="p-6">
+        <div class="flex justify-between items-center mb-6">
 
-        <div
-            class="
-                flex
-                justify-between
-                items-center
-                mb-6
-            "
-        >
-
-            <h1
-                class="
-                    text-2xl
-                    font-bold
-                "
-            >
+            <h1 class="text-2xl font-bold">
                 Nhà cung cấp
             </h1>
 
@@ -76,89 +63,59 @@ const searchSupplier = () => {
 
         </div>
 
-        <table
-            class="
-                w-full
-                border
-            "
-        >
+        <div class="bg-white rounded-xl shadow border overflow-hidden">
+            <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                <thead>
+                    <tr class="bg-gray-100 uppercase text-left">
 
-            <thead>
+                        <th class="border p-2">Mã</th>
+                        <th class="border p-2">Tên</th>
+                        <th class="border p-2">Điện thoại</th>
+                        <th class="border p-2">Công nợ</th>
+                        <th class="border p-2">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
 
-                <tr
-                    class="
-                        bg-gray-100
-                    "
-                >
+                    <tr
+                        v-for="supplier in suppliers"
+                        :key="supplier.id"
+                    >
 
-                    <th class="border p-2">
-                        Mã
-                    </th>
+                        <td class="border p-2">
+                            {{ supplier.code }}
+                        </td>
 
-                    <th class="border p-2">
-                        Tên
-                    </th>
+                        <td class="border p-2">
+                            {{ supplier.name }}
+                        </td>
 
-                    <th class="border p-2">
-                        Điện thoại
-                    </th>
+                        <td class="border p-2">
+                            {{ supplier.phone }}
+                        </td>
 
-                    <th class="border p-2">
-                        Công nợ
-                    </th>
+                        <td class="border p-2">
+                            {{ supplier.debt_balance }}
+                        </td>
 
-                    <th class="border p-2">
-                        Thao tác
-                    </th>
+                        <td class="border p-2">
 
-                </tr>
+                            <Link
+                                :href="
+                                    `/suppliers/${supplier.id}/edit`
+                                "
+                                class="
+                                    text-blue-600
+                                "
+                            >
+                                Sửa
+                            </Link>
 
-            </thead>
-
-            <tbody>
-
-                <tr
-                    v-for="supplier in suppliers"
-                    :key="supplier.id"
-                >
-
-                    <td class="border p-2">
-                        {{ supplier.code }}
-                    </td>
-
-                    <td class="border p-2">
-                        {{ supplier.name }}
-                    </td>
-
-                    <td class="border p-2">
-                        {{ supplier.phone }}
-                    </td>
-
-                    <td class="border p-2">
-                        {{ supplier.debt_balance }}
-                    </td>
-
-                    <td class="border p-2">
-
-                        <Link
-                            :href="
-                                `/suppliers/${supplier.id}/edit`
-                            "
-                            class="
-                                text-blue-600
-                            "
-                        >
-                            Sửa
-                        </Link>
-
-                    </td>
-
-                </tr>
-
-            </tbody>
-
-        </table>
-
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
 </template>

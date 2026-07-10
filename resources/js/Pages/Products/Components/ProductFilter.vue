@@ -87,7 +87,7 @@ const update = (key, value) => {
                         <Trash size="16"/><span class="hidden sm:inline"> Xóa</span>
                     </button>
                     
-                    <span class="text-sm text-gray-500">
+                    <span class="text-xs text-gray-500 ml-1">
                         ({{ selectedCount }})
                     </span>
                 </div>

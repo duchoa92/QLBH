@@ -69,61 +69,6 @@ class ProductController extends Controller
         );
     }
 
-    // hiển thị form tạo sản phẩm
-    public function create(): Response
-    {
-        return Inertia::render(
-            'Products/Create',
-            [
-
-                'brands' => Brand::query()
-                    ->select(
-                        'id',
-                        'name'
-                    )
-                    ->orderBy('name')
-                    ->get(),
-
-                'categories' => Category::query()
-                    ->select(
-                        'id',
-                        'name'
-                    )
-                    ->orderBy('name')
-                    ->get(),
-            ]
-        );
-    }
-
-    // Hiển thị form chỉnh sửa sản phẩm
-    public function edit(
-        Product $product
-    ): Response {
-
-        return Inertia::render(
-            'Products/Edit',
-            [
-
-                'product' => $product,
-
-                'brands' => Brand::query()
-                    ->select(
-                        'id',
-                        'name'
-                    )
-                    ->orderBy('name')
-                    ->get(),
-
-                'categories' => Category::query()
-                    ->select(
-                        'id',
-                        'name'
-                    )
-                    ->orderBy('name')
-                    ->get(),
-            ]
-        );
-    }
 
     // Lưu sản phẩm mới
     public function store(
@@ -179,13 +124,15 @@ class ProductController extends Controller
     }
 
     // Thùng rác
-    public function trash(): Response
+    public function trash()
     {
-        return Inertia::render('Products/Trash', [
-            'products' => $this->productRepository->trash()
-        ]);
-    }
+        $products = Product::onlyTrashed()
+            ->with(['category:id,name', 'brand:id,name'])
+            ->latest()
+            ->get();
 
+        return response()->json($products);
+    }
     // Khôi phục sản phẩm
     public function restore(int $id): RedirectResponse
     {

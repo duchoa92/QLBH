@@ -56,28 +56,14 @@ watch(search, value => {
 
         <!-- table -->
 
-        <div class="border rounded overflow-hidden">
-
-            <table class="w-full">
-
-                <thead class="bg-gray-100">
-
-                    <tr>
-
-                        <th class="p-3 text-left">
-                            Mã HD
-                        </th>
-
-                        <th class="p-3 text-left">
-                            Tổng tiền
-                        </th>
-
-                        <th class="p-3 text-left">
-                            Ngày
-                        </th>
-
-                        <th class="p-3">
-                        </th>
+        <div class="bg-white rounded-xl shadow border overflow-hidden">
+            <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                <thead >
+                    <tr class="bg-gray-100 uppercase text-left">
+                        <th class="p-3 text-left">Mã HD</th>
+                        <th class="p-3 text-left">Tổng tiền</th>
+                        <th class="p-3 text-left">Ngày</th>
+                        <th class="p-3 text-right">Hành động</th>
                     </tr>
                 </thead>
 
@@ -88,11 +74,9 @@ watch(search, value => {
                         :key="sale.id"
                         class="border-t"
                     >
-
                         <td class="p-3">
                             {{ sale.code }}
                         </td>
-
                         <td class="p-3">
                             {{ Number(sale.subtotal).toLocaleString() }}
                         </td>

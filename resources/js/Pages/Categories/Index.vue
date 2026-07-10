@@ -155,46 +155,47 @@ const toggleStatus = (id) => {
     <div class="flex gap-3 mb-5">
         <FloatingInput name="search" v-model="search" label="Tìm kiếm..." class="w-64" />
     </div>
-
-    <table class="w-full bg-white border collapse-separate">
-        <thead>
-            <tr class="bg-gray-100 text-left">
-                <th class="border p-2 w-16 text-center">ID</th>
-                <th class="border p-2">Tên danh mục</th>
-                <th class="border p-2 w-32 text-center">Trạng thái</th>
-                <th class="border p-2 w-40 text-center">Hành động</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr v-for="item in categories.data" :key="item.id" class="hover:bg-gray-50">
-                <td class="border p-2 text-center">{{ item.id }}</td>
-                <td class="border p-2 font-medium">{{ item.name }}</td>
-                <td class="border p-2 text-center">
-                    <div class="flex items-center gap-2 justify-center">
-                        <button
-                            @click="toggleStatus(item.id)"
-                            :disabled="loadingStatus === item.id"
-                            class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                            :class="item.is_active ? 'bg-green-500' : 'bg-gray-300'"
-                        >
-                            <span
-                                class="inline-block h-4 w-4 transform rounded-full bg-white transition"
-                                :class="item.is_active ? 'translate-x-6' : 'translate-x-1'"
-                            />
-                        </button>
-                    </div>
-                </td>
-                <td class="border p-2 text-center">
-                    <div class="flex gap-2 justify-center">
-                        <button @click.stop="openEdit(item)" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">Sửa</button>
-                        <button @click.stop="destroy(item.id)" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">Xóa</button>
-                    </div>
-                </td>
-            </tr>
-            <tr v-if="categories.data.length === 0">
-                <td colspan="4" class="text-center p-10 text-gray-500 bg-gray-50">Không tìm thấy danh mục nào phù hợp.</td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="bg-white rounded-xl shadow border overflow-hidden">
+        <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+            <thead >
+                <tr class="bg-gray-100 uppercase text-left">
+                    <th class="border p-2 w-16 text-center">ID</th>
+                    <th class="border p-2">Tên danh mục</th>
+                    <th class="border p-2 w-32 text-center">Trạng thái</th>
+                    <th class="border p-2 w-40 text-center">Hành động</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="item in categories.data" :key="item.id" class="hover:bg-gray-50">
+                    <td class="border p-2 text-center">{{ item.id }}</td>
+                    <td class="border p-2 font-medium">{{ item.name }}</td>
+                    <td class="border p-2 text-center">
+                        <div class="flex items-center gap-2 justify-center">
+                            <button
+                                @click="toggleStatus(item.id)"
+                                :disabled="loadingStatus === item.id"
+                                class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                                :class="item.is_active ? 'bg-green-500' : 'bg-gray-300'"
+                            >
+                                <span
+                                    class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                                    :class="item.is_active ? 'translate-x-6' : 'translate-x-1'"
+                                />
+                            </button>
+                        </div>
+                    </td>
+                    <td class="border p-2 text-center">
+                        <div class="flex gap-2 justify-center">
+                            <button @click.stop="openEdit(item)" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">Sửa</button>
+                            <button @click.stop="destroy(item.id)" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">Xóa</button>
+                        </div>
+                    </td>
+                </tr>
+                <tr v-if="categories.data.length === 0">
+                    <td colspan="4" class="text-center p-10 text-gray-500 bg-gray-50">Không tìm thấy danh mục nào phù hợp.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 </template>

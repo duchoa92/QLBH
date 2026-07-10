@@ -48,20 +48,22 @@ const form = useForm({
 
 // reset form khi props.product thay đổi (chọn sửa sản phẩm khác)
 watch(() => props.product, (p) => {
-    if (!p) return
 
-    form.reset()
+    if (!p) {
+        form.reset()
+        return
+    }
 
-    form.id = p.id
-    form.name = p.name
-    form.category_id = p.category_id
-    form.brand_id = p.brand_id
-    form.sku = p.sku
-    form.barcode = p.barcode
-    form.cost_price = p.cost_price
-    form.sell_price = p.sell_price
-    form.stock = p.stock
+    form.name = p.name ?? ''
+    form.category_id = p.category_id ?? null
+    form.brand_id = p.brand_id ?? null
+    form.sku = p.sku ?? ''
+    form.barcode = p.barcode ?? ''
+    form.cost_price = p.cost_price ?? ''
+    form.sell_price = p.sell_price ?? ''
+    form.stock = p.stock ?? 0
     form.variants = p.variants ?? []
+
 })
 
 /*
@@ -71,16 +73,9 @@ watch(() => props.product, (p) => {
 */
 const preview = ref(null)
 
-// nếu là edit → hiển thị ảnh cũ
-if (props.product?.image_url) {
-    preview.value = props.product.image_url
-}
+// Hiên thị ảnh khi props.product thay đổi
 watch(() => props.product, (p) => {
-    if (p?.image_url) {
-        preview.value = p.image_url
-    } else {
-        preview.value = null
-    }
+    preview.value = p?.image_url || null
 })
 
 const handleImage = (e) => {
@@ -176,6 +171,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', handler)
+    stopCamera() // 🔥 quan trọng
 })
 
 
@@ -213,28 +209,23 @@ const handleScan = async (code) => {
 | SUBMIT
 |--------------------------------------------------------------------------
 */
+const emit = defineEmits(['close', 'updated'])
+
 const submit = () => {
 
     const options = {
-
         onSuccess: () => {
-
+            emit('updated')
+            form.imeis = ''
             closeModal()
-
         }
-
     }
 
     if (form.id) {
-
         form.put(route('products.update', form.id), options)
-
     } else {
-
         form.post(route('products.store'), options)
-
     }
-
 }
 
 
@@ -282,6 +273,10 @@ const submit = () => {
 
                 <FloatingSelect
                     v-model="form.category_id"
+                    @update:modelValue="v => {
+                        form.category_id = v
+                        form.brand_id = null
+                    }"
                     :options="categories"
                     option-label="name"
                     option-value="id"
@@ -451,8 +446,12 @@ const submit = () => {
                 >
                     Hủy
                 </button>
-                <button @click="submit" class="btn-green">
-                    Lưu
+                <button
+                    @click="submit"
+                    :disabled="form.processing"
+                    class="btn-green"
+                >
+                    {{ form.processing ? 'Đang lưu...' : 'Lưu' }}
                 </button>
             </div>
         </div>

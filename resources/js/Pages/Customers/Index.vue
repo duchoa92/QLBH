@@ -68,93 +68,47 @@ watch(search, (value) => {
         </div>
 
         <!-- TABLE -->
-        <div class="bg-white rounded shadow overflow-x-auto">
-
-            <table class="w-full">
-
-                <thead class="bg-gray-100">
-
-                    <tr>
-
-                        <th class="text-left p-3">
-                            Mã KH
-                        </th>
-
-                        <th class="text-left p-3">
-                            Họ tên
-                        </th>
-
-                        <th class="text-left p-3">
-                            SĐT
-                        </th>
-
-                        <th class="text-left p-3">
-                            Điểm
-                        </th>
-
-                        <th class="text-left p-3">
-                            Công nợ
-                        </th>
-
-                        <th class="text-left p-3">
-                            Loại
-                        </th>
-
+        <div class="bg-white rounded-xl shadow border overflow-hidden">
+            <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                <thead>
+                    <tr class="bg-gray-100 uppercase text-left">
+                        <th class="w-10 text-center border-r p-2">Mã KH</th>
+                        <th class="w-10 text-center border-r p-2">Họ tên</th>
+                        <th class="w-10 text-center border-r p-2">SĐT</th>
+                        <th class="w-10 text-center border-r p-2">Điểm</th>
+                        <th class="w-10 text-center border-r p-2">Công nợ</th>
+                        <th class="w-10 text-center border-r p-2">Loại</th>
                     </tr>
-
                 </thead>
-
                 <tbody>
-
                     <tr
                         v-for="item in customers.data"
                         :key="item.id"
                         class="border-t hover:bg-gray-50"
                     >
-
-                        <td class="p-3">
-                            {{ item.code }}
-                        </td>
-
-                        <td class="p-3 font-medium">
-
+                        <td class="text-center border-r p-2">{{ item.code }}</td>
+                        <td class="text-center border-r p-2 font-medium">
                             <Link
                                 :href="route('customers.show', item.id)"
                                 class="text-blue-600 hover:underline"
                             >
                                 {{ item.full_name }}
                             </Link>
-
                         </td>
-                                                <td class="p-3">
-                            {{ item.phone }}
-                        </td>
-
-                        <td class="p-3 text-blue-600">
-                            {{ item.point_balance }}
-                        </td>
-
-                        <td
-                            class="p-3"
+                        <td class="text-center border-r p-2">{{ item.phone }}</td>
+                        <td class="text-center border-r p-2 text-blue-600">{{ item.point_balance }}</td>
+                        <td class="text-center border-r p-2"
                             :class="item.debt_balance > 0
                                 ? 'text-red-600'
                                 : 'text-green-600'"
                         >
                             {{ item.debt_balance }}
                         </td>
-
-                        <td class="p-3">
-                            {{ item.customer_type }}
-                        </td>
-
+                        <td class="text-center border-r p-2">{{ item.customer_type }}</td>
                     </tr>
-
                 </tbody>
-
             </table>
-
         </div>
-
     </div>
 
 </template>
