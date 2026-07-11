@@ -9,6 +9,7 @@ import { Plus, Trash2 } from 'lucide-vue-next'
 import TrashModal from '@/Components/TrashModal.vue'
 import { confirmDelete } from '@/utils/confirm'
 import PrintModal from './PrintModal.vue'
+import ConfirmModal from '@/Components/ConfirmModal.vue'
 
 
 const props = defineProps({
@@ -116,7 +117,7 @@ const bulkDelete = () => {
         }, {
             onSuccess: () => {
                 selectedIds.value = []
-                    loadTrashCount()
+                loadTrashCount()
             }
         })
     })
@@ -185,14 +186,20 @@ const handleSort = (sort) => {
 
 
 const deleteOne = (id) => {
-    confirmDelete('Chuyển sản phẩm vào thùng rác?', () => {
-        router.delete(route('products.destroy', id), {
-            onSuccess: () => {
-                selectedIds.value = []
-                loadData()
-                loadTrashCount()
+    openModal(ConfirmModal, {
+        title: 'Xác nhận',
+        props: {
+            message: 'Chuyển sản phẩm vào thùng rác?',
+            type: 'danger',
+            onConfirm: () => {
+                router.delete(route('products.destroy', id), {
+                    onSuccess: () => {
+                        loadData()
+                        loadTrashCount()
+                    }
+                })
             }
-        })
+        }
     })
 }
 
@@ -218,6 +225,8 @@ const printOne = (id) => {
         }
     })
 }
+
+
 
 </script>
 

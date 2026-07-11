@@ -31,7 +31,7 @@ const page = usePage()
 <template>
 
     <div class="min-h-screen bg-slate-100 text-slate-900">
-
+        
         <div
             v-if="sidebarOpen"
             class="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
@@ -102,14 +102,11 @@ const page = usePage()
                     <slot />
                 </div>
             </main>
+            
+            <!-- GLOBAL MODAL -->
+            <Modal />
 
         </div>
-    </div>
-
-     <div>
-
-        <!-- GLOBAL MODAL -->
-        <Modal />
     </div>
 
 </template>

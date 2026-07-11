@@ -1,7 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { router } from '@inertiajs/vue3'
-import { confirmDelete } from '@/utils/confirm'
+import ConfirmModal from '@/Components/ConfirmModal.vue'
+import { openModal } from '@/Stores/modal'
 
 const props = defineProps({
     endpoint: String,
@@ -43,13 +44,23 @@ const restore = (id) => {
 
 /* ================= FORCE DELETE ================= */
 const forceDelete = (id) => {
-    confirmDelete('Bạn có chắc chắn muốn xóa vĩnh viễn?', () => {
-        router.delete(`/${props.endpoint}/${id}/force`, {
-            onSuccess: () => {
-                items.value = items.value.filter(i => i.id !== id)
-                emit('updated')
+    openModal(ConfirmModal, {
+        title: 'Xóa vĩnh viễn?',
+        props: {
+            message: 'Không thể khôi phục dữ liệu!',
+            type: 'danger',
+            onConfirm: () => {
+                router.delete(route(`${props.endpoint}.forceDelete`, id), {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        items.value = []
+                        loadTrash()
+                        emit('updated')
+                    }
+                })
             }
-        })
+        }
     })
 }
 </script>
