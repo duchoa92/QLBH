@@ -145,7 +145,7 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('permission:products.edit')
         ->name('products.restore');
     // Xóa hẳn sản phẩm
-    Route::delete('/products/{id}/force-delete', [ProductController::class, 'forceDelete'])
+    Route::delete('/products/{id}/force', [ProductController::class, 'forceDelete'])
         ->name('products.forceDelete');
     // Khôi phục nhiều sản phẩm
     Route::post('/products/bulk-restore', [ProductController::class, 'bulkRestore'])
@@ -165,6 +165,8 @@ Route::middleware(['auth'])->group(function () {
     // In tem sp
     Route::post('/products/print-imei', [ProductController::class, 'printImei'])
     ->name('products.printImei');
+
+    Route::post('/products/print-data', [ProductController::class, 'printData']);
 
 
 

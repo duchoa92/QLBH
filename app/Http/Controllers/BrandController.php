@@ -37,39 +37,39 @@ class BrandController extends Controller
             'categories' => $categories,
         ]);
     }
-
+    // Hiển thị form tạo thương hiệu
     public function store(StoreBrandRequest $request)
     {
         $this->brandService->create($request->validated());
 
         return back()->with('success', 'Đã thêm thương hiệu thành công');
     }
-
+    // cập nhật thương hiệu
     public function update(UpdateBrandRequest $request, Brand $brand)
     {
         $this->brandService->update($brand, $request->validated());
 
         return back()->with('success', 'Đã cập nhật thương hiệu thành công');
     }
-
+    // Xóa thương hiệu (chuyển vào thùng rác)
     public function destroy(Brand $brand)
     {
         $brand->delete();
         return back()->with('success', 'Đã chuyển thương hiệu vào thùng rác');
     }
-
+    // Hiển thị danh sách thương hiệu trong thùng rác
     public function trash()
     {
         $brands = Brand::onlyTrashed()->with('category')->latest()->get();
         return response()->json($brands);
     }
-
+    // Khôi phục thương hiệu từ thùng rác
     public function restore($id)
     {
         Brand::withTrashed()->findOrFail($id)->restore();
         return back()->with('success', 'Đã khôi phục thương hiệu thành công');
     }
-
+    // Xóa vĩnh viễn thương hiệu
     public function forceDelete($id)
     {
         $brand = Brand::withTrashed()->find($id);
@@ -85,7 +85,7 @@ class BrandController extends Controller
         $brand->forceDelete();
         return back()->with('success', 'Đã xóa vĩnh viễn thương hiệu');
     }
-
+    // Chuyển trạng thái hoạt động của thương hiệu
     public function toggleStatus($id)
     {
         $brand = Brand::findOrFail($id);

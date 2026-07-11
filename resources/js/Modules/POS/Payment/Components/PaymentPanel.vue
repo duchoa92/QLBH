@@ -1,4 +1,5 @@
 <script setup>
+import { Wallet } from 'lucide-vue-next'
 import {
     ref,
 } from 'vue'
@@ -72,8 +73,9 @@ const formatMoney = (value) => {
             <button
                 :disabled="cart.length === 0 || loading"
                 @click="emit('checkout')"
-                class="w-full h-14 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:bg-gray-300"
-            >Thanh toán
+                class="w-full flex items-center justify-center gap-2 h-14 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:bg-gray-300"
+            >
+                Thanh toán <Wallet />
             </button>
         </div>
 

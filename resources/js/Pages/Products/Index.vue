@@ -7,7 +7,9 @@ import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
 import TrashModal from '@/Components/TrashModal.vue'
-import Swal from 'sweetalert2'
+import { confirmDelete } from '@/utils/confirm'
+import PrintModal from './PrintModal.vue'
+
 
 const props = defineProps({
     products: Object,
@@ -108,31 +110,18 @@ const toggleAll = () => {
 const bulkDelete = () => {
     if (!selectedIds.value.length) return
 
-    Swal.fire({
-        title: `Xóa ${selectedIds.value.length} sản phẩm?`,
-        icon: 'warning',
-        showCancelButton: true
-    }).then((r) => {
-        if (r.isConfirmed) {
-            router.post(route('products.bulkDelete'), {
-                ids: selectedIds.value
-            }, {
-                onSuccess: () => {
-                    selectedIds.value = []
+    confirmDelete(`Xóa ${selectedIds.value.length} sản phẩm?`, () => {
+        router.post(route('products.bulkDelete'), {
+            ids: selectedIds.value
+        }, {
+            onSuccess: () => {
+                selectedIds.value = []
                     loadTrashCount()
-                }
-            })
-        }
+            }
+        })
     })
 }
 
-const printImei = () => {
-    if (!selectedIds.value.length) return
-
-    router.post(route('products.printImei'), {
-        ids: selectedIds.value
-    })
-}
 
 /*
 |--------------------------------------------------------------------------
@@ -196,18 +185,36 @@ const handleSort = (sort) => {
 
 
 const deleteOne = (id) => {
-    Swal.fire({
-        title: 'Xác nhận chuyển vào thùng rác?',
-        icon: 'warning',
-        showCancelButton: true
-    }).then((r) => {
-        if (r.isConfirmed) {
-            router.delete(route('products.destroy', id), {
-                onSuccess: () => {
-                    loadData()
-                    loadTrashCount()
-                }
-            })
+    confirmDelete('Chuyển sản phẩm vào thùng rác?', () => {
+        router.delete(route('products.destroy', id), {
+            onSuccess: () => {
+                selectedIds.value = []
+                loadData()
+                loadTrashCount()
+            }
+        })
+    })
+}
+
+// In
+
+const printImei = () => {
+    if (!selectedIds.value.length) return
+
+    openModal(PrintModal, {
+        title: 'In tem',
+        props: {
+            ids: selectedIds.value
+        }
+    })
+}
+
+
+const printOne = (id) => {
+    openModal(PrintModal, {
+        title: 'In tem',
+        props: {
+            ids: [id]
         }
     })
 }

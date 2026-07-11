@@ -19,29 +19,17 @@ const props = defineProps({
 |--------------------------------------------------------------------------
 */
 const form = useForm({
-
     id: props.product?.id ?? null,
-
     name: props.product?.name ?? '',
-
     category_id: props.product?.category_id ?? null,
-
     brand_id: props.product?.brand_id ?? null,
-
     sku: props.product?.sku ?? '',
-
     barcode: props.product?.barcode ?? '',
-
     cost_price: props.product?.cost_price ?? '',
-
     sell_price: props.product?.sell_price ?? '',
-
     stock: props.product?.stock ?? 0,
-
     imeis: '',
-
     image: null,
-
     variants: props.product?.variants ?? []
 
 })

@@ -7,23 +7,21 @@ use App\Http\Requests\Product\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
 use App\Services\Product\ProductService;
-use Illuminate\Http\RedirectResponse;
-use Inertia\Inertia;
-use Inertia\Response;
-use App\Models\Brand;
 use App\Repositories\Product\ProductRepository;
-
+use App\Models\Brand;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class ProductController extends Controller
 {
     public function __construct(
-    protected ProductService $service,
-    protected ProductRepository $productRepository
-) {}
+        protected ProductService $service,
+        protected ProductRepository $productRepository
+    ) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $filters = request()->only([
+        $filters = $request->only([
             'search',
             'category_id',
             'brand_id',
@@ -34,16 +32,13 @@ class ProductController extends Controller
         ]);
 
         return Inertia::render('Products/Index', [
-            'products' => $this->productRepository->paginate(),
-
-            'filters' => $filters,
-
-            'categories' => Category::select('id','name')->get(),
-
-            'brands' => Brand::query()
-                ->select('id','name','category_id')
-                ->when(request('category_id'), function ($q) {
-                    $q->where('category_id', request('category_id'));
+            'products'   => $this->productRepository->paginate(),
+            'filters'    => $filters,
+            'categories' => Category::select('id', 'name')->get(),
+            'brands'     => Brand::query()
+                ->select('id', 'name', 'category_id')
+                ->when($request->filled('category_id'), function ($q) use ($request) {
+                    $q->where('category_id', $request->category_id);
                 })
                 ->orderBy('name')
                 ->get(),
@@ -51,79 +46,48 @@ class ProductController extends Controller
     }
 
     // Hiển thị chi tiết sản phẩm
-    public function show(
-        Product $product
-    ): Response {
-
+    public function show(Product $product)
+    {
         $product->load([
             'category',
             'brand',
             'imeis',
         ]);
 
-        return Inertia::render(
-            'Products/Show',
-            [
-                'product' => $product,
-            ]
-        );
+        return Inertia::render('Products/Show', [
+            'product' => $product,
+        ]);
     }
-
 
     // Lưu sản phẩm mới
-    public function store(
-        StoreProductRequest $request
-    ): RedirectResponse {
-
-        $this->service->create(
-            $request->validated()
-        );
+    public function store(StoreProductRequest $request)
+    {
+        $this->service->create($request->validated());
 
         return redirect()
             ->route('products.index')
-            ->with(
-                'success',
-                'Thêm sản phẩm thành công'
-            );
+            ->with('success', 'Thêm sản phẩm thành công');
     }
 
-    // Cập nhập sản phẩm
-    public function update(
-        UpdateProductRequest $request,
-        Product $product
-    ): RedirectResponse {
-
-        $this->service->update(
-            $product,
-            $request->validated()
-        );
+    // Cập nhật sản phẩm
+    public function update(UpdateProductRequest $request, Product $product)
+    {
+        $this->service->update($product, $request->validated());
 
         return redirect()
             ->route('products.index')
-            ->with(
-                'success',
-                'Cập nhật sản phẩm thành công'
-            );
+            ->with('success', 'Cập nhật sản phẩm thành công');
     }
 
-
-
-   // Chuyển vào thùng rác
-    public function destroy(
-        Product $product
-    ): RedirectResponse {
-
+    // Chuyển vào thùng rác
+    public function destroy(Product $product)
+    {
         $this->service->delete($product);
 
-        return redirect()
-            ->back()
-            ->with(
-                'success',
-                'Đã chuyển vào thùng rác!'
-            );
+        return back()->with('success', 'Đã chuyển vào thùng rác!');
     }
 
-    // Thùng rác
+    // Thùng rác (Vẫn giữ JSON nếu Modal thùng rác gọi dạng Async giống bên Brand)
     public function trash()
     {
         $products = Product::onlyTrashed()
@@ -133,92 +97,114 @@ class ProductController extends Controller
 
         return response()->json($products);
     }
+
     // Khôi phục sản phẩm
-    public function restore(int $id): RedirectResponse
+    public function restore($id)
     {
         Product::onlyTrashed()->findOrFail($id)->restore();
 
-        return back()->with('success', 'Đã khôi phục');
+        return back()->with('success', 'Đã khôi phục sản phẩm thành công');
     }
 
-    // Kiểm tra an toàn trước khi xóa
-    public function forceDelete(int $id)
+    // Kiểm tra an toàn trước khi xóa vĩnh viễn (Đồng bộ chuẩn back()->withErrors)
+    public function forceDelete($id)
     {
-        $product = Product::withTrashed()->findOrFail($id);
+        $product = Product::withTrashed()->find($id);
+
+        if (!$product) {
+            return back()->withErrors(['error' => 'Sản phẩm không tồn tại']);
+        }
 
         if (!$product->canForceDelete()) {
-            return back()->with('error', 'Sản phẩm đã phát sinh dữ liệu, không thể xóa vĩnh viễn');
+            return back()->withErrors(['error' => 'Sản phẩm đã phát sinh dữ liệu, không thể xóa vĩnh viễn']);
         }
 
         $product->forceDelete();
 
-        return back()->with('success', 'Đã xóa vĩnh viễn');
+        return back()->with('success', 'Đã xóa vĩnh viễn sản phẩm');
     }
 
     // Bulk restore
-    public function bulkRestore()
+    public function bulkRestore(Request $request)
     {
-        request()->validate([
+        $request->validate([
             'ids' => 'required|array'
         ]);
 
         Product::onlyTrashed()
-            ->whereIn('id', request('ids'))
+            ->whereIn('id', $request->ids)
             ->restore();
 
-        return back()->with('success', 'Khôi phục thành công');
+        return back()->with('success', 'Khôi phục các sản phẩm thành công');
     }
 
-    public function bulkForceDelete()
+    // Bulk force delete (Đồng bộ kiểm tra hàng loạt)
+    public function bulkForceDelete(Request $request)
     {
-        request()->validate([
+        $request->validate([
             'ids' => 'required|array'
         ]);
 
         $products = Product::withTrashed()
-            ->whereIn('id', request('ids'))
+            ->whereIn('id', $request->ids)
             ->get();
 
+        $skippedCount = 0;
         foreach ($products as $product) {
             if ($product->canForceDelete()) {
                 $product->forceDelete();
+            } else {
+                $skippedCount++;
             }
         }
 
-        return back()->with('success', 'Đã xóa vĩnh viễn');
+        if ($skippedCount > 0) {
+            return back()->withErrors(['error' => "Có {$skippedCount} sản phẩm đã phát sinh dữ liệu không thể xóa vĩnh viễn. Các sản phẩm còn lại đã được xóa."]);
+        }
+
+        return back()->with('success', 'Đã xóa vĩnh viễn các sản phẩm được chọn');
     }
 
-    // Xóa nhiều SP
-    public function bulkDelete()
+    // Xóa nhiều SP tạm thời
+    public function bulkDelete(Request $request)
     {
-        request()->validate([
+        $request->validate([
             'ids' => 'required|array'
         ]);
 
-        Product::whereIn('id', request('ids'))->delete();
+        Product::whereIn('id', $request->ids)->delete();
 
-        return back()->with('success', 'Đã chuyển vào thùng rác');
+        return back()->with('success', 'Đã chuyển các sản phẩm vào thùng rác');
     }
 
-
     // In tem
-    public function printImei()
+    public function printImei(Request $request)
     {
-        $ids = request('ids', []);
+        $ids = $request->get('ids', []);
 
-        $products = Product::with('imeis')
-            ->whereIn('id', $ids)
-            ->get();
+        $products = Product::whereIn('id', $ids)->get();
 
         return Inertia::render('Products/PrintImei', [
             'products' => $products
         ]);
     }
 
-    // Tạo API Scan
-    public function scan()
+    public function printData(Request $request)
     {
-        $code = request('code');
+        $ids = $request->get('ids', []);
+
+        $products = Product::with([
+            'imeis',
+            'variants'
+        ])->whereIn('id', $ids)->get();
+
+        return response()->json($products);
+    }
+
+    // Tạo API Scan
+    public function scan(Request $request)
+    {
+        $code = $request->get('code');
 
         // 1. tìm theo IMEI
         $imei = \App\Models\ProductImei::with('variant.product')
@@ -260,8 +246,4 @@ class ProductController extends Controller
             'error' => 'Không tìm thấy'
         ], 404);
     }
-
-
-
-
 }

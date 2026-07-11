@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+
+
 [data-sonner-toast] {
 
     font-size: 14px !important;
@@ -86,4 +88,8 @@ input.no-spinner::-webkit-outer-spin-button {
 
 input.no-spinner {
     -moz-appearance: textfield !important;
+}
+
+html {
+    overflow-y: scroll;
 }

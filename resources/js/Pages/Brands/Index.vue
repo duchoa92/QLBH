@@ -1,7 +1,6 @@
 <script setup>
 import { router } from '@inertiajs/vue3'
 import { ref, watch, onMounted, onBeforeUnmount  } from 'vue'
-import Swal from 'sweetalert2'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -9,6 +8,7 @@ import { openModal } from '@/Stores/modal'
 import BrandForm from './Form.vue'
 import TrashModal from '@/Components/TrashModal.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
+import { confirmDelete } from '@/utils/confirm'
 
 
 defineOptions({ layout: AdminLayout })
@@ -52,16 +52,10 @@ const loadData = () => {
 
 /* DELETE */
 const destroy = (id) => {
-    Swal.fire({
-        title: 'Xác nhận chuyển vào thùng rác?',
-        icon: 'warning',
-        showCancelButton: true
-    }).then((r) => {
-        if (r.isConfirmed) {
-            router.delete(`/brands/${id}`, {
-                onSuccess: loadData
-            })
-        }
+    confirmDelete('Chuyển thương hiệu vào thùng rác?', () => {
+        router.delete(`/brands/${id}`, {
+            onSuccess: loadData
+        })
     })
 }
 

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { router } from '@inertiajs/vue3'
-import Swal from 'sweetalert2'
+import { confirmDelete } from '@/utils/confirm'
 
 const props = defineProps({
     endpoint: String,
@@ -43,22 +43,13 @@ const restore = (id) => {
 
 /* ================= FORCE DELETE ================= */
 const forceDelete = (id) => {
-    Swal.fire({
-        title: 'Xóa vĩnh viễn?',
-        text: 'Không thể hoàn tác!',
-        icon: 'error',
-        showCancelButton: true,
-        confirmButtonText: 'Xóa',
-        cancelButtonText: 'Hủy'
-    }).then((r) => {
-        if (r.isConfirmed) {
-            router.delete(`/${props.endpoint}/${id}/force`, {
-                onSuccess: () => {
-                    items.value = items.value.filter(i => i.id !== id)
-                    emit('updated')
-                }
-            })
-        }
+    confirmDelete('Bạn có chắc chắn muốn xóa vĩnh viễn?', () => {
+        router.delete(`/${props.endpoint}/${id}/force`, {
+            onSuccess: () => {
+                items.value = items.value.filter(i => i.id !== id)
+                emit('updated')
+            }
+        })
     })
 }
 </script>

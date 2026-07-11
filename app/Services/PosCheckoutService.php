@@ -81,7 +81,7 @@ class PosCheckoutService
 
             // Nếu không có khách hàng và tiền thanh toán chưa đủ thì báo lỗi
             if (!$customerId && $paidAmount < $grandTotal) {
-                throw new \Exception('Khách lẻ phải thanh toán đủ tiền');
+                throw new \Exception('Khách lạ phải thanh toán đủ tiền');
             }
             
             /*

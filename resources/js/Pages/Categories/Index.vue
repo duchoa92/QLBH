@@ -1,7 +1,7 @@
 <script setup>
 import { router } from '@inertiajs/vue3'
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import Swal from 'sweetalert2'
+import { confirmDelete } from '@/utils/confirm'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { openModal } from '@/Stores/modal'
@@ -48,18 +48,10 @@ const loadData = () => {
 
 /* DELETE */
 const destroy = (id) => {
-    Swal.fire({
-        title: 'Xác nhận chuyển vào thùng rác?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Đồng ý',
-        cancelButtonText: 'Hủy'
-    }).then((r) => {
-        if (r.isConfirmed) {
-            router.delete(`/categories/${id}`, {
-                onSuccess: loadData
-            })
-        }
+    confirmDelete('Chuyển danh mục vào thùng rác?', () => {
+        router.delete(`/categories/${id}`, {
+            onSuccess: loadData
+        })
     })
 }
 

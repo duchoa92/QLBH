@@ -18,29 +18,32 @@
 REPLACE INTO `brands` (`id`, `name`, `search_text`, `slug`, `category_id`, `sort_order`, `is_active`, `deleted_at`, `created_at`, `updated_at`) VALUES
 	(1, 'Samsung', 'samsung', 'samsung', 1, 0, 1, NULL, '2026-06-19 09:03:23', '2026-07-03 16:11:29'),
 	(2, 'Apple', 'apple', 'apple', 1, 0, 1, NULL, '2026-06-19 09:03:30', '2026-07-03 16:11:28'),
-	(3, 'OEM', 'oem', 'oem', 2, 0, 1, NULL, '2026-06-19 09:03:38', '2026-07-03 16:11:26');
+	(3, 'OEM', 'oem', 'oem', 2, 0, 1, NULL, '2026-06-19 09:03:38', '2026-07-07 17:20:20');
 
 -- Dumping data for table qlbh.cache: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.cache_locks: ~0 rows (approximately)
 
--- Dumping data for table qlbh.categories: ~2 rows (approximately)
+-- Dumping data for table qlbh.categories: ~3 rows (approximately)
 REPLACE INTO `categories` (`id`, `parent_id`, `name`, `slug`, `sort_order`, `is_active`, `created_at`, `updated_at`, `deleted_at`) VALUES
 	(1, NULL, 'Điện Thoại', 'dien-thoai', 0, 1, '2026-06-19 09:02:48', '2026-06-19 09:02:48', NULL),
-	(2, NULL, 'Phụ kiện', 'phu-kien', 0, 1, '2026-06-19 09:03:02', '2026-06-19 09:03:02', NULL);
+	(2, NULL, 'Phụ kiện', 'phu-kien', 0, 1, '2026-06-19 09:03:02', '2026-06-19 09:03:02', NULL),
+	(4, NULL, 'demo', 'demo', 0, 1, '2026-07-06 17:33:37', '2026-07-08 07:00:55', NULL);
 
 -- Dumping data for table qlbh.customers: ~4 rows (approximately)
 REPLACE INTO `customers` (`id`, `code`, `full_name`, `search_text`, `phone`, `email`, `birthday`, `gender`, `cccd`, `province`, `district`, `ward`, `address`, `point_balance`, `debt_balance`, `total_spent`, `total_orders`, `last_order_at`, `customer_type`, `is_active`, `created_by`, `created_at`, `updated_at`, `deleted_at`) VALUES
-	(1, 'KH000001', 'Đức Hòa', 'duc hoa', '0906064789', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:10:43', '2026-06-19 09:10:43', NULL),
+	(1, 'KH000001', 'Đức Hòa', 'duc hoa', '0906064789', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 50000.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:10:43', '2026-07-09 07:10:50', NULL),
 	(2, 'KH000002', 'Kim Ngân', 'kim ngan', '123456789', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:11:07', '2026-06-19 09:11:07', NULL),
 	(3, 'KH000003', 'Kim Oanh', 'kim oanh', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:11:22', '2026-06-19 09:11:22', NULL),
 	(4, 'KH000004', 'Lê Hiền', 'le hien', '789456123', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:11:41', '2026-06-19 09:11:41', NULL);
 
--- Dumping data for table qlbh.customer_debts: ~0 rows (approximately)
+-- Dumping data for table qlbh.customer_debts: ~1 rows (approximately)
+REPLACE INTO `customer_debts` (`id`, `customer_id`, `type`, `amount`, `source_type`, `source_id`, `note`, `created_at`, `updated_at`) VALUES
+	(1, 1, 'increase', 50000.00, 'App\\Models\\Sale', 2, 'Mua nợ - Tiền hàng còn thiếu của hóa đơn INV-20260709141049', '2026-07-09 07:10:50', '2026-07-09 07:10:50');
 
 -- Dumping data for table qlbh.customer_devices: ~0 rows (approximately)
 
--- Dumping data for table qlbh.customer_images: ~0 rows (approximately)
+-- Dumping data for table qlbh.customer_images: ~1 rows (approximately)
 REPLACE INTO `customer_images` (`id`, `customer_id`, `type`, `path`, `mime_type`, `size`, `is_primary`, `uploaded_by`, `created_at`, `updated_at`) VALUES
 	(1, 1, 'portrait', 'customers/1/SrwZ0VGRc7mkOQbmScK0A1JsoC0ADgjUar8Qae3m.jpg', 'image/jpeg', 11243, 1, NULL, '2026-06-19 09:10:43', '2026-06-19 09:10:43');
 
@@ -115,15 +118,20 @@ REPLACE INTO `permissions` (`id`, `name`, `guard_name`, `created_at`, `updated_a
 
 -- Dumping data for table qlbh.personal_access_tokens: ~0 rows (approximately)
 
--- Dumping data for table qlbh.products: ~7 rows (approximately)
+-- Dumping data for table qlbh.products: ~12 rows (approximately)
 REPLACE INTO `products` (`id`, `category_id`, `brand_id`, `unit_id`, `name`, `search_text`, `slug`, `sku`, `barcode`, `product_type`, `image`, `warranty_days`, `allow_negative_stock`, `cost_price`, `sell_price`, `tax_percent`, `stock`, `sold_count`, `alert_stock`, `manage_stock_by_serial`, `is_active`, `description`, `deleted_at`, `created_at`, `updated_at`) VALUES
-	(1, 1, 1, NULL, 'Samsung A07', 'samsung a07', 'samsung-a07', 'DTSSA07', NULL, 'normal', 'products/cY6bplbSH1k8nJeBG5yzxfsFbUnC9qGgAEAeAnpH.jpg', 0, 0, 2500000.00, 2700000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
-	(2, 1, 1, NULL, 'Samsung A17', 'samsung a17', 'samsung-a17', 'DTSSA17', NULL, 'normal', 'products/4f3DOMkABUEJ1YwJPb4NmpG4vdzHbC3muYteVZBa.jpg', 0, 0, 3000000.00, 3500000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
+	(1, 1, 1, NULL, 'Samsung A07', 'samsung a07 dtssa07 Điện thoại samsung', 'samsung-a07', 'DTSSA07', NULL, 'normal', 'products/cY6bplbSH1k8nJeBG5yzxfsFbUnC9qGgAEAeAnpH.jpg', 0, 0, 2500000.00, 2700000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:04:55', '2026-07-09 17:14:20'),
+	(2, 1, 1, NULL, 'Samsung A17', 'samsung a17 dtssa17 Điện thoại samsung', 'samsung-a17', 'DTSSA17', NULL, 'normal', 'products/4f3DOMkABUEJ1YwJPb4NmpG4vdzHbC3muYteVZBa.jpg', 0, 0, 3000000.00, 3500000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:05:44', '2026-07-09 17:14:19'),
 	(3, 1, 1, NULL, 'Điện Thoại Samsung A17 5G', 'dien thoai samsung a17 5g', 'dien-thoai-samsung-a17-5g', 'DTSSA175G', NULL, 'normal', 'products/W7YauvpjAx1zTO2aqMRXAEsmCpTLnOi0fyAzQIdy.jpg', 0, 0, 3000000.00, 3500000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
 	(4, 1, 2, NULL, 'Iphone 11', 'iphone 11', 'iphone-11', 'DTIP11', NULL, 'normal', 'products/SnTSwqmK4bwfdfUmBumWe5SjGRuHOnOTzCpXxKNE.jpg', 0, 0, 5000000.00, 5500000.00, 0.00, 3, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(5, 1, 2, NULL, 'Điện Thoại IP 12', 'dien thoai ip 12', 'dien-thoai-ip-12', 'DTIP12', NULL, 'normal', 'products/5lAy8J8uJ63KfaXN8MYtIUWjoMKaCka4uDMMytHO.jpg', 0, 0, 6000000.00, 6500000.00, 0.00, 1, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:08:58', '2026-06-19 09:08:58'),
+	(5, 1, 2, NULL, 'Điện Thoại IP 12', 'Điện thoại ip 12 dtip12 Điện thoại apple', 'dien-thoai-ip-12', 'DTIP12', NULL, 'normal', 'products/5lAy8J8uJ63KfaXN8MYtIUWjoMKaCka4uDMMytHO.jpg', 0, 0, 6000000.00, 6500000.00, 0.00, 1, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:08:58', '2026-07-09 16:48:41'),
 	(6, 2, 3, NULL, 'Dây sạc rẻ', 'day sac re', 'day-sac-re', 'DSRE', NULL, 'normal', 'products/REPcUXh3qJ3YHnoMWIaqyOb7xnXgnjBetmcqqRPb.jpg', 0, 0, 10000.00, 20000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:09:34', '2026-06-19 09:09:34'),
-	(7, 2, 3, NULL, 'Củ sạc 20w', 'cu sac 20w', 'cu-sac-20w', 'CS20W', NULL, 'normal', 'products/6fqRfYcyfjk4aXUGxNuR4YFWFZoFnes0llTyS7CL.jpg', 0, 0, 30000.00, 50000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:10:10', '2026-06-19 09:10:10');
+	(7, 2, 3, NULL, 'Củ sạc 20w', 'củ sạc 20w cs20w phụ kiện oem', 'cu-sac-20w', 'CS20W', NULL, 'normal', 'products/6fqRfYcyfjk4aXUGxNuR4YFWFZoFnes0llTyS7CL.jpg', 0, 0, 30000.00, 50000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:10:10', '2026-07-09 08:10:43'),
+	(8, 2, 3, NULL, 'Củ sạc nhanh 20W', 'củ sạc nhanh 20w csn20 phụ kiện oem', 'cu-sac-nhanh-20w', 'CSN20', NULL, 'normal', NULL, 0, 0, 25000.00, 50000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:26:08', '2026-07-08 16:26:08'),
+	(9, 2, 3, NULL, 'Tai nghe ip 6', 'tai nghe ip 6 tnip phụ kiện oem', 'tai-nghe-ip-6', 'TNIP', NULL, 'normal', 'products/JY3w6RA8Rag4lNDupqcNQODYeROkkTiUkcs93ESq.jpg', 0, 0, 20000.00, 40000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:29:03', '2026-07-08 16:29:03'),
+	(10, 2, 3, NULL, 'Tai nghe không dây', 'tai nghe không dây tnkd phụ kiện oem', 'tai-nghe-khong-day', 'TNKD', NULL, 'normal', NULL, 0, 0, 150000.00, 300000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:29:57', '2026-07-08 16:29:57'),
+	(11, 2, 3, NULL, 'Dây sạc micro', 'dây sạc micro dsmc phụ kiện oem', 'day-sac-micro', 'DSMC', NULL, 'normal', NULL, 0, 0, 10000.00, 20000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:31:11', '2026-07-09 15:53:10'),
+	(12, 2, 3, NULL, 'Dây sạc type-c', 'dây sạc type-c dstc phụ kiện oem', 'day-sac-type-c', 'DSTC', NULL, 'normal', 'products/JJDjF2jOhoPYjmFU7wfLJsCnxIm9xSJMPvB0pdgb.jpg', 0, 0, 25000.00, 50000.00, 0.00, 99, 1, 0, 0, 1, NULL, NULL, '2026-07-08 16:33:08', '2026-07-09 16:11:29');
 
 -- Dumping data for table qlbh.product_imeis: ~10 rows (approximately)
 REPLACE INTO `product_imeis` (`id`, `product_id`, `variant_id`, `supplier_id`, `customer_id`, `sale_id`, `imei`, `serial`, `color`, `storage`, `condition`, `battery_health`, `purchase_price`, `cost_price`, `sell_price`, `warranty_expired_at`, `imported_at`, `sold_at`, `status`, `note`, `deleted_at`, `created_at`, `updated_at`) VALUES
@@ -184,13 +192,15 @@ REPLACE INTO `role_has_permissions` (`permission_id`, `role_id`) VALUES
 	(16, 2),
 	(17, 2);
 
--- Dumping data for table qlbh.sales: ~0 rows (approximately)
+-- Dumping data for table qlbh.sales: ~2 rows (approximately)
 REPLACE INTO `sales` (`id`, `code`, `customer_id`, `user_id`, `subtotal`, `discount`, `tax`, `grand_total`, `paid_amount`, `change_amount`, `payment_method`, `status`, `note`, `created_at`, `updated_at`) VALUES
-	(1, 'INV-20260702231134', 1, 1, 5500000.00, 0.00, 0.00, 5500000.00, 5500000.00, 0.00, 'cash', 'completed', NULL, '2026-07-02 16:11:34', '2026-07-02 16:11:34');
+	(1, 'INV-20260702231134', 1, 1, 5500000.00, 0.00, 0.00, 5500000.00, 5500000.00, 0.00, 'cash', 'completed', NULL, '2026-07-02 16:11:34', '2026-07-02 16:11:34'),
+	(2, 'INV-20260709141049', 1, 1, 50000.00, 0.00, 0.00, 50000.00, 0.00, 0.00, 'cash', 'completed', NULL, '2026-07-09 07:10:49', '2026-07-09 07:10:49');
 
--- Dumping data for table qlbh.sale_items: ~0 rows (approximately)
+-- Dumping data for table qlbh.sale_items: ~2 rows (approximately)
 REPLACE INTO `sale_items` (`id`, `sale_id`, `product_id`, `product_imei_id`, `quantity`, `unit_price`, `discount`, `tax`, `subtotal`, `note`, `discount_type`, `discount_value`, `created_at`, `updated_at`) VALUES
-	(1, 1, 4, NULL, 1, 5500000.00, 0.00, 0.00, 5500000.00, NULL, NULL, 0.00, '2026-07-02 16:11:34', '2026-07-02 16:11:34');
+	(1, 1, 4, NULL, 1, 5500000.00, 0.00, 0.00, 5500000.00, NULL, NULL, 0.00, '2026-07-02 16:11:34', '2026-07-02 16:11:34'),
+	(2, 2, 12, NULL, 1, 50000.00, 0.00, 0.00, 50000.00, NULL, NULL, 0.00, '2026-07-09 07:10:50', '2026-07-09 07:10:50');
 
 -- Dumping data for table qlbh.sale_item_gifts: ~0 rows (approximately)
 
