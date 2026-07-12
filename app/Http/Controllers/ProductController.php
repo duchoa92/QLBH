@@ -93,9 +93,11 @@ class ProductController extends Controller
         $products = Product::onlyTrashed()
             ->with(['category:id,name', 'brand:id,name'])
             ->latest()
-            ->get();
+            ->paginate(10);
 
-        return response()->json($products);
+        return Inertia::render('Products/Trash', [
+            'products' => $products
+        ]);
     }
 
     // Khôi phục sản phẩm

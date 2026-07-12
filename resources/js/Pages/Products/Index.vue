@@ -6,10 +6,6 @@ import Form from './Form.vue'
 import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-import TrashModal from '@/Components/TrashModal.vue'
-import { confirmDelete } from '@/utils/confirm'
-import PrintModal from './PrintModal.vue'
-import ConfirmModal from '@/Components/ConfirmModal.vue'
 
 
 const props = defineProps({
@@ -153,17 +149,8 @@ const openCreate = () => {
     })
 }
 
-const openTrash = () => {
-    openModal(TrashModal, {
-        title: 'Thùng rác sản phẩm',
-        props: {
-            endpoint: 'products'
-        },
-        onUpdated: () => {
-            loadData()
-            loadTrashCount()
-        }
-    })
+const goTrash = () => {
+    router.visit(route('products.trash'))
 }
 
 const trashCount = ref(0)
@@ -244,7 +231,7 @@ const printOne = (id) => {
             <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
                 <Plus /> Thêm
             </button>
-            <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
+            <button @click="goTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
                 <Trash2 /> ({{ trashCount }})
             </button>
         </div>
