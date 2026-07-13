@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import Sidebar from '@/Components/Sidebar.vue'
 import Modal from '@/Components/Modal.vue'
+import ConfirmBox from '@/Components/ConfirmBox.vue'
 
 const sidebarOpen = ref(false)
 
@@ -25,6 +26,16 @@ const currentTitle = computed(() => {
 })
 
 const page = usePage()
+
+watch(() => page.props.flash, (flash) => {
+    if (flash.success) {
+        toast.success(flash.success)
+    }
+
+    if (flash.error) {
+        toast.error(flash.error)
+    }
+}, { deep: true })
 
 </script>
 
@@ -102,11 +113,10 @@ const page = usePage()
                     <slot />
                 </div>
             </main>
-            
-            <!-- GLOBAL MODAL -->
-            <Modal />
+
 
         </div>
     </div>
 
+<ConfirmBox />
 </template>

@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { Printer, Trash2 } from 'lucide-vue-next'
 
+
 const props = defineProps({
     products: Object,
     selectedIds: Array,

@@ -1,12 +1,12 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { router } from '@inertiajs/vue3'
-import { openModal } from '@/Stores/modal'
 import Form from './Form.vue'
 import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
+import ProductTrashModal from './ProductTrashModal.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-
+import { useConfirm } from '@/Composables/useConfirm'
 
 const props = defineProps({
     products: Object,
@@ -15,17 +15,11 @@ const props = defineProps({
     brands: Array
 })
 
+const showForm = ref(false)
+const showTrash = ref(false)
+const confirmBox = useConfirm()
 
-
-onMounted(() => {
-    loadTrashCount()
-})
-
-/*
-|--------------------------------------------------------------------------
-| STATE
-|--------------------------------------------------------------------------
-*/
+/* ================= FILTER ================= */
 const filters = ref({
     search: props.filters?.search || '',
     category_id: props.filters?.category_id || '',
@@ -37,184 +31,165 @@ const filters = ref({
     per_page: props.filters?.per_page || 10
 })
 
+// Khai báo biến timeout phạm vi component
+let filterTimeout = null
 
-/*
-|--------------------------------------------------------------------------
-| SEARCH (ANTI SPAM - CHUẨN)
-|--------------------------------------------------------------------------
-*/
-let timeout = null
+// Lắng nghe thay đổi bộ lọc với tính năng Debounce an toàn
+watch(filters, (newFilters) => {
+    // 1. Clear timeout cũ ngay lập tức nếu người dùng tiếp tục gõ/chọn tiếp
+    if (filterTimeout) clearTimeout(filterTimeout)
 
-watch(
-    filters,
-    () => {
-        clearTimeout(timeout)
+    // 2. Tự động reset các ô checkbox đang chọn hàng loạt khi bộ lọc thay đổi
+    selectedIds.value = []
 
-        timeout = setTimeout(() => {
+    // 3. Thiết lập độ trễ tránh overload request lên Server
+    filterTimeout = setTimeout(() => {
+        newFilters.page = 1 // Reset về trang đầu tiên khi đổi bộ lọc
 
-            filters.value.page = 1
-            router.get(route('products.index'), filters.value, {
-                preserveState: true,
-                replace: true,
-                preserveScroll: true,
-                only: ['products', 'filters', 'brands', 'categories'],
-            })
-        }, 400)
-    },
-    { deep: true }
-)
-
-
-const loadData=()=>{
-    router.reload({
-        only:['products']
-    })
-}
-
-
-
-
-/*
-|--------------------------------------------------------------------------
-| SELECT
-|--------------------------------------------------------------------------
-*/
-const selectedIds = ref([])
-
-const toggleOne = (id) => {
-    if (selectedIds.value.includes(id)) {
-        selectedIds.value = selectedIds.value.filter(i => i !== id)
-    } else {
-        selectedIds.value.push(id)
-    }
-}
-
-const toggleAll = () => {
-    const ids = props.products.data.map(p => p.id)
-
-    if (selectedIds.value.length === ids.length) {
-        selectedIds.value = []
-    } else {
-        selectedIds.value = ids
-    }
-}
-
-/*
-|--------------------------------------------------------------------------
-| BULK ACTION
-|--------------------------------------------------------------------------
-*/
-const bulkDelete = () => {
-    if (!selectedIds.value.length) return
-
-    confirmDelete(`Xóa ${selectedIds.value.length} sản phẩm?`, () => {
-        router.post(route('products.bulkDelete'), {
-            ids: selectedIds.value
-        }, {
-            onSuccess: () => {
-                selectedIds.value = []
-                loadTrashCount()
-            }
+        router.get(route('products.index'), newFilters, {
+            preserveState: true,
+            replace: true,
+            preserveScroll: true,
+            only: ['products', 'filters', 'brands', 'categories'],
         })
+    }, 400)
+}, { deep: true })
+
+// Dọn dẹp bộ nhớ: Hủy bỏ hoàn toàn hành động chạy ngầm nếu chuyển trang giữa chừng
+onBeforeUnmount(() => {
+    if (filterTimeout) {
+        clearTimeout(filterTimeout)
+    }
+})
+
+// Hàm loadData chuẩn hóa để cập nhật danh sách dựa trên chính bộ lọc hiện tại
+const loadData = () => {
+    router.get(route('products.index'), filters.value, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: ['products'],
     })
 }
 
+/* ================= FORM ================= */
+const editingProduct = ref(null)
 
-/*
-|--------------------------------------------------------------------------
-| MODAL
-|--------------------------------------------------------------------------
-*/
-// mở modal sửa sản phẩm
-const openEdit = (product) => {
-    openModal(Form, {
-        title: 'Sửa sản phẩm',
-        props: {
-            product,
-            categories: props.categories,
-            brands: props.brands
-        },
-        onUpdated: loadData
-    })
+const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+        showForm.value = false
+        showTrash.value = false
+    }
 }
-// mở modal tạo sản phẩm
+
+onMounted(() => window.addEventListener('keydown', handleEsc))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
+
+watch(showForm, (v) => {
+    document.body.style.overflow = v ? 'hidden' : ''
+})
+
+watch(showTrash, (v) => {
+    document.body.style.overflow = v ? 'hidden' : ''
+})
+
 const openCreate = () => {
-    openModal(Form, {
-        title: 'Thêm sản phẩm',
-        props: {
-            categories: props.categories,
-            brands: props.brands
-        },
-        onUpdated: loadData
-    })
+    editingProduct.value = null
+    showForm.value = true
 }
 
-const goTrash = () => {
-    router.visit(route('products.trash'))
+const openEdit = (product) => {
+    editingProduct.value = product
+    showForm.value = true
 }
 
+/* ================= TRASH ================= */
 const trashCount = ref(0)
+
 const loadTrashCount = async () => {
     try {
         const res = await fetch('/products/trash', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
-
         const data = await res.json()
-        trashCount.value = data.length
-    } catch (e) {
+        trashCount.value = data.total
+    } catch {
         trashCount.value = 0
     }
 }
 
-const handleSort = (sort) => {
-    Object.assign(filters.value, sort)
+onMounted(loadTrashCount)
+
+/* ================= SELECT ================= */
+const selectedIds = ref([])
+
+const toggleOne = (id) => {
+    selectedIds.value.includes(id)
+        ? selectedIds.value = selectedIds.value.filter(i => i !== id)
+        : selectedIds.value.push(id)
 }
 
+const toggleAll = () => {
+    const ids = props.products?.data?.map(p => p.id) || []
+    selectedIds.value = selectedIds.value.length === ids.length ? [] : ids
+}
 
+/* ================= DELETE ================= */
 const deleteOne = (id) => {
-    openModal(ConfirmModal, {
+    confirmBox.show({
         title: 'Xác nhận',
-        props: {
-            message: 'Chuyển sản phẩm vào thùng rác?',
-            type: 'danger',
-            onConfirm: () => {
-                router.delete(route('products.destroy', id), {
-                    onSuccess: () => {
-                        loadData()
-                        loadTrashCount()
-                    }
-                })
-            }
+        message: 'Chuyển sản phẩm vào thùng rác?',
+        confirmText: 'Xóa',
+        cancelText: 'Hủy',
+        onConfirm: () => {
+            router.delete(route('products.destroy', id), {
+                preserveScroll: true,
+                onSuccess: () => {
+                    loadData()
+                    loadTrashCount()
+                }
+            })
         }
     })
 }
 
-// In
+const bulkDelete = () => {
+    if (!selectedIds.value.length) return
+
+    confirmBox.show({
+        title: 'Xác nhận',
+        message: `Xóa ${selectedIds.value.length} sản phẩm?`,
+        confirmText: 'Xóa',
+        cancelText: 'Hủy',
+        onConfirm: () => {
+            router.post(route('products.bulkDelete'), {
+                ids: selectedIds.value
+            }, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    selectedIds.value = []
+                    loadData() // Load lại danh sách sản phẩm trang hiện tại sau khi xóa nhiều
+                    loadTrashCount()
+                }
+            })
+        }
+    })
+}
+
+/* ================= PRINT ================= */
+const printOne = (id) => {
+    window.open(`/products/print?ids=${id}`, '_blank')
+}
 
 const printImei = () => {
     if (!selectedIds.value.length) return
-
-    openModal(PrintModal, {
-        title: 'In tem',
-        props: {
-            ids: selectedIds.value
-        }
-    })
+    window.open(`/products/print?ids=${selectedIds.value.join(',')}`, '_blank')
 }
 
-
-const printOne = (id) => {
-    openModal(PrintModal, {
-        title: 'In tem',
-        props: {
-            ids: [id]
-        }
-    })
+/* ================= SORT ================= */
+const handleSort = (sort) => {
+    Object.assign(filters.value, sort)
 }
-
-
-
 </script>
 
 <template>
@@ -228,10 +203,13 @@ const printOne = (id) => {
         </div>
 
         <div class="flex gap-2">
-            <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
+            <button @click="openCreate"
+                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
                 <Plus /> Thêm
             </button>
-            <button @click="goTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
+
+            <button @click="showTrash = true"
+                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white">
                 <Trash2 /> ({{ trashCount }})
             </button>
         </div>
@@ -242,11 +220,8 @@ const printOne = (id) => {
         :filters="filters"
         :categories="categories"
         :brands="brands"
-        @update:filters="v => {
-            if (!v || typeof v !== 'object') return
-            Object.assign(filters, v)
-        }"
         :selectedCount="selectedIds.length"
+        @update:filters="v => Object.assign(filters.value, v)"
         @delete="bulkDelete"
         @print="printImei"
     />
@@ -264,6 +239,76 @@ const printOne = (id) => {
         @print="printOne"
     />
 
-</div>
+    <!-- TRASH MODAL -->
+    <ProductTrashModal
+        :show="showTrash"
+        @close="showTrash = false"
+        @updated="() => {
+            loadData()
+            loadTrashCount()
+        }"
+    />
 
+    <!-- FORM MODAL -->
+    <!-- FORM MODAL LEVEL 2 -->
+    <div v-if="showForm" class="fixed inset-0 z-[1000]">
+
+        <!-- overlay -->
+        <div 
+            class="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            @click="showForm = false"
+        ></div>
+
+        <!-- container -->
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+
+            <div 
+                class="bg-white w-full max-w-[1100px] h-[90vh] rounded-2xl shadow-xl overflow-hidden flex flex-col animate-scale"
+                @click.stop
+            >
+
+                <!-- header -->
+                <div class="flex justify-between items-center p-4 border-b shrink-0">
+                    <h2 class="font-bold text-lg">
+                        {{ editingProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm' }}
+                    </h2>
+
+                    <button @click="showForm = false" class="text-red-500 font-bold">
+                        ✕
+                    </button>
+                </div>
+
+                <!-- body scroll -->
+                <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
+
+                    <Form
+                        :product="editingProduct"
+                        :categories="categories"
+                        :brands="brands"
+                        @close="showForm = false"
+                        @updated="() => {
+                            showForm = false
+                            loadData()
+                        }"
+                    />
+
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+
+</div>
 </template>
+
+<style>
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0 }
+  to { transform: scale(1); opacity: 1 }
+}
+.animate-scale {
+  animation: scaleIn 0.15s ease;
+}
+</style>
