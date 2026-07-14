@@ -4,11 +4,11 @@ import { ref, watch, onMounted, onBeforeUnmount  } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { openModal } from '@/Stores/modal'
 import BrandForm from './Form.vue'
-import TrashModal from '@/Components/TrashModal.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-import { confirmDelete } from '@/utils/confirm'
+import BrandTrashModal from './BrandTrashModal.vue'
+import { openModal } from '@/Stores/modal'
+import { useConfirm } from '@/Composables/useConfirm'
 
 
 defineOptions({ layout: AdminLayout })
@@ -18,6 +18,10 @@ const props = defineProps({
     filters: Object,
     categories: Array
 })
+
+
+const showTrash = ref(false)
+const confirmBox = useConfirm()
 
 /* FILTER */
 const search = ref(props.filters?.search || '')
@@ -52,10 +56,19 @@ const loadData = () => {
 
 /* DELETE */
 const destroy = (id) => {
-    confirmDelete('Chuyển thương hiệu vào thùng rác?', () => {
-        router.delete(`/brands/${id}`, {
-            onSuccess: loadData
-        })
+    confirmBox.show({
+        title: 'Xác nhận',
+        message: 'Chuyển thương hiệu vào thùng rác?',
+        confirmText: 'Xóa',
+        cancelText: 'Hủy',
+        onConfirm: () => {
+            router.delete(`/brands/${id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    loadData()
+                }
+            })
+        }
     })
 }
 
@@ -86,19 +99,6 @@ const openEdit = (item) => {
 onMounted(() => {
     loadTrashCount()
 })
-
-const openTrash = () => {
-    openModal(TrashModal, {
-        title: 'Thùng rác',
-         props: {
-            endpoint: 'brands'
-        },
-        onUpdated: () => {
-            loadData()
-            router.reload({ only: ['brands'] }) // Reload lại danh sách trang chính khi trong thùng rác thay đổi
-        }
-    })
-}
 
 const trashCount = ref(0)
 const loadTrashCount = async () => {
@@ -142,7 +142,7 @@ const toggleStatus = (id) => {
             <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
                 <Plus /> Thêm mới
             </button>
-            <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
+            <button @click="showTrash = true" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
                 <Trash2 /> Xóa ({{ trashCount }})
             </button>
         </div>
@@ -209,4 +209,12 @@ const toggleStatus = (id) => {
     </div>
 
 </div>
+
+<BrandTrashModal
+    :show="showTrash"
+    @close="showTrash = false"
+    @updated="() => {
+        loadData()
+    }"
+/>
 </template>

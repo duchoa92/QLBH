@@ -35,24 +35,28 @@ const filters = ref({
 let filterTimeout = null
 
 // Lắng nghe thay đổi bộ lọc với tính năng Debounce an toàn
+
+
 watch(filters, (newFilters) => {
-    // 1. Clear timeout cũ ngay lập tức nếu người dùng tiếp tục gõ/chọn tiếp
+
     if (filterTimeout) clearTimeout(filterTimeout)
 
-    // 2. Tự động reset các ô checkbox đang chọn hàng loạt khi bộ lọc thay đổi
     selectedIds.value = []
 
-    // 3. Thiết lập độ trễ tránh overload request lên Server
     filterTimeout = setTimeout(() => {
-        newFilters.page = 1 // Reset về trang đầu tiên khi đổi bộ lọc
 
-        router.get(route('products.index'), newFilters, {
+        router.get(route('products.index'), {
+            ...newFilters,
+            page: 1
+        }, {
             preserveState: true,
             replace: true,
             preserveScroll: true,
             only: ['products', 'filters', 'brands', 'categories'],
         })
+
     }, 400)
+
 }, { deep: true })
 
 // Dọn dẹp bộ nhớ: Hủy bỏ hoàn toàn hành động chạy ngầm nếu chuyển trang giữa chừng
@@ -145,7 +149,7 @@ const deleteOne = (id) => {
             router.delete(route('products.destroy', id), {
                 preserveScroll: true,
                 onSuccess: () => {
-                    loadData()
+                    // loadData()
                     loadTrashCount()
                 }
             })
@@ -168,7 +172,7 @@ const bulkDelete = () => {
                 preserveScroll: true,
                 onSuccess: () => {
                     selectedIds.value = []
-                    loadData() // Load lại danh sách sản phẩm trang hiện tại sau khi xóa nhiều
+                   // loadData() // Load lại danh sách sản phẩm trang hiện tại sau khi xóa nhiều
                     loadTrashCount()
                 }
             })
@@ -244,7 +248,6 @@ const handleSort = (sort) => {
         :show="showTrash"
         @close="showTrash = false"
         @updated="() => {
-            loadData()
             loadTrashCount()
         }"
     />

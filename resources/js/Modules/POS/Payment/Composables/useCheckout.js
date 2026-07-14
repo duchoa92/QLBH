@@ -65,14 +65,6 @@ export function useCheckout(
             | API
             |--------------------------------------------------------------------------
             */
-// Debug
-console.log(
-    JSON.parse(
-        JSON.stringify(
-            cart.value
-        )
-    )
-)
 
             const response =
            

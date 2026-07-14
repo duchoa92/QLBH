@@ -10,17 +10,11 @@ import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
 
-// Debug
-console.log('🚀 APP JS LOADED')
-
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
  // ❗ CHẶN ĐĂNG KÝ NHIỀU LẦN
 if (!window._inertiaToastRegistered) {
-
-    // Debug
-    console.log('✅ REGISTER LISTENER')
 
     window._inertiaToastRegistered = true
 
@@ -52,25 +46,23 @@ if (!window._inertiaToastRegistered) {
     let shownMessages = new Set()
 
     router.on('success', (event) => {
-        const flash = event.detail.page.props.flash
-        if (!flash) return
 
-        const message = flash.success || flash.error
-        if (!message) return
+    const page = event.detail.page
+    const flash = page.props.flash
 
-        // ❗ CHẶN TRIỆT ĐỂ
-        if (shownMessages.has(message)) return
+    if (!flash) return
 
-        shownMessages.add(message)
+    if (flash.success) {
+        toast.success(flash.success)
+    }
 
-        if (flash.success) toast.success(flash.success)
-        if (flash.error) toast.error(flash.error)
+    if (flash.error) {
+        toast.error(flash.error)
+    }
 
-        // reset sau 1 khoảng để cho phép message mới
-        setTimeout(() => {
-            shownMessages.delete(message)
-        }, 2000)
-    })
+    // QUAN TRỌNG: XÓA FLASH SAU KHI DÙNG
+    page.props.flash = {}
+})
 }
 
 createInertiaApp({
