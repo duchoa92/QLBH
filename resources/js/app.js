@@ -10,8 +10,68 @@ import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
 
+// Debug
+console.log('🚀 APP JS LOADED')
+
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+ // ❗ CHẶN ĐĂNG KÝ NHIỀU LẦN
+if (!window._inertiaToastRegistered) {
+
+    // Debug
+    console.log('✅ REGISTER LISTENER')
+
+    window._inertiaToastRegistered = true
+
+    let lastFlash = null
+
+    router.on('error', (event) => {
+
+        const errors = event.detail.errors
+        if (!errors) return
+
+        Object.values(errors).forEach(msg => {
+            if (msg) toast.error(msg)
+        })
+
+        setTimeout(() => {
+            const first = Object.keys(errors)[0]
+            const el = document.querySelector(`[name="${first}"]`)
+
+            if (el) {
+                el.focus()
+                el.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                })
+            }
+        }, 100)
+    })
+
+    let shownMessages = new Set()
+
+    router.on('success', (event) => {
+        const flash = event.detail.page.props.flash
+        if (!flash) return
+
+        const message = flash.success || flash.error
+        if (!message) return
+
+        // ❗ CHẶN TRIỆT ĐỂ
+        if (shownMessages.has(message)) return
+
+        shownMessages.add(message)
+
+        if (flash.success) toast.success(flash.success)
+        if (flash.error) toast.error(flash.error)
+
+        // reset sau 1 khoảng để cho phép message mới
+        setTimeout(() => {
+            shownMessages.delete(message)
+        }, 2000)
+    })
+}
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
@@ -89,7 +149,7 @@ createInertiaApp({
             }
         }
 
-    const app = createApp(Root)
+        const app = createApp(Root)
 
         app.component(
             'Toaster',
@@ -105,61 +165,7 @@ createInertiaApp({
 
         app.use(ZiggyVue)
 
-        // 🔥 GLOBAL ERROR HANDLER
-        router.on('error', (event) => {
-            const errors = event.detail.errors
-
-            if (!errors) return
-
-            Object.values(errors).forEach(msg => {
-                if (msg) toast.error(msg)
-            })
-
-            // focus field lỗi đầu tiên
-            setTimeout(() => {
-                const first = Object.keys(errors)[0]
-                const el = document.querySelector(`[name="${first}"]`)
-
-                if (el) {
-                    el.focus()
-                    el.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'center'
-                    })
-                }
-            }, 100)
-        })
-
-
-        // 🔥 GLOBAL SUCCESS HANDLER (flash)
-       let lastFlash = null
-
-        router.on('success', (event) => {
-            const flash = event.detail.page.props.flash
-
-            if (!flash) return
-
-            const key = JSON.stringify(flash)
-
-            if (key === lastFlash) return // Chặn trùng lặp tức thì trong cùng 1 request
-
-            lastFlash = key
-
-            // Reset lại biến chặn trùng sau 500ms để các thao tác tiếp theo vẫn hiển thị được
-            setTimeout(() => {
-                lastFlash = null
-            }, 500)
-
-            if (flash.success) {
-                toast.success(flash.success)
-            }
-
-            if (flash.error) {
-                toast.error(flash.error)
-            }
-        })
-
-        
+            
         app.mount(el)
     },
     progress: {
