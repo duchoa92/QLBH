@@ -16,7 +16,6 @@ const props = defineProps({
 })
 
 const showForm = ref(false)
-const showTrash = ref(false)
 const confirmBox = useConfirm()
 
 /* ================= FILTER ================= */

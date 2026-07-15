@@ -9,6 +9,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
+import ModalRoot from '@/Components/ModalRoot.vue'
 
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -127,15 +128,20 @@ createInertiaApp({
         const Root = {
             setup() {
 
-                return () => [
+               return () => [
                     h(App, props),
+
+                    // 🔥 QUAN TRỌNG: ModalRoot phải ở đây
+                    h(ModalRoot),
+
                     h(Toaster, {
                         richColors: true,
                         position: 'top-right',
                         closeButton: true,
                         style: {
-                            zIndex: 9999, 
-                            position: 'fixed' },
+                            zIndex: 9999,
+                            position: 'fixed'
+                        },
                     }),
                 ]
             }

@@ -110,4 +110,6 @@ const page = usePage()
     </div>
 
 <ConfirmBox />
+<ModalRoot />
+
 </template>

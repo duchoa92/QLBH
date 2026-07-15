@@ -1,6 +1,5 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3'
-import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 
@@ -20,11 +19,17 @@ const form = useForm({
 const submit = () => {
     if (form.id) {
         form.put(`/brands/${form.id}`, {
-            onSuccess: closeModal
+            onSuccess: () => {
+                emit('updated')
+                emit('close') // 👈 đúng
+            }
         })
     } else {
         form.post('/brands', {
-            onSuccess: closeModal
+            onSuccess: () => {
+                emit('updated')
+                emit('close') // 👈 đúng
+            }
         })
     }
 }

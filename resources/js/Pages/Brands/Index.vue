@@ -7,7 +7,6 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import BrandForm from './Form.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
 import BrandTrashModal from './BrandTrashModal.vue'
-import { openModal } from '@/Stores/modal'
 import { useConfirm } from '@/Composables/useConfirm'
 
 
@@ -20,8 +19,9 @@ const props = defineProps({
 })
 
 
-const showTrash = ref(false)
 const confirmBox = useConfirm()
+const showForm = ref(false)
+const editingBrand = ref(null)
 
 /* FILTER */
 const search = ref(props.filters?.search || '')
@@ -44,9 +44,6 @@ watch([search, category_id], ([s, c]) => {
     }, 300)
 })
 
-const handleTrashUpdated = async () => {
-    await loadTrashCount()
-}
 
 /* RELOAD */
 const loadData = () => {
@@ -72,26 +69,14 @@ const destroy = (id) => {
     })
 }
 
-/* MODAL */
 const openCreate = () => {
-    openModal(BrandForm, {
-        title: 'Thêm thương hiệu',
-        props: {
-            categories: props.categories || []
-        },
-        onUpdated: handleTrashUpdated
-    })
+    editingBrand.value = null
+    showForm.value = true
 }
 
 const openEdit = (item) => {
-    openModal(BrandForm, {
-        title: 'Sửa thương hiệu',
-        props: {
-            brand: item,
-            categories: props.categories
-        },
-        onUpdated: handleTrashUpdated
-    })
+    editingBrand.value = item
+    showForm.value = true
 }
 
 /* TRASH COUNT */
@@ -217,4 +202,34 @@ const toggleStatus = (id) => {
         loadData()
     }"
 />
+
+<div v-if="showForm" class="fixed inset-0 z-50">
+
+    <!-- overlay -->
+    <div class="absolute inset-0 bg-black/40"
+         @click="showForm = false"></div>
+
+    <!-- modal -->
+    <div class="absolute inset-0 flex items-center justify-center">
+
+        <div class="bg-white w-[500px] p-4 rounded shadow">
+
+            <h2 class="font-bold mb-4">
+                {{ editingBrand ? 'Sửa thương hiệu' : 'Thêm thương hiệu' }}
+            </h2>
+
+            <BrandForm
+                :brand="editingBrand"
+                :categories="categories"
+                @close="showForm = false"
+                @updated="() => {
+                    showForm = false
+                    loadData()
+                }"
+            />
+
+        </div>
+
+    </div>
+</div>
 </template>

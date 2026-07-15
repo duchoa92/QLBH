@@ -1,13 +1,13 @@
 <script setup>
 import { router } from '@inertiajs/vue3'
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { confirmDelete } from '@/utils/confirm'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { openModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
-import TrashModal from '@/Components/TrashModal.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
+import CategoryTrashModal from './CategoryTrashModal.vue'
+import { useConfirm } from '@/Composables/useConfirm'
 
 defineOptions({ layout: AdminLayout })
 
@@ -18,6 +18,8 @@ const props = defineProps({
 
 /* FILTER */
 const search = ref(props.filters?.search || '')
+
+const confirmBox = useConfirm()
 
 let timeout = null
 onBeforeUnmount(() => {
@@ -36,9 +38,6 @@ watch(search, (s) => {
     }, 300)
 })
 
-const handleTrashUpdated = async () => {
-    await loadTrashCount()
-}
 
 /* RELOAD */
 const loadData = () => {
@@ -48,21 +47,22 @@ const loadData = () => {
 
 /* DELETE */
 const destroy = (id) => {
-    confirmDelete('Chuyển danh mục vào thùng rác?', () => {
-        router.delete(`/categories/${id}`, {
-            onSuccess: loadData
-        })
+    confirmBox.show({
+        title: 'Xác nhận',
+        message: 'Chuyển vào thùng rác?',
+        onConfirm: () => {
+            router.delete(`/categories/${id}`, {
+                preserveScroll: true,
+                onSuccess: loadData
+            })
+        }
     })
 }
 
-/* MODAL */
 const openCreate = () => {
     openModal(CategoryForm, {
         title: 'Thêm danh mục',
-        props: {
-            brands: props.brands || []
-        },
-        onUpdated: handleTrashUpdated
+        onUpdated: loadData
     })
 }
 
@@ -70,10 +70,17 @@ const openEdit = (item) => {
     openModal(CategoryForm, {
         title: 'Sửa danh mục',
         props: {
-            category: item,
-            brands: props.brands || []
+            category: item
         },
-        onUpdated: handleTrashUpdated
+        onUpdated: loadData
+    })
+}
+
+
+
+const openTrash = () => {
+    openModal(CategoryTrashModal, {
+        onUpdated: loadData
     })
 }
 
@@ -83,18 +90,6 @@ onMounted(() => {
     loadTrashCount()
 })
 
-const openTrash = () => {
-    openModal(TrashModal, {
-        title: 'Thùng rác',
-        props: {
-            endpoint: 'categories'
-        },
-        onUpdated: () => {
-            loadData()
-            router.reload({ only: ['categories'] })
-        }
-    })
-}
 
 const trashCount = ref(0)
 const loadTrashCount = async () => {
@@ -190,4 +185,5 @@ const toggleStatus = (id) => {
         </table>
     </div>
 </div>
+
 </template>

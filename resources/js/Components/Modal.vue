@@ -1,11 +1,14 @@
 <script setup>
-import { modalState, closeModal } from '@/Stores/modal'
+import { useModal } from '@/Stores/modal'
 import { onMounted, onBeforeUnmount } from 'vue'
 
+
+const { modals } = useModal()
 
 const handleKey = (e) => {
     if (e.key === 'Escape') closeModal()
 }
+
 
 onMounted(() => window.addEventListener('keydown', handleKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleKey))
