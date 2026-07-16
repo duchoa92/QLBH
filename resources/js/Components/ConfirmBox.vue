@@ -8,7 +8,7 @@ const { state, confirm, cancel } = useConfirm()
 </script>
 
 <template>
-<div v-if="state.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+<div v-if="state.show" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
     <div class="bg-white p-6 rounded shadow w-[400px]">
 
         <h2 class="font-bold text-lg mb-2">

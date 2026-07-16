@@ -6,8 +6,9 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import BrandForm from './Form.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-import BrandTrashModal from './BrandTrashModal.vue'
+import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
+import { openModal } from '@/Stores/modal'
 
 
 defineOptions({ layout: AdminLayout })
@@ -102,6 +103,15 @@ const loadTrashCount = async () => {
     }
 }
 
+const openTrash = () => {
+    openModal(TrashModal, {
+        props: {
+            endpoint: 'brands'
+        },
+        onUpdated: loadData
+    })
+}
+
 /* STATUS */
 const loadingStatus = ref(null)
 
@@ -127,8 +137,8 @@ const toggleStatus = (id) => {
             <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
                 <Plus /> Thêm mới
             </button>
-            <button @click="showTrash = true" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
-                <Trash2 /> Xóa ({{ trashCount }})
+            <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
+                <Trash2 />({{ trashCount }})
             </button>
         </div>
     </div>
@@ -182,7 +192,7 @@ const toggleStatus = (id) => {
                     <td class="border p-2 text-center">
                         <div class="flex gap-2 justify-center">
                             <button @click.stop="openEdit(brand)" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">Sửa</button>
-                            <button @click.stop="destroy(brand.id)" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">Xóa</button>
+                            <button @click.stop="destroy(brand.id)" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"><Trash2 /></button>
                         </div>
                     </td>
                 </tr>
@@ -194,14 +204,6 @@ const toggleStatus = (id) => {
     </div>
 
 </div>
-
-<BrandTrashModal
-    :show="showTrash"
-    @close="showTrash = false"
-    @updated="() => {
-        loadData()
-    }"
-/>
 
 <div v-if="showForm" class="fixed inset-0 z-50">
 

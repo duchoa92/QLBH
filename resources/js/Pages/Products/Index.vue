@@ -4,9 +4,10 @@ import { router } from '@inertiajs/vue3'
 import Form from './Form.vue'
 import ProductFilter from './Components/ProductFilter.vue'
 import ProductTable from './Components/ProductTable.vue'
-import ProductTrashModal from './ProductTrashModal.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
+import { openModal } from '@/Stores/modal'
+import TrashModal from '@/Components/TrashModal.vue'
 
 const props = defineProps({
     products: Object,
@@ -15,7 +16,6 @@ const props = defineProps({
     brands: Array
 })
 
-const showForm = ref(false)
 const confirmBox = useConfirm()
 
 /* ================= FILTER ================= */
@@ -88,23 +88,35 @@ const handleEsc = (e) => {
 onMounted(() => window.addEventListener('keydown', handleEsc))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
 
-watch(showForm, (v) => {
-    document.body.style.overflow = v ? 'hidden' : ''
-})
-
-watch(showTrash, (v) => {
-    document.body.style.overflow = v ? 'hidden' : ''
-})
-
 const openCreate = () => {
-    editingProduct.value = null
-    showForm.value = true
+    openModal(Form, {
+        title: 'Thêm sản phẩm',
+        props: {
+            categories: props.categories,
+            brands: props.brands
+        },
+        onUpdated: () => {
+            loadData()
+            loadTrashCount()
+        }
+    })
 }
 
 const openEdit = (product) => {
-    editingProduct.value = product
-    showForm.value = true
+    openModal(Form, {
+        title: 'Sửa sản phẩm',
+        props: {
+            product,
+            categories: props.categories,
+            brands: props.brands
+        },
+        onUpdated: () => {
+            loadData()
+            loadTrashCount()
+        }
+    })
 }
+
 
 /* ================= TRASH ================= */
 const trashCount = ref(0)
@@ -115,11 +127,25 @@ const loadTrashCount = async () => {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         const data = await res.json()
-        trashCount.value = data.total
+        trashCount.value = data.length
     } catch {
         trashCount.value = 0
     }
 }
+
+
+const openTrash = () => {
+    openModal(TrashModal, {
+        props: {
+            endpoint: 'products'
+        },
+        onUpdated: () => {
+            loadTrashCount()
+            loadData()
+        }
+    })
+}
+
 
 onMounted(loadTrashCount)
 
@@ -148,7 +174,7 @@ const deleteOne = (id) => {
             router.delete(route('products.destroy', id), {
                 preserveScroll: true,
                 onSuccess: () => {
-                    // loadData()
+                    loadData()
                     loadTrashCount()
                 }
             })
@@ -171,7 +197,7 @@ const bulkDelete = () => {
                 preserveScroll: true,
                 onSuccess: () => {
                     selectedIds.value = []
-                   // loadData() // Load lại danh sách sản phẩm trang hiện tại sau khi xóa nhiều
+                    loadData() // Load lại danh sách sản phẩm trang hiện tại sau khi xóa nhiều
                     loadTrashCount()
                 }
             })
@@ -211,7 +237,7 @@ const handleSort = (sort) => {
                 <Plus /> Thêm
             </button>
 
-            <button @click="showTrash = true"
+            <button @click="openTrash"
                 class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white">
                 <Trash2 /> ({{ trashCount }})
             </button>
@@ -242,65 +268,8 @@ const handleSort = (sort) => {
         @print="printOne"
     />
 
-    <!-- TRASH MODAL -->
-    <ProductTrashModal
-        :show="showTrash"
-        @close="showTrash = false"
-        @updated="() => {
-            loadTrashCount()
-        }"
-    />
 
-    <!-- FORM MODAL -->
-    <!-- FORM MODAL LEVEL 2 -->
-    <div v-if="showForm" class="fixed inset-0 z-[1000]">
-
-        <!-- overlay -->
-        <div 
-            class="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            @click="showForm = false"
-        ></div>
-
-        <!-- container -->
-        <div class="absolute inset-0 flex items-center justify-center p-4">
-
-            <div 
-                class="bg-white w-full max-w-[1100px] h-[90vh] rounded-2xl shadow-xl overflow-hidden flex flex-col animate-scale"
-                @click.stop
-            >
-
-                <!-- header -->
-                <div class="flex justify-between items-center p-4 border-b shrink-0">
-                    <h2 class="font-bold text-lg">
-                        {{ editingProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm' }}
-                    </h2>
-
-                    <button @click="showForm = false" class="text-red-500 font-bold">
-                        ✕
-                    </button>
-                </div>
-
-                <!-- body scroll -->
-                <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
-
-                    <Form
-                        :product="editingProduct"
-                        :categories="categories"
-                        :brands="brands"
-                        @close="showForm = false"
-                        @updated="() => {
-                            showForm = false
-                            loadData()
-                        }"
-                    />
-
-                </div>
-
-            </div>
-
-        </div>
-    </div>
-
+  
 
 </div>
 </template>

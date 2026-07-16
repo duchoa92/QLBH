@@ -6,8 +6,9 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { openModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-import CategoryTrashModal from './CategoryTrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
+import TrashModal from '@/Components/TrashModal.vue'
+
 
 defineOptions({ layout: AdminLayout })
 
@@ -79,7 +80,10 @@ const openEdit = (item) => {
 
 
 const openTrash = () => {
-    openModal(CategoryTrashModal, {
+    openModal(TrashModal, {
+        props: {
+            endpoint: 'categories'
+        },
         onUpdated: loadData
     })
 }
@@ -134,7 +138,7 @@ const toggleStatus = (id) => {
                 <Plus /> Thêm mới
             </button>
             <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white">
-                <Trash2 /> Xóa ({{ trashCount }})
+                <Trash2 /> ({{ trashCount }})
             </button>
         </div>
     </div>
@@ -173,8 +177,8 @@ const toggleStatus = (id) => {
                     </td>
                     <td class="border p-2 text-center">
                         <div class="flex gap-2 justify-center">
-                            <button @click.stop="openEdit(item)" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">Sửa</button>
-                            <button @click.stop="destroy(item.id)" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">Xóa</button>
+                            <button @click.stop="openEdit(item)" class="mx-1 px-2 py-2 bg-red-500 text-white rounded text-sm">Sửa</button>
+                            <button @click.stop="destroy(item.id)" class="mx-1 px-2 py-2 bg-red-500 text-white rounded text-sm"><Trash2 /></button>
                         </div>
                     </td>
                 </tr>

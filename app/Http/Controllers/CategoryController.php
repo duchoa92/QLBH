@@ -74,20 +74,10 @@ class CategoryController extends Controller
 
     public function destroy(Category $category)
     {
-        if ($category->children()->exists()) {
-            return back()->withErrors([
-                'error' => 'Không thể xóa vì còn danh mục con',
-            ]);
-        }
+       
+        $category->delete(); // ✅ đúng chuẩn
 
-        if ($category->products()->exists()) {
-            return back()->withErrors([
-                'error' => 'Không thể xóa vì còn sản phẩm thuộc danh mục này',
-            ]);
-        }
-
-        $category->delete();
-        return back()->with('success', 'Đã chuyển danh mục vào thùng rác');
+        return back()->with('success', 'Đã chuyển vào thùng rác');
     }
 
     public function trash()
@@ -112,6 +102,10 @@ class CategoryController extends Controller
 
         if (! $category) {
             return back()->withErrors(['error' => 'Danh mục không tồn tại']);
+        }
+
+        if ($category->products()->exists()) {
+            return back()->withErrors(['error' => 'Không thể xóa vì còn sản phẩm thuộc Danh mục này']);
         }
 
         $category->forceDelete();
