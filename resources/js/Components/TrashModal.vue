@@ -5,35 +5,43 @@ import { useConfirm } from '@/Composables/useConfirm'
 import { closeModal } from '@/Stores/modal'
 
 const props = defineProps({
-    endpoint: {
-        type: String,
-        required: true
-    }
+    endpoint: String,
+    modalId: Number
 })
 
 const emit = defineEmits(['updated'])
 
 const items = ref([])
 const loading = ref(false)
+const total = ref(0)
+
 const confirmBox = useConfirm()
 
 const loadTrash = async () => {
     loading.value = true
 
-    const res = await fetch(`/${props.endpoint}/trash`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
+    try {
+        const res = await fetch(`/${props.endpoint}/trash`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
 
-    items.value = await res.json()
+        const json = await res.json()
+
+        items.value = json.data || json
+        total.value = json.meta?.total || items.value.length
+
+    } catch (e) {
+        console.error(e)
+        items.value = []
+    }
+
     loading.value = false
 }
 
 onMounted(loadTrash)
 
-/* restore */
 const restore = (id) => {
     router.post(`/${props.endpoint}/${id}/restore`, {}, {
-        preserveScroll: true,
         onSuccess: () => {
             items.value = items.value.filter(i => i.id !== id)
             emit('updated')
@@ -41,14 +49,12 @@ const restore = (id) => {
     })
 }
 
-/* force delete */
 const forceDelete = (id) => {
     confirmBox.show({
         title: 'Xóa vĩnh viễn?',
         message: 'Không thể khôi phục!',
         onConfirm: () => {
-            router.delete(`/${props.endpoint}/${id}/force`, {
-                preserveScroll: true,
+            router.delete(`/${props.endpoint}/${id}/force-delete`, {
                 onSuccess: () => {
                     loadTrash()
                     emit('updated')
@@ -60,21 +66,21 @@ const forceDelete = (id) => {
 </script>
 
 <template>
-<div class="fixed inset-0 z-50">
+<div class="fixed inset-0 z-[9999]">
 
     <!-- overlay -->
-    <div class="absolute inset-0 bg-black/40" @click="closeModal()"></div>
+    <div class="absolute inset-0 bg-black/40" @click="closeModal(modalId)"></div>
 
     <!-- modal -->
     <div class="absolute inset-0 flex items-center justify-center">
-        <div class="bg-white w-[900px] h-[80vh] rounded-xl shadow-xl flex flex-col overflow-hidden">
+        <div class="bg-white w-[900px] h-[80vh] rounded-xl shadow-xl flex flex-col overflow-hidden"  @click.stop >
 
             <!-- header -->
             <div class="p-4 border-b flex justify-between items-center bg-gray-50">
                 <h2 class="text-lg font-semibold">
-                    🗑 Thùng rác ({{ endpoint }})
+                    <Trash2 /> Thùng rác ({{ endpoint }})
                 </h2>
-                <button @click="closeModal()" class="text-gray-500 hover:text-black text-xl">✕</button>
+                <button @click="closeModal(modalId)" class="text-gray-500 hover:text-black text-xl">✕</button>
             </div>
 
             <!-- content -->
@@ -131,7 +137,7 @@ const forceDelete = (id) => {
             <!-- footer -->
             <div class="p-3 border-t bg-gray-50 text-right">
                 <button
-                    @click="closeModal()"
+                    @click="closeModal(modalId)"
                     class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
                 >
                     Đóng

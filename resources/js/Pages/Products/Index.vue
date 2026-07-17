@@ -78,15 +78,7 @@ const loadData = () => {
 /* ================= FORM ================= */
 const editingProduct = ref(null)
 
-const handleEsc = (e) => {
-    if (e.key === 'Escape') {
-        showForm.value = false
-        showTrash.value = false
-    }
-}
 
-onMounted(() => window.addEventListener('keydown', handleEsc))
-onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
 
 const openCreate = () => {
     openModal(Form, {
@@ -127,7 +119,7 @@ const loadTrashCount = async () => {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         const data = await res.json()
-        trashCount.value = data.length
+        trashCount.value = data.meta?.total || 0
     } catch {
         trashCount.value = 0
     }

@@ -96,7 +96,7 @@ const loadTrashCount = async () => {
         if (!res.ok) throw new Error('API lỗi')
 
         const data = await res.json()
-        trashCount.value = data.length
+        trashCount.value = data.meta?.total || 0
     } catch (e) {
         console.error('Load trash count lỗi', e)
         trashCount.value = 0

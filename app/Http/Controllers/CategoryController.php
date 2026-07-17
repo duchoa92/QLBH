@@ -82,12 +82,14 @@ class CategoryController extends Controller
 
     public function trash()
     {
-        $categories = Category::onlyTrashed()
-            ->with('parent:id,name')
-            ->latest()
-            ->get();
+        $categories = Category::onlyTrashed()->latest()->get();
 
-        return response()->json($categories);
+        return response()->json([
+            'data' => $categories,
+            'meta' => [
+                'total' => $categories->count()
+            ]
+        ]);
     }
 
     public function restore($id)

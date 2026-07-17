@@ -5,12 +5,21 @@ const { modals } = useModal()
 </script>
 
 <template>
-    <component
-        v-for="(modal, index) in modals"
-        :key="modal.id"
-        :is="modal.component"
-        v-bind="modal.props"
-        @close="closeModal(index)"
-        @updated="modal.onUpdated && modal.onUpdated()"
-    />
+     <div
+        v-if="modals.length"
+        class="fixed inset-0 z-[9999]"
+    >
+        <component
+            v-for="modal in modals"
+            :key="modal.id"
+            :is="modal.component"
+            v-bind="modal.props"
+            :modalId="modal.id"  
+            @close="closeModal(modal.id)"
+            @updated="() => {
+                modal.onUpdated && modal.onUpdated()
+                closeModal(modal.id)
+            }"
+        />
+    </div>
 </template>

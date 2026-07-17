@@ -60,8 +60,14 @@ class BrandController extends Controller
     // Hiển thị danh sách thương hiệu trong thùng rác
     public function trash()
     {
-        $brands = Brand::onlyTrashed()->with('category')->latest()->get();
-        return response()->json($brands);
+        $brands = Brand::onlyTrashed()->latest()->get();
+
+        return response()->json([
+            'data' => $brands,
+            'meta' => [
+                'total' => $brands->count()
+            ]
+        ]);
     }
     // Khôi phục thương hiệu từ thùng rác
     public function restore($id)

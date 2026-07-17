@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import Sidebar from '@/Components/Sidebar.vue'
-import Modal from '@/Components/Modal.vue'
 import ConfirmBox from '@/Components/ConfirmBox.vue'
+import ModalRoot from '@/Components/ModalRoot.vue'
 
 const sidebarOpen = ref(false)
 

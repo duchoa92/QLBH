@@ -87,20 +87,19 @@ class ProductController extends Controller
         return back()->with('success', 'Đã chuyển vào thùng rác!');
     }
 
-    // Thùng rác (Vẫn giữ JSON nếu Modal thùng rác gọi dạng Async giống bên Brand)
-   public function trash(Request $request)
+    // Thùng rác
+     public function trash(Request $request)
     {
         $products = Product::onlyTrashed()
             ->with(['category:id,name', 'brand:id,name'])
             ->latest()
-            ->get(); // 🔥 đổi paginate -> get
+            ->get();
 
-        if ($request->ajax()) {
-            return response()->json($products);
-        }
-
-        return Inertia::render('Products/Trash', [
-            'products' => $products
+        return response()->json([
+            'data' => $products,
+            'meta' => [
+                'total' => $products->count()
+            ]
         ]);
     }
 
