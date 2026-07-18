@@ -12,17 +12,19 @@ use Inertia\Inertia;
 
 class BrandController extends Controller
 {
+    // Giữ nguyên constructor tiêm Service
     public function __construct(protected BrandService $brandService)
     {
     }
 
     public function index(Request $request)
     {
+        // Nên chuyển logic query này vào BrandService->paginate() nếu muốn chuẩn Pattern
         $brands = Brand::with('category')
             ->when($request->filled('search'), fn ($q) =>
                 $q->where('name', 'like', '%' . $request->search . '%')
             )
-            ->when($request->filled('category_id'), fn ($q) =>
+            ->when($request->category_id !== null && $request->category_id !== '', fn ($q) =>
                 $q->where('category_id', $request->category_id)
             )
             ->latest()
@@ -37,30 +39,30 @@ class BrandController extends Controller
             'categories' => $categories,
         ]);
     }
-    // Hiển thị form tạo thương hiệu
+
     public function store(StoreBrandRequest $request)
     {
         $this->brandService->create($request->validated());
-
         return back()->with('success', 'Đã thêm thương hiệu thành công');
     }
-    // cập nhật thương hiệu
+
     public function update(UpdateBrandRequest $request, Brand $brand)
     {
         $this->brandService->update($brand, $request->validated());
-
         return back()->with('success', 'Đã cập nhật thương hiệu thành công');
     }
-    // Xóa thương hiệu (chuyển vào thùng rác)
+
     public function destroy(Brand $brand)
     {
-        $brand->delete();
+        $brand->delete(); // Hoặc $this->brandService->delete($brand);
         return back()->with('success', 'Đã chuyển thương hiệu vào thùng rác');
     }
-    // Hiển thị danh sách thương hiệu trong thùng rác
+
+    // Tối ưu hàm này để không kéo toàn bộ data làm nặng hệ thống
     public function trash()
     {
-        $brands = Brand::onlyTrashed()->latest()->get();
+        // Chỉ lấy những thông tin tối thiểu để đếm hoặc hiển thị nhanh modal
+        $brands = Brand::onlyTrashed()->select('id', 'name', 'deleted_at')->latest()->get();
 
         return response()->json([
             'data' => $brands,
@@ -69,21 +71,22 @@ class BrandController extends Controller
             ]
         ]);
     }
-    // Khôi phục thương hiệu từ thùng rác
+
     public function restore($id)
     {
         Brand::withTrashed()->findOrFail($id)->restore();
         return back()->with('success', 'Đã khôi phục thương hiệu thành công');
     }
-    // Xóa vĩnh viễn thương hiệu
+
     public function forceDelete($id)
     {
         $brand = Brand::withTrashed()->find($id);
 
-        if (! $brand) {
+        if (!$brand) {
             return back()->withErrors(['error' => 'Thương hiệu không tồn tại']);
         }
 
+        // Ngăn chặn xóa cứng nếu dính khóa ngoại tới sản phẩm
         if ($brand->products()->exists()) {
             return back()->withErrors(['error' => 'Không thể xóa vì còn sản phẩm thuộc thương hiệu này']);
         }
@@ -91,11 +94,13 @@ class BrandController extends Controller
         $brand->forceDelete();
         return back()->with('success', 'Đã xóa vĩnh viễn thương hiệu');
     }
-    // Chuyển trạng thái hoạt động của thương hiệu
+
     public function toggleStatus($id)
     {
         $brand = Brand::findOrFail($id);
-        $brand->update(['is_active' => ! $brand->is_active]);
+        $brand->update(['is_active' => !$brand->is_active]);
+        
+        // Trả về dữ liệu cập nhật, Inertia sẽ tự động đồng bộ hóa client-side state
         return back()->with('success', 'Đã cập nhật trạng thái hoạt động');
     }
 }

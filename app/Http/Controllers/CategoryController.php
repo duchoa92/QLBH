@@ -3,19 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
-use App\Http\Requests\Category\StoreCategoryRequest;
-use App\Http\Requests\Category\UpdateCategoryRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use App\Http\Requests\Category\StoreCategoryRequest;
+use App\Http\Requests\Category\UpdateCategoryRequest;
 
 class CategoryController extends Controller
 {
     public function index(Request $request)
     {
-        $categories = Category::with('parent:id,name')
+        $categories = Category::query()
             ->when($request->filled('search'), fn ($q) =>
                 $q->where('name', 'like', '%' . $request->search . '%')
+            )
+            ->when($request->filled('status'), fn ($q) =>
+                $q->where('is_active', $request->status)
             )
             ->latest()
             ->paginate(10)
@@ -23,15 +26,7 @@ class CategoryController extends Controller
 
         return Inertia::render('Categories/Index', [
             'categories' => $categories,
-            'filters'    => $request->only('search'),
-        ]);
-    }
-
-    public function create()
-    {
-        $categories = Category::select('id', 'name')->get();
-        return Inertia::render('Categories/Create', [
-            'categories' => $categories,
+            'filters' => $request->only('search', 'status'),
         ]);
     }
 
@@ -43,21 +38,7 @@ class CategoryController extends Controller
 
         Category::create($data);
 
-        return redirect()
-            ->route('categories.index')
-            ->with('success', 'Đã thêm danh mục');
-    }
-
-    public function edit(Category $category)
-    {
-        $categories = Category::where('id', '!=', $category->id)
-            ->select('id', 'name')
-            ->get();
-
-        return Inertia::render('Categories/Edit', [
-            'category'   => $category,
-            'categories' => $categories,
-        ]);
+        return back()->with('success', 'Đã thêm danh mục');
     }
 
     public function update(UpdateCategoryRequest $request, Category $category)
@@ -67,15 +48,12 @@ class CategoryController extends Controller
 
         $category->update($data);
 
-        return redirect()
-            ->route('categories.index')
-            ->with('success', 'Đã cập nhật danh mục');
+        return back()->with('success', 'Đã cập nhật danh mục');
     }
 
     public function destroy(Category $category)
     {
-       
-        $category->delete(); // ✅ đúng chuẩn
+        $category->delete();
 
         return back()->with('success', 'Đã chuyển vào thùng rác');
     }
@@ -95,7 +73,8 @@ class CategoryController extends Controller
     public function restore($id)
     {
         Category::withTrashed()->findOrFail($id)->restore();
-        return back()->with('success', 'Đã khôi phục danh mục thành công');
+
+        return back()->with('success', 'Đã khôi phục danh mục');
     }
 
     public function forceDelete($id)
@@ -107,16 +86,19 @@ class CategoryController extends Controller
         }
 
         if ($category->products()->exists()) {
-            return back()->withErrors(['error' => 'Không thể xóa vì còn sản phẩm thuộc Danh mục này']);
+            return back()->withErrors(['error' => 'Không thể xóa vì còn sản phẩm']);
         }
 
         $category->forceDelete();
-        return back()->with('success', 'Đã xóa vĩnh viễn danh mục');
+
+        return back()->with('success', 'Đã xóa vĩnh viễn');
     }
 
-    public function toggleStatus(Category $category)
+    public function toggleStatus($id)
     {
+        $category = Category::findOrFail($id);
         $category->update(['is_active' => ! $category->is_active]);
-        return back()->with('success', 'Đã cập nhật trạng thái hoạt động');
+
+        return back()->with('success', 'Đã cập nhật trạng thái');
     }
 }

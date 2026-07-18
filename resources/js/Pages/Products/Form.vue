@@ -153,10 +153,6 @@ let handler = (e) => {
     }
 }
 
-onMounted(() => {
-    window.addEventListener('keydown', handler)
-})
-
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', handler)
     stopCamera() // 🔥 quan trọng

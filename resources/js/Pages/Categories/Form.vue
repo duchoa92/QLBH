@@ -4,7 +4,8 @@ import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 const props = defineProps({
-    category: Object
+    category: Object,
+    modalId: Number // Nhận ID modal truyền từ ModalRoot sang
 })
 
 const emit = defineEmits(['close', 'updated'])
@@ -19,14 +20,14 @@ const submit = () => {
         form.put(`/categories/${form.id}`, {
             onSuccess: () => {
                 emit('updated')
-                closeModal()
+                closeModal(props.modalId) // Đóng chính xác modal này bằng ID
             }
         })
     } else {
         form.post('/categories', {
             onSuccess: () => {
                 emit('updated')
-                closeModal()
+                closeModal(props.modalId) // Đóng chính xác modal này bằng ID
             }
         })
     }
@@ -34,36 +35,30 @@ const submit = () => {
 </script>
 
 <template>
-<div class="fixed inset-0 z-50">
+<div class="fixed inset-0 z-50 flex items-center justify-center">
 
-    <!-- overlay -->
     <div class="absolute inset-0 bg-black/40" @click="emit('close')"></div>
 
-    <!-- modal -->
-    <div class="absolute inset-0 flex items-center justify-center">
+    <div class="bg-white w-[500px] rounded-xl shadow-lg p-6 relative z-10">
 
-        <div class="bg-white w-[500px] rounded-xl shadow-lg p-6">
+        <h2 class="text-lg font-bold mb-4">
+            {{ form.id ? 'Sửa danh mục' : 'Thêm danh mục' }}
+        </h2>
 
-            <h2 class="text-lg font-bold mb-4">
-                {{ form.id ? 'Sửa danh mục' : 'Thêm danh mục' }}
-            </h2>
+        <FloatingInput
+            v-model="form.name"
+            label="Tên danh mục"
+            class="mb-4"
+        />
 
-            <FloatingInput
-                v-model="form.name"
-                label="Tên danh mục"
-                class="mb-4"
-            />
+        <div class="flex justify-end gap-2">
+            <button @click="emit('close')" class="bg-gray-300 px-4 py-2 rounded">
+                Hủy
+            </button>
 
-            <div class="flex justify-end gap-2">
-                <button @click="emit('close')" class="bg-gray-300 px-4 py-2 rounded">
-                    Hủy
-                </button>
-
-                <button @click="submit" class="bg-green-600 text-white px-4 py-2 rounded">
-                    Lưu
-                </button>
-            </div>
-
+            <button @click="submit" class="bg-green-600 text-white px-4 py-2 rounded" :disabled="form.processing">
+                {{ form.processing ? 'Đang lưu...' : 'Lưu' }}
+            </button>
         </div>
 
     </div>

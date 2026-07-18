@@ -1,6 +1,6 @@
 <script setup>
 import { router } from '@inertiajs/vue3'
-import { ref, watch, onMounted, onBeforeUnmount  } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -10,7 +10,6 @@ import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 
-
 defineOptions({ layout: AdminLayout })
 
 const props = defineProps({
@@ -19,37 +18,37 @@ const props = defineProps({
     categories: Array
 })
 
-
 const confirmBox = useConfirm()
-const showForm = ref(false)
-const editingBrand = ref(null)
 
 /* FILTER */
 const search = ref(props.filters?.search || '')
-const category_id = ref(props.filters?.category_id ?? null)
+const category_id = ref(props.filters?.category_id ?? '') // Đồng bộ với value trống '' của option Tất cả
 
 let timeout = null
 onBeforeUnmount(() => {
-    if (timeout) {
-        clearTimeout(timeout)
-    }
+    if (timeout) clearTimeout(timeout)
 })
 
-watch([search, category_id], ([s, c]) => {
+// HÀM TRIGGER CHUNG ĐỂ GET DỮ LIỆU
+const handleFilter = () => {
+    router.get('/brands', { search: search.value, category_id: category_id.value }, {
+        preserveState: true,
+        replace: true
+    })
+}
+
+// Chỉ debounce với ô tìm kiếm văn bản (Search)
+watch(search, () => {
     clearTimeout(timeout)
-    timeout = setTimeout(() => {
-        router.get('/brands', { search: s, category_id: c }, {
-            preserveState: true,
-            replace: true
-        })
-    }, 300)
+    timeout = setTimeout(handleFilter, 300)
 })
 
+// Lập tức trigger filter khi người dùng thay đổi select Category
+watch(category_id, handleFilter)
 
 /* RELOAD */
 const loadData = () => {
     router.reload({ only: ['brands'] })
-    loadTrashCount()
 }
 
 /* DELETE */
@@ -62,39 +61,39 @@ const destroy = (id) => {
         onConfirm: () => {
             router.delete(`/brands/${id}`, {
                 preserveScroll: true,
-                onSuccess: () => {
-                    loadData()
-                }
+                onSuccess: () => loadData()
             })
         }
     })
 }
 
 const openCreate = () => {
-    editingBrand.value = null
-    showForm.value = true
+    openModal(BrandForm, {
+        props: {
+            categories: props.categories
+        },
+        onUpdated: loadData
+    })
 }
 
-const openEdit = (item) => {
-    editingBrand.value = item
-    showForm.value = true
+const openEdit = (brand) => {
+    openModal(BrandForm, {
+        props: {
+            brand,
+            categories: props.categories
+        },
+        onUpdated: loadData
+    })
 }
 
 /* TRASH COUNT */
-
-onMounted(() => {
-    loadTrashCount()
-})
-
 const trashCount = ref(0)
 const loadTrashCount = async () => {
     try {
         const res = await fetch('/brands/trash', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
-
         if (!res.ok) throw new Error('API lỗi')
-
         const data = await res.json()
         trashCount.value = data.meta?.total || 0
     } catch (e) {
@@ -103,24 +102,24 @@ const loadTrashCount = async () => {
     }
 }
 
+onMounted(() => {
+    loadTrashCount()
+})
+
 const openTrash = () => {
     openModal(TrashModal, {
-        props: {
-            endpoint: 'brands'
-        },
+        props: { endpoint: 'brands' },
         onUpdated: loadData
     })
 }
 
 /* STATUS */
 const loadingStatus = ref(null)
-
 const toggleStatus = (id) => {
     if (loadingStatus.value) return
-
     loadingStatus.value = id
-
     router.patch(`/brands/${id}/toggle-status`, {}, {
+        preserveScroll: true,
         onFinish: () => loadingStatus.value = null
     })
 }
@@ -134,11 +133,13 @@ const toggleStatus = (id) => {
             <p class="text-gray-500">Quản lý các thương hiệu sản phẩm</p>
         </div>
         <div class="flex gap-2">
-            <button @click="openCreate" class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
-                <Plus /> Thêm mới
+            <button @click="openCreate" 
+                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                <Plus class="w-4 h-4" /> Thêm mới
             </button>
-            <button @click="openTrash" class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500  hover:text-white transition">
-                <Trash2 />({{ trashCount }})
+            <button @click="openTrash"
+                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white transition">
+                <Trash2 class="w-4 h-4" />({{ trashCount }})
             </button>
         </div>
     </div>
@@ -154,32 +155,33 @@ const toggleStatus = (id) => {
                 ...categories.map(c => ({ value: c.id, label: c.name }))
             ]" class="w-64" />
     </div>
+
     <div class="bg-white rounded-xl shadow border overflow-hidden">
-        <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
             <thead>
-                <tr class="bg-gray-100 uppercase text-left">
-                    <th class="border p-2 w-16 text-center">ID</th>
-                    <th class="border p-2">Tên thương hiệu</th>
-                    <th class="border p-2">Thuộc danh mục</th>
-                    <th class="border p-2 w-32 text-center">Trạng thái</th>
-                    <th class="border p-2 w-40 text-center">Hành động</th>
+                <tr class="bg-gray-100 uppercase text-left text-gray-700 border-b">
+                    <th class="p-3 w-16 text-center">ID</th>
+                    <th class="p-3">Tên thương hiệu</th>
+                    <th class="p-3">Thuộc danh mục</th>
+                    <th class="p-3 w-32 text-center">Trạng thái</th>
+                    <th class="p-3 w-40 text-center">Hành động</th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="brand in brands.data" :key="brand.id" class="hover:bg-gray-50">
-                    <td class="border p-2 text-center">{{ brand.id }}</td>
-                    <td class="border p-2 font-medium">{{ brand.name }}</td>
-                    <td class="border p-2">
-                        <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm">
+                <tr v-for="brand in brands.data" :key="brand.id" class="hover:bg-gray-50 border-b last:border-0">
+                    <td class="p-3 text-center text-gray-500">{{ brand.id }}</td>
+                    <td class="p-3 font-medium text-gray-900">{{ brand.name }}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold">
                             {{ brand.category?.name || 'Chưa phân loại' }}
                         </span>
                     </td>
-                    <td class="border p-2 text-center">
-                        <div class="flex items-center gap-2 justify-center">
+                    <td class="p-3 text-center">
+                        <div class="flex items-center justify-center">
                             <button
                                 @click="toggleStatus(brand.id)"
                                 :disabled="loadingStatus === brand.id"
-                                class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                                class="relative inline-flex h-6 w-11 items-center rounded-full transition focus:outline-none"
                                 :class="brand.is_active ? 'bg-green-500' : 'bg-gray-300'"
                             >
                                 <span
@@ -189,10 +191,10 @@ const toggleStatus = (id) => {
                             </button>
                         </div>
                     </td>
-                    <td class="border p-2 text-center">
+                    <td class="p-3 text-center">
                         <div class="flex gap-2 justify-center">
-                            <button @click.stop="openEdit(brand)" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">Sửa</button>
-                            <button @click.stop="destroy(brand.id)" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"><Trash2 /></button>
+                            <button @click="openEdit(brand)" class="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition">Sửa</button>
+                            <button @click="destroy(brand.id)" class="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition flex items-center justify-center"><Trash2 class="w-3.5 h-3.5" /></button>
                         </div>
                     </td>
                 </tr>
@@ -202,36 +204,6 @@ const toggleStatus = (id) => {
             </tbody>
         </table>
     </div>
-
 </div>
 
-<div v-if="showForm" class="fixed inset-0 z-50">
-
-    <!-- overlay -->
-    <div class="absolute inset-0 bg-black/40"
-         @click="showForm = false"></div>
-
-    <!-- modal -->
-    <div class="absolute inset-0 flex items-center justify-center">
-
-        <div class="bg-white w-[500px] p-4 rounded shadow">
-
-            <h2 class="font-bold mb-4">
-                {{ editingBrand ? 'Sửa thương hiệu' : 'Thêm thương hiệu' }}
-            </h2>
-
-            <BrandForm
-                :brand="editingBrand"
-                :categories="categories"
-                @close="showForm = false"
-                @updated="() => {
-                    showForm = false
-                    loadData()
-                }"
-            />
-
-        </div>
-
-    </div>
-</div>
 </template>

@@ -16,8 +16,11 @@ export function useConfirm() {
         Object.assign(state, options)
     }
 
-    const confirm = () => {
-        state.onConfirm?.()
+    const confirm = async () => {
+        if (state.onConfirm) {
+            await state.onConfirm()
+        }
+
         state.show = false
     }
 

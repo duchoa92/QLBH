@@ -12,7 +12,7 @@ export function useModal() {
 
 export function openModal(component, options = {}) {
     state.modals.push({
-        id: ++uid, // 🔥 thêm id
+        id: ++uid,
         component,
         props: options.props || {},
         onUpdated: options.onUpdated || null

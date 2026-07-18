@@ -225,12 +225,6 @@ Route::middleware(['auth'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    /* Route::delete(
-        '/categories/{category}',
-        [CategoryController::class, 'destroy']
-    )
-        ->middleware('permission:categories.delete')
-        ->name('categories.destroy'); */
 
     // Khôi phục danh mục
     Route::post('/categories/{id}/restore', [CategoryController::class, 'restore'])
