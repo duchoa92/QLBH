@@ -19,23 +19,43 @@ class BrandController extends Controller
 
     public function index(Request $request)
     {
-        // Nên chuyển logic query này vào BrandService->paginate() nếu muốn chuẩn Pattern
-        $brands = Brand::with('category')
-            ->when($request->filled('search'), fn ($q) =>
-                $q->where('name', 'like', '%' . $request->search . '%')
-            )
-            ->when($request->category_id !== null && $request->category_id !== '', fn ($q) =>
-                $q->where('category_id', $request->category_id)
-            )
-            ->latest()
-            ->paginate(10)
-            ->withQueryString();
+        
+       $brands = Brand::with('category')
+        ->when($request->filled('search'), fn ($q) =>
+            $q->where('name', 'like', '%' . $request->search . '%')
+        )
+        ->when($request->category_id !== null && $request->category_id !== '', fn ($q) =>
+            $q->where('category_id', $request->category_id)
+        )
+        ->when($request->filled('sort_by'), function ($q) use ($request) {
+
+            $order = $request->get('sort_order', 'asc');
+
+            if ($request->sort_by === 'category_name') {
+                $q->leftJoin('categories', 'brands.category_id', '=', 'categories.id')
+                ->orderBy('categories.name', $order)
+                ->select('brands.*');
+            } else {
+                $q->orderBy($request->sort_by, $order);
+            }
+
+        }, function ($q) {
+            $q->latest();
+        })
+        ->paginate(10)
+        ->withQueryString();
+
 
         $categories = Category::select('id', 'name')->get();
 
         return Inertia::render('Brands/Index', [
             'brands'     => $brands,
-            'filters'    => $request->only('search', 'category_id'),
+            'filters' => $request->only(
+                'search',
+                'category_id',
+                'sort_by',
+                'sort_order'
+            ),
             'categories' => $categories,
         ]);
     }

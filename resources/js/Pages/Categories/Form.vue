@@ -42,7 +42,7 @@ const submit = () => {
     <div class="bg-white w-[500px] rounded-xl shadow-lg p-6 relative z-10">
 
         <h2 class="text-lg font-bold mb-4">
-            {{ form.id ? 'Sửa danh mục' : 'Thêm danh mục' }}
+            {{ props.title }}
         </h2>
 
         <FloatingInput

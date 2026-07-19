@@ -18,8 +18,8 @@ const handleSort = () => {
     }
 
     emit('sort', {
-        sort_by: props.field,
-        sort_order: order
+        field: props.field,
+        order: order
     })
 }
 </script>

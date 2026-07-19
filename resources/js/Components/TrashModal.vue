@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { useConfirm } from '@/Composables/useConfirm'
 import { closeModal } from '@/Stores/modal'
@@ -11,7 +11,7 @@ const props = defineProps({
     id: [Number, String]
 })
 
-const emit = defineEmits(['updated'])
+const emit = defineEmits(['close', 'updated'])
 
 const items = ref([])
 const loading = ref(false)
@@ -61,6 +61,20 @@ const forceDelete = (id) => {
         }
     })
 }
+
+const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+        emit('close')
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', handleEsc)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleEsc)
+})
 </script>
 
 <template>
