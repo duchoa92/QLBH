@@ -46,6 +46,10 @@ class Product extends Model
         'allow_negative_stock' => 'boolean',
     ];
 
+    protected $attributes = [
+        'is_active' => true
+    ];
+
 
     /*
     |--------------------------------------------------------------------------

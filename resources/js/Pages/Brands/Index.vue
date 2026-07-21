@@ -5,11 +5,13 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import BrandForm from './Form.vue'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { FilePlus, Plus, SquarePen, Trash2 } from 'lucide-vue-next'
 import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 import BaseTable from '@/Components/UI/BaseTable.vue'
+import Tooltip from '@/Components/UI/Tooltip.vue'
+
 
 
 defineOptions({ layout: AdminLayout })
@@ -41,23 +43,7 @@ const columns = [
     }
 ]
 
-const selectedIds = ref([])
 
-const toggleOne = (id) => {
-    if (selectedIds.value.includes(id)) {
-        selectedIds.value = selectedIds.value.filter(i => i !== id)
-    } else {
-        selectedIds.value.push(id)
-    }
-}
-
-const toggleAll = () => {
-    if (selectedIds.value.length === props.brands.data.length) {
-        selectedIds.value = []
-    } else {
-        selectedIds.value = props.brands.data.map(i => i.id)
-    }
-}
 
 const confirmBox = useConfirm()
 
@@ -116,6 +102,7 @@ const openCreate = () => {
         props: {
             categories: props.categories,
             title: 'Thêm thương hiệu',
+            size: 'sm',
         },
         onUpdated: loadData
     })
@@ -127,6 +114,7 @@ const openEdit = (item) => {
             brand: item,
             categories: props.categories,
             title: 'Sửa thương hiệu',
+            size: 'sm',
         },
         onUpdated: loadData
     })
@@ -162,12 +150,18 @@ const loadingStatus = ref(null)
 const toggleStatus = (id) => {
     if (loadingStatus.value) return
     loadingStatus.value = id
+
+    // 👉 update UI trước
+    const item = props.brands.data.find(i => i.id === id)
+    if (item) item.is_active = !item.is_active
+
     router.patch(`/brands/${id}/toggle-status`, {}, {
         preserveScroll: true,
-        onFinish: () => loadingStatus.value = null
+        onFinish: () => {
+            loadingStatus.value = null
+        }
     })
 }
-
 
 // Sort
 
@@ -187,24 +181,27 @@ const sort = ({ field, order }) => {
 
 <template>
 <div>
-    <div class="flex justify-between mb-5">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
         <div>
-            <h1 class="text-2xl font-bold">Thương hiệu</h1>
-            <p class="text-gray-500">Quản lý các thương hiệu sản phẩm</p>
+            <h1 class="text-2xl font-bold">Thương Hiệu</h1>
+            <p class="text-sm text-gray-500">Quản lý thương hiệu của sản phẩm</p>
         </div>
+
         <div class="flex gap-2">
-            <button @click="openCreate" 
-                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
-                <Plus class="w-4 h-4" /> Thêm mới
+            <button @click="openCreate"
+                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <FilePlus /> Thêm
             </button>
+
             <button @click="openTrash"
-                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white transition">
-                <Trash2 class="w-4 h-4" />({{ trashCount }})
+                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white">
+                <Trash2 /> ({{ trashCount }})
             </button>
         </div>
     </div>
 
-    <div class="flex gap-3 mb-5">
+    <div class="flex gap-3 my-5">
         <FloatingInput name="search" v-model="search" label="Tìm kiếm..." class="w-64" />
         <FloatingSelect 
             name="category_id"
@@ -222,11 +219,6 @@ const sort = ({ field, order }) => {
             :columns="columns"
             :filters="filters"
             @sort="sort"
-
-            :selectedIds="selectedIds"
-            selectable
-            @toggleOne="toggleOne"
-            @toggleAll="toggleAll"
         >
             <template #row="{ row }">
 
@@ -241,21 +233,33 @@ const sort = ({ field, order }) => {
                 </td>
 
                 <td class="border-r p-2 text-center">
-                    <span
-                        class="px-2 py-1 rounded text-xs"
-                        :class="row.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200'"
+                    <button
+                        @click="toggleStatus(row.id)"
+                        :disabled="loadingStatus === row.id"
+                        class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                        :class="row.is_active ? 'bg-green-500 ' : 'bg-gray-300'"
                     >
-                        {{ row.is_active ? 'Hoạt động' : 'Tắt' }}
-                    </span>
+                        <span
+                            class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                            :class="row.is_active ? 'translate-x-6' : 'translate-x-1'"
+                        />
+                    </button>
                 </td>
 
                 <td class="text-center p-2">
-                    <button @click="openEdit(row)" class="mx-1 px-2 py-2 bg-blue-500 text-white rounded">
-                        Sửa
-                    </button>
-                    <button @click="destroy(row.id)" class="mx-1 px-2 py-2 bg-red-500 text-white rounded">
-                        Xóa
-                    </button>
+                    <div class="flex justify-center gap-1">
+                        <Tooltip text="Sửa">
+                            <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
+                                <SquarePen size="17" class="text-blue-500" />
+                            </button>
+                        </Tooltip>
+
+                        <Tooltip text="Chuyển vào thùng rác" position="top">
+                            <button @click="destroy(row.id)"  class="p-1 hover:bg-gray-200 rounded">
+                                <Trash2 size="17" class="text-red-500" />
+                            </button>
+                        </Tooltip>
+                    </div>
                 </td>
 
             </template>

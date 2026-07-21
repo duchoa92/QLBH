@@ -6,8 +6,10 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { ScanSearch } from 'lucide-vue-next'
 import { BrowserMultiFormatReader } from '@zxing/browser'
+import BaseModal from '@/Components/UI/BaseModal.vue'
 
 const props = defineProps({
+    title: String,
     product: Object,
     categories: Array,
     brands: Array
@@ -199,8 +201,9 @@ const submit = () => {
 
     const options = {
         onSuccess: () => {
+            form.reset()
+            form.clearErrors()
             emit('updated')
-            form.imeis = ''
             closeModal()
         }
     }
@@ -216,231 +219,235 @@ const submit = () => {
 </script>
 
 <template>
-<div class="flex bg-white">
+    <BaseModal :title="title" @close="closeModal()">
+        <div class="flex overflow-hidden">
+            <!-- LEFT -->
+            <div class="w-1/3 border-r p-4 flex flex-col items-center justify-center">
+                <label class="w-full h-[300px] border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer overflow-hidden">
 
-    <div class="bg-white w-[1100px] rounded-xl shadow-xl flex overflow-hidden">
-
-        <!-- LEFT: IMAGE -->
-        <div class="w-1/3 border-r p-4 flex flex-col items-center justify-center">
-
-            <label class="w-full h-[320px] border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer overflow-hidden">
-
-                <img
-                    v-if="preview"
-                    :src="preview"
-                    class="w-full h-full object-cover"
-                />
-
-                <span v-else class="text-gray-400">Thêm ảnh</span>
-
-                <input
-                    type="file"
-                    class="hidden"
-                    @change="handleImage"
-                />
-            </label>
-
-        </div>
-
-        <!-- RIGHT -->
-        <div class="flex-1 p-6 space-y-4 overflow-y-auto max-h-[90vh]">
-
-            <!-- FORM -->
-            <div class="grid grid-cols-2 gap-4">
-
-                <div class="col-span-2">
-                    <FloatingInput
-                        v-model="form.name"
-                        label="Tên hàng hóa"
-                    />
-                </div>
-
-                <FloatingSelect
-                    v-model="form.category_id"
-                    @update:modelValue="v => {
-                        form.category_id = v
-                        form.brand_id = null
-                    }"
-                    :options="categories"
-                    option-label="name"
-                    option-value="id"
-                    label="Danh mục"
-                />
-
-                <FloatingSelect
-                    v-model="form.brand_id"
-                    :options="brands"
-                    option-label="name"
-                    option-value="id"
-                    label="Thương hiệu"
-                />
-
-                <div class="col-span-2 grid grid-cols-2 gap-4">
-                    <FloatingInput
-                        v-model="form.sku"
-                        label="SKU"
+                    <img
+                        v-if="preview"
+                        :src="preview"
+                        class="w-full h-full object-cover"
                     />
 
-                    <div class="flex gap-2 items-end">
-                        <div class="flex-1">
-                            <FloatingInput
-                                v-model="form.barcode"
-                                label="Barcode"
-                            />
+                    <span v-else class="text-gray-400">Thêm ảnh</span>
+
+                    <input
+                        type="file"
+                        class="hidden"
+                        @change="handleImage"
+                    />
+                </label>
+            </div>
+
+            <!-- RIGHT -->
+            <div class="flex-1 p-4 space-y-4 overflow-y-auto max-h-[80vh]">
+
+                <!-- FORM -->
+                <div class="grid grid-cols-2 gap-4">
+
+                    <div class="col-span-2">
+                        <FloatingInput
+                            v-model="form.name"
+                            label="Tên hàng hóa"
+                            :error="form.errors.name"
+                        />
+                    </div>
+
+                    <FloatingSelect
+                        v-model="form.category_id"
+                        @update:modelValue="v => {
+                            form.category_id = v
+                            form.brand_id = null
+                        }"
+                        :options="categories"
+                        option-label="name"
+                        option-value="id"
+                        label="Danh mục"
+
+                        :error="form.errors.category_id"
+                    />
+
+                    <FloatingSelect
+                        v-model="form.brand_id"
+                        :options="brands"
+                        option-label="name"
+                        option-value="id"
+                        label="Thương hiệu"
+                        :error="form.errors.brand_id"
+                    />
+
+                    <div class="col-span-2 grid grid-cols-2 gap-4">
+                        <FloatingInput
+                            v-model="form.sku"
+                            label="SKU"
+                            :error="form.errors.sku"
+                        />
+
+                        <div class="flex gap-2 items-end">
+                            <div class="flex-1">
+                                <FloatingInput
+                                    v-model="form.barcode"
+                                    label="Barcode"
+                                    :error="form.errors.barcode"
+                                />
+                            </div>
+
+                            <button
+                                type="button"
+                                class="px-3 py-2 bg-gray-200 rounded text-sm hover:bg-gray-300"
+                                @click="generateBarcode"
+                            >
+                                Tạo
+                            </button>
                         </div>
 
-                        <button
-                            type="button"
-                            class="px-3 py-2 bg-gray-200 rounded text-sm hover:bg-gray-300"
-                            @click="generateBarcode"
-                        >
-                            Tạo
-                        </button>
+                    </div>
+
+                    <div class="col-span-2 grid grid-cols-3 gap-4">
+                        <FloatingInput
+                            v-model="form.cost_price"
+                            label="Giá vốn"
+                            type="number"
+                            :error="form.errors.cost_price"
+                        />
+
+                        <FloatingInput
+                            v-model="form.sell_price"
+                            label="Giá bán"
+                            type="number"
+                            :error="form.errors.sell_price"
+
+                        />
+
+                        <FloatingInput
+                            v-model="form.stock"
+                            label="Tồn kho"
+                            type="number"
+                            :error="form.errors.stock"
+                        />
+
+                    </div>
+
+                    <div class="col-span-2 space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="text-sm font-medium">IMEI</label>
+
+                            <button
+                                title="Quét"
+                                type="button"
+                                class="text-blue-600 text-sm"
+                                @click="toggleCamera"
+                            >
+                                <ScanSearch />
+                            </button>
+                        </div>
+
+                        <textarea
+                            ref="imeiInput"
+                            v-model="form.imeis"
+                            rows="5"
+                            @keyup.enter="() => {
+                                handleScan(form.imeis)
+                                form.imeis = ''
+                            }"
+                            class="w-full border rounded p-2 focus:ring focus:ring-blue-200"
+                            placeholder="Quét hoặc nhập IMEI..."
+                        />
+
+                        <div v-if="showCamera" class="border rounded p-2">
+                            <video ref="videoRef" class="w-full h-[200px] rounded" />
+                        </div>
+
                     </div>
 
                 </div>
 
-                <div class="col-span-2 grid grid-cols-3 gap-4">
-                    <FloatingInput
-                        v-model="form.cost_price"
-                        label="Giá vốn"
-                        type="number"
-                    />
+                <!-- ===================== -->
+                <!-- THUỘC TÍNH -->
+                <!-- ===================== -->
+                <div class="border-t pt-4">
 
-                    <FloatingInput
-                        v-model="form.sell_price"
-                        label="Giá bán"
-                        type="number"
-                    />
-
-                    <FloatingInput
-                        v-model="form.stock"
-                        label="Tồn kho"
-                        type="number"
-                    />
-
-                </div>
-
-                <div class="col-span-2 space-y-2">
                     <div class="flex justify-between items-center">
-                        <label class="text-sm font-medium">IMEI</label>
+                        <h3 class="font-semibold">Biến thể</h3>
 
                         <button
-                            title="Quét"
                             type="button"
-                            class="text-blue-600 text-sm"
-                            @click="toggleCamera"
+                            class="px-3 py-2 bg-gray-200 rounded text-sm"
+                            @click="addVariant"
                         >
-                            <ScanSearch />
+                            + Thêm biến thể
                         </button>
                     </div>
 
-                    <textarea
-                        ref="imeiInput"
-                        v-model="form.imeis"
-                        rows="5"
-                        @keyup.enter="() => {
-                            handleScan(form.imeis)
-                            form.imeis = ''
-                        }"
-                        class="w-full border rounded p-2 focus:ring focus:ring-blue-200"
-                        placeholder="Quét hoặc nhập IMEI..."
-                    />
-
-                    <div v-if="showCamera" class="border rounded p-2">
-                        <video ref="videoRef" class="w-full h-[200px] rounded" />
-                    </div>
-
-                </div>
-
-            </div>
-
-            <!-- ===================== -->
-            <!-- THUỘC TÍNH -->
-            <!-- ===================== -->
-            <div class="border-t pt-4">
-
-                <div class="flex justify-between items-center">
-                    <h3 class="font-semibold">Biến thể</h3>
-
-                    <button
-                        type="button"
-                        class="px-3 py-2 bg-gray-200 rounded text-sm"
-                        @click="addVariant"
+                    <div
+                        v-for="(v, i) in form.variants"
+                        :key="i"
+                        class="border rounded p-3 mt-3 space-y-3"
                     >
-                        + Thêm biến thể
-                    </button>
-                </div>
 
-                <div
-                    v-for="(v, i) in form.variants"
-                    :key="i"
-                    class="border rounded p-3 mt-3 space-y-3"
-                >
+                        <!-- THUỘC TÍNH -->
+                        <div class="grid grid-cols-3 gap-2">
+                            <FloatingInput v-model="v.color" label="Màu" />
+                            <FloatingInput v-model="v.storage" label="Bộ nhớ" />
+                            <FloatingInput v-model="v.version" label="Phiên bản" />
+                        </div>
 
-                    <!-- THUỘC TÍNH -->
-                    <div class="grid grid-cols-3 gap-2">
-                        <FloatingInput v-model="v.color" label="Màu" />
-                        <FloatingInput v-model="v.storage" label="Bộ nhớ" />
-                        <FloatingInput v-model="v.version" label="Phiên bản" />
+                        <!-- SKU + BARCODE -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <FloatingInput v-model="v.sku" label="SKU" />
+                            <FloatingInput v-model="v.barcode" label="Barcode" />
+                        </div>
+
+                        <!-- GIÁ + TỒN -->
+                        <div class="grid grid-cols-3 gap-2">
+                            <FloatingInput v-model="v.cost_price" label="Giá nhập" type="number"/>
+                            <FloatingInput v-model="v.sell_price" label="Giá bán" type="number"/>
+                            <FloatingInput v-model="v.stock" label="Tồn kho" type="number"/>
+                        </div>
+
+                        <!-- IMEI -->
+                        <textarea
+                            v-model="v.imeis"
+                            rows="3"
+                            class="w-full border rounded p-2"
+                            placeholder="IMEI riêng cho biến thể"
+                        />
+
+                        <button
+                            type="button"
+                            class="text-red-500 text-sm"
+                            @click="removeVariant(i)"
+                        >
+                            Xóa biến thể
+                        </button>
+
                     </div>
-
-                    <!-- SKU + BARCODE -->
-                    <div class="grid grid-cols-2 gap-2">
-                        <FloatingInput v-model="v.sku" label="SKU" />
-                        <FloatingInput v-model="v.barcode" label="Barcode" />
-                    </div>
-
-                    <!-- GIÁ + TỒN -->
-                    <div class="grid grid-cols-3 gap-2">
-                        <FloatingInput v-model="v.cost_price" label="Giá nhập" type="number"/>
-                        <FloatingInput v-model="v.sell_price" label="Giá bán" type="number"/>
-                        <FloatingInput v-model="v.stock" label="Tồn kho" type="number"/>
-                    </div>
-
-                    <!-- IMEI -->
-                    <textarea
-                        v-model="v.imeis"
-                        rows="3"
-                        class="w-full border rounded p-2"
-                        placeholder="IMEI riêng cho biến thể"
-                    />
-
-                    <button
-                        type="button"
-                        class="text-red-500 text-sm"
-                        @click="removeVariant(i)"
-                    >
-                        Xóa biến thể
-                    </button>
 
                 </div>
-
             </div>
 
-
-            
-
-            <!-- ACTION -->
-            <div class="flex justify-end gap-2 pt-4">
-                <button
-                    type="button"
-                    @click="closeModal()"
-                    class="btn-gray"
-                >
-                    Hủy
-                </button>
-                <button
-                    @click="submit"
-                    :disabled="form.processing"
-                    class="btn-green"
-                >
-                    {{ form.processing ? 'Đang lưu...' : 'Lưu' }}
-                </button>
-            </div>
         </div>
-    </div>
-</div>
+
+        <template #footer>
+        <div class="flex justify-end gap-2">
+            <button @click="closeModal()" class="px-4 py-2 bg-gray-200 rounded">
+                Hủy
+            </button>
+
+            <button 
+                @click="submit"
+                class="px-4 py-2 bg-green-600 text-white rounded"
+                :disabled="form.processing"
+            >
+                {{ form.processing ? 'Đang lưu...' : 'Lưu' }}
+            </button>
+        </div>
+    </template>
+
+    </BaseModal>
+
 </template>
 
 

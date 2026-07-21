@@ -65,6 +65,13 @@ class StoreProductRequest extends FormRequest
                 'nullable',
                 'string',
             ],
+
+            'barcode' => [
+                'nullable',
+                'string',
+                'max:100',
+                'unique:products,barcode'
+            ],
         ];
     }
 }

@@ -168,7 +168,12 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/products/print-data', [ProductController::class, 'printData']);
 
+    // Trạng thái SP
+    Route::patch('/products/{product}/toggle-status', [ProductController::class, 'toggleStatus']);
 
+    // nhập xuất Sản Phẩm
+    Route::post('/products/import', [ProductController::class, 'import'])->name('products.import');
+    Route::get('/products/export', [ProductController::class, 'export'])->name('products.export');
 
 
     /*

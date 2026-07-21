@@ -89,7 +89,7 @@ onBeforeUnmount(() => {
                 <h2 class="text-lg font-semibold flex items-center gap-2">
                     <Trash2 class="w-5 h-5 text-red-500" /> Thùng rác ({{ endpoint }})
                 </h2>
-                <button @click="closeModal(props.modalId)" class="text-gray-500 hover:text-black text-xl">✕</button>
+                <button @click="closeModal(props.modalId)" class="text-gray-500 hover:text-red-500 text-xl">✕</button>
             </div>
 
             <div class="p-4 flex-1 overflow-y-auto">
@@ -104,28 +104,28 @@ onBeforeUnmount(() => {
                 <table v-else class="w-full border border-gray-200 rounded-lg overflow-hidden text-sm">
                     <thead>
                         <tr class="bg-gray-100 text-left">
-                            <th class="p-3 border">ID</th>
-                            <th class="p-3 border">Tên</th>
-                            <th class="p-3 border text-center w-40">Hành động</th>
+                            <th class="p-2 border">ID</th>
+                            <th class="p-2 border">Tên</th>
+                            <th class="p-2 border text-center">Hành động</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="item in items" :key="item.id" class="hover:bg-gray-50">
-                            <td class="p-3 border">{{ item.id }}</td>
-                            <td class="p-3 border font-medium">
+                            <td class="p-2 border">{{ item.id }}</td>
+                            <td class="p-2 border font-medium">
                                 {{ item.name || item.title || '---' }}
                             </td>
-                            <td class="p-3 border text-center">
+                            <td class="p-2 border text-center">
                                 <div class="flex justify-center gap-2">
                                     <button
                                         @click="restore(item.id)"
-                                        class="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                                        class="px-2 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
                                     >
                                         Khôi phục
                                     </button>
                                     <button
                                         @click="forceDelete(item.id)"
-                                        class="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                                        class="px-2 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
                                     >
                                         Xóa
                                     </button>

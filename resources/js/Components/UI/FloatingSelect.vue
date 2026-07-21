@@ -84,22 +84,7 @@ const emit = defineEmits([
             {{ error }}
         </p>
 
-        <label
-            class="
-                absolute
-                left-3
-
-                bg-white
-                px-1
-
-                text-gray-500
-
-                transition-all
-
-                -top-2
-                text-xs
-            "
-        >
+        <label class="absolute left-3 bg-white px-1 text-gray-500 transition-all -top-2 text-xs">
             {{ label }}
         </label>
 

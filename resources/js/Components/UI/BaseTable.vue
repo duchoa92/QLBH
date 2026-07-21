@@ -35,14 +35,14 @@ const go = (url) => {
 <template>
 <div class="bg-white rounded-xl shadow border overflow-hidden">
     <div class="overflow-x-auto">
-        <table class="min-w-[600px] w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+        <table class="min-w-[500px] w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
 
             <!-- HEADER -->
             <thead>
                 <tr class="bg-gray-100 text-left uppercase">
 
                     <!-- checkbox -->
-                    <th v-if="selectable" class="w-10 text-center border-r p-2">
+                    <th v-if="selectable" class="text-center border-r p-1">
                         <input
                             type="checkbox"
                             :checked="isAllSelected"
@@ -54,7 +54,7 @@ const go = (url) => {
                     <th 
                         v-for="col in columns" 
                         :key="col.key"
-                        class="px-2 py-1 border-r text-left whitespace-nowrap"
+                        class="p-1 border-r text-left whitespace-nowrap"
                         :class="col.class"
                         :style="{ width: col.width }"
                     >
@@ -74,18 +74,18 @@ const go = (url) => {
 
                     </th>
 
-                    <th class="text-center px-2 py-1 w-[90px]">Tác vụ</th>
+                    <th class="text-center p-1">Tác vụ</th>
                 </tr>
             </thead>
 
             <!-- BODY -->
             <tbody>
-                <tr v-for="row in rows"
+                <tr v-for="row in data.data"
                     :key="row.id"
                     class="border-t hover:bg-gray-50 cursor-pointer"
                 >
                     <!-- checkbox -->
-                    <td v-if="selectable" class="px-2 py-1 border-r">
+                    <td v-if="selectable" class="text-center p-1 border-r">
                         <input
                             type="checkbox"
                             :checked="selectedIds.includes(row.id)"

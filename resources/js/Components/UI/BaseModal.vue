@@ -3,7 +3,11 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
-    title: String
+    title: String,
+    size: {
+        type: String,
+        default: 'lg' // sm | md | lg | xl
+    }
 })
 
 const emit = defineEmits(['close', 'updated'])
@@ -25,29 +29,39 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-<div class="fixed inset-0 flex items-center justify-center z-50">
+    <div class="fixed inset-0 z-50 flex items-center justify-center">
+        
+        <!-- overlay -->
+        <div 
+            class="absolute inset-0 bg-black/50"
+            @click="$emit('close')"
+        ></div>
 
-    <!-- overlay click -->
-    <div class="absolute inset-0 bg-black/40" @click="emit('close')"></div>
+        <!-- modal -->
+        <div class="relative bg-gray-100 rounded-xl shadow-xl w-full mx-4"
+            :class="{
+                'max-w-md': size === 'sm',
+                'max-w-xl': size === 'md',
+                'max-w-3xl': size === 'lg',
+                'max-w-5xl': size === 'xl'
+            }"
+        >
+            <!-- HEADER -->
+            <div class=" flex justify-between items-center p-3 border-b">
+                <h2 class="font-semibold text-lg">{{ title }}</h2>
+                <button @click="$emit('close')" class="hover:text-red-500">✕</button>
+            </div>
 
-    <div class="bg-white w-[500px] rounded-xl shadow-lg relative z-10 overflow-hidden">
+            <!-- BODY -->
+            <div class="bg-white max-h-[80vh] overflow-y-auto p-3">
+                <slot />
+            </div>
 
-        <!-- header -->
-        <div class="flex justify-between items-center px-5 py-3 border-b bg-gray-50">
-            <h2 class="font-semibold">{{ title }}</h2>
-            <button @click="emit('close')">✕</button>
+            <!-- FOOTER -->
+            <div v-if="$slots.footer" class="p-3 border-t">
+                <slot name="footer" />
+            </div>
+
         </div>
-
-        <!-- content -->
-        <div class="p-5">
-            <slot />
-        </div>
-
-        <!-- footer -->
-        <div class="px-5 py-3 border-t bg-gray-50">
-            <slot name="footer" />
-        </div>
-
     </div>
-</div>
 </template>

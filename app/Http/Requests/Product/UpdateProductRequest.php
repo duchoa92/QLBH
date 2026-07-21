@@ -51,9 +51,9 @@ class UpdateProductRequest extends FormRequest
                 )->ignore($this->product),
             ],
 
-            'imei' => [
+            'imeis' => [
                 'nullable',
-                'max:100',
+                'string'
             ],
 
             'cost_price' => [

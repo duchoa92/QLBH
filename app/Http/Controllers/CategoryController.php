@@ -17,16 +17,29 @@ class CategoryController extends Controller
             ->when($request->filled('search'), fn ($q) =>
                 $q->where('name', 'like', '%' . $request->search . '%')
             )
-            ->when($request->filled('status'), fn ($q) =>
+            ->when($request->filled('status') && $request->status !== '', fn ($q) =>
                 $q->where('is_active', $request->status)
             )
-            ->latest()
+
+            ->when($request->filled('sort_by'), function ($q) use ($request) {
+                $order = $request->get('sort_order', 'asc');
+
+                $q->orderBy($request->sort_by, $order);
+            }, function ($q) {
+                $q->latest();
+            })
+
             ->paginate(10)
             ->withQueryString();
 
         return Inertia::render('Categories/Index', [
             'categories' => $categories,
-            'filters' => $request->only('search', 'status'),
+            'filters' => $request->only(
+                'search',
+                'status',
+                'sort_by',
+                'sort_order'
+            ),
         ]);
     }
 

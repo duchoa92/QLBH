@@ -8,7 +8,11 @@ import { openModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
 import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { SquarePen, Plus, Trash2, FilePlus } from 'lucide-vue-next'
+import BaseTable from '@/Components/UI/BaseTable.vue'
+import Tooltip from '@/Components/UI/Tooltip.vue'
+import { size } from 'lodash'
+
 
 defineOptions({ layout: AdminLayout })
 
@@ -17,26 +21,56 @@ const props = defineProps({
     filters: Object
 })
 
+const columns = [
+    { key: 'id', label: 'ID', sortable: true, width: '60px' },
+
+    { key: 'name', label: 'Tên danh mục', sortable: true },
+
+    { 
+        key: 'is_active', 
+        label: 'Trạng thái', 
+        sortable: true,
+        width: '120px',
+        class: 'text-center'
+    }
+]
+
+
+
 const confirmBox = useConfirm()
 
-/* ================= FILTER (CHUẨN) ================= */
-const filters = ref({
-    search: props.filters?.search || '',
-    status: props.filters?.status || '',
+const search = ref(props.filters?.search || '')
+const status = ref(props.filters?.status || '')
+
+watch([search, status], () => {
+    router.get('/categories', {
+        search: search.value,
+        status: status.value,
+        sort_by: props.filters?.sort_by,
+        sort_order: props.filters?.sort_order
+    }, {
+        preserveState: true,
+        replace: true
+    })
 })
 
 let timeout = null
 
-watch(filters, (newFilters) => {
-    if (timeout) clearTimeout(timeout)
+watch([search, status], () => {
+    clearTimeout(timeout)
 
     timeout = setTimeout(() => {
-        router.get('/categories', newFilters, {
+        router.get('/categories', {
+            search: search.value,
+            status: status.value,
+            sort_by: props.filters?.sort_by,
+            sort_order: props.filters?.sort_order
+        }, {
             preserveState: true,
             replace: true
         })
     }, 300)
-}, { deep: true })
+})
 
 onBeforeUnmount(() => {
     if (timeout) clearTimeout(timeout)
@@ -51,13 +85,21 @@ const loadData = () => {
 /* ================= MODAL ================= */
 const openCreate = () => {
     openModal(CategoryForm, {
+        props: {
+            title: 'Thêm danh mục',
+            size: 'sm'
+        },
         onUpdated: loadData
     })
 }
 
 const openEdit = (item) => {
     openModal(CategoryForm, {
-        props: { category: item },
+        props: {
+            category: item,
+            title: 'Sửa danh mục',
+            size: 'sm',
+        },
         onUpdated: loadData
     })
 }
@@ -111,8 +153,24 @@ const toggleStatus = (id) => {
 
     loadingStatus.value = id
 
+    // 👉 update UI trước
+    const item = props.categories.data.find(i => i.id === id)
+    if (item) item.is_active = !item.is_active
+
     router.patch(`/categories/${id}/toggle-status`, {}, {
         onFinish: () => loadingStatus.value = null
+    })
+}
+
+const sort = ({ field, order }) => {
+    router.get('/categories', {
+        search: search.value,
+        status: status.value,
+        sort_by: field,
+        sort_order: order
+    }, {
+        preserveState: true,
+        replace: true
     })
 }
 </script>
@@ -121,31 +179,31 @@ const toggleStatus = (id) => {
 <div>
 
     <!-- HEADER -->
-    <div class="flex justify-between mb-5">
+    <div class="flex justify-between items-center">
         <div>
             <h1 class="text-2xl font-bold">Danh mục</h1>
-            <p class="text-gray-500">Quản lý danh mục sản phẩm</p>
+            <p class="text-sm text-gray-500">Quản lý các danh mục</p>
         </div>
 
         <div class="flex gap-2">
             <button @click="openCreate"
-                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
-                <Plus /> Thêm
+                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <FilePlus /> Thêm
             </button>
 
             <button @click="openTrash"
-                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white transition">
+                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white">
                 <Trash2 /> ({{ trashCount }})
             </button>
         </div>
     </div>
 
     <!-- FILTER -->
-    <div class="flex gap-3 mb-5">
-        <FloatingInput name="search" v-model="filters.search" label="Tìm kiếm..." class="w-64" />
+    <div class="flex gap-3 my-5">
+        <FloatingInput v-model="search" label="Tìm kiếm..." class="w-64" />
 
         <FloatingSelect
-            v-model="filters.status"
+            v-model="status"
             label="Trạng thái"
             :options="[
                 { value: '', label: 'Tất cả' },
@@ -158,57 +216,53 @@ const toggleStatus = (id) => {
 
     <!-- TABLE -->
     <div class="bg-white rounded-xl shadow border overflow-hidden">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-100">
-                <tr>
-                    <th class="p-2 w-16 text-center">ID</th>
-                    <th class="p-2">Tên danh mục</th>
-                    <th class="p-2 w-32 text-center">Trạng thái</th>
-                    <th class="p-2 w-40 text-center">Hành động</th>
-                </tr>
-            </thead>
+        <BaseTable
+            :data="categories"
+            :columns="columns"
+            :filters="filters"
+            @sort="sort"
+        >
+            <template #row="{ row }">
 
-            <tbody>
-                <tr v-for="item in categories.data" :key="item.id" class="hover:bg-gray-50">
-                    <td class="p-2 text-center">{{ item.id }}</td>
-                    <td class="p-2 font-medium">{{ item.name }}</td>
+                <td class="border-r p-2 text-center">{{ row.id }}</td>
 
-                    <td class="p-2 text-center">
-                        <button
-                            @click="toggleStatus(item.id)"
-                            :disabled="loadingStatus === item.id"
-                            class="relative inline-flex h-6 w-11 items-center rounded-full"
-                            :class="item.is_active ? 'bg-green-500' : 'bg-gray-300'"
-                        >
-                            <span
-                                class="inline-block h-4 w-4 transform rounded-full bg-white"
-                                :class="item.is_active ? 'translate-x-6' : 'translate-x-1'"
-                            />
-                        </button>
-                    </td>
+                <td class="border-r p-2 font-medium">
+                    {{ row.name }}
+                </td>
 
-                    <td class="p-2 text-center">
-                        <div class="flex gap-2 justify-center">
-                            <button @click="openEdit(item)"
-                                class="px-2 py-1 bg-blue-500 text-white rounded text-sm">
-                                Sửa
+                <td class="border-r p-2 text-center">
+                    <button
+                        @click="toggleStatus(row.id)"
+                        :disabled="loadingStatus === row.id"
+                        class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                        :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'"
+                    >
+                        <span
+                            class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                            :class="row.is_active ? 'translate-x-6' : 'translate-x-1'"
+                        />
+                    </button>
+                </td>
+
+                <td class="text-center p-2">
+                    <div class="flex justify-center gap-1">
+                        <Tooltip text="Sửa">
+                            <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
+                                <SquarePen size="17" class="text-blue-500" />
                             </button>
+                        </Tooltip>
 
-                            <button @click="destroy(item.id)"
-                                class="px-2 py-1 bg-red-500 text-white rounded text-sm">
-                                <Trash2 />
+                        <Tooltip text="Chuyển vào thùng rác" position="top">
+                            <button @click="destroy(row.id)"  class="p-1 hover:bg-gray-200 rounded">
+                                <Trash2 size="17" class="text-red-500" />
                             </button>
-                        </div>
-                    </td>
-                </tr>
+                        </Tooltip>
 
-                <tr v-if="categories.data.length === 0">
-                    <td colspan="4" class="text-center p-10 text-gray-500">
-                        Không có dữ liệu
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+                    </div>
+                </td>
+
+            </template>
+        </BaseTable>
     </div>
 
 </div>

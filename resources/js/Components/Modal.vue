@@ -34,7 +34,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKey))
             <!-- HEADER -->
             <div class="flex justify-between items-center p-4 border-b">
                 <h2 class="font-bold">{{ modalState.title }}</h2>
-                <button @click="closeModal">✕</button>
+                <button @click="closeModal" class="">✕</button>
             </div>
 
             <!-- BODY -->

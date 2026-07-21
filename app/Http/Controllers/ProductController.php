@@ -11,6 +11,10 @@ use App\Repositories\Product\ProductRepository;
 use App\Models\Brand;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\ProductsImport;
+use App\Exports\ProductsExport;
+
 
 class ProductController extends Controller
 {
@@ -64,9 +68,7 @@ class ProductController extends Controller
     {
         $this->service->create($request->validated());
 
-        return redirect()
-            ->route('products.index')
-            ->with('success', 'Thêm sản phẩm thành công');
+        return back()->with('success', 'Thêm sản phẩm thành công');
     }
 
     // Cập nhật sản phẩm
@@ -74,9 +76,15 @@ class ProductController extends Controller
     {
         $this->service->update($product, $request->validated());
 
-        return redirect()
-            ->route('products.index')
-            ->with('success', 'Cập nhật sản phẩm thành công');
+        return back()->with('success', 'Cập nhật sản phẩm thành công');
+    }
+
+    public function toggleStatus(Product $product)
+    {
+        $product->update([
+            'is_active' => !$product->is_active
+        ]);
+        return back()->with('success', 'Cập nhật trạng thái thành công');
     }
 
     // Chuyển vào thùng rác
@@ -250,5 +258,23 @@ class ProductController extends Controller
         return response()->json([
             'error' => 'Không tìm thấy'
         ], 404);
+
+
     }
+
+/*================ Nhập xuất file excel ================================ */
+    public function import(Request $request)
+    {
+        Excel::import(new ProductsImport, $request->file('file'));
+
+        return back()->with('success', 'Import thành công');
+    }
+
+    public function export()
+    {
+        return Excel::download(new ProductsExport, 'products.xlsx');
+    }
+
+
+
 }

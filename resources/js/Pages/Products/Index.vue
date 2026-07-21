@@ -1,14 +1,19 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { router } from '@inertiajs/vue3'
+import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
-import ProductFilter from './Components/ProductFilter.vue'
-import ProductTable from './Components/ProductTable.vue'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { ArrowDownUp, ArrowUpDown, FileDown, FileInput, FileOutput, FilePlus, Plus, Printer, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
+import BaseTable from '@/Components/UI/BaseTable.vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import Tooltip from '@/Components/UI/Tooltip.vue'
+import ImportExportModal from './ImportExportModal.vue'
 
+defineOptions({ layout: AdminLayout })
 const props = defineProps({
     products: Object,
     filters: Object,
@@ -18,45 +23,44 @@ const props = defineProps({
 
 const confirmBox = useConfirm()
 
-/* ================= FILTER ================= */
-const filters = ref({
-    search: props.filters?.search || '',
-    category_id: props.filters?.category_id || '',
-    brand_id: props.filters?.brand_id || '',
-    stock: props.filters?.stock || '',
-    status: props.filters?.status || '',
-    sort_by: props.filters?.sort_by || 'id',
-    sort_order: props.filters?.sort_order || 'desc',
-    per_page: props.filters?.per_page || 10
+const search = ref(props.filters?.search || '')
+const category_id = ref(props.filters?.category_id || '')
+const brand_id = ref(props.filters?.brand_id || '')
+
+let timeout = null
+
+watch([search, category_id, brand_id], () => {
+    clearTimeout(timeout)
+
+    timeout = setTimeout(() => {
+        router.get('/products', {
+            search: search.value,
+            category_id: category_id.value,
+            brand_id: brand_id.value,
+            sort_by: props.filters?.sort_by,
+            sort_order: props.filters?.sort_order
+        }, {
+            preserveState: true,
+            replace: true
+        })
+    }, 300)
 })
+
+onBeforeUnmount(() => {
+    if (timeout) clearTimeout(timeout)
+})
+
+const columns = [
+    { key: 'id', label: 'ID', sortable: true, width: '60px' },
+    { key: 'name', label: 'Tên hàng hóa', sortable: true },
+    { key: 'sell_price', label: 'Giá bán', sortable: true },
+    { key: 'stock', label: 'Tồn kho', sortable: true },
+    { key: 'is_active', label: 'Trạng thái', sortable: true, width: '120px' }
+]
 
 // Khai báo biến timeout phạm vi component
 let filterTimeout = null
 
-// Lắng nghe thay đổi bộ lọc với tính năng Debounce an toàn
-
-
-watch(filters, (newFilters) => {
-
-    if (filterTimeout) clearTimeout(filterTimeout)
-
-    selectedIds.value = []
-
-    filterTimeout = setTimeout(() => {
-
-        router.get(route('products.index'), {
-            ...newFilters,
-            page: 1
-        }, {
-            preserveState: true,
-            replace: true,
-            preserveScroll: true,
-            only: ['products', 'filters', 'brands', 'categories'],
-        })
-
-    }, 400)
-
-}, { deep: true })
 
 // Dọn dẹp bộ nhớ: Hủy bỏ hoàn toàn hành động chạy ngầm nếu chuyển trang giữa chừng
 onBeforeUnmount(() => {
@@ -67,12 +71,8 @@ onBeforeUnmount(() => {
 
 // Hàm loadData chuẩn hóa để cập nhật danh sách dựa trên chính bộ lọc hiện tại
 const loadData = () => {
-    router.get(route('products.index'), filters.value, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        only: ['products'],
-    })
+    router.reload({ only: ['products'] })
+    loadTrashCount()
 }
 
 /* ================= FORM ================= */
@@ -82,8 +82,9 @@ const editingProduct = ref(null)
 
 const openCreate = () => {
     openModal(Form, {
-        title: 'Thêm sản phẩm',
         props: {
+            title: 'Thêm sản phẩm',
+            size: 'xl',
             categories: props.categories,
             brands: props.brands
         },
@@ -94,13 +95,14 @@ const openCreate = () => {
     })
 }
 
-const openEdit = (product) => {
+const openEdit = (item) => {
     openModal(Form, {
-        title: 'Sửa sản phẩm',
         props: {
-            product,
+            title: 'Sửa sản phẩm',
+            size: 'xl',
+            product: item,
             categories: props.categories,
-            brands: props.brands
+            brands: props.brands,
         },
         onUpdated: () => {
             loadData()
@@ -151,12 +153,29 @@ const toggleOne = (id) => {
 }
 
 const toggleAll = () => {
-    const ids = props.products?.data?.map(p => p.id) || []
+    const ids = props.products?.data?.map(row => row.id) || []
     selectedIds.value = selectedIds.value.length === ids.length ? [] : ids
 }
 
+const loadingStatus = ref(null)
+
+const toggleStatus = (id) => {
+    if (loadingStatus.value) return
+
+    loadingStatus.value = id
+
+    const item = props.products.data.find(i => i.id === id)
+    if (item) item.is_active = !item.is_active
+
+    router.patch(`/products/${id}/toggle-status`, {}, {
+        onFinish: () => loadingStatus.value = null
+    })
+}
+
 /* ================= DELETE ================= */
-const deleteOne = (id) => {
+
+
+const destroy = (id) => {
     confirmBox.show({
         title: 'Xác nhận',
         message: 'Chuyển sản phẩm vào thùng rác?',
@@ -211,6 +230,30 @@ const printImei = () => {
 const handleSort = (sort) => {
     Object.assign(filters.value, sort)
 }
+
+const sort = ({ field, order }) => {
+    router.get('/products', {
+        search: search.value,
+        category_id: category_id.value,
+        brand_id: brand_id.value,
+        sort_by: field,
+        sort_order: order
+    }, {
+        preserveState: true,
+        replace: true
+    })
+}
+
+// nhập xuất file
+const openImportExport = () => {
+    openModal(ImportExportModal, {
+        props: {
+            endpoint: 'products'
+        },
+        onUpdated: loadData
+    })
+}
+
 </script>
 
 <template>
@@ -219,14 +262,20 @@ const handleSort = (sort) => {
     <!-- HEADER -->
     <div class="flex justify-between items-center">
         <div>
-            <h1 class="text-2xl font-bold">Hàng hóa</h1>
-            <p class="text-sm text-gray-500">Quản lý hàng hóa</p>
+            <h1 class="text-2xl font-bold">Sản phẩm</h1>
+            <p class="text-sm text-gray-500">Quản lý các sản phẩm</p>
         </div>
 
         <div class="flex gap-2">
             <button @click="openCreate"
                 class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
-                <Plus /> Thêm
+                <FilePlus /> Thêm
+            </button>
+
+            <button 
+                @click="openImportExport"
+                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
+                Nhập <ArrowUpDown /> Xuất
             </button>
 
             <button @click="openTrash"
@@ -236,32 +285,137 @@ const handleSort = (sort) => {
         </div>
     </div>
 
-    <!-- FILTER -->
-    <ProductFilter
-        :filters="filters"
-        :categories="categories"
-        :brands="brands"
-        :selectedCount="selectedIds.length"
-        @update:filters="v => Object.assign(filters.value, v)"
-        @delete="bulkDelete"
-        @print="printImei"
-    />
+   <!-- FILTER -->
+    <div class="flex gap-3 my-5">
 
-    <!-- TABLE -->
-    <ProductTable
-        :products="products"
-        :selectedIds="selectedIds"
+        <!-- SEARCH -->
+        <FloatingInput
+            v-model="search"
+            label="Tìm sản phẩm..."
+            class="w-64"
+        />
+
+        <!-- CATEGORY -->
+        <FloatingSelect
+            v-model="category_id"
+            label="Danh mục"
+            :options="[
+                { id: '', name: 'Tất cả' },
+                ...categories
+            ]"
+            option-label="name"
+            option-value="id"
+            class="w-64"
+        />
+
+        <!-- BRAND -->
+        <FloatingSelect
+            v-model="brand_id"
+            label="Thương hiệu"
+            :options="[
+                { id: '', name: 'Tất cả' },
+                ...brands.filter(b => !category_id || b.category_id == category_id)
+            ]"
+            option-label="name"
+            option-value="id"
+            class="w-64"
+        />
+
+    </div>
+
+    <!-- BULK ACTION -->
+    <div 
+        v-if="selectedIds.length"
+        class="flex items-center gap-3 bg-blue-50 border rounded p-2 mb-3"
+    >
+
+        <span class="text-sm text-gray-600">
+            Đã chọn <b>{{ selectedIds.length }}</b> sản phẩm
+        </span>
+
+        <button
+            @click="printImei"
+            class="flex items-center gap-1 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded"
+        >
+            In IMEI
+        </button>
+
+        <button
+            @click="bulkDelete"
+            class="flex items-center gap-1 text-red-600 hover:bg-red-100 px-2 py-1 rounded"
+        >
+            Xóa
+        </button>
+
+    </div>
+
+    <BaseTable
+        :data="products"
+        :columns="columns"
         :filters="filters"
+        @sort="sort"
+        :selectedIds="selectedIds"
+        selectable
         @toggleOne="toggleOne"
         @toggleAll="toggleAll"
-        @open="openEdit"
-        @sort="handleSort"
-        @delete="deleteOne"
-        @print="printOne"
-    />
+    >
+        <template #row="{ row }">
 
+            <td class="border-r p-2 text-center">{{ row.id }}</td>
 
-  
+            <td class="border-r p-2 flex items-center gap-2">
+                <img :src="row.image_url" class="w-8 h-8 rounded"/>
+                {{ row.name }}
+            </td>
+
+            <td class="border-r p-2 text-right">
+                {{ row.sell_price }}
+            </td>
+
+            <td class="border-r p-2 text-center">
+                {{ row.stock }}
+            </td>
+
+            <!-- STATUS -->
+            <td class="border-r p-2 text-center">
+                <button
+                    @click.stop="toggleStatus(row.id)"
+                    :disabled="loadingStatus === row.id"
+                    class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                    :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'"
+                >
+                    <span
+                        class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                        :class="row.is_active ? 'translate-x-6' : 'translate-x-1'"
+                    />
+                </button>
+            </td>
+
+            <!-- ACTION -->
+            <td class="text-center p-1">
+                <div class="flex">
+                    <Tooltip text="In tem" position="top">
+                        <button @click="printOne(row.id)"  class="p-1 hover:bg-gray-200 rounded">
+                            <Printer size="17" class="text-gray-500 " />
+                        </button>
+                    </Tooltip>
+
+                    <Tooltip text="Sửa">
+                        <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
+                            <SquarePen size="17" class="text-blue-500" />
+                        </button>
+                    </Tooltip>
+
+                    <Tooltip text="Chuyển vào thùng rác" position="top">
+                        <button @click="destroy(row.id)"  class="p-1 hover:bg-gray-200 rounded">
+                            <Trash2 size="17" class="text-red-500" />
+                        </button>
+                    </Tooltip>
+                </div>
+            </td>
+
+        </template>
+    </BaseTable>
 
 </div>
 </template>
