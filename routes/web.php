@@ -86,94 +86,88 @@ Route::middleware(['auth'])->group(function () {
 
     
 
-    /*
-    |--------------------------------------------------------------------------
-    | Products
-    |--------------------------------------------------------------------------
-    */
+  /*
+|--------------------------------------------------------------------------
+| Products
+|--------------------------------------------------------------------------
+*/
 
-    Route::get(
-        '/products',
-        [ProductController::class, 'index']
-    )
-        ->middleware('permission:products.view')
-        ->name('products.index');
+Route::prefix('products')
+    ->name('products.')
+    ->middleware('auth')
+    ->group(function () {
 
-    Route::get(
-        '/products/create',
-        [ProductController::class, 'create']
-    )
-        ->middleware('permission:products.create')
-        ->name('products.create');
+        /* ===== STATIC ROUTES (PHẢI ĐẶT TRÊN) ===== */
 
-    Route::post(
-        '/products',
-        [ProductController::class, 'store']
-    )
-        ->middleware('permission:products.create')
-        ->name('products.store');
-
-    Route::get(
-        '/products/{product}/edit',
-        [ProductController::class, 'edit']
-    )
-        ->middleware('permission:products.edit')
-        ->name('products.edit');
-    // Cập nhật sản phẩm
-    Route::put(
-        '/products/{product}',
-        [ProductController::class, 'update']
-    )
-        ->middleware('permission:products.edit')
-        ->name('products.update');
+        // import export
+        Route::get('/template', [ProductController::class, 'template'])->name('template');
+        Route::post('/import', [ProductController::class, 'import'])->name('import');
+        Route::post('/validate', [ProductController::class, 'previewImport'])->name('validate');
+        Route::get('/export-data', [ProductController::class, 'exportData'])->name('exportData');
         
-    // Chuyển vào thùng rác
-    Route::delete('/products/{product}',[ProductController::class, 'destroy'])
-        ->middleware('permission:products.delete')
-        ->name('products.destroy');
+        // trash
+        Route::get('/trash', [ProductController::class, 'trash'])
+            ->middleware('permission:products.view')
+            ->name('trash');
 
-    // Hiển thị sản phẩm trong thùng rác
-    Route::get('/products/trash', [ProductController::class, 'trash'])
-        ->middleware('permission:products.view')
-        ->name('products.trash');
+        // bulk
+        Route::post('/bulk-delete', [ProductController::class, 'bulkDelete'])->name('bulkDelete');
+        Route::post('/bulk-restore', [ProductController::class, 'bulkRestore'])->name('bulkRestore');
+        Route::post('/bulk-force-delete', [ProductController::class, 'bulkForceDelete'])->name('bulkForceDelete');
 
-    // Chuyển nhiều sản phẩm vào thùng rác
-    Route::post('/products/bulk-delete', [ProductController::class, 'bulkDelete'])
-    ->name('products.bulkDelete');
-    // Khôi phục sản phẩm
-    Route::post('/products/{id}/restore', [ProductController::class, 'restore'])
-        ->middleware('permission:products.edit')
-        ->name('products.restore');
-    // Xóa hẳn sản phẩm
-    Route::delete('/products/{id}/force', [ProductController::class, 'forceDelete'])
-        ->name('products.forceDelete');
-    // Khôi phục nhiều sản phẩm
-    Route::post('/products/bulk-restore', [ProductController::class, 'bulkRestore'])
-        ->name('products.bulkRestore');
-    // Xóa Nhiều
-    Route::post('/products/bulk-force-delete', [ProductController::class, 'bulkForceDelete'])
-        ->name('products.bulkForceDelete');
-    
-    // Hiển thị chi tiết sản phẩm
-    Route::get(
-        '/products/{product}',
-        [ProductController::class, 'show']
-    )
-        ->middleware('permission:products.view')
-        ->name('products.show');
+        // print
+        Route::post('/print-imei', [ProductController::class, 'printImei'])->name('printImei');
+        Route::post('/print-data', [ProductController::class, 'printData'])->name('printData');
 
-    // In tem sp
-    Route::post('/products/print-imei', [ProductController::class, 'printImei'])
-    ->name('products.printImei');
+        /* ===== CRUD ===== */
 
-    Route::post('/products/print-data', [ProductController::class, 'printData']);
+        Route::get('/', [ProductController::class, 'index'])
+            ->middleware('permission:products.view')
+            ->name('index');
 
-    // Trạng thái SP
-    Route::patch('/products/{product}/toggle-status', [ProductController::class, 'toggleStatus']);
+        Route::get('/create', [ProductController::class, 'create'])
+            ->middleware('permission:products.create')
+            ->name('create');
 
-    // nhập xuất Sản Phẩm
-    Route::post('/products/import', [ProductController::class, 'import'])->name('products.import');
-    Route::get('/products/export', [ProductController::class, 'export'])->name('products.export');
+        Route::post('/', [ProductController::class, 'store'])
+            ->middleware('permission:products.create')
+            ->name('store');
+
+        /* ===== DYNAMIC ROUTES (ĐẶT CUỐI) ===== */
+
+        Route::get('/{product}', [ProductController::class, 'show'])
+            ->whereNumber('product')
+            ->middleware('permission:products.view')
+            ->name('show');
+
+        Route::get('/{product}/edit', [ProductController::class, 'edit'])
+            ->middleware('permission:products.edit')
+            ->name('edit');
+
+        Route::put('/{product}', [ProductController::class, 'update'])
+            ->middleware('permission:products.edit')
+            ->name('update');
+
+        Route::delete('/{product}', [ProductController::class, 'destroy'])
+            ->middleware('permission:products.delete')
+            ->name('destroy');
+
+        // restore / force
+        Route::post('/{id}/restore', [ProductController::class, 'restore'])
+            ->middleware('permission:products.edit')
+            ->name('restore');
+
+        Route::delete('/{id}/force', [ProductController::class, 'forceDelete'])
+            ->name('forceDelete');
+
+        // toggle
+        Route::patch('/{product}/toggle-status', [ProductController::class, 'toggleStatus'])
+            ->name('toggleStatus');
+
+        
+
+    });
+
 
 
     /*
@@ -429,6 +423,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/scan', [ProductController::class, 'scan']);
 
 });
+
 
 
 

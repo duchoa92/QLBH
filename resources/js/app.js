@@ -10,7 +10,7 @@ import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
 import ModalRoot from '@/Components/ModalRoot.vue'
-
+import { Ziggy } from './ziggy'
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -161,7 +161,7 @@ createInertiaApp({
 
         app.use(plugin)
 
-        app.use(ZiggyVue)
+        app.use(ZiggyVue, Ziggy)
 
             
         app.mount(el)

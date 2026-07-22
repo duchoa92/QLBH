@@ -2,20 +2,16 @@
 
 namespace App\Exports;
 
-use App\Models\Product;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
-class ProductsExport implements FromCollection
+class ProductsExport implements WithMultipleSheets
 {
-    public function collection()
+    public function sheets(): array
     {
-        return Product::select(
-            'name',
-            'sku',
-            'barcode',
-            'cost_price',
-            'sell_price',
-            'stock'
-        )->get();
+        return [
+            new \App\Exports\ProductsSheet(),
+            new \App\Exports\CategorySheet(),
+            new \App\Exports\BrandSheet(),
+        ];
     }
 }

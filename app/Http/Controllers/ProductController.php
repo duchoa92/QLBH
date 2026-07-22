@@ -14,6 +14,7 @@ use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\ProductsImport;
 use App\Exports\ProductsExport;
+use App\Exports\ProductsExportReal;
 
 
 class ProductController extends Controller
@@ -263,16 +264,67 @@ class ProductController extends Controller
     }
 
 /*================ Nhập xuất file excel ================================ */
-    public function import(Request $request)
+   public function import(Request $request)
     {
         Excel::import(new ProductsImport, $request->file('file'));
 
         return back()->with('success', 'Import thành công');
     }
 
-    public function export()
+
+    public function exportData()
     {
-        return Excel::download(new ProductsExport, 'products.xlsx');
+        return Excel::download(new ProductsExportReal, 'products_data.xlsx');
+    }
+
+    public function template()
+    {
+        return Excel::download(new ProductsExport, 'product_file_mau.xlsx');
+    }
+
+
+    public function previewImport(Request $request)
+    {
+        $rows = Excel::toArray([], $request->file('file'))[0];
+
+        $errors = [];
+        $valid = [];
+
+        foreach ($rows as $index => $row) {
+
+            if ($index === 0) continue;
+
+            $name = $row[0] ?? null;
+            $sku = $row[1] ?? null;
+            $price = $row[2] ?? null;
+
+            if (!$name) {
+                $errors[] = [
+                    'row' => $index + 1,
+                    'error' => 'Thiếu tên'
+                ];
+                continue;
+            }
+
+            if (!is_numeric($price)) {
+                $errors[] = [
+                    'row' => $index + 1,
+                    'error' => 'Giá sai'
+                ];
+                continue;
+            }
+
+            $valid[] = [
+                'name' => $name,
+                'sku' => $sku,
+                'price' => $price,
+            ];
+        }
+
+        return response()->json([
+            'valid' => $valid,
+            'errors' => $errors
+        ]);
     }
 
 
