@@ -99,12 +99,19 @@ Route::prefix('products')
 
         /* ===== STATIC ROUTES (PHẢI ĐẶT TRÊN) ===== */
 
-        // import export
+        // import
         Route::get('/template', [ProductController::class, 'template'])->name('template');
         Route::post('/import', [ProductController::class, 'import'])->name('import');
         Route::post('/validate', [ProductController::class, 'previewImport'])->name('validate');
-        Route::get('/export-data', [ProductController::class, 'exportData'])->name('exportData');
-        
+       
+
+        // Export
+        Route::post('/export-start', [ProductController::class, 'startExport'])->name('export.start');
+        Route::get('/export-check/{id}', [ProductController::class, 'checkExport'])->name('export.check');
+        Route::get('/export-download/{id}', [ProductController::class, 'downloadExport'])->name('export.download');
+        Route::post('/export-errors', [ProductController::class, 'exportErrors'])->name('export.errors');
+
+
         // trash
         Route::get('/trash', [ProductController::class, 'trash'])
             ->middleware('permission:products.view')

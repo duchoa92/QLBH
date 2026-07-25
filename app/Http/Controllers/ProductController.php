@@ -12,9 +12,14 @@ use App\Models\Brand;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
-use App\Imports\ProductsImport;
-use App\Exports\ProductsExport;
-use App\Exports\ProductsExportReal;
+use App\Exports\ProductsTemplateExport;
+use App\Exports\ProductsDataExport;
+use App\Services\ProductImportService;
+use Illuminate\Support\Facades\Storage;
+use App\Jobs\ExportProductsJob;
+use Illuminate\Support\Str;
+use App\Exports\ImportErrorExport;
+
 
 
 class ProductController extends Controller
@@ -264,22 +269,35 @@ class ProductController extends Controller
     }
 
 /*================ Nhập xuất file excel ================================ */
-   public function import(Request $request)
+   public function import(Request $request, ProductImportService $service)
     {
-        Excel::import(new ProductsImport, $request->file('file'));
+        $rows = Excel::toArray([], $request->file('file'))[0];
 
-        return back()->with('success', 'Import thành công');
+        $allowDuplicate = $request->get('force', false);
+
+        $images = [];
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                $images[strtolower($file->getClientOriginalName())] = $file;
+            }
+        }
+
+        $result = $service->handle($rows, $allowDuplicate, $images);
+
+        return response()->json([
+            'count' => $result['count'] ?? 0,
+            'errors' => $result['errors'] ?? [],
+            'error_count' => $result['error_count'] ?? 0,
+        ]);
+
     }
 
 
-    public function exportData()
-    {
-        return Excel::download(new ProductsExportReal, 'products_data.xlsx');
-    }
 
     public function template()
     {
-        return Excel::download(new ProductsExport, 'product_file_mau.xlsx');
+        return Excel::download(new ProductsTemplateExport, 'file_mau_products.xlsx');
     }
 
 
@@ -287,46 +305,159 @@ class ProductController extends Controller
     {
         $rows = Excel::toArray([], $request->file('file'))[0];
 
-        $errors = [];
         $valid = [];
+
+        
 
         foreach ($rows as $index => $row) {
 
             if ($index === 0) continue;
 
-            $name = $row[0] ?? null;
-            $sku = $row[1] ?? null;
-            $price = $row[2] ?? null;
+            $name         = trim($row[1] ?? '');
+            $sku          = trim($row[2] ?? '');
+            $barcode      = trim($row[3] ?? '');
+            $categoryName = trim($row[4] ?? '');
+            $brandName    = trim($row[5] ?? '');
+            $sellPrice    = $row[6] ?? null;
+            $costPrice    = $row[7] ?? 0;
+            $stock        = $row[8] ?? 0;
+            $type         = $row[9] ?? 'normal';
+            $active       = $row[10] ?? 1;
+            $imageName = strtolower(trim($row[11] ?? ''));
 
+
+            $rowNumber = $index + 1;
+
+            $status = 'OK';
+            $isError = false;
+
+            // VALIDATE
             if (!$name) {
-                $errors[] = [
-                    'row' => $index + 1,
-                    'error' => 'Thiếu tên'
-                ];
-                continue;
+                $status = 'Thiếu tên';
+                $isError = true;
+            }
+            elseif (!$sku) {
+                $status = 'Thiếu SKU';
+                $isError = true;
+            }
+            elseif (!is_numeric($sellPrice)) {
+                $status = 'Sai giá';
+                $isError = true;
+            }
+            elseif (!in_array($type, ['normal','imei','service','combo'])) {
+                $status = 'Sai loại';
+                $isError = true;
+            }
+            elseif ($sku && Product::where('sku', $sku)->exists()) {
+                $status = 'Trùng SKU';
+                $isError = true;
             }
 
-            if (!is_numeric($price)) {
-                $errors[] = [
-                    'row' => $index + 1,
-                    'error' => 'Giá sai'
-                ];
-                continue;
+            /* CHECK ẢNH */
+            if (!$isError && $imageName) {
+
+                $imageFiles = [];
+
+                if ($request->hasFile('images')) {
+                    foreach ($request->file('images') as $file) {
+                        $imageFiles[strtolower($file->getClientOriginalName())] = true;
+                    }
+                }
+
+                if (!isset($imageFiles[$imageName])) {
+                    $status = 'Thiếu ảnh';
+                    $isError = true;
+                }
             }
 
             $valid[] = [
+                'row' => $rowNumber,
                 'name' => $name,
                 'sku' => $sku,
-                'price' => $price,
+                'barcode' => $barcode,
+                'category' => $categoryName,
+                'brand' => $brandName,
+                'sell_price' => $sellPrice,
+                'status' => $status,
+                'is_error' => $isError
             ];
         }
 
         return response()->json([
             'valid' => $valid,
-            'errors' => $errors
+            'error_count' => collect($valid)->where('is_error', true)->count()
         ]);
     }
 
+
+    
+    public function startExport()
+    {
+        try {
+
+            $export = \App\Models\ExportHistory::create([
+                'type' => 'products'
+            ]);
+
+            \App\Jobs\ExportProductsJob::dispatch($export->id);
+
+            return response()->json([
+                'id' => $export->id
+            ]);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function checkExport($id)
+    {
+        $export = \App\Models\ExportHistory::findOrFail($id);
+
+        return response()->json([
+            'progress' => $export->progress,
+            'status' => $export->status,
+            'file' => $export->file
+        ]);
+    }
+
+    // Tải file trích xuất
+    public function downloadExport($id)
+    {
+        $export = \App\Models\ExportHistory::findOrFail($id);
+
+        if (!$export->file) {
+            return response()->json([
+                'error' => 'Chưa có file'
+            ], 404);
+        }
+
+        if (!Storage::disk('local')->exists($export->file)) {
+            return response()->json([
+                'error' => 'File không tồn tại: ' . $export->file
+            ], 404);
+        }
+
+        return Storage::disk('local')->download($export->file);
+    }
+
+    // Tải file lỗi
+    public function exportErrors(Request $request)
+    {
+        $errors = $request->input('errors', []);
+
+        if (!$errors || !count($errors)) {
+            return response()->json(['error' => 'Không có lỗi'], 400);
+        }
+
+        return Excel::download(
+            new ImportErrorExport($errors),
+            'loi_import.xlsx'
+        );
+    }
 
 
 }

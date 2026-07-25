@@ -1,72 +1,86 @@
 <?php
 
-namespace App\Imports;
-
+use Maatwebsite\Excel\Concerns\ToCollection;
+use Illuminate\Support\Collection;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
-use App\Models\ProductImei;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Maatwebsite\Excel\Concerns\ToCollection;
 
 class ProductsImport implements ToCollection
 {
-    public function collection(Collection $rows)
+    public function collection(Collection $sheets)
     {
-        foreach ($rows->skip(1) as $row) {
+        $products = $sheets[0];
+        $categories = $sheets[1];
+        $brands = $sheets[2];
 
-            $name = trim($row[0] ?? '');
-            $sku = trim($row[1] ?? '');
-            $price = $row[2] ?? 0;
-            $stock = $row[3] ?? 0;
-            $categoryName = trim($row[4] ?? '');
-            $brandName = trim($row[5] ?? '');
-            $imeis = $row[6] ?? null;
+        /* ========= CATEGORY ========= */
+        foreach ($categories->skip(1) as $row) {
+
+            $name = trim($row[0]);
+            $parentName = trim($row[1]);
 
             if (!$name) continue;
 
-            /* ================= CATEGORY ================= */
-            $category = Category::firstOrCreate([
-                'name' => $categoryName ?: 'Khác'
-            ]);
+            $parent = Category::where('name', $parentName)->first();
 
-            /* ================= BRAND ================= */
-            $brand = Brand::firstOrCreate([
-                'name' => $brandName ?: 'No Brand',
-                'category_id' => $category->id
-            ]);
-
-            /* ================= PRODUCT ================= */
-            $product = Product::updateOrCreate(
-                ['sku' => $sku ?: Str::slug($name)],
+            Category::updateOrCreate(
+                ['name' => $name],
                 [
-                    'name' => $name,
-                    'price' => $price,
-                    'stock' => $stock,
-                    'category_id' => $category->id,
-                    'brand_id' => $brand->id,
+                    'slug' => Str::slug($name),
+                    'parent_id' => $parent?->id,
+                    'is_active' => $row[2] ?? 1,
                 ]
             );
+        }
 
-            /* ================= IMEI ================= */
-            if ($imeis) {
+        /* ========= BRAND ========= */
+        foreach ($brands->skip(1) as $row) {
 
-                $imeiList = explode(',', $imeis);
+            $name = trim($row[0]);
+            $categoryName = trim($row[1]);
 
-                foreach ($imeiList as $imei) {
+            if (!$name) continue;
 
-                    $imei = trim($imei);
+            $category = Category::where('name', $categoryName)->first();
 
-                    if (!$imei) continue;
+            Brand::updateOrCreate(
+                ['name' => $name],
+                [
+                    'slug' => Str::slug($name),
+                    'category_id' => $category?->id,
+                    'is_active' => $row[2] ?? 1,
+                ]
+            );
+        }
 
-                    ProductImei::firstOrCreate([
-                        'imei' => $imei
-                    ], [
-                        'product_id' => $product->id
-                    ]);
-                }
-            }
+        /* ========= PRODUCT ========= */
+        foreach ($products->skip(1) as $row) {
+
+            $name = trim($row[0]);
+            $sku = trim($row[1]);
+
+            if (!$name || !$sku) continue;
+
+            $category = Category::where('name', trim($row[7]))->first();
+            $brand = Brand::where('name', trim($row[8]))->first();
+
+            Product::withTrashed()->updateOrCreate(
+                ['sku' => $sku],
+                [
+                    'name' => $name,
+                    'slug' => Str::slug($name) . '-' . uniqid(),
+                    'barcode' => $row[2] ?? null,
+                    'product_type' => $row[3] ?? 'normal',
+                    'cost_price' => $row[4] ?? 0,
+                    'sell_price' => $row[5] ?? 0,
+                    'stock' => $row[6] ?? 0,
+                    'category_id' => $category?->id,
+                    'brand_id' => $brand?->id,
+                    'is_active' => $row[9] ?? 1,
+                ]
+            );
         }
     }
 }
