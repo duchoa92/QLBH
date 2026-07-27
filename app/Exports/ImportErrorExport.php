@@ -29,6 +29,7 @@ class ImportErrorExport implements FromArray, WithHeadings
                 $e['stock'] ?? '',
                 $e['type'] ?? '',
                 $e['active'] ?? '',
+                $e['image'] ?? '',
                 $e['error'] ?? '',
             ];
         })->toArray();
@@ -47,6 +48,7 @@ class ImportErrorExport implements FromArray, WithHeadings
             'Tồn kho',
             'Loại',
             'Kích hoạt',
+            'Ảnh',
             'Lỗi'
         ];
     }

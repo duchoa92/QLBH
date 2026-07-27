@@ -41,7 +41,8 @@ class ProductsDataExport implements
             'Giá vốn',
             'Tồn kho',
             'Loại',
-            'Kích hoạt'
+            'Kích hoạt',
+            'Ảnh'
         ];
     }
 
@@ -76,6 +77,7 @@ class ProductsDataExport implements
             $p->stock,
             $p->product_type,
             $p->is_active ? 1 : 0,
+            $p->image,
         ];
     }
 }

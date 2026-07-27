@@ -20,7 +20,8 @@ class ProductsTemplateSheet implements WithHeadings, WithTitle
             'Giá vốn',
             'Tồn kho',
             'Loại sản phẩm',
-            'Trạng thái'
+            'Trạng thái',
+            'Ảnh'
         ];
     }
 

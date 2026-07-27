@@ -279,7 +279,10 @@ class ProductController extends Controller
 
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $file) {
-                $images[strtolower($file->getClientOriginalName())] = $file;
+
+                $key = strtolower(trim(str_replace(' ', '', $file->getClientOriginalName())));
+
+                $images[$key] = $file;
             }
         }
 
@@ -323,7 +326,7 @@ class ProductController extends Controller
             $stock        = $row[8] ?? 0;
             $type         = $row[9] ?? 'normal';
             $active       = $row[10] ?? 1;
-            $imageName = strtolower(trim($row[11] ?? ''));
+            $imageName = strtolower(trim(str_replace(' ', '', $row[11] ?? '')));
 
 
             $rowNumber = $index + 1;
@@ -331,7 +334,8 @@ class ProductController extends Controller
             $status = 'OK';
             $isError = false;
 
-            // VALIDATE
+            /* VALIDATE */
+
             if (!$name) {
                 $status = 'Thiếu tên';
                 $isError = true;
@@ -353,20 +357,37 @@ class ProductController extends Controller
                 $isError = true;
             }
 
-            /* CHECK ẢNH */
+            /* 👉 CHECK ẢNH */
             if (!$isError && $imageName) {
 
                 $imageFiles = [];
 
                 if ($request->hasFile('images')) {
                     foreach ($request->file('images') as $file) {
-                        $imageFiles[strtolower($file->getClientOriginalName())] = true;
+                        $name = strtolower(trim(str_replace(' ', '', $file->getClientOriginalName())));
+                        $imageFiles[$name] = true;
                     }
                 }
 
                 if (!isset($imageFiles[$imageName])) {
-                    $status = 'Thiếu ảnh';
-                    $isError = true;
+
+                    // thử match gần đúng (không cần giống 100%)
+                    foreach ($imageFiles as $key => $val) {
+
+                        // ví dụ:
+                        // excel: a08.jpg
+                        // upload: samsung-a08.jpg
+                        if (str_contains($key, pathinfo($imageName, PATHINFO_FILENAME))) {
+                            $imageName = $key;
+                            break;
+                        }
+                    }
+
+                    //  vẫn không có → báo lỗi
+                    if (!isset($imageFiles[$imageName])) {
+                        $status = 'Thiếu ảnh';
+                        $isError = true;
+                    }
                 }
             }
 
@@ -378,6 +399,7 @@ class ProductController extends Controller
                 'category' => $categoryName,
                 'brand' => $brandName,
                 'sell_price' => $sellPrice,
+                'image_name' => $imageName,
                 'status' => $status,
                 'is_error' => $isError
             ];

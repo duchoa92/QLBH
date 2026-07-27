@@ -93,3 +93,22 @@ input.no-spinner {
 html {
     overflow-y: scroll;
 }
+
+/* Custom Scrollbar nhỏ gọn */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 5px; /* Độ dày thanh cuộn ngang */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
