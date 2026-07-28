@@ -19,6 +19,7 @@ class ImportErrorExport implements FromArray, WithHeadings
         return collect($this->errors)->map(function ($e) {
 
             return [
+                $e['row'] ?? '',
                 $e['name'] ?? '',
                 $e['sku'] ?? '',
                 $e['barcode'] ?? '',
@@ -29,7 +30,7 @@ class ImportErrorExport implements FromArray, WithHeadings
                 $e['stock'] ?? '',
                 $e['type'] ?? '',
                 $e['active'] ?? '',
-                $e['image'] ?? '',
+                $e['image_name'] ?? '',
                 $e['error'] ?? '',
             ];
         })->toArray();
@@ -38,6 +39,7 @@ class ImportErrorExport implements FromArray, WithHeadings
     public function headings(): array
     {
         return [
+            'STT',
             'Tên sản phẩm',
             'SKU',
             'Barcode',

@@ -280,7 +280,9 @@ class ProductController extends Controller
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $file) {
 
-                $key = strtolower(trim(str_replace(' ', '', $file->getClientOriginalName())));
+                $key = strtolower(
+                    preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
+                );
 
                 $images[$key] = $file;
             }
@@ -310,31 +312,38 @@ class ProductController extends Controller
 
         $valid = [];
 
-        
+        // LẤY HEADER (QUAN TRỌNG)
+        $header = array_map(fn($h) => strtolower(trim($h)), $rows[0]);
 
         foreach ($rows as $index => $row) {
 
             if ($index === 0) continue;
 
-            $name         = trim($row[1] ?? '');
-            $sku          = trim($row[2] ?? '');
-            $barcode      = trim($row[3] ?? '');
-            $categoryName = trim($row[4] ?? '');
-            $brandName    = trim($row[5] ?? '');
-            $sellPrice    = $row[6] ?? null;
-            $costPrice    = $row[7] ?? 0;
-            $stock        = $row[8] ?? 0;
-            $type         = $row[9] ?? 'normal';
-            $active       = $row[10] ?? 1;
-            $imageName = strtolower(trim(str_replace(' ', '', $row[11] ?? '')));
+            //  map theo header (KHÔNG DÙNG index nữa)
+            $data = array_combine($header, $row);
 
+            $name         = trim($data['tên sản phẩm'] ?? '');
+            $sku          = trim($data['sku'] ?? '');
+            $barcode      = trim($data['barcode'] ?? '');
+            $categoryName = trim($data['danh mục'] ?? '');
+            $brandName    = trim($data['thương hiệu'] ?? '');
+            $sellPrice    = $data['giá bán'] ?? null;
+            $costPrice    = $data['giá vốn'] ?? 0;
+            $stock        = $data['tồn kho'] ?? 0;
+            $type         = $data['loại sản phẩm'] ?? 'normal';
+            $active       = $data['kích hoạt'] ?? 1;
+            
+            $rawImageName = trim($row[11] ?? '');
 
+            $imageName = strtolower(
+                preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
+            );
             $rowNumber = $index + 1;
 
             $status = 'OK';
             $isError = false;
 
-            /* VALIDATE */
+            /* ===== VALIDATE ===== */
 
             if (!$name) {
                 $status = 'Thiếu tên';
@@ -345,7 +354,7 @@ class ProductController extends Controller
                 $isError = true;
             }
             elseif (!is_numeric($sellPrice)) {
-                $status = 'Sai giá';
+                $status = 'Thiếu giá';
                 $isError = true;
             }
             elseif (!in_array($type, ['normal','imei','service','combo'])) {
@@ -357,37 +366,39 @@ class ProductController extends Controller
                 $isError = true;
             }
 
-            /* 👉 CHECK ẢNH */
-            if (!$isError && $imageName) {
-
+            /* ===== CHECK ẢNH ===== */
+            if (!$isError && $rawImageName) {
                 $imageFiles = [];
 
                 if ($request->hasFile('images')) {
                     foreach ($request->file('images') as $file) {
-                        $name = strtolower(trim(str_replace(' ', '', $file->getClientOriginalName())));
-                        $imageFiles[$name] = true;
+
+                        $fileName = strtolower(
+                            preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
+                        );
+
+                        $imageFiles[$fileName] = $file->getClientOriginalName();
                     }
                 }
 
-                if (!isset($imageFiles[$imageName])) {
+                $found = false;
 
-                    // thử match gần đúng (không cần giống 100%)
-                    foreach ($imageFiles as $key => $val) {
+                foreach ($imageFiles as $key => $originalName) {
 
-                        // ví dụ:
-                        // excel: a08.jpg
-                        // upload: samsung-a08.jpg
-                        if (str_contains($key, pathinfo($imageName, PATHINFO_FILENAME))) {
-                            $imageName = $key;
-                            break;
-                        }
+                    // match gần đúng
+                    if (
+                        str_contains($key, $imageName) ||
+                        str_contains($imageName, $key)
+                    ) {
+                        $imageName = $originalName; // trả về đúng tên file upload
+                        $found = true;
+                        break;
                     }
+                }
 
-                    //  vẫn không có → báo lỗi
-                    if (!isset($imageFiles[$imageName])) {
-                        $status = 'Thiếu ảnh';
-                        $isError = true;
-                    }
+                if (!$found) {
+                    $status = 'Thiếu ảnh';
+                    $isError = true;
                 }
             }
 
@@ -399,7 +410,7 @@ class ProductController extends Controller
                 'category' => $categoryName,
                 'brand' => $brandName,
                 'sell_price' => $sellPrice,
-                'image_name' => $imageName,
+                'image_name' => $rawImageName,
                 'status' => $status,
                 'is_error' => $isError
             ];

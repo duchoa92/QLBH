@@ -17,12 +17,17 @@ class ProductImportService
         $success = 0;
 
         DB::beginTransaction();
+            
+        $skuList = [];
+        $imageFiles = [];
 
         try {
+
 
             foreach ($rows as $index => $row) {
 
                 if ($index === 0) continue;
+                if (empty(array_filter($row))) continue;
 
                 $name         = trim($row[1] ?? '');
                 $sku          = trim($row[2] ?? '');
@@ -34,9 +39,15 @@ class ProductImportService
                 $stock        = $row[8] ?? 0;
                 $type         = $row[9] ?? 'normal';
                 $active       = $row[10] ?? 1;
-                $imageName = strtolower(trim(str_replace(' ', '', $row[11] ?? '')));
+                $rawImageName = trim($row[11] ?? '');
+
+                $imageName = strtolower(
+                    preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
+                );
 
                 $rowNumber = $index + 1;
+
+
 
                 /* ========= VALIDATE ========= */
 
@@ -94,6 +105,30 @@ class ProductImportService
                     continue;
                 }
 
+                /* ========= CHECK TRÙNG SKU TRONG FILE ========= */
+
+                if (in_array($sku, $skuList)) {
+                    $errors[] = [
+                        'row' => $rowNumber,
+                        'name' => $name,
+                        'sku' => $sku,
+                        'barcode' => $barcode,
+                        'category' => $categoryName,
+                        'brand' => $brandName,
+                        'sell_price' => $sellPrice,
+                        'cost_price' => $costPrice,
+                        'stock' => $stock,
+                        'type' => $type,
+                        'active' => $active,
+                        'image_name' => $rawImageName, // 🔥 FIX
+                        'error' => 'Trùng SKU trong file'
+                    ];
+                    continue;
+                }
+
+                $skuList[] = $sku;
+
+
                 /* ========= CATEGORY ========= */
 
                 $category = null;
@@ -140,6 +175,7 @@ class ProductImportService
                 // 👉 FIX TRÙNG SLUG
                 while (Product::where('slug', $slug)->exists()) {
                     $slug = $baseSlug . '-' . $count++;
+
                 }
 
 
@@ -159,6 +195,7 @@ class ProductImportService
                         'stock' => $stock,
                         'type' => $type,
                         'active' => $active,
+                        'image_name' => $rawImageName,
                         'error' => 'Trùng SKU'
                     ];
 
@@ -170,31 +207,56 @@ class ProductImportService
                     $sku = $sku . '-' . time();
                 }
 
+
+                foreach ($images as $file) {
+                    $key = strtolower(
+                        preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
+                    );
+
+                    $imageFiles[$key] = $file;
+                }
+
                 $imagePath = null;
 
                 if ($imageName) {
 
-                    if (isset($images[$imageName])) {
+                    $found = false;
 
-                        // 👉 lưu theo SKU (chuẩn)
-                        $ext = $images[$imageName]->getClientOriginalExtension();
+                    foreach ($imageFiles as $key => $file) {
 
-                        $imagePath = $images[$imageName]
-                            ->storeAs(
+                        if (
+                            str_contains($key, $imageName) ||
+                            str_contains($imageName, $key)
+                        ) {
+                            $ext = $file->getClientOriginalExtension();
+
+                            $imagePath = $file->storeAs(
                                 'products',
                                 $sku . '_' . time() . '.' . $ext,
                                 'public'
                             );
 
-                    } else {
+                            $found = true;
+                            break;
+                        }
+                    }
 
+                    if (!$found) {
                         $errors[] = [
                             'row' => $rowNumber,
                             'name' => $name,
                             'sku' => $sku,
-                            'error' => 'Không tìm thấy ảnh: ' . $imageName
+                            'barcode' => $barcode,
+                            'category' => $categoryName,
+                            'brand' => $brandName,
+                            'sell_price' => $sellPrice,
+                            'cost_price' => $costPrice,
+                            'stock' => $stock,
+                            'type' => $type,
+                            'active' => $active,
+                            'image_name' => $rawImageName, // 🔥 FIX QUAN TRỌNG
+                            'error' => 'Không tìm thấy ảnh'
                         ];
-
                         continue;
                     }
                 }

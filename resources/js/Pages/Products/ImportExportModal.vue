@@ -3,18 +3,19 @@ import { ref, computed } from 'vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { closeModal } from '@/Stores/modal'
 import axios from 'axios'
-import { ArrowDownToLine, Check, CheckCheck, Download, FileDown, FileSpreadsheet, Image, Lightbulb, Sheet, SkipForward, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
-import Tooltip from '@/Components/UI/Tooltip.vue'
+import { ArrowDownToLine, Check, CheckCheck, Download, FileDown, FileSpreadsheet, Folder, Image, Lightbulb, Sheet, SkipForward, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
+import JSZip from 'jszip'
 
 
 
 const file = ref(null)
 const images = ref([])
 const previewData = ref([])
-const loading = ref(false)
 const step = ref('upload') // upload | preview
-
+const checking = ref(false) 
 const exporting = ref(false)
+const isSkipping = ref(false)
 const progress = ref(0)
 let interval = null
 
@@ -27,7 +28,7 @@ const showReport = ref(false)
 
 const importSkip = async () => {
 
-    loading.value = true
+    isSkipping.value = true
 
     const form = new FormData()
     form.append('file', file.value)
@@ -35,17 +36,20 @@ const importSkip = async () => {
     images.value.forEach(img => {
     form.append('images[]', img.file)
 })
+    try {
+        const res = await axios.post(route('products.import'), form)
 
-    const res = await axios.post(route('products.import'), form)
+        report.value = res.data
+        showReport.value = true
 
-    report.value = res.data
-    showReport.value = true
+        duplicateModal.value = false
 
-    duplicateModal.value = false
-
-    loading.value = false
+    } catch (e) {
+        console.error(e)
+    } finally {
+        isSkipping.value = false
+    }
 }
-
 
 /* ================= FILE ================= */
 const handleFile = (e) => {
@@ -60,43 +64,94 @@ const handleFile = (e) => {
     ]
 
     if (!allowed.includes(f.type)) {
-        alert('❌ Chỉ được chọn file Excel!')
+        toast.error('❌ Chỉ được chọn file Excel!')
         e.target.value = ''
         return
     }
 
     file.value = f
+    
+    // reset input để lần sau chọn lại vẫn trigger
+    e.target.value = null
 }
 
-const handleImages = (e) => {
-
+const handleImages = async (e) => {
     const files = Array.from(e.target.files)
+    if (!files.length) return
 
+    // 1. Nếu là 1 file ZIP đơn lẻ
+    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
+        try {
+            const zip = await JSZip.loadAsync(files[0])
+            const extracted = []
+
+            for (const fileName in zip.files) {
+                const zipEntry = zip.files[fileName]
+                // Bỏ qua folder và file ẩn, chỉ lấy file ảnh
+                if (!zipEntry.dir && fileName.match(/\.(jpg|jpeg|png|webp)$/i)) {
+                    const blob = await zipEntry.async('blob')
+                    const imgFile = new File([blob], fileName.split('/').pop(), {
+                        type: blob.type || 'image/jpeg'
+                    })
+
+                    extracted.push({
+                        file: imgFile,
+                        preview: URL.createObjectURL(blob)
+                    })
+                }
+            }
+
+            images.value = [...images.value, ...extracted]
+        } catch (err) {
+            toast.error('❌ File ZIP không hợp lệ hoặc bị lỗi!')
+        }
+        e.target.value = '' // Reset input
+        return
+    }
+
+    // 2. Nếu là chọn File lẻ hoặc chọn Thư mục (Folder)
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+    
     const validImages = files
-        .filter(f => f.type.startsWith('image/'))
+        .filter(f => {
+            const ext = f.name.split('.').pop().toLowerCase()
+            return f.type.startsWith('image/') || imageExtensions.includes(ext)
+        })
         .map(f => ({
             file: f,
             preview: URL.createObjectURL(f)
         }))
 
-    images.value = validImages
+    // Nối thêm vào danh sách ảnh hiện có (tránh đè mất ảnh cũ)
+    images.value = [...images.value, ...validImages]
+
+    // Reset input để có thể chọn lại cùng file/folder lần sau
+    e.target.value = ''
+}
+
+const normalize = (str) => {
+    return str
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '') // 🔥 giống backend
 }
 
 const findImage = (name) => {
     if (!name) return null
 
-    name = name.toLowerCase().replaceAll(' ', '')
+    const normalize = (str) =>
+        str.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+    const target = normalize(name)
 
     const img = images.value.find(i =>
-        i.file.name.toLowerCase().replaceAll(' ', '') === name
+        normalize(i.file.name) === target
     )
 
     return img ? img.preview : null
 }
-
 /* ================= PREVIEW ================= */
 const previewFile = async () => {
-    if (!file.value) return alert('Chọn file')
+    if (!file.value) return toast.error('Chọn file')
 
     const form = new FormData()
     form.append('file', file.value)
@@ -106,7 +161,7 @@ const previewFile = async () => {
         form.append('images[]', img.file)
     })
 
-    loading.value = true
+    checking.value = true   // bật loading
 
     try {
         const res = await axios.post('/products/validate', form)
@@ -114,10 +169,10 @@ const previewFile = async () => {
         previewData.value = res.data.valid
         step.value = 'preview'
 
-        // 👉 lấy dòng lỗi từ preview (chuẩn nhất)
+        // lấy dòng lỗi từ preview (chuẩn nhất)
         const errorRows = previewData.value.filter(i => i.is_error)
 
-        // 👉 set data dùng chung
+        // set data dùng chung
         duplicateData.value = {
             error_count: errorRows.length,
             duplicate: errorRows.length, // để template dùng
@@ -127,10 +182,10 @@ const previewFile = async () => {
       
 
     } catch (e) {
-        alert('File lỗi')
+        toast.error('File lỗi')
     }
 
-    loading.value = false
+    checking.value = false  // loading
 }
 
 
@@ -143,10 +198,10 @@ const previewContainer = ref(null)
 
 // Xử lý chuyển hướng lăn chuột dọc thành cuộn ngang
 const handleWheel = (e) => {
-  if (previewContainer.value) {
-    // e.deltaY là độ lăn chuột dọc, gán vào scrollLeft để cuộn ngang
-    previewContainer.value.scrollLeft += e.deltaY
-  }
+    if (!previewContainer.value) return
+
+    e.preventDefault()
+    previewContainer.value.scrollLeft += e.deltaY * 0.7
 }
 
 /* ================= IMPORT ================= */
@@ -182,6 +237,14 @@ const totalSize = computed(() => {
     const total = images.value.reduce((sum, img) => sum + img.file.size, 0)
     return (total / 1024 / 1024).toFixed(2)
 })
+
+const clearImages = () => {
+    images.value.forEach(img => {
+        URL.revokeObjectURL(img.preview)
+    })
+    images.value = []
+}
+
 /* ================= EXPORT ================= */
 
 const exportFile = async () => {
@@ -247,7 +310,7 @@ const downloadTemplate = () => {
 
 <template>
     <BaseModal title="Nhập / Xuất sản phẩm" @close="closeModal()">
-        <div class="p-3">
+        <div class="p-2">
             <!-- STEP 1 -->
             <div v-if="step === 'upload'" class="space-y-4">
 
@@ -298,7 +361,7 @@ const downloadTemplate = () => {
                     </div>
 
                     <!-- RIGHT NOTE -->
-                     <div class="col-span-5 bg-green-50 rounded-xl p-3 text-sm">
+                     <div class="col-span-5 bg-green-50 rounded-xl px-2 py-2.5 text-sm">
                         <div class="flex items-center font-semibold text-green-700 mb-2"><Check class="flex mr-2" /> Yêu cầu file Excel</div>
                         <ul class="list-disc ml-4 text-gray-600 space-y-1 text-xs">
                             <li>Đúng định dạng file mẫu</li>
@@ -317,26 +380,50 @@ const downloadTemplate = () => {
                         @dragover.prevent
                         @drop.prevent="handleDropImages"
                     >
-                        <div
-                            class="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-purple-400 rounded-xl p-3 bg-white hover:bg-purple-50 transition cursor-pointer"
-                            @click="$refs.imageInput.click()"
-                        >
+                        <div class="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-purple-400 rounded-xl p-3 bg-white hover:bg-purple-50 transition">
                             <div class="mb-1"><SquareMousePointer/></div>
 
                             <div class="font-medium text-center">
-                                Kéo & thả hoặc 
-                                <span class="text-purple-600 font-semibold">Chọn ảnh</span>
+                                Kéo & thả ảnh / Zip / Folder vào đây
                             </div>
 
-                            <div class="text-xs text-gray-500">
-                                jpg, png, webp... (nhiều file)
+                            <div class="flex gap-2">
+                                <button 
+                                    type="button"
+                                    @click="$refs.imageFileInput.click()" 
+                                    class="flex items-center justify-center gap-1 p-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium rounded-lg transition"
+                                >
+                                    <Image /> Chọn File / Zip
+                                </button>
+
+                                <button 
+                                    type="button"
+                                    @click="$refs.imageFolderInput.click()" 
+                                    class="flex items-center justify-center gap-1 p-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium rounded-lg transition"
+                                >
+                                    <Folder /> Chọn Thư mục
+                                </button>
+                            </div>
+
+                            <div class="text-[11px] text-gray-400 mt-1">
+                                Hỗ trợ jpg, png, webp,... zip hoặc Folder ảnh
                             </div>
 
                             <input
-                                ref="imageInput"
+                                ref="imageFileInput"
                                 type="file"
                                 multiple
-                                accept="image/*"
+                                accept="image/*,.zip"
+                                class="hidden"
+                                @change="handleImages"
+                            />
+
+                            <input
+                                ref="imageFolderInput"
+                                type="file"
+                                multiple
+                                webkitdirectory
+                                directory
                                 class="hidden"
                                 @change="handleImages"
                             />
@@ -346,35 +433,39 @@ const downloadTemplate = () => {
                             <div 
                                 ref="previewContainer"
                                 @wheel.prevent="handleWheel"
-                                class="flex gap-2 overflow-x-auto custom-scrollbar py-1 px-1"
+                                class="w-full max-w-full overflow-x-auto overflow-y-hidden"
                             >
-                                <div
-                                    v-for="(img, i) in images"
-                                    :key="i"
-                                    class="relative group w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border bg-white shadow-sm"
-                                >
-                                    <img
-                                        :src="img.preview"
-                                        class="w-full h-full object-cover transition group-hover:scale-110"
-                                    />
+                                <div class="flex gap-2 w-max py-1 px-1">
 
-                                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                                        <button
-                                            @click.stop="removeImage(i)"
-                                            class="bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow"
-                                            title="Xóa ảnh này"
-                                        >
-                                            ✕
-                                        </button>
+                                    <div
+                                        v-for="(img, i) in images"
+                                        :key="i"
+                                        class="relative group w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border bg-white shadow-sm"
+                                    >
+                                        <img
+                                            :src="img.preview"
+                                            class="w-full h-full object-cover transition group-hover:scale-110"
+                                        />
+
+                                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                            <button
+                                                @click.stop="removeImage(i)"
+                                                class="bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow"
+                                                title="Xóa ảnh này"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
                                     </div>
+                                    
                                 </div>
                             </div>
 
                             <div class="text-xs text-gray-500 flex justify-between items-center pt-1">
                                 <span>Đã chọn <strong class="text-purple-700">{{ images.length }}</strong> ảnh ({{ totalSize }} MB)</span>
 
-                                <button 
-                                    @click="images = []"
+                                <button
+                                    @click="clearImages"
                                     class="text-red-500 hover:text-red-700 hover:underline font-medium"
                                 >
                                     Xóa tất cả
@@ -385,19 +476,19 @@ const downloadTemplate = () => {
 
                     </div>
 
-                    <div class="col-span-5 bg-purple-50 rounded-xl p-3 text-sm">
+                    <div class="col-span-5 bg-purple-50 rounded-xl px-2 py-2.5 text-sm">
                         <div class="flex items-center font-semibold text-purple-700 mb-2"><Lightbulb class="w-4 h-4 mr-2" />Lưu ý</div>
                         <ul class="list-disc ml-4 text-gray-600 space-y-1 text-xs">
                             <li>Tên ảnh trùng cột "ảnh"</li>
                             <li>Không dấu</li>
-                            <li>Tối đa 10MB/ảnh</li>
+                            <li>Có thể chọn folder hoặc file zip</li>
                         </ul>
                     </div>
 
                 </div>
 
                 <!-- ACTION -->
-                <div class="flex justify-between items-center border-t pt-4">
+                <div class="flex justify-between items-center border-t pt-3">
 
                     <button
                         @click="downloadTemplate"
@@ -457,21 +548,50 @@ const downloadTemplate = () => {
 
                         <button
                             @click="previewFile"
-                            class="flex text-center gap-1 p-2 border rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                            :disabled="checking"
+                            class="flex items-center justify-center gap-2 px-4 py-2 border rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            <Check /> Kiểm tra file
+
+                            <!-- Spinner -->
+                            <svg
+                                v-if="checking"
+                                class="w-4 h-4 animate-spin"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    class="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    stroke-width="4"
+                                    fill="none"
+                                />
+                                <path
+                                    class="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v4l3-3-3-3v4a12 12 0 00-12 12h4z"
+                                />
+                            </svg>
+
+                            <!-- Text -->
+                            <span class="flex gap-1">
+                                <template v-if="checking">
+                                    Đang kiểm tra...
+                                </template>
+                                <template v-else>
+                                    <Check /> Kiểm tra file
+                                </template>
+                            </span>
+
                         </button>
-
                     </div>
-
                 </div>
-
             </div>
             
 
             <!-- STEP 2 -->
             <div v-if="step === 'preview'" class="space-y-4">
-
 
                 <!-- PREVIEW -->
                 <div class="max-h-[300px] overflow-auto border">
@@ -524,9 +644,39 @@ const downloadTemplate = () => {
                     <div class="flex gap-2 mt-3">
                         <button
                             @click="importSkip"
-                            class="flex items-center gap-1 px-3 py-2 bg-blue-500 text-white rounded"
+                            :disabled="isSkipping"
+                            class="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded disabled:opacity-60"
                         >
-                            <SkipForward /> Bỏ qua {{ previewData.filter(i => i.is_error).length }} sản phẩm lỗi
+                            <!-- Spinner -->
+                            <svg
+                                v-if="isSkipping"
+                                class="w-4 h-4 animate-spin"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    class="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    stroke-width="4"
+                                    fill="none"
+                                />
+                                <path
+                                    class="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v4l3-3-3-3v4a12 12 0 00-12 12h4z"
+                                />
+                            </svg>
+
+                            <!-- Text -->
+                            <template v-if="isSkipping">
+                                Đang import...
+                            </template>
+                            <template v-else>
+                                <SkipForward />
+                                Bỏ qua {{ previewData.filter(i => i.is_error).length }} sản phẩm lỗi
+                            </template>
                         </button>
 
                         <button

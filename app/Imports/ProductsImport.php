@@ -56,29 +56,38 @@ class ProductsImport implements ToCollection
         }
 
         /* ========= PRODUCT ========= */
+        $header = $products->first()->map(fn($h) => strtolower(trim($h)))->toArray();
+
         foreach ($products->skip(1) as $row) {
 
-            $name = trim($row[0]);
-            $sku = trim($row[1]);
+            $data = array_combine($header, $row->toArray());
+
+            $name = trim($data['name'] ?? '');
+            $sku  = trim($data['sku'] ?? '');
 
             if (!$name || !$sku) continue;
 
-            $category = Category::where('name', trim($row[7]))->first();
-            $brand = Brand::where('name', trim($row[8]))->first();
+            // ✅ dùng header hết
+            $category = Category::where('name', trim($data['category'] ?? ''))->first();
+            $brand    = Brand::where('name', trim($data['brand'] ?? ''))->first();
 
             Product::withTrashed()->updateOrCreate(
                 ['sku' => $sku],
                 [
                     'name' => $name,
                     'slug' => Str::slug($name) . '-' . uniqid(),
-                    'barcode' => $row[2] ?? null,
-                    'product_type' => $row[3] ?? 'normal',
-                    'cost_price' => $row[4] ?? 0,
-                    'sell_price' => $row[5] ?? 0,
-                    'stock' => $row[6] ?? 0,
+
+                    'barcode'      => $data['barcode'] ?? null,
+                    'product_type' => $data['product_type'] ?? 'normal',
+                    'cost_price'   => $data['cost_price'] ?? 0,
+                    'sell_price'   => $data['sell_price'] ?? 0,
+                    'stock'        => $data['stock'] ?? 0,
+
                     'category_id' => $category?->id,
-                    'brand_id' => $brand?->id,
-                    'is_active' => $row[9] ?? 1,
+                    'brand_id'    => $brand?->id,
+
+                    'is_active'  => $data['is_active'] ?? 1,
+                    'image_name' => $data['image'] ?? null,
                 ]
             );
         }

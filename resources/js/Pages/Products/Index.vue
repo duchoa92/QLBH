@@ -227,9 +227,6 @@ const printImei = () => {
 }
 
 /* ================= SORT ================= */
-const handleSort = (sort) => {
-    Object.assign(filters.value, sort)
-}
 
 const sort = ({ field, order }) => {
     router.get('/products', {
