@@ -17,8 +17,6 @@ class ProductsTemplateSheet implements WithHeadings, WithTitle
             'Danh mục',
             'Thương hiệu',
             'Giá bán',
-            'Giá vốn',
-            'Tồn kho',
             'Loại sản phẩm',
             'Trạng thái',
             'Ảnh'

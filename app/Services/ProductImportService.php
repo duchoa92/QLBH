@@ -22,7 +22,14 @@ class ProductImportService
         $imageFiles = [];
 
         try {
+             
+            foreach ($images as $file) {
+                $key = strtolower(
+                    preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
+                );
 
+                $imageFiles[$key] = $file;
+            }
 
             foreach ($rows as $index => $row) {
 
@@ -35,11 +42,9 @@ class ProductImportService
                 $categoryName = trim($row[4] ?? '');
                 $brandName    = trim($row[5] ?? '');
                 $sellPrice    = $row[6] ?? 0;
-                $costPrice    = $row[7] ?? 0;
-                $stock        = $row[8] ?? 0;
-                $type         = $row[9] ?? 'normal';
-                $active       = $row[10] ?? 1;
-                $rawImageName = trim($row[11] ?? '');
+                $type         = $row[7] ?? 'normal';
+                $active       = $row[8] ?? 1;
+                $rawImageName = trim($row[9] ?? '');
 
                 $imageName = strtolower(
                     preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
@@ -60,8 +65,6 @@ class ProductImportService
                         'category' => $categoryName,
                         'brand' => $brandName,
                         'sell_price' => $sellPrice,
-                        'cost_price' => $costPrice,
-                        'stock' => $stock,
                         'type' => $type,
                         'active' => $active,
                         'error' => 'Thiếu tên sản phẩm'
@@ -78,8 +81,6 @@ class ProductImportService
                         'category' => $categoryName,
                         'brand' => $brandName,
                         'sell_price' => $sellPrice,
-                        'cost_price' => $costPrice,
-                        'stock' => $stock,
                         'type' => $type,
                         'active' => $active,
                         'error' => 'Thiếu SKU'
@@ -96,8 +97,6 @@ class ProductImportService
                         'category' => $categoryName,
                         'brand' => $brandName,
                         'sell_price' => $sellPrice,
-                        'cost_price' => $costPrice,
-                        'stock' => $stock,
                         'type' => $type,
                         'active' => $active,
                         'error' => 'Giá bán không hợp lệ'
@@ -116,8 +115,6 @@ class ProductImportService
                         'category' => $categoryName,
                         'brand' => $brandName,
                         'sell_price' => $sellPrice,
-                        'cost_price' => $costPrice,
-                        'stock' => $stock,
                         'type' => $type,
                         'active' => $active,
                         'image_name' => $rawImageName, // 🔥 FIX
@@ -191,8 +188,6 @@ class ProductImportService
                         'category' => $categoryName,
                         'brand' => $brandName,
                         'sell_price' => $sellPrice,
-                        'cost_price' => $costPrice,
-                        'stock' => $stock,
                         'type' => $type,
                         'active' => $active,
                         'image_name' => $rawImageName,
@@ -207,14 +202,7 @@ class ProductImportService
                     $sku = $sku . '-' . time();
                 }
 
-
-                foreach ($images as $file) {
-                    $key = strtolower(
-                        preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
-                    );
-
-                    $imageFiles[$key] = $file;
-                }
+               
 
                 $imagePath = null;
 
@@ -224,10 +212,7 @@ class ProductImportService
 
                     foreach ($imageFiles as $key => $file) {
 
-                        if (
-                            str_contains($key, $imageName) ||
-                            str_contains($imageName, $key)
-                        ) {
+                        if (strpos($key, $imageName) !== false) {
                             $ext = $file->getClientOriginalExtension();
 
                             $imagePath = $file->storeAs(
@@ -250,8 +235,6 @@ class ProductImportService
                             'category' => $categoryName,
                             'brand' => $brandName,
                             'sell_price' => $sellPrice,
-                            'cost_price' => $costPrice,
-                            'stock' => $stock,
                             'type' => $type,
                             'active' => $active,
                             'image_name' => $rawImageName, // 🔥 FIX QUAN TRỌNG
@@ -270,9 +253,10 @@ class ProductImportService
                     'brand_id'    => $brand?->id,
 
                     'sell_price'  => $sellPrice,
-                    'cost_price'  => $costPrice,
 
-                    'stock'       => $stock,
+                    'cost_price'  => 0,
+                    'stock'       => 0,
+
                     'product_type'=> $type,
                     'is_active'   => $active,
 

@@ -328,12 +328,10 @@ class ProductController extends Controller
             $categoryName = trim($data['danh mục'] ?? '');
             $brandName    = trim($data['thương hiệu'] ?? '');
             $sellPrice    = $data['giá bán'] ?? null;
-            $costPrice    = $data['giá vốn'] ?? 0;
-            $stock        = $data['tồn kho'] ?? 0;
             $type         = $data['loại sản phẩm'] ?? 'normal';
             $active       = $data['kích hoạt'] ?? 1;
             
-            $rawImageName = trim($row[11] ?? '');
+            $rawImageName = trim($data['ảnh'] ?? '');
 
             $imageName = strtolower(
                 preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
@@ -377,7 +375,7 @@ class ProductController extends Controller
                             preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
                         );
 
-                        $imageFiles[$fileName] = $file->getClientOriginalName();
+                        $imageFiles[$fileName] = $file;
                     }
                 }
 

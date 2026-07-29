@@ -41,13 +41,21 @@ const importSkip = async () => {
 
         report.value = res.data
         showReport.value = true
-
+        // reset
+        isSkipping.value = false
         duplicateModal.value = false
 
+        // ✅ THÊM ĐOẠN NÀY
+        if (res.data.success) {
+            toast.success(`Import ${res.data.count} sản phẩm thành công`)
+        }
+
+        if (res.data.error_count > 0) {
+            toast.warning(`Có ${res.data.error_count} sản phẩm lỗi`)
+        }
+
     } catch (e) {
-        console.error(e)
-    } finally {
-        isSkipping.value = false
+        toast.error('Import thất bại')
     }
 }
 
@@ -151,7 +159,7 @@ const findImage = (name) => {
 }
 /* ================= PREVIEW ================= */
 const previewFile = async () => {
-    if (!file.value) return toast.error('Chọn file')
+    if (!file.value) return toast.error('Bạn phải chọn file tước')
 
     const form = new FormData()
     form.append('file', file.value)
@@ -268,7 +276,9 @@ const exportFile = async () => {
 
                     setTimeout(() => {
                         window.location.href = route('products.export.download', id)
+                        toast.success('Xuất file thành công!')
                         exporting.value = false
+
                     }, 500)
                 }
 
@@ -644,6 +654,7 @@ const downloadTemplate = () => {
                     <div class="flex gap-2 mt-3">
                         <button
                             @click="importSkip"
+                            :key="isSkipping"
                             :disabled="isSkipping"
                             class="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded disabled:opacity-60"
                         >
