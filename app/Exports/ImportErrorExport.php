@@ -26,6 +26,8 @@ class ImportErrorExport implements FromArray, WithHeadings
                 $e['category'] ?? '',
                 $e['brand'] ?? '',
                 $e['sell_price'] ?? '',
+                $e['type'] ?? '',
+                $e['active'] ?? '',
                 $e['image_name'] ?? '',
                 $e['error'] ?? '',
             ];
@@ -42,6 +44,8 @@ class ImportErrorExport implements FromArray, WithHeadings
             'Danh mục',
             'Thương hiệu',
             'Giá bán',
+            'Loại sản phẩm',
+            'Trạng thái',
             'Ảnh',
             'Lỗi'
         ];

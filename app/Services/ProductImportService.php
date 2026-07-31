@@ -41,14 +41,13 @@ class ProductImportService
                 $barcode      = trim($row[3] ?? '');
                 $categoryName = trim($row[4] ?? '');
                 $brandName    = trim($row[5] ?? '');
-                $sellPrice    = $row[6] ?? 0;
+                $sellPrice    = trim($row[6] ?? '');
                 $type         = $row[7] ?? 'normal';
                 $active       = $row[8] ?? 1;
                 $rawImageName = trim($row[9] ?? '');
 
-                $imageName = strtolower(
-                    preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
-                );
+                
+
 
                 $rowNumber = $index + 1;
 
@@ -67,6 +66,7 @@ class ProductImportService
                         'sell_price' => $sellPrice,
                         'type' => $type,
                         'active' => $active,
+                        'image_name' => $rawImageName,
                         'error' => 'Thiếu tên sản phẩm'
                     ];
                     continue;
@@ -83,12 +83,13 @@ class ProductImportService
                         'sell_price' => $sellPrice,
                         'type' => $type,
                         'active' => $active,
+                        'image_name' => $rawImageName,
                         'error' => 'Thiếu SKU'
                     ];
                     continue;
                 }
 
-                if (!is_numeric($sellPrice)) {
+                if ($sellPrice === '' || !is_numeric($sellPrice)) {
                      $errors[] = [
                         'row' => $rowNumber,
                         'name' => $name,
@@ -99,6 +100,7 @@ class ProductImportService
                         'sell_price' => $sellPrice,
                         'type' => $type,
                         'active' => $active,
+                        'image_name' => $rawImageName,
                         'error' => 'Giá bán không hợp lệ'
                     ];
                     continue;
@@ -201,45 +203,37 @@ class ProductImportService
                 if ($exists && $allowDuplicate) {
                     $sku = $sku . '-' . time();
                 }
-
-               
-
+                
                 $imagePath = null;
 
-                if ($imageName) {
+                if (!empty($rawImageName)) {
 
-                    $found = false;
+                    $imageKey = strtolower(
+                        preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
+                    );
 
-                    foreach ($imageFiles as $key => $file) {
+                    if (isset($imageFiles[$imageKey])) {
 
-                        if (strpos($key, $imageName) !== false) {
-                            $ext = $file->getClientOriginalExtension();
+                        $file = $imageFiles[$imageKey];
 
-                            $imagePath = $file->storeAs(
-                                'products',
-                                $sku . '_' . time() . '.' . $ext,
-                                'public'
-                            );
+                        $ext = $file->getClientOriginalExtension();
 
-                            $found = true;
-                            break;
-                        }
-                    }
+                        $imagePath = $file->storeAs(
+                            'products',
+                            $sku . '_' . time() . '.' . $ext,
+                            'public'
+                        );
 
-                    if (!$found) {
+                    } else {
+
                         $errors[] = [
                             'row' => $rowNumber,
                             'name' => $name,
                             'sku' => $sku,
-                            'barcode' => $barcode,
-                            'category' => $categoryName,
-                            'brand' => $brandName,
-                            'sell_price' => $sellPrice,
-                            'type' => $type,
-                            'active' => $active,
-                            'image_name' => $rawImageName, // 🔥 FIX QUAN TRỌNG
-                            'error' => 'Không tìm thấy ảnh'
+                            'image_name' => $rawImageName,
+                            'error' => 'Không tìm thấy ảnh upload'
                         ];
+
                         continue;
                     }
                 }

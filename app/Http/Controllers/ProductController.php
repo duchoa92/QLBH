@@ -277,15 +277,10 @@ class ProductController extends Controller
 
         $images = [];
 
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $file) {
+        foreach ($request->file('images') as $file) {
 
-                $key = strtolower(
-                    preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
-                );
 
-                $images[$key] = $file;
-            }
+            $images[] = $file;
         }
 
         $result = $service->handle($rows, $allowDuplicate, $images);
@@ -319,19 +314,15 @@ class ProductController extends Controller
 
             if ($index === 0) continue;
 
-            //  map theo header (KHÔNG DÙNG index nữa)
-            $data = array_combine($header, $row);
-
-            $name         = trim($data['tên sản phẩm'] ?? '');
-            $sku          = trim($data['sku'] ?? '');
-            $barcode      = trim($data['barcode'] ?? '');
-            $categoryName = trim($data['danh mục'] ?? '');
-            $brandName    = trim($data['thương hiệu'] ?? '');
-            $sellPrice    = $data['giá bán'] ?? null;
-            $type         = $data['loại sản phẩm'] ?? 'normal';
-            $active       = $data['kích hoạt'] ?? 1;
-            
-            $rawImageName = trim($data['ảnh'] ?? '');
+            $name         = trim($row[1] ?? '');
+            $sku          = trim($row[2] ?? '');
+            $barcode      = trim($row[3] ?? '');
+            $categoryName = trim($row[4] ?? '');
+            $brandName    = trim($row[5] ?? '');
+            $sellPrice    = trim($row[6] ?? '');
+            $type         = $row[7] ?? 'normal';
+            $active       = $row[8] ?? 1;
+            $rawImageName = trim($row[9] ?? '');
 
             $imageName = strtolower(
                 preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
@@ -351,7 +342,7 @@ class ProductController extends Controller
                 $status = 'Thiếu SKU';
                 $isError = true;
             }
-            elseif (!is_numeric($sellPrice)) {
+            elseif ($sellPrice === '' || $sellPrice === null || !is_numeric($sellPrice)) {
                 $status = 'Thiếu giá';
                 $isError = true;
             }
@@ -408,8 +399,8 @@ class ProductController extends Controller
                 'category' => $categoryName,
                 'brand' => $brandName,
                 'sell_price' => $sellPrice,
-                'image_name' => $rawImageName,
                 'status' => $status,
+                'image_name' => $rawImageName,
                 'is_error' => $isError
             ];
         }
