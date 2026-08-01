@@ -320,9 +320,13 @@ class ProductController extends Controller
             $categoryName = trim($row[4] ?? '');
             $brandName    = trim($row[5] ?? '');
             $sellPrice    = trim($row[6] ?? '');
-            $type         = $row[7] ?? 'normal';
-            $active       = $row[8] ?? 1;
-            $rawImageName = trim($row[9] ?? '');
+
+            $costPrice    = trim($row[7] ?? '');
+            $stock        = trim($row[8] ?? '');
+
+            $type         = $row[9] ?? 'normal';
+            $active       = $row[10] ?? 1;
+            $rawImageName = trim($row[11] ?? '');
 
             $imageName = strtolower(
                 preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
@@ -344,6 +348,17 @@ class ProductController extends Controller
             }
             elseif ($sellPrice === '' || $sellPrice === null || !is_numeric($sellPrice)) {
                 $status = 'Thiếu giá';
+                $isError = true;
+            }
+            // cost_price optional
+            elseif ($costPrice !== '' && !is_numeric($costPrice)) {
+                $status = 'Giá nhập không hợp lệ';
+                $isError = true;
+            }
+
+            // stock optional
+            elseif ($stock !== '' && !is_numeric($stock)) {
+                $status = 'Tồn kho không hợp lệ';
                 $isError = true;
             }
             elseif (!in_array($type, ['normal','imei','service','combo'])) {

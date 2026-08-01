@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { closeModal } from '@/Stores/modal'
 import axios from 'axios'
-import { ArrowDownToLine, Check, CheckCheck, Download, FileDown, FileSpreadsheet, Folder, Image, Lightbulb, Sheet, SkipForward, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
+import { ArrowDownToLine, Check, CheckCheck, CircleFadingArrowUp, Download, FileDown, FileSpreadsheet, Folder, Image, Lightbulb, Sheet, SkipForward, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import JSZip from 'jszip'
 
@@ -16,6 +16,7 @@ const step = ref('upload') // upload | preview
 const checking = ref(false) 
 const exporting = ref(false)
 const isSkipping = ref(false)
+const importing = ref(false)
 const progress = ref(0)
 let interval = null
 
@@ -213,9 +214,15 @@ const handleWheel = (e) => {
 }
 
 /* ================= IMPORT ================= */
-const importFile = () => {
+const importFile = async () => {
 
-    importSkip()
+    importing.value = true
+
+    try {
+        await importSkip()
+    } finally {
+        importing.value = false
+    }
 }
 
 // kéo thể file
@@ -605,24 +612,26 @@ const downloadTemplate = () => {
 
                 <!-- PREVIEW -->
                 <div class="max-h-[300px] overflow-auto border">
-                    <table class="w-full text-sm">
+                    <table class="w-full text-sm text-center items-center">
                         <tr>
                             <th class="border p-2">#</th>
                             <th class="border p-2">Tên</th>
                             <th class="border p-2">Ảnh</th>
-                            <th class="border p-2">Giá</th>
+                            <th class="border p-2">Giá bán</th>
+                            <th class="border p-2">Giá nhập</th>
+                            <th class="border p-2">Tồn kho</th>
                             <th class="border p-2">Trạng thái</th>
                         </tr>
 
                         <tr
                             v-for="(item, i) in previewData"
                             :key="i"
-                            :class="item.is_error ? 'bg-red-100' : 'bg-green-50'"
+                            :class="item.is_error ? 'bg-red-50' : 'bg-green-50'"
                         >
-                            <td>{{ i + 1 }}</td>
+                            <td class="border">{{ i + 1 }}</td>
 
-                            <td>{{ item.name }}</td>
-                            <td>
+                            <td class="border">{{ item.name }}</td>
+                            <td class="border">
                                 <img 
                                     v-if="findImage(item.image_name)"
                                     :src="findImage(item.image_name)"
@@ -632,11 +641,29 @@ const downloadTemplate = () => {
                                 <span v-else class="text-red-500">Thiếu ảnh</span>
                             </td>
 
-                            <td>{{ item.sell_price }}</td>
+                            <td class="border">{{ item.sell_price }}</td>
+
+                            <td class="border">
+                                <span v-if="item.cost_price !== ''">
+                                    {{ item.cost_price }}
+                                </span>
+                                <span v-else class="text-gray-400 italic">
+                                    (auto = 0)
+                                </span>
+                            </td>
+
+                            <td class="border">
+                                <span v-if="item.stock !== ''">
+                                    {{ item.stock }}
+                                </span>
+                                <span v-else class="text-gray-400 italic">
+                                    (auto = 0)
+                                </span>
+                            </td>
 
                             <td
                                 :class="item.is_error ? 'text-red-600' : 'text-green-600'"
-                                class="font-semibold"
+                                class="font-semibold border"
                             >
                                 {{ item.status }}
                             </td>
@@ -686,7 +713,7 @@ const downloadTemplate = () => {
                             </template>
                             <template v-else>
                                 <SkipForward />
-                                Bỏ qua {{ previewData.filter(i => i.is_error).length }} sản phẩm lỗi
+                                Nhập và bỏ qua {{ previewData.filter(i => i.is_error).length }} sản phẩm lỗi
                             </template>
                         </button>
 
@@ -701,12 +728,40 @@ const downloadTemplate = () => {
                 </div>
 
                 <div v-else class="flex gap-2 mt-3">
-
                     <button
                         @click="importFile"
-                        class="px-3 py-2 bg-green-600 text-white rounded"
+                        :disabled="importing"
+                        class="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded disabled:opacity-60"
                     >
-                        Nhập
+                        <!-- Spinner -->
+                        <svg
+                            v-if="importing"
+                            class="w-4 h-4 animate-spin"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle
+                                class="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                stroke-width="4"
+                                fill="none"
+                            />
+                            <path
+                                class="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8v4l3-3-3-3v4a12 12 0 00-12 12h4z"
+                            />
+                        </svg>
+
+                        <!-- Text -->
+                        <template v-if="importing">
+                            Đang import...
+                        </template>
+                        <template v-else>
+                            <CircleFadingArrowUp /> Nhập
+                        </template>
                     </button>
 
                     <button

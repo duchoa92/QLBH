@@ -11,6 +11,39 @@ use Illuminate\Support\Str;
 class ProductImportService
 {
 
+    private function pushError(
+        &$errors,
+        $rowNumber,
+        $name,
+        $sku,
+        $barcode,
+        $categoryName,
+        $brandName,
+        $sellPrice,
+        $costPrice,
+        $stock,
+        $type,
+        $active,
+        $rawImageName,
+        $message
+    ) {
+        $errors[] = [
+            'row'        => $rowNumber,
+            'name'       => $name ?? '',
+            'sku'        => $sku ?? '',
+            'barcode'    => $barcode ?? '',
+            'category'   => $categoryName ?? '',
+            'brand'      => $brandName ?? '',
+            'sell_price' => $sellPrice ?? '',
+            'cost_price' => $costPrice ?? '',
+            'stock'      => $stock ?? '',
+            'type'       => $type ?? '',
+            'active'     => $active ?? '',
+            'image_name' => $rawImageName ?? '',
+            'error'      => $message,
+        ];
+    }
+
     public function handle(array $rows, $allowDuplicate = false, $images = [])
     {
         $errors = [];
@@ -42,10 +75,12 @@ class ProductImportService
                 $categoryName = trim($row[4] ?? '');
                 $brandName    = trim($row[5] ?? '');
                 $sellPrice    = trim($row[6] ?? '');
-                $type         = $row[7] ?? 'normal';
-                $active       = $row[8] ?? 1;
-                $rawImageName = trim($row[9] ?? '');
-
+                $costPrice    = trim($row[7] ?? '');
+                $stock        = trim($row[8] ?? '');
+                $type         = $row[9] ?? 'normal';
+                $active       = $row[10] ?? 1;
+                $rawImageName = trim($row[11] ?? '');
+                                
                 
 
 
@@ -56,72 +91,128 @@ class ProductImportService
                 /* ========= VALIDATE ========= */
 
                 if (!$name) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'name' => $name,
-                        'sku' => $sku,
-                        'barcode' => $barcode,
-                        'category' => $categoryName,
-                        'brand' => $brandName,
-                        'sell_price' => $sellPrice,
-                        'type' => $type,
-                        'active' => $active,
-                        'image_name' => $rawImageName,
-                        'error' => 'Thiếu tên sản phẩm'
-                    ];
+                    $this->pushError(
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'Thiếu tên sản phẩm'
+                    );
                     continue;
                 }
 
                 if (!$sku) {
-                     $errors[] = [
-                        'row' => $rowNumber,
-                        'name' => $name,
-                        'sku' => $sku,
-                        'barcode' => $barcode,
-                        'category' => $categoryName,
-                        'brand' => $brandName,
-                        'sell_price' => $sellPrice,
-                        'type' => $type,
-                        'active' => $active,
-                        'image_name' => $rawImageName,
-                        'error' => 'Thiếu SKU'
-                    ];
+                    $this->pushError(
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'Thiếu SKU'
+                    );
                     continue;
                 }
 
                 if ($sellPrice === '' || !is_numeric($sellPrice)) {
-                     $errors[] = [
-                        'row' => $rowNumber,
-                        'name' => $name,
-                        'sku' => $sku,
-                        'barcode' => $barcode,
-                        'category' => $categoryName,
-                        'brand' => $brandName,
-                        'sell_price' => $sellPrice,
-                        'type' => $type,
-                        'active' => $active,
-                        'image_name' => $rawImageName,
-                        'error' => 'Giá bán không hợp lệ'
-                    ];
+                    $this->pushError(  
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'Thiếu giá bán'
+                    );
+                    continue;
+                }
+
+                // cost_price KHÔNG bắt buộc
+                if ($costPrice !== '' && !is_numeric($costPrice)) {
+                    $this->pushError(
+                        
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'Giá nhập không hợp lệ'
+                    );
+                    continue;
+                }
+
+                // stock KHÔNG bắt buộc
+                if ($stock !== '' && !is_numeric($stock)) {
+                    $this->pushError(
+                        
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'Tồn kho không hợp lệ'
+                    );
                     continue;
                 }
 
                 /* ========= CHECK TRÙNG SKU TRONG FILE ========= */
 
                 if (in_array($sku, $skuList)) {
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'name' => $name,
-                        'sku' => $sku,
-                        'barcode' => $barcode,
-                        'category' => $categoryName,
-                        'brand' => $brandName,
-                        'sell_price' => $sellPrice,
-                        'type' => $type,
-                        'active' => $active,
-                        'image_name' => $rawImageName, // 🔥 FIX
-                        'error' => 'Trùng SKU trong file'
-                    ];
+                    $this->pushError(
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'SKU trong file bị lặp'
+                    );
                     continue;
                 }
 
@@ -182,19 +273,23 @@ class ProductImportService
 
                 if ($exists && !$allowDuplicate) {
 
-                    $errors[] = [
-                        'row' => $rowNumber,
-                        'name' => $name,
-                        'sku' => $sku,
-                        'barcode' => $barcode,
-                        'category' => $categoryName,
-                        'brand' => $brandName,
-                        'sell_price' => $sellPrice,
-                        'type' => $type,
-                        'active' => $active,
-                        'image_name' => $rawImageName,
-                        'error' => 'Trùng SKU'
-                    ];
+                    $this->pushError(
+                        
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'SKU đã tồn tại'
+                    );
 
                     continue;
                 }
@@ -226,13 +321,22 @@ class ProductImportService
 
                     } else {
 
-                        $errors[] = [
-                            'row' => $rowNumber,
-                            'name' => $name,
-                            'sku' => $sku,
-                            'image_name' => $rawImageName,
-                            'error' => 'Không tìm thấy ảnh upload'
-                        ];
+                        $this->pushError(
+                            $errors,
+                            $rowNumber,
+                            $name,
+                            $sku,
+                            $barcode,
+                            $categoryName,
+                            $brandName,
+                            $sellPrice,
+                            $costPrice,
+                            $stock,
+                            $type,
+                            $active,
+                            $rawImageName,
+                            'Không tìm thấy file ảnh upload'
+                        );
 
                         continue;
                     }
@@ -248,8 +352,8 @@ class ProductImportService
 
                     'sell_price'  => $sellPrice,
 
-                    'cost_price'  => 0,
-                    'stock'       => 0,
+                    'cost_price'  => $costPrice !== '' ? $costPrice : 0,
+                    'stock'       => $stock !== '' ? $stock : 0,
 
                     'product_type'=> $type,
                     'is_active'   => $active,
