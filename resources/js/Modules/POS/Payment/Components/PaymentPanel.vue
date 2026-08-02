@@ -1,8 +1,6 @@
 <script setup>
 import { Wallet } from 'lucide-vue-next'
-import {
-    ref,
-} from 'vue'
+
 
 
 const props = defineProps({
@@ -35,12 +33,6 @@ const emit = defineEmits([
     'show-sale-history',
 ])
 
-const formatMoney = (value) => {
-
-    return Number(
-        value || 0
-    ).toLocaleString('vi-VN')
-}
 
 </script>
 
@@ -63,7 +55,7 @@ const formatMoney = (value) => {
                             Tiền hàng:
                         </span>
                         <span class="font-bold text-blue-700">
-                            {{ formatMoney(grandTotal) }}
+                            {{ $money(grandTotal) }}
                         </span>
                     </div>
                 </div>

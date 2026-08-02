@@ -11,7 +11,10 @@ import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
 import ModalRoot from '@/Components/ModalRoot.vue'
 import { Ziggy } from './ziggy'
+import { formatMoney, formatDate, formatDateTime } from '@/utils/format'
 
+
+const app = createApp({})
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
  // ❗ CHẶN ĐĂNG KÝ NHIỀU LẦN
@@ -160,6 +163,11 @@ createInertiaApp({
         )
 
         app.use(plugin)
+
+        
+        app.config.globalProperties.$money = formatMoney
+        app.config.globalProperties.$date = formatDate
+        app.config.globalProperties.$dateTime = formatDateTime
 
         app.use(ZiggyVue, Ziggy)
 

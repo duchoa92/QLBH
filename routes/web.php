@@ -171,6 +171,11 @@ Route::prefix('products')
         Route::patch('/{product}/toggle-status', [ProductController::class, 'toggleStatus'])
             ->name('toggleStatus');
 
+
+        // Setting
+        Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
+
         
 
     });

@@ -15,12 +15,7 @@ const {
     openInvoice,
 } = useSaleHistory()
 
-const money = (value) => {
 
-    return Number(value || 0)
-        .toLocaleString('vi-VN')
-
-}
 
 onMounted(() => {
 
@@ -28,9 +23,6 @@ onMounted(() => {
 
 })
 
-const formatDate = (date) => {
-    return new Date(date).toLocaleString('vi-VN')
-}
 
 </script>
 
@@ -71,8 +63,8 @@ const formatDate = (date) => {
                 >
                     <td class="p-2 text-blue-600 font-bold cursor-pointer" @click="openInvoice(invoice.id)">{{ invoice.code }}</td>
                     <td class="text-center">{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</td>
-                    <td class="text-right px-3">{{ money(invoice.grand_total) }}</td>
-                    <td class="px-3">{{ formatDate(invoice.created_at)}}</td>
+                    <td class="text-right px-3">{{ $money(invoice.grand_total) }}</td>
+                    <td class="px-3">{{ $dateTime(invoice.created_at)}}</td>
 
                 </tr>
 

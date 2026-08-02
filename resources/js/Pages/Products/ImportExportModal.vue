@@ -641,14 +641,21 @@ const downloadTemplate = () => {
                                 <span v-else class="text-red-500">Thiếu ảnh</span>
                             </td>
 
-                            <td class="border">{{ item.sell_price }}</td>
+                            <td class="border">
+                                <span v-if="item.sell_price !== ''">
+                                    {{$money(item.sell_price)  }}
+                                </span>
+                                <span v-else class="text-gray-400 italic">
+                                    -
+                                </span>
+                            </td>
 
                             <td class="border">
                                 <span v-if="item.cost_price !== ''">
-                                    {{ item.cost_price }}
+                                    {{$money(item.cost_price)  }}
                                 </span>
                                 <span v-else class="text-gray-400 italic">
-                                    (auto = 0)
+                                    -
                                 </span>
                             </td>
 
@@ -657,7 +664,7 @@ const downloadTemplate = () => {
                                     {{ item.stock }}
                                 </span>
                                 <span v-else class="text-gray-400 italic">
-                                    (auto = 0)
+                                    -
                                 </span>
                             </td>
 

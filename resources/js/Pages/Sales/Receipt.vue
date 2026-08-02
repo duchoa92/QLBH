@@ -114,7 +114,7 @@ window.onload = () => {
                 </span>
 
                 <span v-else>
-                    {{ format(item.discount_value) }}đ
+                    {{ $money(item.discount_value) }}đ
                 </span>
 
             </div>
@@ -131,7 +131,7 @@ window.onload = () => {
                     v-for="gift in item.gifts"
                     :key="gift.id"
                 >
-                    🎁
+                    🎁<gift-icon class="inline-block w-3 h-3 mr-1" />
                     {{ gift.product?.name }}
                     x{{ gift.quantity }}
                 </div>
@@ -160,11 +160,11 @@ window.onload = () => {
                 <div>
                     {{ item.quantity }}
                     x
-                    {{ format(item.unit_price) }}
+                    {{ $money(item.unit_price) }}
                 </div>
 
                 <div>
-                    {{ format(item.subtotal) }}
+                    {{ $money(item.subtotal) }}
                 </div>
 
             </div>
@@ -191,7 +191,7 @@ window.onload = () => {
 
                 <span>
                     {{
-                        format(
+                        $money(
                             sale.subtotal
                         )
                     }}
@@ -209,7 +209,7 @@ window.onload = () => {
 
                 <span>
                     {{
-                        format(
+                        $money(
                             sale.grand_total
                         )
                     }}
@@ -227,7 +227,7 @@ window.onload = () => {
 
                 <span>
                     {{
-                        format(
+                        $money(
                             sale.paid_amount
                         )
                     }}
@@ -245,7 +245,7 @@ window.onload = () => {
 
                 <span>
                     {{
-                        format(
+                        $money(
                             sale.change_amount
                         )
                     }}

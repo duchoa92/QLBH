@@ -414,6 +414,8 @@ class ProductController extends Controller
                 'category' => $categoryName,
                 'brand' => $brandName,
                 'sell_price' => $sellPrice,
+                'cost_price' => $costPrice,
+                'stock' => $stock,
                 'status' => $status,
                 'image_name' => $rawImageName,
                 'is_error' => $isError
