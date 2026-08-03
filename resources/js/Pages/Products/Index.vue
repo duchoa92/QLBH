@@ -26,10 +26,17 @@ const confirmBox = useConfirm()
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id || '')
 const brand_id = ref(props.filters?.brand_id || '')
+const per_page = ref(props.filters?.per_page || 10) 
 
 let timeout = null
 
 watch([search, category_id, brand_id], () => {
+    
+    if (isChangingPerPage.value) {
+        isChangingPerPage.value = false
+        return
+    }
+
     clearTimeout(timeout)
 
     timeout = setTimeout(() => {
@@ -38,13 +45,17 @@ watch([search, category_id, brand_id], () => {
             category_id: category_id.value,
             brand_id: brand_id.value,
             sort_by: props.filters?.sort_by,
-            sort_order: props.filters?.sort_order
+            sort_order: props.filters?.sort_order,
+            per_page: per_page.value
         }, {
             preserveState: true,
+            preserveScroll: true,
             replace: true
         })
     }, 300)
 })
+
+
 
 onBeforeUnmount(() => {
     if (timeout) clearTimeout(timeout)
@@ -233,6 +244,7 @@ const sort = ({ field, order }) => {
         search: search.value,
         category_id: category_id.value,
         brand_id: brand_id.value,
+        per_page: per_page.value,
         sort_by: field,
         sort_order: order
     }, {
@@ -240,6 +252,47 @@ const sort = ({ field, order }) => {
         replace: true
     })
 }
+
+// ================= PER PAGE =================
+const isChangingPerPage = ref(false)
+
+watch(() => props.filters?.per_page, (val) => {
+    if (val && val != per_page.value) {
+        per_page.value = Number(val)
+    }
+})
+
+const changePerPage = (value) => {
+
+    isChangingPerPage.value = true
+
+    per_page.value = value
+    router.get('/products', {
+        search: search.value,
+        category_id: category_id.value,
+        brand_id: brand_id.value,
+        per_page: value,
+        sort_by: props.filters?.sort_by,
+        sort_order: props.filters?.sort_order,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true
+    })
+}
+
+onMounted(() => {
+    const saved = localStorage.getItem('per_page')
+
+    if (saved && saved != props.filters?.per_page) {
+        changePerPage(Number(saved))
+    }
+})
+
+watch(per_page, (val) => {
+    localStorage.setItem('per_page', val)
+})
+
 
 // nhập xuất file
 const openImportExport = () => {
@@ -349,8 +402,9 @@ const openImportExport = () => {
     <BaseTable
         :data="products"
         :columns="columns"
-        :filters="filters"
+        :filters="{ ...filters, per_page }"
         @sort="sort"
+        @changePerPage="changePerPage" 
         :selectedIds="selectedIds"
         selectable
         @toggleOne="toggleOne"

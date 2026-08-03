@@ -15,6 +15,7 @@ use App\Http\Controllers\RepairController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SettingController;
 
 
 /*
@@ -63,6 +64,15 @@ Route::get(
 
 Route::middleware(['auth'])->group(function () {
 
+     /*
+    |--------------------------------------------------------------------------
+    | Setting
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+    Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
+    
+    
     /*
     |--------------------------------------------------------------------------
     | Profile
@@ -172,9 +182,7 @@ Route::prefix('products')
             ->name('toggleStatus');
 
 
-        // Setting
-        Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
-Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
+        
 
         
 

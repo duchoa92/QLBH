@@ -1,6 +1,10 @@
+
+
 <script setup>
 import { useForm } from '@inertiajs/vue3'
+import AdminLayout from '@/Layouts/AdminLayout.vue'
 
+defineOptions({ layout: AdminLayout })
 const props = defineProps({
     settings: Object
 })

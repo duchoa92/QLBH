@@ -14,7 +14,8 @@ const props = defineProps({
 const emit = defineEmits([
     'toggleOne',
     'toggleAll',
-    'sort'
+    'sort',
+    'changePerPage'
 ])
 
 const rows = computed(() => props.data?.data || [])
@@ -130,8 +131,9 @@ const go = (url) => {
 
         <div class="flex justify-end w-1/3">
             <select
-                v-model="filters.per_page"
-                class="border rounded px-3 py-1 text-sm"
+                :value="filters?.per_page || 10"
+                @change="$emit('changePerPage', Number($event.target.value))"
+                class="border rounded px-6 py-2 text-sm"
             >
                 <option :value="10">10</option>
                 <option :value="20">20</option>

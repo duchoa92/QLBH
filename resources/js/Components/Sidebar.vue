@@ -41,6 +41,7 @@ const isActive = (paths) => {
 
 const menuGroups = [
     {
+
         title: 'Bán Hàng',
         items: [
             {
@@ -59,11 +60,6 @@ const menuGroups = [
     {
         title: 'Vận hành',
         items: [
-            {
-                label: 'Tổng quan',
-                href: '/dashboard',
-                paths: ['/dashboard'],
-            },
             {
                 label: 'Khách hàng',
                 href: '/customers',
@@ -120,6 +116,11 @@ const menuGroups = [
                 label: 'Tài khoản',
                 href: '/profile',
                 paths: ['/profile'],
+            },,
+            {
+                label: 'Thiết lập',
+                href: '/settings',
+                paths: ['/settings'],
             },
         ],
     },
