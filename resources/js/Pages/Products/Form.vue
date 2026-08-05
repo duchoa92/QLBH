@@ -4,9 +4,8 @@ import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { ScanSearch } from 'lucide-vue-next'
-import { BrowserMultiFormatReader } from '@zxing/browser'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+
 
 const props = defineProps({
     title: String,
@@ -25,14 +24,14 @@ const form = useForm({
     name: props.product?.name ?? '',
     category_id: props.product?.category_id ?? null,
     brand_id: props.product?.brand_id ?? null,
-    sku: props.product?.sku ?? '',
-    barcode: props.product?.barcode ?? '',
+    sku: null,
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
-    stock: props.product?.stock ?? 0,
-    imeis: '',
     image: null,
-    variants: props.product?.variants ?? []
+    variants: props.product?.variants ?? [],
+
+    manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
+    product_type: props.product?.product_type ?? 'normal',
 
 })
 
@@ -47,12 +46,13 @@ watch(() => props.product, (p) => {
     form.name = p.name ?? ''
     form.category_id = p.category_id ?? null
     form.brand_id = p.brand_id ?? null
-    form.sku = p.sku ?? ''
-    form.barcode = p.barcode ?? ''
+    form.sku = p.sku ?? null
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
-    form.stock = p.stock ?? 0
     form.variants = p.variants ?? []
+
+    form.manage_stock_by_serial = p.manage_stock_by_serial ?? false
+    form.product_type = p.product_type ?? 'normal'
 
 })
 
@@ -76,119 +76,93 @@ const handleImage = (e) => {
     preview.value = URL.createObjectURL(file)
 }
 
+
+const showVariants = ref(false)
 // Thêm xóa biến thể
-const addVariant = () => {
-    form.variants.push({
-        color: '',
-        storage: '',
-        version: '',
-        sku: '',
-        barcode: '',
-        cost_price: 0,
-        sell_price: 0,
-        stock: 0,
-        imeis: ''
-    })
-}
+const toggleVariants = () => {
 
-const removeVariant = (index) => {
-    form.variants.splice(index, 1)
-}
-
-// Tạo barcode
-const generateBarcode = () => {
-    // dạng 13 số (EAN-like)
-    const code = Date.now().toString().slice(-10) +
-        Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-
-    form.barcode = code
-}
-
-
-
-
-// hiện scan
-const showCamera = ref(false)
-const videoRef = ref(null)
-let codeReader = null
-const toggleCamera = () => {
-    showCamera.value = !showCamera.value
-
-    if (showCamera.value) {
-        startCamera()
+    if (showVariants.value) {
+        // xóa hết
+        form.variants = []
     } else {
-        stopCamera()
+        // thêm 1 cái mặc định
+        form.variants = [{
+            color: '',
+            storage: '',
+            version: '',
+            sku: '',
+            cost_price: 0,
+            sell_price: 0,
+            stock: 0,
+        }]
     }
+
+    showVariants.value = !showVariants.value
 }
 
-const startCamera = async () => {
-    codeReader = new BrowserMultiFormatReader()
 
-    await codeReader.decodeFromVideoDevice(null, videoRef.value, (result) => {
-        if (!result) return
+// Tạo SKU tự động
 
-        const code = result.getText()
+const makeCode = (text) => {
+    if (!text) return ''
 
-        form.imeis += (form.imeis ? '\n' : '') + code
-    })
-}
+    const words = text.toLowerCase().split(' ')
 
-const stopCamera = () => {
-    if (codeReader) {
-        codeReader.reset()
-        codeReader = null
+    if (words.length === 1) {
+        return words[0].slice(0, 3).toUpperCase()
     }
-}
 
-
-let buffer = ''
-
-
-let handler = (e) => {
-    if (e.key === 'Enter') {
-        if (buffer.length > 5) {
-            form.imeis += (form.imeis ? '\n' : '') + buffer
-        }
-        buffer = ''
-    } else {
-        buffer += e.key
+    if (words.length === 2) {
+        return (words[0][0] + words[1].slice(0, 2)).toUpperCase()
     }
+
+    return (words[0][0] + words[1][0] + words[2][0]).toUpperCase()
 }
 
-onBeforeUnmount(() => {
-    window.removeEventListener('keydown', handler)
-    stopCamera() // 🔥 quan trọng
-})
+watch(
+    () => [form.category_id, form.brand_id, form.variants],
+    () => {
+        const cat = props.categories.find(c => c.id == form.category_id)
+        const brand = props.brands.find(b => b.id == form.brand_id)
 
+        if (!cat || !brand) return
 
+        const base = makeCode(cat.name) + makeCode(brand.name)
 
-// Hàm scan
-const handleScan = async (code) => {
+        form.sku = base
 
-    if (!code) return
+        form.variants.forEach(v => {
+            let suffix = []
 
-    try {
-        const res = await axios.post('/scan', { code })
+            if (v.storage) suffix.push(v.storage)
+            if (v.color) suffix.push(v.color.slice(0, 3).toUpperCase())
 
-        const data = res.data
+            v.sku = base + (suffix.length ? '-' + suffix.join('-') : '')
+        })
+    },
+    { deep: true }
+)
 
-        if (data.type === 'imei') {
-            console.log('IMEI → đúng máy', data.variant)
-        }
+watch(
+    () => form.variants,
+    () => {
+        const cat = props.categories.find(c => c.id == form.category_id)
+        const brand = props.brands.find(b => b.id == form.brand_id)
 
-        if (data.type === 'variant') {
-            console.log('Barcode → đúng biến thể', data.variant)
-        }
+        const catCode = makeCode(cat?.name)
+        const brandCode = makeCode(brand?.name)
 
-        if (data.type === 'product') {
-            console.log('Product thường', data.product)
-        }
+        form.variants.forEach(v => {
+            let parts = []
 
-    } catch (e) {
-        console.log('Không tìm thấy')
-    }
-}
+            if (v.storage) parts.push(v.storage)
+            if (v.color) parts.push(v.color.slice(0,3).toUpperCase())
 
+            v.sku = `${catCode}${brandCode}-${parts.join('-')}`
+        })
+    },
+    { deep: true }
+)
 
 /*
 |--------------------------------------------------------------------------
@@ -214,6 +188,7 @@ const submit = () => {
         form.post(route('products.store'), options)
     }
 }
+
 
 
 </script>
@@ -284,25 +259,19 @@ const submit = () => {
                             label="SKU"
                             :error="form.errors.sku"
                         />
+                        <!-- CHECKBOX IMEI -->
+                        <div class="flex items-center gap-2 mt-2">
+                            <input
+                                id="imei"
+                                type="checkbox"
+                                v-model="form.manage_stock_by_serial"
+                                class="w-5 h-5 accent-green-600 cursor-pointer"
+                            />
 
-                        <div class="flex gap-2 items-end">
-                            <div class="flex-1">
-                                <FloatingInput
-                                    v-model="form.barcode"
-                                    label="Barcode"
-                                    :error="form.errors.barcode"
-                                />
-                            </div>
-
-                            <button
-                                type="button"
-                                class="px-3 py-2 bg-gray-200 rounded text-sm hover:bg-gray-300"
-                                @click="generateBarcode"
-                            >
-                                Tạo
-                            </button>
+                            <label for="imei" class="text-sm cursor-pointer select-none">
+                                Có IMEI
+                            </label>
                         </div>
-
                     </div>
 
                     <div class="col-span-2 grid grid-cols-3 gap-4">
@@ -321,108 +290,34 @@ const submit = () => {
 
                         />
 
-                        <FloatingInput
-                            v-model="form.stock"
-                            label="Tồn kho"
-                            type="number"
-                            :error="form.errors.stock"
-                        />
-
                     </div>
 
-                    <div class="col-span-2 space-y-2">
-                        <div class="flex justify-between items-center">
-                            <label class="text-sm font-medium">IMEI</label>
-
-                            <button
-                                title="Quét"
-                                type="button"
-                                class="text-blue-600 text-sm"
-                                @click="toggleCamera"
-                            >
-                                <ScanSearch />
-                            </button>
-                        </div>
-
-                        <textarea
-                            ref="imeiInput"
-                            v-model="form.imeis"
-                            rows="5"
-                            @keyup.enter="() => {
-                                handleScan(form.imeis)
-                                form.imeis = ''
-                            }"
-                            class="w-full border rounded p-2 focus:ring focus:ring-blue-200"
-                            placeholder="Quét hoặc nhập IMEI..."
-                        />
-
-                        <div v-if="showCamera" class="border rounded p-2">
-                            <video ref="videoRef" class="w-full h-[200px] rounded" />
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- ===================== -->
-                <!-- THUỘC TÍNH -->
-                <!-- ===================== -->
-                <div class="border-t pt-4">
-
-                    <div class="flex justify-between items-center">
-                        <h3 class="font-semibold">Biến thể</h3>
-
+                    <div>
                         <button
                             type="button"
                             class="px-3 py-2 bg-gray-200 rounded text-sm"
-                            @click="addVariant"
+                            @click="toggleVariants"
                         >
-                            + Thêm biến thể
-                        </button>
-                    </div>
-
-                    <div
-                        v-for="(v, i) in form.variants"
-                        :key="i"
-                        class="border rounded p-3 mt-3 space-y-3"
-                    >
-
-                        <!-- THUỘC TÍNH -->
-                        <div class="grid grid-cols-3 gap-2">
-                            <FloatingInput v-model="v.color" label="Màu" />
-                            <FloatingInput v-model="v.storage" label="Bộ nhớ" />
-                            <FloatingInput v-model="v.version" label="Phiên bản" />
-                        </div>
-
-                        <!-- SKU + BARCODE -->
-                        <div class="grid grid-cols-2 gap-2">
-                            <FloatingInput v-model="v.sku" label="SKU" />
-                            <FloatingInput v-model="v.barcode" label="Barcode" />
-                        </div>
-
-                        <!-- GIÁ + TỒN -->
-                        <div class="grid grid-cols-3 gap-2">
-                            <FloatingInput v-model="v.cost_price" label="Giá nhập" type="number"/>
-                            <FloatingInput v-model="v.sell_price" label="Giá bán" type="number"/>
-                            <FloatingInput v-model="v.stock" label="Tồn kho" type="number"/>
-                        </div>
-
-                        <!-- IMEI -->
-                        <textarea
-                            v-model="v.imeis"
-                            rows="3"
-                            class="w-full border rounded p-2"
-                            placeholder="IMEI riêng cho biến thể"
-                        />
-
-                        <button
-                            type="button"
-                            class="text-red-500 text-sm"
-                            @click="removeVariant(i)"
-                        >
-                            Xóa biến thể
+                            {{ showVariants ? 'Xóa biến thể' : 'Thêm biến thể' }}
                         </button>
 
+                        <div v-if="showVariants">
+                            <div
+                                v-for="(v, i) in form.variants"
+                                :key="i"
+                                class="border rounded p-3 mt-3 space-y-3"
+                            >
+
+                                <!-- THUỘC TÍNH -->
+                                <div class="grid grid-cols-3 gap-2">
+                                    <FloatingInput v-model="v.color" label="Màu" />
+                                    <FloatingInput v-model="v.storage" label="Bộ nhớ" />
+                                    <FloatingInput v-model="v.version" label="Phiên bản" />
+                                </div>
+
+                            </div>
+                        </div>
+                        
                     </div>
 
                 </div>

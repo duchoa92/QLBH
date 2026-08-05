@@ -8,6 +8,7 @@ use App\Services\Base\BaseService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductVariant;
 
@@ -26,7 +27,12 @@ class ProductService extends BaseService
 
             $data['slug'] = Str::slug($data['name']);
 
-            // ✅ đảm bảo barcode luôn tồn tại
+            unset($data['sku']); // LUÔN bỏ SKU frontend
+
+            //  
+            $data['manage_stock_by_serial'] = $data['manage_stock_by_serial'] ?? false;
+
+            // đảm bảo barcode luôn tồn tại
             $data['barcode'] = $data['barcode'] ?? null;
 
             // upload ảnh
@@ -34,7 +40,20 @@ class ProductService extends BaseService
                 $data['image'] = $data['image']->store('products', 'public');
             }
 
+            // tạo SKU trước khi insert
+            $tempProduct = new Product($data);
+
+            $data['sku'] = $this->generateSku($tempProduct);
+
             $product = $this->repository->create($data);
+
+            $product->sku = $this->generateSku($product);
+            $product->save();
+
+            // nếu sản phẩm KHÔNG phải IMEI → xóa IMEI gửi lên (tránh bug)
+            if (!$product->manage_stock_by_serial) {
+                unset($data['imeis']);
+            }
 
             // ==========================
             // VARIANTS + IMEI (CHUẨN POS)
@@ -46,7 +65,10 @@ class ProductService extends BaseService
                     $variant = ProductVariant::create([
                         'product_id' => $product->id,
 
-                        'sku' => $v['sku'] ?? null,
+                        'sku' => empty($v['sku'])
+                            ? $this->generateSku($product, $v)
+                            : $v['sku'],
+
                         'barcode' => $v['barcode'] ?? null,
 
                         'color' => $v['color'] ?? null,
@@ -58,8 +80,8 @@ class ProductService extends BaseService
                         'stock' => $v['stock'] ?? 0,
                     ]);
 
-                    // 🔥 IMEI theo từng VARIANT
-                    if (!empty($v['imeis'])) {
+                    //  IMEI theo từng VARIANT
+                    if ($product->manage_stock_by_serial && !empty($v['imeis'])) {
 
                         $imeis = preg_split('/\r\n|\r|\n/', trim($v['imeis']));
 
@@ -81,10 +103,11 @@ class ProductService extends BaseService
                     }
                 }
             }
+            
 
 
-            // ✅ XỬ LÝ IMEI CHUẨN HƠN (KHÔNG PHÁ CODE CŨ)
-            if (!empty($data['imeis'])) {
+            // XỬ LÝ IMEI CHUẨN HƠN (KHÔNG PHÁ CODE CŨ)
+            if ($product->manage_stock_by_serial && !empty($data['imeis'])) {
 
                 $imeis = preg_split('/\r\n|\r|\n/', trim($data['imeis']));
 
@@ -95,7 +118,7 @@ class ProductService extends BaseService
                     // bỏ rỗng
                     if (!$imei) continue;
 
-                    // ❗ tránh trùng IMEI trong DB
+                    // tránh trùng IMEI trong DB
                     $exists = ProductImei::where('imei', $imei)->exists();
                     if ($exists) continue;
 
@@ -111,14 +134,11 @@ class ProductService extends BaseService
     }
 
     // Cập nhập sản phẩm
-    public function update(
-        Model $model,
-        array $data
-    ): Model {
+    public function update(Model $model, array $data): Model {
 
-        $data['slug'] = Str::slug(
-            $data['name']
-        );
+        $data['slug'] = Str::slug($data['name']);
+
+        $data['manage_stock_by_serial'] = $data['manage_stock_by_serial'] ?? false;
 
 
         if (isset($data['image'])) {
@@ -153,6 +173,61 @@ class ProductService extends BaseService
     {
         return $this->repository
             ->restore($id);
+    }
+
+    // Tự tạo SKU dựa trên SP
+    private function makeCodeFromWords($text)
+    {
+        $text = Str::slug($text);
+        $words = explode('-', $text);
+
+        if (count($words) == 1) {
+            return strtoupper(substr($words[0], 0, 3));
+        }
+
+        if (count($words) == 2) {
+            return strtoupper(substr($words[0], 0, 1) . substr($words[1], 0, 2));
+        }
+
+        // >= 3 từ
+        return strtoupper(implode('', array_map(fn($w) => substr($w, 0, 1), $words)));
+    }
+
+    private function short($text, $len = 3)
+    {
+        return strtoupper(substr(Str::slug($text), 0, $len));
+    }
+
+    private function generateSku($product, $variant = null)
+    {
+        $category = \App\Models\Category::find($product->category_id)?->name ?? 'GEN';
+        $brand = \App\Models\Brand::find($product->brand_id)?->name ?? 'GEN';
+
+        $catCode = $this->makeCodeFromWords($category);
+        $brandCode = $this->makeCodeFromWords($brand);
+
+        // SKU PRODUCT
+        if (!$variant) {
+            return "{$catCode}{$brandCode}";
+        }
+
+        $parts = [];
+
+        if (!empty($variant['storage'])) {
+            $parts[] = strtoupper($variant['storage']); // 128G
+        }
+
+        if (!empty($variant['color'])) {
+            $parts[] = $this->short($variant['color']); // RED
+        }
+
+        if (!empty($variant['version'])) {
+            $parts[] = $this->short($variant['version']);
+        }
+
+        $suffix = implode('-', $parts);
+
+        return "{$catCode}{$brandCode}" . ($suffix ? "-{$suffix}" : '');
     }
     
 }

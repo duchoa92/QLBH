@@ -72,6 +72,10 @@ class StoreProductRequest extends FormRequest
                 'max:100',
                 'unique:products,barcode'
             ],
+
+            'manage_stock_by_serial' => 'boolean',
+            
+            'product_type' => 'nullable|string',
         ];
     }
 }

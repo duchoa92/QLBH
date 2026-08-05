@@ -410,7 +410,6 @@ class ProductController extends Controller
                 'row' => $rowNumber,
                 'name' => $name,
                 'sku' => $sku,
-                'barcode' => $barcode,
                 'category' => $categoryName,
                 'brand' => $brandName,
                 'sell_price' => $sellPrice,
