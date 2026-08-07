@@ -41,9 +41,7 @@ class ProductService extends BaseService
             }
 
             // tạo SKU trước khi insert
-            $tempProduct = new Product($data);
-
-            $data['sku'] = $this->generateSku($tempProduct);
+            $data['sku'] = 'TEMP-' . time();
 
             $product = $this->repository->create($data);
 
@@ -69,11 +67,7 @@ class ProductService extends BaseService
                             ? $this->generateSku($product, $v)
                             : $v['sku'],
 
-                        'barcode' => $v['barcode'] ?? null,
-
-                        'color' => $v['color'] ?? null,
-                        'storage' => $v['storage'] ?? null,
-                        'version' => $v['version'] ?? null,
+                        'attributes' => $v['attributes'] ?? [],
 
                         'cost_price' => $v['cost_price'] ?? 0,
                         'sell_price' => $v['sell_price'] ?? 0,
@@ -206,28 +200,42 @@ class ProductService extends BaseService
         $catCode = $this->makeCodeFromWords($category);
         $brandCode = $this->makeCodeFromWords($brand);
 
-        // SKU PRODUCT
+        $base = "{$catCode}{$brandCode}";
+
+        // PRODUCT SKU
         if (!$variant) {
-            return "{$catCode}{$brandCode}";
+            $sku = $base;
+            $i = 1;
+
+            while (Product::where('sku', $sku)->exists()) {
+                $sku = $base . '-' . str_pad($i, 3, '0', STR_PAD_LEFT);
+                $i++;
+            }
+
+            return $sku;
         }
 
+        // VARIANT SKU
         $parts = [];
 
-        if (!empty($variant['storage'])) {
-            $parts[] = strtoupper($variant['storage']); // 128G
-        }
+        if (!empty($variant['attributes'])) {
 
-        if (!empty($variant['color'])) {
-            $parts[] = $this->short($variant['color']); // RED
-        }
+            foreach ($variant['attributes'] as $attr) {
 
-        if (!empty($variant['version'])) {
-            $parts[] = $this->short($variant['version']);
+                if (!empty($attr['value'])) {
+
+                    $parts[] = strtoupper(substr(
+                        Str::slug($attr['value']),
+                        0,
+                        3
+                    ));
+                }
+            }
         }
 
         $suffix = implode('-', $parts);
 
-        return "{$catCode}{$brandCode}" . ($suffix ? "-{$suffix}" : '');
+        return $base . ($suffix ? "-{$suffix}" : '');
     }
     
 }

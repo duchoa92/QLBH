@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, computed, watch, watchEffect } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -13,6 +13,10 @@ const props = defineProps({
     categories: Array,
     brands: Array
 })
+
+
+
+const showVariants = ref(false)
 
 /*
 |--------------------------------------------------------------------------
@@ -51,6 +55,8 @@ watch(() => props.product, (p) => {
     form.sell_price = p.sell_price ?? ''
     form.variants = p.variants ?? []
 
+    showVariants.value = form.variants.length > 0
+
     form.manage_stock_by_serial = p.manage_stock_by_serial ?? false
     form.product_type = p.product_type ?? 'normal'
 
@@ -65,7 +71,15 @@ const preview = ref(null)
 
 // Hiên thị ảnh khi props.product thay đổi
 watch(() => props.product, (p) => {
-    preview.value = p?.image_url || null
+    if (!p) {
+        form.reset()
+        showVariants.value = false // 🔥 thêm dòng này
+        return
+    }
+
+    form.variants = p.variants ?? []
+
+    showVariants.value = form.variants.length > 0 // 🔥 chuẩn
 })
 
 const handleImage = (e) => {
@@ -76,37 +90,55 @@ const handleImage = (e) => {
     preview.value = URL.createObjectURL(file)
 }
 
-
-const showVariants = ref(false)
 // Thêm xóa biến thể
 const toggleVariants = () => {
-
-    if (showVariants.value) {
-        // xóa hết
+    if (form.variants.length) {
         form.variants = []
     } else {
-        // thêm 1 cái mặc định
         form.variants = [{
-            color: '',
-            storage: '',
-            version: '',
+            attributes: categoryAttributes.value.map(attr => ({
+                name: attr.name,
+                value: ''
+            })),
             sku: '',
             cost_price: 0,
             sell_price: 0,
             stock: 0,
         }]
     }
-
-    showVariants.value = !showVariants.value
 }
 
+const categoryAttributes = computed(() => {
+    const cat = props.categories.find(c => c.id == form.category_id)
+    return cat?.attributes || []
+})
+
+watch(() => form.category_id, () => {
+
+    if (!categoryAttributes.value.length) return
+
+    form.variants.forEach(v => {
+        v.attributes = categoryAttributes.value.map(attr => ({
+            name: attr.name,
+            value: ''
+        }))
+    })
+
+})
 
 // Tạo SKU tự động
 
 const makeCode = (text) => {
     if (!text) return ''
 
-    const words = text.toLowerCase().split(' ')
+    // 🔥 bỏ dấu tiếng Việt
+    const noAccent = text
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+
+    const words = noAccent.trim().split(/\s+/)
 
     if (words.length === 1) {
         return words[0].slice(0, 3).toUpperCase()
@@ -116,53 +148,56 @@ const makeCode = (text) => {
         return (words[0][0] + words[1].slice(0, 2)).toUpperCase()
     }
 
-    return (words[0][0] + words[1][0] + words[2][0]).toUpperCase()
+    return words.slice(0, 3).map(w => w[0]).join('').toUpperCase()
 }
 
-watch(
-    () => [form.category_id, form.brand_id, form.variants],
-    () => {
-        const cat = props.categories.find(c => c.id == form.category_id)
-        const brand = props.brands.find(b => b.id == form.brand_id)
+watchEffect(() => {
 
-        if (!cat || !brand) return
+    const cat = props.categories.find(c => c.id == form.category_id)
+    const brand = props.brands.find(b => b.id == form.brand_id)
 
-        const base = makeCode(cat.name) + makeCode(brand.name)
+    if (!cat || !brand) return
 
+    const base = makeCode(cat.name) + makeCode(brand.name)
+
+    // SKU product
+    if (!form.sku) {
         form.sku = base
+    }
 
-        form.variants.forEach(v => {
-            let suffix = []
+    // SKU variants
+    form.variants.forEach(v => {
 
-            if (v.storage) suffix.push(v.storage)
-            if (v.color) suffix.push(v.color.slice(0, 3).toUpperCase())
+        let parts = []
 
-            v.sku = base + (suffix.length ? '-' + suffix.join('-') : '')
+        v.attributes?.forEach(attr => {
+            if (attr.value) {
+                parts.push(
+                    attr.value
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/đ/g, 'd')
+                        .replace(/Đ/g, 'D')
+                        .slice(0, 3)
+                        .toUpperCase()
+                )
+            }
         })
-    },
-    { deep: true }
-)
 
-watch(
-    () => form.variants,
-    () => {
-        const cat = props.categories.find(c => c.id == form.category_id)
-        const brand = props.brands.find(b => b.id == form.brand_id)
+        v.sku = base + (parts.length ? '-' + parts.join('-') : '')
+    })
 
-        const catCode = makeCode(cat?.name)
-        const brandCode = makeCode(brand?.name)
+})
 
-        form.variants.forEach(v => {
-            let parts = []
+const normalize = (text) => {
+    return text
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+}
 
-            if (v.storage) parts.push(v.storage)
-            if (v.color) parts.push(v.color.slice(0,3).toUpperCase())
 
-            v.sku = `${catCode}${brandCode}-${parts.join('-')}`
-        })
-    },
-    { deep: true }
-)
 
 /*
 |--------------------------------------------------------------------------
@@ -274,6 +309,45 @@ const submit = () => {
                         </div>
                     </div>
 
+                    <button
+                        type="button"
+                        class="px-3 py-2 bg-gray-200 rounded text-sm"
+                        @click="toggleVariants"
+                    >
+                        {{ form.variants.length ? 'Xóa biến thể' : 'Thêm biến thể' }}
+                    </button>
+
+                    <div v-if="form.variants.length">
+                        <div
+                            v-for="(v, i) in form.variants"
+                            :key="i"
+                            class="border rounded p-3 mt-3 space-y-3"
+                        >
+
+                            <!-- THUỘC TÍNH -->
+                            <div class="grid grid-cols-3 gap-2">
+                                <div v-for="(attr, i2) in v.attributes" :key="i2">
+    
+                                    <!-- LABEL -->
+                                    <label class="text-xs text-gray-500">
+                                        {{ attr.name }}
+                                    </label>
+
+                                    <!-- VALUE -->
+                                    <FloatingSelect
+                                        v-model="attr.value"
+                                        :options="categoryAttributes.find(a => a.name === attr.name)?.options || []"
+                                        :label="attr.name"
+                                    />
+
+                                </div>
+                            </div>
+
+                        </div>
+
+
+                    </div>
+
                     <div class="col-span-2 grid grid-cols-3 gap-4">
                         <FloatingInput
                             v-model="form.cost_price"
@@ -292,33 +366,7 @@ const submit = () => {
 
                     </div>
 
-                    <div>
-                        <button
-                            type="button"
-                            class="px-3 py-2 bg-gray-200 rounded text-sm"
-                            @click="toggleVariants"
-                        >
-                            {{ showVariants ? 'Xóa biến thể' : 'Thêm biến thể' }}
-                        </button>
-
-                        <div v-if="showVariants">
-                            <div
-                                v-for="(v, i) in form.variants"
-                                :key="i"
-                                class="border rounded p-3 mt-3 space-y-3"
-                            >
-
-                                <!-- THUỘC TÍNH -->
-                                <div class="grid grid-cols-3 gap-2">
-                                    <FloatingInput v-model="v.color" label="Màu" />
-                                    <FloatingInput v-model="v.storage" label="Bộ nhớ" />
-                                    <FloatingInput v-model="v.version" label="Phiên bản" />
-                                </div>
-
-                            </div>
-                        </div>
-                        
-                    </div>
+                    
 
                 </div>
             </div>

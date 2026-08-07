@@ -24,7 +24,6 @@ class StoreProductRequest extends FormRequest
                 'nullable',
                 'string',
                 'max:100',
-                'unique:products,sku',
             ],
 
             'cost_price' => [
@@ -74,8 +73,16 @@ class StoreProductRequest extends FormRequest
             ],
 
             'manage_stock_by_serial' => 'boolean',
-            
+
             'product_type' => 'nullable|string',
+
+
+            // Biến thể
+
+            'variants' => 'array',
+            'variants.*.attributes' => 'array',
+            'variants.*.attributes.*.name' => 'required|string',
+            'variants.*.attributes.*.value' => 'nullable|string',
         ];
     }
 }

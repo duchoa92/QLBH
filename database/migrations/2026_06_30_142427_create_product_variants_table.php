@@ -24,9 +24,7 @@ return new class extends Migration
             $table->string('barcode')->nullable();
 
             // thuộc tính
-            $table->string('color')->nullable();
-            $table->string('storage')->nullable();
-            $table->string('version')->nullable();
+            $table->json('attributes')->nullable();
 
             // giá
             $table->decimal('cost_price', 12, 2)->default(0);

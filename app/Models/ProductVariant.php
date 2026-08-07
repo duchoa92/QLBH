@@ -10,12 +10,14 @@ class ProductVariant extends Model
         'product_id',
         'sku',
         'barcode',
-        'color',
-        'storage',
-        'version',
+        'attributes',
         'cost_price',
         'sell_price',
         'stock',
+    ];
+
+    protected $casts = [
+        'attributes' => 'array',
     ];
 
     // Quan hệ với Imeis

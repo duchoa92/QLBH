@@ -8,6 +8,9 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use App\Http\Requests\Category\StoreCategoryRequest;
 use App\Http\Requests\Category\UpdateCategoryRequest;
+use App\Models\CategoryAttribute;
+use App\Models\CategoryAttributeValue;
+use Illuminate\Support\Facades\DB;
 
 class CategoryController extends Controller
 {
@@ -49,7 +52,32 @@ class CategoryController extends Controller
         $data['slug'] = Str::slug($data['name']);
         $data['is_active'] = $data['is_active'] ?? true;
 
-        Category::create($data);
+        DB::transaction(function () use ($data, &$category) {
+
+            $category = Category::create($data);
+
+            if (!empty($data['attributes'])) {
+
+                foreach ($data['attributes'] as $attr) {
+
+                    $attribute = CategoryAttribute::create([
+                        'category_id' => $category->id,
+                        'name' => $attr['name'],
+                    ]);
+
+                    if (!empty($attr['options'])) {
+
+                        foreach ($attr['options'] as $value) {
+
+                            CategoryAttributeValue::create([
+                                'attribute_id' => $attribute->id,
+                                'value' => $value,
+                            ]);
+                        }
+                    }
+                }
+            }
+        });
 
         return back()->with('success', 'Đã thêm danh mục');
     }
@@ -59,7 +87,36 @@ class CategoryController extends Controller
         $data = $request->validated();
         $data['slug'] = Str::slug($data['name']);
 
-        $category->update($data);
+        DB::transaction(function () use ($category, $data) {
+
+            $category->update($data);
+
+            //  xóa attribute cũ
+            $category->attributes()->delete();
+
+            //  tạo lại
+            if (!empty($data['attributes'])) {
+
+                foreach ($data['attributes'] as $attr) {
+
+                    $attribute = CategoryAttribute::create([
+                        'category_id' => $category->id,
+                        'name' => $attr['name'],
+                    ]);
+
+                    if (!empty($attr['options'])) {
+
+                        foreach ($attr['options'] as $value) {
+
+                            CategoryAttributeValue::create([
+                                'attribute_id' => $attribute->id,
+                                'value' => $value,
+                            ]);
+                        }
+                    }
+                }
+            }
+        });
 
         return back()->with('success', 'Đã cập nhật danh mục');
     }
@@ -114,4 +171,32 @@ class CategoryController extends Controller
 
         return back()->with('success', 'Đã cập nhật trạng thái');
     }
+
+    public function create()
+    {
+        return Inertia::render('Categories/Form', [
+            'category' => null
+        ]);
+    }
+
+    public function edit(Category $category)
+    {
+        $category->load('attributes.values');
+
+        return Inertia::render('Categories/Form', [
+            'category' => [
+                'id' => $category->id,
+                'name' => $category->name,
+
+                'attributes' => $category->attributes->map(function ($attr) {
+                    return [
+                        'name' => $attr->name,
+                        'options' => $attr->values->pluck('value')
+                    ];
+                })
+            ]
+        ]);
+    }
+
+
 }

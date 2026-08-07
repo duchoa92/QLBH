@@ -25,6 +25,8 @@ return new class extends Migration
             $table->string('slug')
                 ->unique();
 
+            $table->json('attributes')->nullable();
+
             $table->integer('sort_order')
                 ->default(0);
 

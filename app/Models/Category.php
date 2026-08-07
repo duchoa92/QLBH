@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\PreventDeleteIfHasRelations;
+use App\Models\CategoryAttribute;
 
 class Category extends Model
 {
@@ -20,6 +21,7 @@ class Category extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'attributes' => 'array',
     ];
 
     // Quan hệ
@@ -27,4 +29,5 @@ class Category extends Model
     public function children() { return $this->hasMany(Category::class, 'parent_id'); }
     public function products() { return $this->hasMany(Product::class); }
     public function brands()   { return $this->hasMany(Brand::class); }
+    public function attributes(){return $this->hasMany(CategoryAttribute::class);}
 }

@@ -16,6 +16,8 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\CategoryAttributeController;
+use App\Http\Controllers\CategoryAttributeValueController;
 
 
 /*
@@ -181,13 +183,26 @@ Route::prefix('products')
         Route::patch('/{product}/toggle-status', [ProductController::class, 'toggleStatus'])
             ->name('toggleStatus');
 
-
-        
-
-        
-
     });
 
+
+    /* 
+    | Tạo biến thể
+     */
+Route::prefix('category-attributes')->group(function () {
+    Route::post('/', [CategoryAttributeController::class, 'store'])->name('attributes.store');
+    Route::put('/{attribute}', [CategoryAttributeController::class, 'update'])->name('attributes.update');
+    Route::delete('/{attribute}', [CategoryAttributeController::class, 'destroy'])->name('attributes.destroy');
+});
+
+
+Route::prefix('category-attribute-values')->group(function () {
+    Route::get('/{attributeId}', [CategoryAttributeValueController::class, 'index']);
+    Route::post('/', [CategoryAttributeValueController::class, 'store']);
+    Route::put('/{id}', [CategoryAttributeValueController::class, 'update']);
+    Route::delete('/{id}', [CategoryAttributeValueController::class, 'destroy']);
+
+});
 
 
     /*

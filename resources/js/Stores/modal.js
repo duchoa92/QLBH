@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, markRaw } from 'vue'
 
 let uid = 0
 
@@ -14,6 +14,7 @@ export function openModal(component, options = {}) {
     state.modals.push({
         id: ++uid,
         component,
+        component: markRaw(component),
         props: options.props || {},
         onUpdated: options.onUpdated || null
     })
@@ -21,7 +22,8 @@ export function openModal(component, options = {}) {
 
 export function closeModal(id = null) {
     if (id !== null) {
-        state.modals = state.modals.filter(m => m.id !== id)
+        const index = state.modals.findIndex(m => m.id === id)
+        if (index !== -1) state.modals.splice(index, 1)
     } else {
         state.modals.pop()
     }

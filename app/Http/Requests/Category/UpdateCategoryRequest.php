@@ -40,6 +40,26 @@ class UpdateCategoryRequest extends FormRequest
             'is_active' => [
                 'boolean',
             ],
+            
+            'attributes' => [
+                'nullable',
+                'array',
+            ],
+
+            'attributes.*.name' => [
+                'required',
+                'string',
+            ],
+
+            'attributes.*.options' => [
+                'nullable',
+                'array',
+            ],
+
+            'attributes.*.options.*' => [
+                'nullable',
+                'string',
+            ],
         ];
     }
 

@@ -44,7 +44,20 @@ class ProductController extends Controller
         return Inertia::render('Products/Index', [
             'products'   => $this->productRepository->paginate(),
             'filters'    => $filters,
-            'categories' => Category::select('id', 'name')->get(),
+            'categories' => Category::with('attributes.values')
+                ->get()
+                ->map(function ($cat) {
+                    return [
+                        'id' => $cat->id,
+                        'name' => $cat->name,
+                        'attributes' => $cat->attributes->map(function ($attr) {
+                            return [
+                                'name' => $attr->name,
+                                'options' => $attr->values->pluck('value')
+                            ];
+                        })
+                    ];
+                }),
             'brands'     => Brand::query()
                 ->select('id', 'name', 'category_id')
                 ->when($request->filled('category_id'), function ($q) use ($request) {
@@ -52,6 +65,27 @@ class ProductController extends Controller
                 })
                 ->orderBy('name')
                 ->get(),
+        ]);
+    }
+
+    public function create()
+    {
+        return Inertia::render('Products/Form', [
+            'categories' => Category::with('attributes.values')
+                ->get()
+                ->map(function ($cat) {
+                    return [
+                        'id' => $cat->id,
+                        'name' => $cat->name,
+                        'attributes' => $cat->attributes->map(function ($attr) {
+                            return [
+                                'name' => $attr->name,
+                                'options' => $attr->values->pluck('value')
+                            ];
+                        })
+                    ];
+                }),
+            'brands' => Brand::select('id', 'name', 'category_id')->get(),
         ]);
     }
 
