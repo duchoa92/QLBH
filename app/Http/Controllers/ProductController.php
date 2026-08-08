@@ -44,16 +44,20 @@ class ProductController extends Controller
         return Inertia::render('Products/Index', [
             'products'   => $this->productRepository->paginate(),
             'filters'    => $filters,
-            'categories' => Category::with('attributes.values')
+            'categories' => Category::with('categoryAttributes.values') // 👈 THÊM DÒNG NÀY
+                ->select('id', 'name')
                 ->get()
                 ->map(function ($cat) {
                     return [
                         'id' => $cat->id,
                         'name' => $cat->name,
-                        'attributes' => $cat->attributes->map(function ($attr) {
+                        'attributes' => collect($cat->categoryAttributes ?? [])->map(function ($attr) {
                             return [
+                                'id' => $attr->id,
                                 'name' => $attr->name,
-                                'options' => $attr->values->pluck('value')
+                                'values' => ($attr->values ?? collect())->map(fn ($v) => [
+                                    'value' => $v->value
+                                ])
                             ];
                         })
                     ];
@@ -71,20 +75,12 @@ class ProductController extends Controller
     public function create()
     {
         return Inertia::render('Products/Form', [
-            'categories' => Category::with('attributes.values')
-                ->get()
-                ->map(function ($cat) {
-                    return [
-                        'id' => $cat->id,
-                        'name' => $cat->name,
-                        'attributes' => $cat->attributes->map(function ($attr) {
-                            return [
-                                'name' => $attr->name,
-                                'options' => $attr->values->pluck('value')
-                            ];
-                        })
-                    ];
-                }),
+            'categories' => Category::with([
+                'attributes.values' // 👈 BẮT BUỘC PHẢI CÓ
+            ])
+            ->select('id', 'name')
+            ->get(),
+
             'brands' => Brand::select('id', 'name', 'category_id')->get(),
         ]);
     }

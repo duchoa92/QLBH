@@ -21,7 +21,6 @@ class Category extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
-        'attributes' => 'array',
     ];
 
     // Quan hệ
@@ -29,5 +28,8 @@ class Category extends Model
     public function children() { return $this->hasMany(Category::class, 'parent_id'); }
     public function products() { return $this->hasMany(Product::class); }
     public function brands()   { return $this->hasMany(Brand::class); }
-    public function attributes(){return $this->hasMany(CategoryAttribute::class);}
+    public function categoryAttributes()
+    {
+        return $this->hasMany(CategoryAttribute::class, 'category_id');
+    }
 }

@@ -1,4 +1,5 @@
 <script setup>
+import { ref, watch, computed } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -11,8 +12,8 @@ const props = defineProps({
 const emit = defineEmits(['close', 'updated'])
 
 const form = useForm({
-    id: props.category?.id || null,
-    name: props.category?.name || '',
+    id: null,
+    name: '',
     attributes: []
 })
 
@@ -54,6 +55,34 @@ const addOption = (attr) => {
 const removeOption = (attr, index) => {
     attr.options.splice(index, 1)
 }
+
+watch(() => props.category, (c) => {
+
+    console.log('CATEGORY NHẬN ĐƯỢC:', c)
+
+    if (!c) {
+        form.id = null
+        form.name = ''
+        form.attributes = []
+        return
+    }
+
+    form.id = c.id ?? null
+    form.name = c.name ?? ''
+
+    form.attributes = (c.attributes ?? []).map(attr => ({
+        id: attr.id ?? null,
+        name: attr.name ?? '',
+        options: [...(attr.options ?? [])]
+    }))
+
+}, {
+    immediate: true
+})
+
+watch(() => props.category, (c) => {
+    console.log('CATEGORY:', c)
+}, { immediate: true })
 
 </script>
 

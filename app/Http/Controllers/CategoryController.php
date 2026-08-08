@@ -17,6 +17,7 @@ class CategoryController extends Controller
     public function index(Request $request)
     {
         $categories = Category::query()
+            ->with('categoryAttributes.values')
             ->when($request->filled('search'), fn ($q) =>
                 $q->where('name', 'like', '%' . $request->search . '%')
             )
@@ -33,6 +34,24 @@ class CategoryController extends Controller
             })
 
             ->paginate(10)
+            ->through(function ($cat) {
+                return [
+                    'id' => $cat->id,
+                    'name' => $cat->name,
+                    'is_active' => $cat->is_active,
+
+                    'attributes' => $cat->categoryAttributes->map(function ($attr) {
+                        return [
+                            'id' => $attr->id,
+                            'name' => $attr->name,
+                            'options' => $attr->values
+                                ->pluck('value')
+                                ->values()
+                                ->toArray(),
+                        ];
+                    })->values()->toArray(),
+                ];
+            })
             ->withQueryString();
 
         return Inertia::render('Categories/Index', [
@@ -92,7 +111,7 @@ class CategoryController extends Controller
             $category->update($data);
 
             //  xóa attribute cũ
-            $category->attributes()->delete();
+            $category->categoryAttributes()->delete();
 
             //  tạo lại
             if (!empty($data['attributes'])) {
@@ -176,25 +195,6 @@ class CategoryController extends Controller
     {
         return Inertia::render('Categories/Form', [
             'category' => null
-        ]);
-    }
-
-    public function edit(Category $category)
-    {
-        $category->load('attributes.values');
-
-        return Inertia::render('Categories/Form', [
-            'category' => [
-                'id' => $category->id,
-                'name' => $category->name,
-
-                'attributes' => $category->attributes->map(function ($attr) {
-                    return [
-                        'name' => $attr->name,
-                        'options' => $attr->values->pluck('value')
-                    ];
-                })
-            ]
         ]);
     }
 

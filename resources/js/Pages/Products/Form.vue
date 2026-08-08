@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch, watchEffect } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, watchEffect } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -33,11 +33,36 @@ const form = useForm({
     sell_price: props.product?.sell_price ?? '',
     image: null,
     variants: props.product?.variants ?? [],
-
     manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
     product_type: props.product?.product_type ?? 'normal',
-
 })
+
+/*
+|--------------------------------------------------------------------------
+| LỌC THƯƠNG HIỆU THEO DANH MỤC
+|--------------------------------------------------------------------------
+*/
+const filteredBrands = computed(() => {
+    if (!form.category_id) {
+        return []
+    }
+
+    return props.brands.filter(
+        brand => Number(brand.category_id) === Number(form.category_id)
+    )
+})
+
+/*
+|--------------------------------------------------------------------------
+| ĐỔI DANH MỤC → XÓA THƯƠNG HIỆU ĐÃ CHỌN
+|--------------------------------------------------------------------------
+*/
+watch(
+    () => form.category_id,
+    () => {
+        form.brand_id = null
+    }
+)
 
 // reset form khi props.product thay đổi (chọn sửa sản phẩm khác)
 watch(() => props.product, (p) => {
@@ -51,6 +76,7 @@ watch(() => props.product, (p) => {
     form.category_id = p.category_id ?? null
     form.brand_id = p.brand_id ?? null
     form.sku = p.sku ?? null
+    autoSku.value = p.sku ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
     form.variants = p.variants ?? []
@@ -90,41 +116,80 @@ const handleImage = (e) => {
     preview.value = URL.createObjectURL(file)
 }
 
+
+
+const categoryAttributes = computed(() => {
+    const cat = props.categories.find(
+        c => Number(c.id) === Number(form.category_id)
+    )
+
+    if (!cat?.attributes) {
+        return []
+    }
+
+    return cat.attributes.map(attr => ({
+        id: attr.id,
+        name: attr.name,
+        values: (
+            attr.values ??
+            attr.options ??
+            []
+        ).map(value => {
+            if (typeof value === 'string') {
+                return {
+                    value
+                }
+            }
+
+            return value
+        })
+    }))
+})
+
+const buildVariantAttributes = () => {
+    return categoryAttributes.value.map(attr => ({
+        id: attr.id,
+        name: attr.name,
+        value: ''
+    }))
+}
 // Thêm xóa biến thể
 const toggleVariants = () => {
     if (form.variants.length) {
         form.variants = []
-    } else {
-        form.variants = [{
-            attributes: categoryAttributes.value.map(attr => ({
-                name: attr.name,
-                value: ''
-            })),
-            sku: '',
-            cost_price: 0,
-            sell_price: 0,
-            stock: 0,
-        }]
+        return
     }
+
+    form.variants = [{
+        attributes: buildVariantAttributes(),
+        sku: '',
+        cost_price: 0,
+        sell_price: 0,
+        stock: 0,
+    }]
 }
 
-const categoryAttributes = computed(() => {
-    const cat = props.categories.find(c => c.id == form.category_id)
-    return cat?.attributes || []
-})
+watch(
+    () => form.category_id,
+    () => {
+        // Đổi danh mục thì thương hiệu phải reset
+        form.brand_id = null
 
-watch(() => form.category_id, () => {
+        // Chưa có thuộc tính thì không tạo biến thể
+        if (!categoryAttributes.value.length) {
+            return
+        }
 
-    if (!categoryAttributes.value.length) return
+        // Nếu đang bật biến thể thì cập nhật ngay
+        if (form.variants.length) {
+            form.variants.forEach(variant => {
+                variant.attributes = buildVariantAttributes()
+            })
+        }
+    },
+    { flush: 'sync' }
+)
 
-    form.variants.forEach(v => {
-        v.attributes = categoryAttributes.value.map(attr => ({
-            name: attr.name,
-            value: ''
-        }))
-    })
-
-})
 
 // Tạo SKU tự động
 
@@ -151,43 +216,78 @@ const makeCode = (text) => {
     return words.slice(0, 3).map(w => w[0]).join('').toUpperCase()
 }
 
-watchEffect(() => {
+const autoSku = ref('')
+watch(
+    [() => form.category_id, () => form.brand_id],
+    ([categoryId, brandId], [oldCategoryId, oldBrandId]) => {
 
-    const cat = props.categories.find(c => c.id == form.category_id)
-    const brand = props.brands.find(b => b.id == form.brand_id)
+        const cat = props.categories.find(
+            c => Number(c.id) === Number(categoryId)
+        )
 
-    if (!cat || !brand) return
+        const brand = props.brands.find(
+            b => Number(b.id) === Number(brandId)
+        )
 
-    const base = makeCode(cat.name) + makeCode(brand.name)
+        if (!cat || !brand) return
 
-    // SKU product
-    if (!form.sku) {
-        form.sku = base
-    }
+        const base =
+            makeCode(cat.name) +
+            makeCode(brand.name)
 
-    // SKU variants
-    form.variants.forEach(v => {
+        /*
+        |--------------------------------------------------------------------------
+        | SKU sản phẩm
+        |--------------------------------------------------------------------------
+        */
 
-        let parts = []
+        // Khi thêm mới hoặc khi SKU đang là SKU tự động cũ
+        if (
+            !form.id ||
+            !form.sku ||
+            form.sku === autoSku.value
+        ) {
+            form.sku = base
+            autoSku.value = base
+        }
 
-        v.attributes?.forEach(attr => {
-            if (attr.value) {
-                parts.push(
-                    attr.value
-                        .normalize('NFD')
-                        .replace(/[\u0300-\u036f]/g, '')
-                        .replace(/đ/g, 'd')
-                        .replace(/Đ/g, 'D')
-                        .slice(0, 3)
-                        .toUpperCase()
+        /*
+        |--------------------------------------------------------------------------
+        | SKU biến thể
+        |--------------------------------------------------------------------------
+        */
+
+        form.variants.forEach(v => {
+
+            const parts = []
+
+            v.attributes?.forEach(attr => {
+
+                if (attr.value) {
+
+                    parts.push(
+                        attr.value
+                            .normalize('NFD')
+                            .replace(/[\u0300-\u036f]/g, '')
+                            .replace(/đ/g, 'd')
+                            .replace(/Đ/g, 'D')
+                            .slice(0, 3)
+                            .toUpperCase()
+                    )
+
+                }
+
+            })
+
+            v.sku =
+                base +
+                (parts.length
+                    ? '-' + parts.join('-')
+                    : ''
                 )
-            }
         })
-
-        v.sku = base + (parts.length ? '-' + parts.join('-') : '')
-    })
-
-})
+    }
+)
 
 const normalize = (text) => {
     return text
@@ -196,6 +296,8 @@ const normalize = (text) => {
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D')
 }
+
+
 
 
 
@@ -267,10 +369,6 @@ const submit = () => {
 
                     <FloatingSelect
                         v-model="form.category_id"
-                        @update:modelValue="v => {
-                            form.category_id = v
-                            form.brand_id = null
-                        }"
                         :options="categories"
                         option-label="name"
                         option-value="id"
@@ -281,70 +379,94 @@ const submit = () => {
 
                     <FloatingSelect
                         v-model="form.brand_id"
-                        :options="brands"
+                        :options="filteredBrands"
                         option-label="name"
                         option-value="id"
                         label="Thương hiệu"
                         :error="form.errors.brand_id"
                     />
 
+                    <!-- SKU + IMEI + BIẾN THỂ -->
                     <div class="col-span-2 grid grid-cols-2 gap-4">
+
+                        <!-- SKU -->
                         <FloatingInput
                             v-model="form.sku"
                             label="SKU"
                             :error="form.errors.sku"
                         />
-                        <!-- CHECKBOX IMEI -->
-                        <div class="flex items-center gap-2 mt-2">
-                            <input
-                                id="imei"
-                                type="checkbox"
-                                v-model="form.manage_stock_by_serial"
-                                class="w-5 h-5 accent-green-600 cursor-pointer"
-                            />
 
-                            <label for="imei" class="text-sm cursor-pointer select-none">
-                                Có IMEI
-                            </label>
+                        <!-- CÓ IMEI + NÚT BIẾN THỂ -->
+                        <div class="flex items-center gap-3">
+
+                            <!-- CHECKBOX IMEI -->
+                            <div class="flex items-center gap-2">
+                                <input
+                                    id="imei"
+                                    type="checkbox"
+                                    v-model="form.manage_stock_by_serial"
+                                    class="w-5 h-5 accent-green-600 cursor-pointer"
+                                />
+
+                                <label
+                                    for="imei"
+                                    class="text-sm cursor-pointer select-none"
+                                >
+                                    Có IMEI
+                                </label>
+                            </div>
+
+                            <!-- THÊM / XÓA BIẾN THỂ -->
+                            <button
+                                type="button"
+                                class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap"
+                                @click="toggleVariants"
+                            >
+                                {{ form.variants.length ? 'Xóa biến thể' : 'Thêm biến thể' }}
+                            </button>
+
                         </div>
                     </div>
 
-                    <button
-                        type="button"
-                        class="px-3 py-2 bg-gray-200 rounded text-sm"
-                        @click="toggleVariants"
-                    >
-                        {{ form.variants.length ? 'Xóa biến thể' : 'Thêm biến thể' }}
-                    </button>
 
-                    <div v-if="form.variants.length">
+                    <!-- ========================= -->
+                    <!-- DANH SÁCH BIẾN THỂ -->
+                    <!-- ========================= -->
+                    <div
+                        v-if="form.variants.length"
+                        class="col-span-2 border rounded-lg p-3"
+                    >
+
                         <div
                             v-for="(v, i) in form.variants"
                             :key="i"
-                            class="border rounded p-3 mt-3 space-y-3"
+                            class="space-y-3"
                         >
 
                             <!-- THUỘC TÍNH -->
-                            <div class="grid grid-cols-3 gap-2">
-                                <div v-for="(attr, i2) in v.attributes" :key="i2">
-    
-                                    <!-- LABEL -->
-                                    <label class="text-xs text-gray-500">
-                                        {{ attr.name }}
-                                    </label>
+                            <div class="grid grid-cols-3 gap-3">
 
-                                    <!-- VALUE -->
+                                <div
+                                    v-for="(attr, i2) in v.attributes"
+                                    :key="i2"
+                                >
+
                                     <FloatingSelect
                                         v-model="attr.value"
-                                        :options="categoryAttributes.find(a => a.name === attr.name)?.options || []"
+                                        :key="`${form.category_id}-${attr.id}-${i2}`"
+                                        :options="
+                                            categoryAttributes.find(a => a.id === attr.id)?.values ?? []
+                                        "
+                                        option-label="value"
+                                        option-value="value"
                                         :label="attr.name"
                                     />
 
                                 </div>
+
                             </div>
 
                         </div>
-
 
                     </div>
 

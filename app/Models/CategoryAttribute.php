@@ -10,9 +10,6 @@ class CategoryAttribute extends Model
         'category_id',
         'name'
     ];
-    protected $casts = [
-        'options' => 'array',
-    ];
 
     // thuộc về category
     public function category()
@@ -25,4 +22,5 @@ class CategoryAttribute extends Model
     {
         return $this->hasMany(CategoryAttributeValue::class, 'attribute_id');
     }
+
 }
