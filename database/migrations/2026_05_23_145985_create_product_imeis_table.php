@@ -25,6 +25,11 @@ return new class extends Migration
                 ->constrained()
                 ->cascadeOnDelete();
 
+            $table->foreignId('variant_id')
+                ->nullable()
+                ->constrained('product_variants')
+                ->cascadeOnDelete();
+
             $table->foreignId('supplier_id')
                 ->nullable()
                 ->constrained()
@@ -138,11 +143,7 @@ return new class extends Migration
             |--------------------------------------------------------------------------
             */
 
-            $table->tinyInteger('status')
-                ->default(0)
-                ->comment(
-                    '0=available,1=sold,2=repairing,3=returned'
-                );
+            $table->enum('status', ['in_stock', 'sold'])->default('in_stock');
 
             /*
             |--------------------------------------------------------------------------

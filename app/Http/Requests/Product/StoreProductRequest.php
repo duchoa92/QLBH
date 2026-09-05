@@ -74,15 +74,24 @@ class StoreProductRequest extends FormRequest
 
             'manage_stock_by_serial' => 'boolean',
 
-            'product_type' => 'nullable|string',
+            'product_type' => [
+                'nullable',
+                'in:normal,imei,service,combo',
+            ],
 
 
             // Biến thể
 
             'variants' => 'array',
+            'variants.*.sku' => 'nullable|string|max:100',
+            'variants.*.cost_price' => 'nullable|numeric|min:0',
+            'variants.*.sell_price' => 'nullable|numeric|min:0',
+            'variants.*.stock' => 'nullable|integer|min:0',
+            'variants.*.imeis' => 'nullable|string',
             'variants.*.attributes' => 'array',
             'variants.*.attributes.*.name' => 'required|string',
-            'variants.*.attributes.*.value' => 'nullable|string',
+            'variants.*.attributes.*.value' => 'nullable|array',
+            'variants.*.attributes.*.value.*' => 'string',
         ];
     }
 }

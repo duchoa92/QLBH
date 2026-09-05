@@ -51,8 +51,7 @@ return new class extends Migration
             $table->string('slug')
                 ->unique();
 
-            $table->string('sku')
-                ->unique();
+            $table->string('sku')->nullable()->unique();
 
             $table->string('barcode')
                 ->nullable()

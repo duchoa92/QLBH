@@ -1,13 +1,15 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, h } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import TagBadge from '@/Components/UI/TagBadge.vue'
 
 const props = defineProps({
     category: Object,
     title: String
 })
+const attrInput = ref('')
 
 const emit = defineEmits(['close', 'updated'])
 
@@ -37,6 +39,36 @@ const submit = () => {
     }
 }
 
+// Tạo hàm Tag
+const addAttributeTag = () => {
+    const values = attrInput.value.split(',')
+
+    values.forEach(v => {
+        const name = v.trim()
+        if (!name) return
+
+        // tránh trùng
+        const exists = form.attributes.some(a => a.name === name)
+        if (!exists) {
+            form.attributes.push({
+                name,
+                options: []
+            })
+        }
+    })
+
+    attrInput.value = ''
+}
+
+// Bắt sự kiện Enter hoặc dấu phẩy
+const handleAttrKey = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault()
+        addAttributeTag()
+    }
+}
+
+
 const addAttribute = () => {
     form.attributes.push({
         name: '',
@@ -58,8 +90,6 @@ const removeOption = (attr, index) => {
 
 watch(() => props.category, (c) => {
 
-    console.log('CATEGORY NHẬN ĐƯỢC:', c)
-
     if (!c) {
         form.id = null
         form.name = ''
@@ -80,9 +110,9 @@ watch(() => props.category, (c) => {
     immediate: true
 })
 
-watch(() => props.category, (c) => {
+/* watch(() => props.category, (c) => {
     console.log('CATEGORY:', c)
-}, { immediate: true })
+}, { immediate: true }) */
 
 </script>
 
@@ -97,74 +127,45 @@ watch(() => props.category, (c) => {
         <FloatingInput
             v-model="form.name"
             label="Tên danh mục"
+            :error="form.errors.name"
         />
 
         <!-- ATTRIBUTES-->
         <div class="mt-4">
-            <h3 class="font-semibold mb-2">Thuộc tính danh mục</h3>
+            <FloatingInput
+                v-model="attrInput"
+                @keydown="handleAttrKey"
+                @blur="addAttributeTag"
+                label="Nhập thuộc tính"
+            />
+            <h4 class="text-sm text-gray-500 mx-2 my-1">Ví dụ: Màu sắc, Bộ nhớ, Dung lượng,...</h4>
 
-            <button
-                type="button"
-                @click="addAttribute"
-                class="mb-3 px-3 py-1 bg-blue-500 text-white rounded"
-            >
-                + Thêm thuộc tính
-            </button>
+           
 
+
+            <!-- TAG LIST -->
             <div
-                v-for="(attr, index) in form.attributes"
-                :key="index"
-                class="border p-3 rounded mb-3"
+                :class="[
+                    'rounded-lg p-2 my-2 flex flex-wrap gap-2',
+                    form.attributes.length
+                        ? 'border border-gray-300'
+                        : 'border border-transparent'
+                ]"
             >
 
-                <!-- TÊN ATTRIBUTE -->
-                <input
-                    v-model="attr.name"
-                    placeholder="Tên thuộc tính (VD: Màu sắc, bộ nhớ, phiên bản,...)"
-                    class="border p-2 w-full mb-2"
+                <TagBadge
+                    v-for="(attr, index) in form.attributes"
+                    :key="index"
+                    :label="attr.name"
+                    removable
+                    @remove="removeAttribute(index)"
+                    size="lg"
+                    color="blue"
                 />
-
-                <!-- OPTIONS -->
-                <div
-                    v-for="(opt, i) in attr.options"
-                    :key="i"
-                    class="flex gap-2 mb-2"
-                >
-                    <input
-                        v-model="attr.options[i]"
-                        placeholder="Giá trị (VD: Đỏ, xanh, vàng,...)"
-                        class="border p-2 flex-1"
-                    />
-
-                    <button
-                        type="button"
-                        @click="removeOption(attr, i)"
-                        class="text-red-500"
-                    >
-                        X
-                    </button>
-                </div>
-
-                <button
-                    type="button"
-                    @click="addOption(attr)"
-                    class="text-sm text-blue-600"
-                >
-                    + Thêm giá trị
-                </button>
-
-                <div class="mt-2">
-                    <button
-                        type="button"
-                        @click="removeAttribute(index)"
-                        class="text-red-600 text-sm"
-                    >
-                        Xóa thuộc tính
-                    </button>
-                </div>
 
             </div>
         </div>
+
     </div>
 
 

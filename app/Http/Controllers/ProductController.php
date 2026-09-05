@@ -6,9 +6,9 @@ use App\Http\Requests\Product\StoreProductRequest;
 use App\Http\Requests\Product\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
-use App\Services\Product\ProductService;
 use App\Repositories\Product\ProductRepository;
 use App\Models\Brand;
+use App\Services\Product\ProductService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Jobs\ExportProductsJob;
 use Illuminate\Support\Str;
 use App\Exports\ImportErrorExport;
+use App\Models\ProductVariant;
 
 
 
@@ -85,6 +86,20 @@ class ProductController extends Controller
         ]);
     }
 
+
+    public function previewSku(Request $request)
+    {
+        $sku = $this->service->previewNextSku(
+            $request->category_id,
+            $request->brand_id
+        );
+
+        return response()->json([
+            'sku' => $sku,
+        ]);
+    }
+
+
     // Hiển thị chi tiết sản phẩm
     public function show(Product $product)
     {
@@ -92,11 +107,14 @@ class ProductController extends Controller
             'category',
             'brand',
             'imeis',
+            'variants',
         ]);
 
         return Inertia::render('Products/Show', [
             'product' => $product,
         ]);
+
+        
     }
 
     // Lưu sản phẩm mới
@@ -243,8 +261,10 @@ class ProductController extends Controller
         $ids = $request->get('ids', []);
 
         $products = Product::with([
+            'category',
+            'brand',
+            'variants',
             'imeis',
-            'variants'
         ])->whereIn('id', $ids)->get();
 
         return response()->json($products);
@@ -525,6 +545,104 @@ class ProductController extends Controller
             new ImportErrorExport($errors),
             'loi_import.xlsx'
         );
+    }
+
+
+    public function getProductApi($id)
+    {
+        $product = Product::with('variants')->find($id);
+
+        if (!$product) {
+            return response()->json([
+                'message' => 'Không tìm thấy sản phẩm'
+            ], 404);
+        }
+
+        return response()->json($product);
+    }
+
+    // 
+    public function variants()
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+    // API lấy product + variant
+    public function listForImport(Request $request)
+    {
+        $keyword = trim($request->input('keyword', ''));
+
+        $products = Product::query()
+            ->where('is_active', true)
+
+            ->when($keyword, function ($query) use ($keyword) {
+
+                $normalizedKeyword = Product::normalizeSearch($keyword);
+
+                $query->where(function ($q) use (
+                    $keyword,
+                    $normalizedKeyword
+                ) {
+
+                    $q->where('barcode', $keyword)
+                        ->orWhere('sku', 'like', $keyword . '%')
+                        ->orWhere(
+                            'search_text',
+                            'like',
+                            '%' . $normalizedKeyword . '%'
+                        );
+                });
+            })
+
+            ->with([
+                'variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock',
+            ])
+
+            ->select([
+                'id',
+                'category_id',
+                'name',
+                'sku',
+                'barcode',
+                'cost_price',
+                'sell_price',
+                'stock',
+                'product_type',
+                'manage_stock_by_serial',
+                'image',
+            ])
+
+            ->orderBy('name')
+            ->limit(30)
+            ->get();
+
+        return response()->json(
+            $products
+        );
+    }
+
+    // API SEARCH
+    public function search(Request $request)
+    {
+        $keyword = $request->q;
+
+        return Product::with('variants')
+            ->where('name', 'like', "%$keyword%")
+            ->orWhere('sku', 'like', "%$keyword%")
+            ->limit(10)
+            ->get()
+            ->flatMap(function ($p) {
+                return $p->variants->map(function ($v) use ($p) {
+                    return [
+                        'product_id' => $p->id,
+                        'variant_id' => $v->id,
+                        'name' => $p->name,
+                        'sku' => $v->sku,
+                        'attributes' => $v->attributes,
+                        'price' => $v->cost_price,
+                        'image' => $p->image_url,
+                    ];
+                });
+            });
     }
 
 

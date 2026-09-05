@@ -20,7 +20,7 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             // mã
-            $table->string('sku')->nullable();
+            $table->string('sku')->unique();
             $table->string('barcode')->nullable();
 
             // thuộc tính

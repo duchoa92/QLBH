@@ -28,6 +28,7 @@ class Product extends Model
         'stock',
         'alert_stock',
         'product_type',
+        'manage_stock_by_serial',
         'is_active',
         'description',
 
@@ -44,6 +45,8 @@ class Product extends Model
         'is_active' => 'boolean',
 
         'allow_negative_stock' => 'boolean',
+
+        'manage_stock_by_serial' => 'boolean',
     ];
 
     protected $attributes = [

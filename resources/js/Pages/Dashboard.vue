@@ -67,11 +67,11 @@ const stats = [
                     <div>
 
                         <div class="text-sm font-bold uppercase tracking-wide text-blue-600">
-                            Tong quan he thong
+                            Tổng quan hệ thống
                         </div>
 
                         <h2 class="mt-2 text-3xl font-black text-slate-950">
-                            Quan ly ban hang tap trung
+                            Quản lý bán hàng tập trung
                         </h2>
 
                         <p class="mt-2 max-w-2xl text-slate-600">
@@ -84,7 +84,7 @@ const stats = [
                         href="/pos"
                         class="inline-flex h-12 items-center justify-center rounded-md bg-blue-600 px-5 text-sm font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-blue-700"
                     >
-                        Mo POS
+                        Mở Pos
                     </Link>
 
                 </div>

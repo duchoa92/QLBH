@@ -32,9 +32,8 @@ const emit = defineEmits([
                     gift.id
                 )
             "
+            label="gift.name"
         >
-
-            {{ gift.name }}
 
             <span
                 class="

@@ -14,42 +14,63 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
--- Dumping data for table qlbh.brands: ~3 rows (approximately)
+-- Dumping data for table qlbh.brands: ~4 rows (approximately)
 REPLACE INTO `brands` (`id`, `name`, `search_text`, `slug`, `category_id`, `sort_order`, `is_active`, `deleted_at`, `created_at`, `updated_at`) VALUES
-	(1, 'Samsung', 'samsung', 'samsung', 1, 0, 1, NULL, '2026-06-19 09:03:23', '2026-07-03 16:11:29'),
-	(2, 'Apple', 'apple', 'apple', 1, 0, 1, NULL, '2026-06-19 09:03:30', '2026-07-03 16:11:28'),
-	(3, 'OEM', 'oem', 'oem', 2, 0, 1, NULL, '2026-06-19 09:03:38', '2026-07-07 17:20:20');
+	(1, 'Samsung', 'samsung', 'samsung', 1, 0, 1, NULL, '2026-08-15 16:46:06', '2026-08-15 16:46:06'),
+	(2, 'Apple', 'apple', 'apple', 1, 0, 1, NULL, '2026-08-15 16:46:20', '2026-08-15 16:46:20'),
+	(3, 'Ezivi', 'ezivi', 'ezivi', 2, 0, 1, NULL, '2026-08-15 16:46:36', '2026-08-17 07:40:17'),
+	(4, 'OEM', 'oem', 'oem', 3, 0, 1, NULL, '2026-08-17 07:40:29', '2026-08-17 07:40:29');
 
 -- Dumping data for table qlbh.cache: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.cache_locks: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.categories: ~3 rows (approximately)
-REPLACE INTO `categories` (`id`, `parent_id`, `name`, `slug`, `sort_order`, `is_active`, `created_at`, `updated_at`, `deleted_at`) VALUES
-	(1, NULL, 'Điện Thoại', 'dien-thoai', 0, 1, '2026-06-19 09:02:48', '2026-06-19 09:02:48', NULL),
-	(2, NULL, 'Phụ kiện', 'phu-kien', 0, 1, '2026-06-19 09:03:02', '2026-06-19 09:03:02', NULL),
-	(4, NULL, 'demo', 'demo', 0, 1, '2026-07-06 17:33:37', '2026-07-08 07:00:55', NULL);
+REPLACE INTO `categories` (`id`, `parent_id`, `name`, `slug`, `attributes`, `sort_order`, `is_active`, `created_at`, `updated_at`, `deleted_at`) VALUES
+	(1, NULL, 'Điện Thoại', 'dien-thoai', NULL, 0, 1, '2026-08-15 16:43:02', '2026-08-15 16:43:02', NULL),
+	(2, NULL, 'Camera', 'camera', NULL, 0, 1, '2026-08-15 16:44:39', '2026-08-15 16:44:39', NULL),
+	(3, NULL, 'Phụ kiện', 'phu-kien', NULL, 0, 1, '2026-08-15 16:45:09', '2026-08-15 16:45:09', NULL);
 
--- Dumping data for table qlbh.customers: ~4 rows (approximately)
-REPLACE INTO `customers` (`id`, `code`, `full_name`, `search_text`, `phone`, `email`, `birthday`, `gender`, `cccd`, `province`, `district`, `ward`, `address`, `point_balance`, `debt_balance`, `total_spent`, `total_orders`, `last_order_at`, `customer_type`, `is_active`, `created_by`, `created_at`, `updated_at`, `deleted_at`) VALUES
-	(1, 'KH000001', 'Đức Hòa', 'duc hoa', '0906064789', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 50000.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:10:43', '2026-07-09 07:10:50', NULL),
-	(2, 'KH000002', 'Kim Ngân', 'kim ngan', '123456789', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:11:07', '2026-06-19 09:11:07', NULL),
-	(3, 'KH000003', 'Kim Oanh', 'kim oanh', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:11:22', '2026-06-19 09:11:22', NULL),
-	(4, 'KH000004', 'Lê Hiền', 'le hien', '789456123', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-06-19 09:11:41', '2026-06-19 09:11:41', NULL);
+-- Dumping data for table qlbh.category_attributes: ~8 rows (approximately)
+REPLACE INTO `category_attributes` (`id`, `category_id`, `name`, `created_at`, `updated_at`) VALUES
+	(1, 1, 'Màu sắc', '2026-08-15 16:43:02', '2026-08-15 16:43:02'),
+	(2, 1, 'Ram', '2026-08-15 16:43:02', '2026-08-15 16:43:02'),
+	(3, 1, 'Bộ nhớ', '2026-08-15 16:43:02', '2026-08-15 16:43:02'),
+	(4, 1, 'Phiên bản', '2026-08-15 16:43:02', '2026-08-15 16:43:02'),
+	(5, 2, 'Độ phân giải', '2026-08-15 16:44:39', '2026-08-15 16:44:39'),
+	(6, 2, 'Màu ban đêm', '2026-08-15 16:44:39', '2026-08-15 16:44:39'),
+	(7, 2, 'Trong/Ngoài', '2026-08-15 16:44:39', '2026-08-15 16:44:39'),
+	(8, 3, 'OEM', '2026-08-15 16:45:09', '2026-08-15 16:45:09');
 
--- Dumping data for table qlbh.customer_debts: ~1 rows (approximately)
-REPLACE INTO `customer_debts` (`id`, `customer_id`, `type`, `amount`, `source_type`, `source_id`, `note`, `created_at`, `updated_at`) VALUES
-	(1, 1, 'increase', 50000.00, 'App\\Models\\Sale', 2, 'Mua nợ - Tiền hàng còn thiếu của hóa đơn INV-20260709141049', '2026-07-09 07:10:50', '2026-07-09 07:10:50');
+-- Dumping data for table qlbh.category_attribute_values: ~13 rows (approximately)
+REPLACE INTO `category_attribute_values` (`id`, `attribute_id`, `value`, `created_at`, `updated_at`) VALUES
+	(1, 1, 'Đen', '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
+	(2, 2, '3G', '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
+	(3, 3, '32Gb', '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
+	(4, 4, 'Quốc tế', '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
+	(5, 1, 'Xanh', '2026-08-15 16:49:37', '2026-08-15 16:49:37'),
+	(6, 1, 'Vàng', '2026-08-15 16:49:37', '2026-08-15 16:49:37'),
+	(7, 3, '128Gb', '2026-08-15 16:49:37', '2026-08-15 16:49:37'),
+	(10, 1, 'Tím', '2026-08-16 06:52:00', '2026-08-16 06:52:00'),
+	(11, 2, '4G', '2026-08-16 06:52:00', '2026-08-16 06:52:00'),
+	(12, 3, '64G', '2026-08-16 06:52:00', '2026-08-16 06:52:00'),
+	(13, 2, '6G', '2026-08-16 06:53:02', '2026-08-16 06:53:02'),
+	(14, 3, '128G', '2026-08-16 06:53:02', '2026-08-16 06:53:02'),
+	(16, 3, '64Gb', '2026-08-17 07:39:25', '2026-08-17 07:39:25');
+
+-- Dumping data for table qlbh.customers: ~0 rows (approximately)
+
+-- Dumping data for table qlbh.customer_debts: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.customer_devices: ~0 rows (approximately)
 
--- Dumping data for table qlbh.customer_images: ~1 rows (approximately)
-REPLACE INTO `customer_images` (`id`, `customer_id`, `type`, `path`, `mime_type`, `size`, `is_primary`, `uploaded_by`, `created_at`, `updated_at`) VALUES
-	(1, 1, 'portrait', 'customers/1/SrwZ0VGRc7mkOQbmScK0A1JsoC0ADgjUar8Qae3m.jpg', 'image/jpeg', 11243, 1, NULL, '2026-06-19 09:10:43', '2026-06-19 09:10:43');
+-- Dumping data for table qlbh.customer_images: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.customer_logs: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.customer_points: ~0 rows (approximately)
+
+-- Dumping data for table qlbh.export_histories: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.failed_jobs: ~0 rows (approximately)
 
@@ -59,7 +80,7 @@ REPLACE INTO `customer_images` (`id`, `customer_id`, `type`, `path`, `mime_type`
 
 -- Dumping data for table qlbh.job_batches: ~0 rows (approximately)
 
--- Dumping data for table qlbh.migrations: ~26 rows (approximately)
+-- Dumping data for table qlbh.migrations: ~30 rows (approximately)
 REPLACE INTO `migrations` (`id`, `migration`, `batch`) VALUES
 	(1, '0001_01_01_000000_create_users_table', 1),
 	(2, '0001_01_01_000001_create_cache_table', 1),
@@ -72,21 +93,26 @@ REPLACE INTO `migrations` (`id`, `migration`, `batch`) VALUES
 	(9, '2026_05_22_082557_create_customer_logs_table', 1),
 	(10, '2026_05_22_091156_create_customer_images_table', 1),
 	(11, '2026_05_23_145920_create_suppliers_table', 1),
-	(12, '2026_05_23_145930_create_brands_table', 1),
-	(13, '2026_05_23_145940_create_categories_table', 1),
+	(12, '2026_05_23_145930_create_categories_table', 1),
+	(13, '2026_05_23_145940_create_brands_table', 1),
 	(14, '2026_05_23_145950_create_units_table', 1),
 	(15, '2026_05_23_145960_create_products_table', 1),
 	(16, '2026_05_23_145980_create_sales_table', 1),
-	(17, '2026_05_23_145981_create_product_imeis_table', 1),
-	(18, '2026_05_23_145990_create_sale_items_table', 1),
-	(19, '2026_05_23_146100_create_repairs_table', 1),
-	(20, '2026_05_23_146110_create_repair_images_table', 1),
-	(21, '2026_05_23_146120_create_repair_timelines_table', 1),
-	(22, '2026_05_25_123656_create_hold_sales_table', 1),
-	(23, '2026_05_25_151943_create_personal_access_tokens_table', 1),
-	(24, '2026_05_26_230107_add_sold_count_to_products_table', 1),
-	(25, '2026_06_30_142427_create_product_variants_table', 1),
-	(26, '2026_06_30_145316_add_variant_id_to_product_imeis_table', 1);
+	(17, '2026_05_23_145983_create_product_variants_table', 1),
+	(18, '2026_05_23_145985_create_product_imeis_table', 1),
+	(19, '2026_05_23_145990_create_sale_items_table', 1),
+	(20, '2026_05_23_145995_create_sale_item_gifts_table', 1),
+	(21, '2026_05_23_146100_create_repairs_table', 1),
+	(22, '2026_05_23_146110_create_repair_images_table', 1),
+	(23, '2026_05_23_146120_create_repair_timelines_table', 1),
+	(24, '2026_05_25_123656_create_hold_sales_table', 1),
+	(25, '2026_05_25_151943_create_personal_access_tokens_table', 1),
+	(26, '2026_07_22_235536_create_export_histories_table', 1),
+	(27, '2026_08_01_233827_create_settings_table', 1),
+	(28, '2026_08_06_143848_create_category_attributes_table', 1),
+	(29, '2026_08_06_143940_create_category_attribute_values_table', 1),
+	(30, '2026_08_17_232234_create_stock_imports_table', 2),
+	(31, '2026_08_17_232315_create_stock_import_items_table', 2);
 
 -- Dumping data for table qlbh.model_has_permissions: ~0 rows (approximately)
 
@@ -98,55 +124,50 @@ REPLACE INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 
 -- Dumping data for table qlbh.permissions: ~17 rows (approximately)
 REPLACE INTO `permissions` (`id`, `name`, `guard_name`, `created_at`, `updated_at`) VALUES
-	(1, 'categories.view', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(2, 'categories.create', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(3, 'categories.edit', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(4, 'categories.delete', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(5, 'products.view', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(6, 'products.create', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(7, 'products.edit', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(8, 'products.delete', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(9, 'brands.view', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(10, 'brands.create', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(11, 'brands.edit', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(12, 'brands.delete', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(13, 'pos.access', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(14, 'users.view', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(15, 'users.create', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(16, 'users.edit', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(17, 'users.delete', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05');
+	(1, 'categories.view', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(2, 'categories.create', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(3, 'categories.edit', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(4, 'categories.delete', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(5, 'products.view', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(6, 'products.create', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(7, 'products.edit', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(8, 'products.delete', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(9, 'brands.view', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(10, 'brands.create', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(11, 'brands.edit', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(12, 'brands.delete', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(13, 'pos.access', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(14, 'users.view', 'web', '2026-08-15 16:40:32', '2026-08-15 16:40:32'),
+	(15, 'users.create', 'web', '2026-08-15 16:40:32', '2026-08-15 16:40:32'),
+	(16, 'users.edit', 'web', '2026-08-15 16:40:32', '2026-08-15 16:40:32'),
+	(17, 'users.delete', 'web', '2026-08-15 16:40:32', '2026-08-15 16:40:32');
 
 -- Dumping data for table qlbh.personal_access_tokens: ~0 rows (approximately)
 
--- Dumping data for table qlbh.products: ~12 rows (approximately)
+-- Dumping data for table qlbh.products: ~4 rows (approximately)
 REPLACE INTO `products` (`id`, `category_id`, `brand_id`, `unit_id`, `name`, `search_text`, `slug`, `sku`, `barcode`, `product_type`, `image`, `warranty_days`, `allow_negative_stock`, `cost_price`, `sell_price`, `tax_percent`, `stock`, `sold_count`, `alert_stock`, `manage_stock_by_serial`, `is_active`, `description`, `deleted_at`, `created_at`, `updated_at`) VALUES
-	(1, 1, 1, NULL, 'Samsung A07', 'samsung a07 dtssa07 Điện thoại samsung', 'samsung-a07', 'DTSSA07', NULL, 'normal', 'products/cY6bplbSH1k8nJeBG5yzxfsFbUnC9qGgAEAeAnpH.jpg', 0, 0, 2500000.00, 2700000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:04:55', '2026-07-09 17:14:20'),
-	(2, 1, 1, NULL, 'Samsung A17', 'samsung a17 dtssa17 Điện thoại samsung', 'samsung-a17', 'DTSSA17', NULL, 'normal', 'products/4f3DOMkABUEJ1YwJPb4NmpG4vdzHbC3muYteVZBa.jpg', 0, 0, 3000000.00, 3500000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:05:44', '2026-07-09 17:14:19'),
-	(3, 1, 1, NULL, 'Điện Thoại Samsung A17 5G', 'dien thoai samsung a17 5g', 'dien-thoai-samsung-a17-5g', 'DTSSA175G', NULL, 'normal', 'products/W7YauvpjAx1zTO2aqMRXAEsmCpTLnOi0fyAzQIdy.jpg', 0, 0, 3000000.00, 3500000.00, 0.00, 2, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
-	(4, 1, 2, NULL, 'Iphone 11', 'iphone 11', 'iphone-11', 'DTIP11', NULL, 'normal', 'products/SnTSwqmK4bwfdfUmBumWe5SjGRuHOnOTzCpXxKNE.jpg', 0, 0, 5000000.00, 5500000.00, 0.00, 3, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(5, 1, 2, NULL, 'Điện Thoại IP 12', 'Điện thoại ip 12 dtip12 Điện thoại apple', 'dien-thoai-ip-12', 'DTIP12', NULL, 'normal', 'products/5lAy8J8uJ63KfaXN8MYtIUWjoMKaCka4uDMMytHO.jpg', 0, 0, 6000000.00, 6500000.00, 0.00, 1, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:08:58', '2026-07-09 16:48:41'),
-	(6, 2, 3, NULL, 'Dây sạc rẻ', 'day sac re', 'day-sac-re', 'DSRE', NULL, 'normal', 'products/REPcUXh3qJ3YHnoMWIaqyOb7xnXgnjBetmcqqRPb.jpg', 0, 0, 10000.00, 20000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:09:34', '2026-06-19 09:09:34'),
-	(7, 2, 3, NULL, 'Củ sạc 20w', 'củ sạc 20w cs20w phụ kiện oem', 'cu-sac-20w', 'CS20W', NULL, 'normal', 'products/6fqRfYcyfjk4aXUGxNuR4YFWFZoFnes0llTyS7CL.jpg', 0, 0, 30000.00, 50000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-06-19 09:10:10', '2026-07-09 08:10:43'),
-	(8, 2, 3, NULL, 'Củ sạc nhanh 20W', 'củ sạc nhanh 20w csn20 phụ kiện oem', 'cu-sac-nhanh-20w', 'CSN20', NULL, 'normal', NULL, 0, 0, 25000.00, 50000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:26:08', '2026-07-08 16:26:08'),
-	(9, 2, 3, NULL, 'Tai nghe ip 6', 'tai nghe ip 6 tnip phụ kiện oem', 'tai-nghe-ip-6', 'TNIP', NULL, 'normal', 'products/JY3w6RA8Rag4lNDupqcNQODYeROkkTiUkcs93ESq.jpg', 0, 0, 20000.00, 40000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:29:03', '2026-07-08 16:29:03'),
-	(10, 2, 3, NULL, 'Tai nghe không dây', 'tai nghe không dây tnkd phụ kiện oem', 'tai-nghe-khong-day', 'TNKD', NULL, 'normal', NULL, 0, 0, 150000.00, 300000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:29:57', '2026-07-08 16:29:57'),
-	(11, 2, 3, NULL, 'Dây sạc micro', 'dây sạc micro dsmc phụ kiện oem', 'day-sac-micro', 'DSMC', NULL, 'normal', NULL, 0, 0, 10000.00, 20000.00, 0.00, 100, 0, 0, 0, 1, NULL, NULL, '2026-07-08 16:31:11', '2026-07-09 15:53:10'),
-	(12, 2, 3, NULL, 'Dây sạc type-c', 'dây sạc type-c dstc phụ kiện oem', 'day-sac-type-c', 'DSTC', NULL, 'normal', 'products/JJDjF2jOhoPYjmFU7wfLJsCnxIm9xSJMPvB0pdgb.jpg', 0, 0, 25000.00, 50000.00, 0.00, 99, 1, 0, 0, 1, NULL, NULL, '2026-07-08 16:33:08', '2026-07-09 16:11:29');
+	(1, 1, 1, NULL, 'Samsung A01', 'samsung a01 dthsam Điện thoại samsung', 'samsung-a01', 'DTHSAM', NULL, 'imei', 'products/KMSQXS12HHbGSgrurtiV7mo0KtLYaGKuK6ed0WzG.jpg', 0, 0, 100.00, 120.00, 0.00, 0, 0, 0, 1, 1, NULL, NULL, '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
+	(2, 1, 2, NULL, 'Iphone 12 promax', 'iphone 12 promax dthapp Điện thoại apple', 'iphone-12-promax', 'DTHAPP', NULL, 'imei', 'products/fF3B8pKXVCEleDLxXJygQX8EGKz1ThxqCZHA69B4.jpg', 0, 0, 100.00, 120.00, 0.00, 0, 0, 0, 1, 1, NULL, NULL, '2026-08-15 16:49:37', '2026-08-15 16:49:37'),
+	(3, 3, 4, NULL, 'Củ Sạc 20W', 'củ sạc 20w pkigen phụ kiện oem', 'cu-sac-20w', 'PKIGEN', NULL, 'normal', 'products/bpM8fcLnfozCr072WV6B4DsrseaYibtIeYEH7VPs.jpg', 0, 0, 100.00, 120.00, 0.00, 0, 0, 0, 0, 1, NULL, NULL, '2026-08-15 16:50:31', '2026-08-17 07:40:46'),
+	(6, 1, 1, NULL, 'A03', 'a03 dthsam-001 Điện thoại samsung', 'a03', 'DTHSAM-001', NULL, 'imei', 'products/WqwrsfjrXyRwFoVwh5RTOAGC6l0d9wqo7DJbw41s.jpg', 0, 0, 100.00, 110.00, 0.00, 0, 0, 0, 1, 1, NULL, NULL, '2026-08-16 06:52:00', '2026-08-17 07:43:27');
 
--- Dumping data for table qlbh.product_imeis: ~10 rows (approximately)
-REPLACE INTO `product_imeis` (`id`, `product_id`, `variant_id`, `supplier_id`, `customer_id`, `sale_id`, `imei`, `serial`, `color`, `storage`, `condition`, `battery_health`, `purchase_price`, `cost_price`, `sell_price`, `warranty_expired_at`, `imported_at`, `sold_at`, `status`, `note`, `deleted_at`, `created_at`, `updated_at`) VALUES
-	(1, 1, NULL, NULL, NULL, NULL, '0000', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
-	(2, 1, NULL, NULL, NULL, NULL, '1111', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:04:55', '2026-06-19 09:04:55'),
-	(3, 2, NULL, NULL, NULL, NULL, '2222', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
-	(4, 2, NULL, NULL, NULL, NULL, '3333', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:05:44', '2026-06-19 09:05:44'),
-	(5, 3, NULL, NULL, NULL, NULL, '4444', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
-	(6, 3, NULL, NULL, NULL, NULL, '5555', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:07:13', '2026-06-19 09:07:13'),
-	(7, 4, NULL, NULL, NULL, NULL, '6666', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(8, 4, NULL, NULL, NULL, NULL, '7777', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(9, 4, NULL, NULL, NULL, NULL, '8888', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:10', '2026-06-19 09:08:10'),
-	(10, 5, NULL, NULL, NULL, NULL, '9999', NULL, NULL, NULL, 'new', NULL, 0.00, 0.00, 0.00, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-19 09:08:58', '2026-06-19 09:08:58');
+-- Dumping data for table qlbh.product_imeis: ~0 rows (approximately)
 
--- Dumping data for table qlbh.product_variants: ~0 rows (approximately)
+-- Dumping data for table qlbh.product_variants: ~13 rows (approximately)
+REPLACE INTO `product_variants` (`id`, `product_id`, `sku`, `barcode`, `attributes`, `cost_price`, `sell_price`, `stock`, `created_at`, `updated_at`) VALUES
+	(76, 2, 'DTHAPP-DEN-128G-QUOC', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Bộ nhớ", "value": "128Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 120.00, 0, '2026-08-17 07:40:51', '2026-08-17 07:40:51'),
+	(81, 1, 'DTHSAM-DEN-4G-32GB', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "32Gb"}]', 100.00, 120.00, 0, '2026-08-17 07:42:01', '2026-08-17 07:42:01'),
+	(82, 1, 'DTHSAM-XANH-4G-32GB', NULL, '[{"name": "Màu sắc", "value": "Xanh"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "32Gb"}]', 100.00, 120.00, 0, '2026-08-17 07:42:01', '2026-08-17 07:42:01'),
+	(83, 1, 'DTHSAM-VANG-4G-32GB', NULL, '[{"name": "Màu sắc", "value": "Vàng"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "32Gb"}]', 100.00, 120.00, 0, '2026-08-17 07:42:01', '2026-08-17 07:42:01'),
+	(84, 1, 'DTHSAM-TIM-4G-32GB', NULL, '[{"name": "Màu sắc", "value": "Tím"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "32Gb"}]', 100.00, 120.00, 0, '2026-08-17 07:42:01', '2026-08-17 07:42:01'),
+	(129, 6, 'DTHSAM-XANH-4G-128G-QUOC', NULL, '[{"name": "Màu sắc", "value": "Xanh"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "128Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(130, 6, 'DTHSAM-XANH-4G-64GB-QUOC', NULL, '[{"name": "Màu sắc", "value": "Xanh"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "64Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(131, 6, 'DTHSAM-XANH-6G-128G-QUOC', NULL, '[{"name": "Màu sắc", "value": "Xanh"}, {"name": "Ram", "value": "6G"}, {"name": "Bộ nhớ", "value": "128Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(132, 6, 'DTHSAM-XANH-6G-64GB-QUOC', NULL, '[{"name": "Màu sắc", "value": "Xanh"}, {"name": "Ram", "value": "6G"}, {"name": "Bộ nhớ", "value": "64Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(133, 6, 'DTHSAM-DEN-4G-128G-QUOC', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "128Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(134, 6, 'DTHSAM-DEN-4G-64GB-QUOC', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "64Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(135, 6, 'DTHSAM-DEN-6G-128G-QUOC', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Ram", "value": "6G"}, {"name": "Bộ nhớ", "value": "128Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15'),
+	(136, 6, 'DTHSAM-DEN-6G-64GB-QUOC', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Ram", "value": "6G"}, {"name": "Bộ nhớ", "value": "64Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 110.00, 0, '2026-08-17 07:45:15', '2026-08-17 07:45:15');
 
 -- Dumping data for table qlbh.repairs: ~0 rows (approximately)
 
@@ -156,8 +177,8 @@ REPLACE INTO `product_imeis` (`id`, `product_id`, `variant_id`, `supplier_id`, `
 
 -- Dumping data for table qlbh.roles: ~2 rows (approximately)
 REPLACE INTO `roles` (`id`, `name`, `guard_name`, `created_at`, `updated_at`) VALUES
-	(1, 'Super Admin', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05'),
-	(2, 'admin', 'web', '2026-06-19 08:44:05', '2026-06-19 08:44:05');
+	(1, 'Super Admin', 'web', '2026-08-15 16:40:31', '2026-08-15 16:40:31'),
+	(2, 'admin', 'web', '2026-08-15 16:40:32', '2026-08-15 16:40:32');
 
 -- Dumping data for table qlbh.role_has_permissions: ~30 rows (approximately)
 REPLACE INTO `role_has_permissions` (`permission_id`, `role_id`) VALUES
@@ -192,19 +213,19 @@ REPLACE INTO `role_has_permissions` (`permission_id`, `role_id`) VALUES
 	(16, 2),
 	(17, 2);
 
--- Dumping data for table qlbh.sales: ~2 rows (approximately)
-REPLACE INTO `sales` (`id`, `code`, `customer_id`, `user_id`, `subtotal`, `discount`, `tax`, `grand_total`, `paid_amount`, `change_amount`, `payment_method`, `status`, `note`, `created_at`, `updated_at`) VALUES
-	(1, 'INV-20260702231134', 1, 1, 5500000.00, 0.00, 0.00, 5500000.00, 5500000.00, 0.00, 'cash', 'completed', NULL, '2026-07-02 16:11:34', '2026-07-02 16:11:34'),
-	(2, 'INV-20260709141049', 1, 1, 50000.00, 0.00, 0.00, 50000.00, 0.00, 0.00, 'cash', 'completed', NULL, '2026-07-09 07:10:49', '2026-07-09 07:10:49');
+-- Dumping data for table qlbh.sales: ~0 rows (approximately)
 
--- Dumping data for table qlbh.sale_items: ~2 rows (approximately)
-REPLACE INTO `sale_items` (`id`, `sale_id`, `product_id`, `product_imei_id`, `quantity`, `unit_price`, `discount`, `tax`, `subtotal`, `note`, `discount_type`, `discount_value`, `created_at`, `updated_at`) VALUES
-	(1, 1, 4, NULL, 1, 5500000.00, 0.00, 0.00, 5500000.00, NULL, NULL, 0.00, '2026-07-02 16:11:34', '2026-07-02 16:11:34'),
-	(2, 2, 12, NULL, 1, 50000.00, 0.00, 0.00, 50000.00, NULL, NULL, 0.00, '2026-07-09 07:10:50', '2026-07-09 07:10:50');
+-- Dumping data for table qlbh.sale_items: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.sale_item_gifts: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.sessions: ~0 rows (approximately)
+
+-- Dumping data for table qlbh.settings: ~0 rows (approximately)
+
+-- Dumping data for table qlbh.stock_imports: ~0 rows (approximately)
+
+-- Dumping data for table qlbh.stock_import_items: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.suppliers: ~0 rows (approximately)
 
@@ -212,7 +233,7 @@ REPLACE INTO `sale_items` (`id`, `sale_id`, `product_id`, `product_imei_id`, `qu
 
 -- Dumping data for table qlbh.users: ~1 rows (approximately)
 REPLACE INTO `users` (`id`, `name`, `username`, `phone`, `email`, `email_verified_at`, `password`, `remember_token`, `created_at`, `updated_at`) VALUES
-	(1, 'Administrator', 'admin', '0906064789', 'admin@gmail.com', NULL, '$2y$12$bF6brt2gvYO4emoh6FLds.kj4pW5o.2EikqqvOmoOI/XUaGGrMsjG', NULL, '2026-06-19 08:44:05', '2026-06-19 08:44:05');
+	(1, 'Administrator', 'admin', '0906064789', 'admin@gmail.com', NULL, '$2y$12$WUtVW1Ln7UXJI.iKXYlgAu724YU4eTf3di4wanGwr0OumLnL8u4w2', 'lOihNiYeuRmHYwjE2ejkJc1jdQ6ZrFUVmuw5suHIPKMNjyiQRc2MeoTmzBY0', '2026-08-15 16:40:32', '2026-08-15 16:40:32');
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;

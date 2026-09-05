@@ -40,16 +40,24 @@ class CategoryController extends Controller
                     'name' => $cat->name,
                     'is_active' => $cat->is_active,
 
-                    'attributes' => $cat->categoryAttributes->map(function ($attr) {
-                        return [
-                            'id' => $attr->id,
-                            'name' => $attr->name,
-                            'options' => $attr->values
-                                ->pluck('value')
-                                ->values()
-                                ->toArray(),
-                        ];
-                    })->values()->toArray(),
+                    'attributes' => ($cat->categoryAttributes ?? collect())
+                        ->map(function ($attr) {
+
+                            return [
+                                'id' => $attr->id,
+                                'name' => $attr->name,
+
+                                // CHUẨN HÓA FORMAT
+                                'values' => ($attr->values ?? collect())
+                                    ->map(fn ($v) => [
+                                        'value' => $v->value
+                                    ])
+                                    ->values()
+                                    ->toArray(),
+                            ];
+                        })
+                        ->values()
+                        ->toArray(),
                 ];
             })
             ->withQueryString();

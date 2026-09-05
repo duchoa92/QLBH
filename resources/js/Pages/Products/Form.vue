@@ -1,10 +1,14 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch, watchEffect } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import TagBadge from '@/Components/UI/TagBadge.vue'
+import {toast} from 'vue-sonner'
+import { X } from 'lucide-vue-next'
+
 
 
 const props = defineProps({
@@ -16,7 +20,49 @@ const props = defineProps({
 
 
 
-const showVariants = ref(false)
+const showVariants = ref(!!props.product?.variants?.length)
+
+// Đặt autoSku ở đây, TRƯỚC TẤT CẢ watcher có sử dụng nó
+const autoSku = ref(props.product?.sku ?? '')
+
+const activeIndex = ref(-1)
+
+const dropdown = ref({
+    type: null,     // 'attr' | 'value'
+    variantIndex: null,
+    attrIndex: null,
+    keyword: '',
+    ref: null
+})
+
+const setDropdownRef = (el, type, vIndex, aIndex = null) => {
+    if (
+        dropdown.value.type === type &&
+        dropdown.value.variantIndex === vIndex &&
+        dropdown.value.attrIndex === aIndex
+    ) {
+        dropdown.value.ref = el
+    }
+}
+
+const handleClickOutside = (e) => {
+    if (!dropdown.value.type) return
+
+    // 🔥 nếu click vào suggestion thì bỏ qua
+    if (e.target.closest('.suggestion-item')) return
+
+    if (dropdown.value.ref && !dropdown.value.ref.contains(e.target)) {
+        dropdown.value.type = null
+    }
+}
+
+onMounted(() => {
+    document.addEventListener('mousedown', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+    document.removeEventListener('mousedown', handleClickOutside)
+})
 
 /*
 |--------------------------------------------------------------------------
@@ -28,7 +74,7 @@ const form = useForm({
     name: props.product?.name ?? '',
     category_id: props.product?.category_id ?? null,
     brand_id: props.product?.brand_id ?? null,
-    sku: null,
+    sku: props.product?.sku ?? '',
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
     image: null,
@@ -36,6 +82,36 @@ const form = useForm({
     manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
     product_type: props.product?.product_type ?? 'normal',
 })
+
+
+/*
+|--------------------------------------------------------------------------
+| IMAGE PREVIEW
+|--------------------------------------------------------------------------
+*/
+const preview = ref(null)
+
+const getImageUrl = (image) => {
+    if (!image) return null
+
+    // Nếu đã là URL đầy đủ
+    if (image.startsWith('http://') || image.startsWith('https://')) {
+        return image
+    }
+
+    return `/storage/${image}`
+}
+
+
+
+const handleImage = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    form.image = file
+    preview.value = URL.createObjectURL(file)
+}
+
 
 /*
 |--------------------------------------------------------------------------
@@ -52,69 +128,86 @@ const filteredBrands = computed(() => {
     )
 })
 
-/*
-|--------------------------------------------------------------------------
-| ĐỔI DANH MỤC → XÓA THƯƠNG HIỆU ĐÃ CHỌN
-|--------------------------------------------------------------------------
-*/
-watch(
-    () => form.category_id,
-    () => {
-        form.brand_id = null
-    }
-)
+
 
 // reset form khi props.product thay đổi (chọn sửa sản phẩm khác)
 watch(() => props.product, (p) => {
 
     if (!p) {
         form.reset()
+
+        autoSku.value = ''
+        showVariants.value = false
+        preview.value = null
+
         return
     }
 
+    form.id = p.id ?? null
     form.name = p.name ?? ''
     form.category_id = p.category_id ?? null
     form.brand_id = p.brand_id ?? null
-    form.sku = p.sku ?? null
-    autoSku.value = p.sku ?? ''
+    form.sku = p.sku ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
-    form.variants = p.variants ?? []
 
-    showVariants.value = form.variants.length > 0
+    // Ảnh cũ chỉ dùng để preview
+    // Không đưa tên file cũ vào form.image
+    form.image = null
+    preview.value = getImageUrl(p.image)
 
-    form.manage_stock_by_serial = p.manage_stock_by_serial ?? false
-    form.product_type = p.product_type ?? 'normal'
+    autoSku.value = p.sku ?? ''
 
-})
+    if (p.variants?.length) {
 
-/*
-|--------------------------------------------------------------------------
-| IMAGE PREVIEW
-|--------------------------------------------------------------------------
-*/
-const preview = ref(null)
+        const merged = {}
 
-// Hiên thị ảnh khi props.product thay đổi
-watch(() => props.product, (p) => {
-    if (!p) {
-        form.reset()
-        showVariants.value = false // 🔥 thêm dòng này
-        return
+        p.variants.forEach(variant => {
+            (variant.attributes || []).forEach(attr => {
+
+                if (!merged[attr.name]) {
+                    merged[attr.name] = new Set()
+                }
+
+                const value = Array.isArray(attr.value)
+                    ? attr.value[0]
+                    : attr.value
+
+                if (value) {
+                    merged[attr.name].add(value)
+                }
+            })
+        })
+
+        form.variants = [{
+            attributes: Object.keys(merged).map(name => ({
+                id: Date.now(),
+                name,
+                value: Array.from(merged[name])
+            })),
+            sku: '',
+            barcode: '',
+            cost_price: p.cost_price || 0,
+            sell_price: p.sell_price || 0,
+            stock: 0,
+            imeis: ''
+        }]
+
+    } else {
+        form.variants = []
     }
 
-    form.variants = p.variants ?? []
+    // Có biến thể nếu DB trả về ít nhất 1 variant
+    showVariants.value = form.variants.length > 0
 
-    showVariants.value = form.variants.length > 0 // 🔥 chuẩn
-})
+    form.manage_stock_by_serial =
+        p.manage_stock_by_serial ?? false
 
-const handleImage = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+    form.product_type =
+        p.product_type ?? 'normal'
 
-    form.image = file
-    preview.value = URL.createObjectURL(file)
-}
+}, { immediate: true })
+
 
 
 
@@ -146,48 +239,86 @@ const categoryAttributes = computed(() => {
     }))
 })
 
+watch(showVariants, (value) => {
+
+    if (value) {
+
+        // Nếu chưa có variant thì tạo 1 variant rỗng
+        if (!form.variants.length) {
+            form.variants = [{
+                attributes: buildVariantAttributes(),
+                sku: '',
+                barcode: '',
+                cost_price: form.cost_price || 0,
+                sell_price: form.sell_price || 0,
+                stock: 0,
+                imeis: ''
+            }]
+        }
+
+    } else {
+
+        // Tắt checkbox → xóa biến thể
+        form.variants = []
+    }
+})
+
+
 const buildVariantAttributes = () => {
     return categoryAttributes.value.map(attr => ({
         id: attr.id,
         name: attr.name,
-        value: ''
+        value: [],
     }))
 }
-// Thêm xóa biến thể
-const toggleVariants = () => {
-    if (form.variants.length) {
-        form.variants = []
-        return
+
+
+const addAttrValue = (attr, rawValue = dropdown.value.keyword) => {
+    const val = rawValue.trim()
+    if (!val) return
+
+    const exists = attr.value.some(v => normalize(v) === normalize(val))
+    if (exists) {
+        return toast.error('Giá trị đã tồn tại')
     }
 
-    form.variants = [{
-        attributes: buildVariantAttributes(),
-        sku: '',
-        cost_price: 0,
-        sell_price: 0,
-        stock: 0,
-    }]
+    attr.value.push(val)
+    dropdown.value.keyword = ''   // reset input
+    activeIndex.value = -1        // reset chọn
 }
+
+
+
+
 
 watch(
     () => form.category_id,
-    () => {
-        // Đổi danh mục thì thương hiệu phải reset
-        form.brand_id = null
+    (newCategoryId, oldCategoryId) => {
+        // Khi đang sửa và đây là lần load dữ liệu ban đầu
+        // thì KHÔNG được xóa brand_id
+        if (form.id && oldCategoryId === undefined) {
+            return
+        }
 
-        // Chưa có thuộc tính thì không tạo biến thể
+        // Nếu người dùng thực sự đổi danh mục
+        if (
+            oldCategoryId !== undefined &&
+            Number(newCategoryId) !== Number(oldCategoryId)
+        ) {
+            form.brand_id = null
+        }
+
+        // Cập nhật attributes của variant
         if (!categoryAttributes.value.length) {
             return
         }
 
-        // Nếu đang bật biến thể thì cập nhật ngay
         if (form.variants.length) {
             form.variants.forEach(variant => {
                 variant.attributes = buildVariantAttributes()
             })
         }
-    },
-    { flush: 'sync' }
+    }
 )
 
 
@@ -216,89 +347,291 @@ const makeCode = (text) => {
     return words.slice(0, 3).map(w => w[0]).join('').toUpperCase()
 }
 
-const autoSku = ref('')
 watch(
     [() => form.category_id, () => form.brand_id],
-    ([categoryId, brandId], [oldCategoryId, oldBrandId]) => {
+    async ([categoryId, brandId]) => {
 
-        const cat = props.categories.find(
-            c => Number(c.id) === Number(categoryId)
-        )
-
-        const brand = props.brands.find(
-            b => Number(b.id) === Number(brandId)
-        )
-
-        if (!cat || !brand) return
-
-        const base =
-            makeCode(cat.name) +
-            makeCode(brand.name)
-
-        /*
-        |--------------------------------------------------------------------------
-        | SKU sản phẩm
-        |--------------------------------------------------------------------------
-        */
-
-        // Khi thêm mới hoặc khi SKU đang là SKU tự động cũ
-        if (
-            !form.id ||
-            !form.sku ||
-            form.sku === autoSku.value
-        ) {
-            form.sku = base
-            autoSku.value = base
+        // Đang sửa → tuyệt đối không tự đổi SKU
+        if (form.id) {
+            return
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | SKU biến thể
-        |--------------------------------------------------------------------------
-        */
+        // Chưa đủ thông tin
+        if (!categoryId || !brandId) {
+            form.sku = ''
+            autoSku.value = ''
+            return
+        }
 
-        form.variants.forEach(v => {
-
-            const parts = []
-
-            v.attributes?.forEach(attr => {
-
-                if (attr.value) {
-
-                    parts.push(
-                        attr.value
-                            .normalize('NFD')
-                            .replace(/[\u0300-\u036f]/g, '')
-                            .replace(/đ/g, 'd')
-                            .replace(/Đ/g, 'D')
-                            .slice(0, 3)
-                            .toUpperCase()
-                    )
-
+        try {
+            const response = await fetch(
+                route('products.previewSku', {
+                    category_id: categoryId,
+                    brand_id: brandId
+                }),
+                {
+                    headers: {
+                        Accept: 'application/json',
+                    }
                 }
+            )
 
-            })
+            if (!response.ok) {
+                throw new Error('Không lấy được SKU')
+            }
 
-            v.sku =
-                base +
-                (parts.length
-                    ? '-' + parts.join('-')
-                    : ''
-                )
-        })
+            const result = await response.json()
+
+            form.sku = result.sku || ''
+            autoSku.value = result.sku || ''
+
+        } catch (error) {
+            console.error('Preview SKU error:', error)
+        }
     }
 )
 
 const normalize = (text) => {
-    return text
+    return (text || '')
+        .toString()
+        .toLowerCase() // thêm dòng này (fix hoa/thường)
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/đ/g, 'd')
-        .replace(/Đ/g, 'D')
+        .replace(/Đ/g, 'd')
+}
+
+watch(() => dropdown.value.keyword, () => {
+    activeIndex.value = -1
+})
+
+// Thêm thuộc tính
+const createAttribute = (rawName = dropdown.value.keyword) => {
+    const name = rawName.trim()
+    if (!name) return
+
+    const v = form.variants[dropdown.value.variantIndex]
+
+    const exists = v.attributes.some(a => normalize(a.name) === normalize(name))
+    if (exists) return toast.error('Thuộc tính đã tồn tại')
+
+    v.attributes.push({
+        id: Date.now(),
+        name,
+        value: [],
+    })
+
+    dropdown.value.keyword = ''
+    activeIndex.value = -1
+    dropdown.value.type = null
 }
 
 
+// Dropdown thêm thuộc tính
+const openAttrDropdown = async (variantIndex) => {
+    dropdown.value.type = 'attr'
+    dropdown.value.variantIndex = variantIndex
+    dropdown.value.attrIndex = null
+    dropdown.value.keyword = ''
+    activeIndex.value = -1
 
+    await nextTick()
+
+    // 👇 focus input
+    const input = document.querySelector(`#attr-input-${variantIndex}`)
+    input?.focus()
+}
+
+// Dropdown thêm giá trị
+const openValueDropdown = async (variantIndex, attrIndex) => {
+    dropdown.value.type = 'value'
+    dropdown.value.variantIndex = variantIndex
+    dropdown.value.attrIndex = attrIndex
+    dropdown.value.keyword = ''
+    activeIndex.value = -1
+
+    await nextTick()
+}
+
+
+// Xử lý Keyboard
+const syncValueDropdown = (variantIndex, attrIndex, keyword = dropdown.value.keyword) => {
+    const shouldResetActive =
+        dropdown.value.type !== 'value' ||
+        dropdown.value.variantIndex !== variantIndex ||
+        dropdown.value.attrIndex !== attrIndex ||
+        dropdown.value.keyword !== keyword
+
+    dropdown.value.type = 'value'
+    dropdown.value.variantIndex = variantIndex
+    dropdown.value.attrIndex = attrIndex
+    dropdown.value.keyword = keyword
+
+    if (shouldResetActive) {
+        activeIndex.value = -1
+    }
+}
+
+const handleKeyDown = (e, attr = null, variantIndex = null, attrIndex = null) => {
+    if (attr && variantIndex !== null && attrIndex !== null) {
+        syncValueDropdown(variantIndex, attrIndex, e.target.value)
+    }
+
+    if (!dropdown.value.type) return
+
+    if (e.key === 'ArrowDown') {
+        if (!suggestions.value.length) return
+        e.preventDefault()
+        activeIndex.value = (activeIndex.value + 1) % suggestions.value.length
+        return
+    }
+
+    if (e.key === 'ArrowUp') {
+        if (!suggestions.value.length) return
+        e.preventDefault()
+        activeIndex.value =
+            (activeIndex.value - 1 + suggestions.value.length) % suggestions.value.length
+        return
+    }
+
+    if (e.key === 'Enter') {
+        e.preventDefault()
+
+
+        dropdown.value.keyword = e.target.value
+
+        // nếu còn suggestion → chọn
+        if (
+            suggestions.value.length &&
+            activeIndex.value >= 0 &&
+            suggestions.value[activeIndex.value]
+        ) {
+            selectSuggestion(suggestions.value[activeIndex.value])
+            return
+        }
+
+        // hết suggestion → tạo mới
+        if (dropdown.value.type === 'value') {
+            if (attr) addAttrValue(attr, e.target.value)
+        } else if (dropdown.value.type === 'attr') {
+            createAttribute(e.target.value)
+        }
+    }
+}
+
+// Gợi ý Thuộc tính và giá trị
+const suggestions = computed(() => {
+    if (!dropdown.value.type) return []
+
+    const keyword = normalize(dropdown.value.keyword)
+
+    const variant = form.variants[dropdown.value.variantIndex]
+    if (!variant) return []
+
+    // GỢI Ý THUỘC TÍNH
+    if (dropdown.value.type === 'attr') {
+        const selected = variant.attributes.map(a => normalize(a.name))
+
+        const all = props.categories
+            ?.flatMap(c => c.attributes || [])
+            .map(a => a.name)
+            .filter((v, i, arr) => arr.indexOf(v) === i) || []
+
+        return all
+            .filter(name => !selected.includes(normalize(name)))
+            .filter(name => normalize(name).includes(keyword))
+    }
+
+    // GỢI Ý GIÁ TRỊ
+    if (dropdown.value.type === 'value') {
+        const attr = variant.attributes[dropdown.value.attrIndex]
+        if (!attr) return []
+
+        const origin = categoryAttributes.value.find(
+            a =>
+                Number(a.id) === Number(attr.id) ||
+                normalize(a.name) === normalize(attr.name)
+        )
+
+        return (origin?.values || [])
+            .map(v => v.value)
+            .filter(v => !attr.value.includes(v))
+            .filter(v => normalize(v).includes(keyword))
+    }
+
+    return []
+})
+
+watch(suggestions, (list) => {
+    if (!list.length) {
+        activeIndex.value = -1
+    }
+})
+
+
+
+
+// Chọn gợi ý
+const selectSuggestion = async (item) => {
+    const v = form.variants[dropdown.value.variantIndex]
+
+    // 1. GỢI Ý GIÁ TRỊ THUỘC TÍNH
+    if (dropdown.value.type === 'value') {
+        const attr = v.attributes[dropdown.value.attrIndex]
+        if (!attr) return
+
+        const exists = attr.value.some(val => normalize(val) === normalize(item))
+        if (exists) {
+            return toast.error('Giá trị đã tồn tại')
+        }
+
+        attr.value.push(item)
+        dropdown.value.keyword = '' // Reset từ khóa
+        activeIndex.value = -1
+        return
+    }
+
+    // 2. GỢI Ý THUỘC TÍNH BIẾN THỂ
+    if (dropdown.value.type === 'attr') {
+        const exists = v.attributes.some(a => normalize(a.name) === normalize(item))
+        if (exists) {
+            return toast.error('Thuộc tính đã tồn tại')
+        }
+
+        v.attributes.push({
+            id: Date.now(),
+            name: item,
+            value: []
+        })
+
+        // GIỮ NGUYÊN dropdown.type = 'attr' ĐỂ KHÔNG ĐÓNG DROPDOWN
+        dropdown.value.keyword = '' // Clear từ khóa tìm kiếm để load toàn bộ gợi ý còn lại
+        activeIndex.value = -1
+
+        await nextTick()
+        // Re-focus lại ô input nhập thuộc tính
+        const inputEl = document.querySelector(`#attr-input-${dropdown.value.variantIndex}`)
+        if (inputEl) {
+            inputEl.focus()
+        }
+    }
+}
+
+watch(
+    () => form.variants.map(v => v.attributes.length),
+    () => {
+        if (dropdown.value.type === 'attr') {
+            dropdown.value.keyword = ''
+            activeIndex.value = -1
+        }
+    }
+)
+
+
+// Xóa thuộc tính
+const removeAttribute = (variant, attrIndex) => {
+    variant.attributes.splice(attrIndex, 1)
+}
 
 
 /*
@@ -320,7 +653,21 @@ const submit = () => {
     }
 
     if (form.id) {
-        form.put(route('products.update', form.id), options)
+        form
+            .transform(data => {
+                const payload = {
+                    ...data,
+                    _method: 'PUT',
+                }
+
+                // Không chọn ảnh mới thì không gửi image
+                if (!(data.image instanceof File)) {
+                    delete payload.image
+                }
+
+                return payload
+            })
+            .post(route('products.update', form.id), options)
     } else {
         form.post(route('products.store'), options)
     }
@@ -397,73 +744,166 @@ const submit = () => {
                         />
 
                         <!-- CÓ IMEI + NÚT BIẾN THỂ -->
-                        <div class="flex items-center gap-3">
-
-                            <!-- CHECKBOX IMEI -->
+                        <div class="flex items-center gap-4">
+                            <!-- IMEI -->
                             <div class="flex items-center gap-2">
-                                <input
-                                    id="imei"
-                                    type="checkbox"
-                                    v-model="form.manage_stock_by_serial"
-                                    class="w-5 h-5 accent-green-600 cursor-pointer"
-                                />
-
-                                <label
-                                    for="imei"
-                                    class="text-sm cursor-pointer select-none"
-                                >
-                                    Có IMEI
-                                </label>
+                                <input type="checkbox" v-model="form.manage_stock_by_serial" />
+                                <label>Có IMEI</label>
                             </div>
 
-                            <!-- THÊM / XÓA BIẾN THỂ -->
-                            <button
-                                type="button"
-                                class="px-3 py-2 bg-gray-200 rounded text-sm whitespace-nowrap"
-                                @click="toggleVariants"
-                            >
-                                {{ form.variants.length ? 'Xóa biến thể' : 'Thêm biến thể' }}
-                            </button>
-
+                            <!-- VARIANT -->
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" v-model="showVariants" />
+                                <label>Có thuộc tính</label>
+                            </div>
                         </div>
                     </div>
 
 
                     <!-- ========================= -->
-                    <!-- DANH SÁCH BIẾN THỂ -->
+                    <!-- DANH SÁCH Thuộc tính-->
                     <!-- ========================= -->
-                    <div
-                        v-if="form.variants.length"
-                        class="col-span-2 border rounded-lg p-3"
-                    >
+                    <div v-if="form.variants.length" class="col-span-2 border rounded-lg p-4 space-y-4 bg-gray-50">
 
                         <div
                             v-for="(v, i) in form.variants"
-                            :key="i"
-                            class="space-y-3"
+                            :key="v.id || i"
+                            class="grid grid-cols-3 gap-4"
                         >
 
-                            <!-- THUỘC TÍNH -->
-                            <div class="grid grid-cols-3 gap-3">
-
+                            <!-- Thuộc tính mới -->
+                            <div
+                                v-for="(attr, i2) in v.attributes"
+                                :key="attr.id || attr.name"
+                                class="relative"
+                            >
+                                <!-- INPUT -->
                                 <div
-                                    v-for="(attr, i2) in v.attributes"
-                                    :key="i2"
+                                    class="relative"
+                                    :ref="el => setDropdownRef(el, 'value', i, i2)"
                                 >
-
-                                    <FloatingSelect
-                                        v-model="attr.value"
-                                        :key="`${form.category_id}-${attr.id}-${i2}`"
-                                        :options="
-                                            categoryAttributes.find(a => a.id === attr.id)?.values ?? []
+                                    <!-- INPUT NHẬP GIÁ TRỊ THUỘC TÍNH -->
+                                    <FloatingInput
+                                        :model-value="
+                                            dropdown.type === 'value' &&
+                                            dropdown.variantIndex === i &&
+                                            dropdown.attrIndex === i2
+                                                ? dropdown.keyword
+                                                : ''
                                         "
-                                        option-label="value"
-                                        option-value="value"
                                         :label="attr.name"
+                                        @focus="openValueDropdown(i, i2)"
+                                        @update:model-value="val => {
+                                            if (dropdown.type === 'value' && dropdown.variantIndex === i && dropdown.attrIndex === i2) {
+                                                dropdown.keyword = val
+                                            }
+                                        }"
+                                        @keydown="e => {
+                                            if (e.key === ',') {
+                                                e.preventDefault()
+                                                addAttrValue(attr, e.target.value)
+                                                return
+                                            }
+                                            handleKeyDown(e, attr, i, i2)
+                                        }"
                                     />
 
+                                    <div
+                                        v-if="
+                                            dropdown.type === 'value' &&
+                                            dropdown.variantIndex === i &&
+                                            dropdown.attrIndex === i2 &&
+                                            suggestions.length
+                                        "
+                                        class="absolute z-20 w-full bg-white border rounded shadow max-h-40 overflow-auto"
+                                    >
+                                        <div
+                                            v-for="(item, idx) in suggestions"
+                                            :key="item + '-' + idx"
+                                            class="suggestion-item px-3 py-2 cursor-pointer"
+                                            @mousedown.prevent="selectSuggestion(item)"
+                                        >
+                                            {{ item }}
+                                        </div>
+                                    </div>
                                 </div>
 
+                                <!-- NÚT XÓA NỔI TRÊN INPUT -->
+                                <button
+                                    type="button"
+                                    @click="removeAttribute(v, i2)"
+                                    class="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-400 text-white text-xs flex items-center justify-center shadow hover:bg-red-600"
+                                >
+                                    <X />
+                                </button>
+
+                                <!-- TAG -->
+                                <div
+                                    v-if="attr.value.length"
+                                    class="pt-2 flex flex-wrap gap-2"
+                                >
+                                    <TagBadge
+                                        v-for="(val, idx) in attr.value"
+                                        :key="idx"
+                                        :label="val"
+                                        removable
+                                        size="lg"
+                                        color="blue"
+                                        @remove="attr.value.splice(idx, 1)"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- NÚT THÊM -->
+                            <div class="">
+                                <div class="w-full">
+
+                                   <div
+                                        v-if="dropdown.type === 'attr' && dropdown.variantIndex === i"
+                                        class="relative"
+                                        :ref="el => setDropdownRef(el, 'attr', i)"
+                                    >
+                                        <input
+                                            :id="'attr-input-' + i"
+                                            :value="dropdown.type === 'attr' && dropdown.variantIndex === i ? dropdown.keyword : ''"
+                                            class="w-full h-[42px] border rounded px-2 text-sm"
+                                            placeholder="Nhập hoặc chọn thuộc tính..."
+                                            @focus="openAttrDropdown(i)"
+                                            @input="e => {
+                                                dropdown.type = 'attr'
+                                                dropdown.variantIndex = i
+                                                dropdown.keyword = e.target.value
+                                            }"
+                                            @keydown="e => handleKeyDown(e, null, i)"
+                                        />
+
+                                        <div
+                                            v-if="suggestions.length"
+                                            class="absolute z-10 w-full bg-white border rounded shadow max-h-40 overflow-auto"
+                                        >
+                                            <div
+                                                v-for="(item, idx) in suggestions"
+                                                :key="idx"
+                                                :class="[
+                                                    'px-3 py-2 cursor-pointer text-sm',
+                                                    idx === activeIndex ? 'bg-blue-100' : 'hover:bg-gray-100'
+                                                ]"
+                                                @mousedown.prevent="selectSuggestion(item)"
+                                            >
+                                                {{ item }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        v-else
+                                        @click="openAttrDropdown(i)"
+                                        class="p-2 bg-green-600 text-white rounded"
+                                    >
+                                        + Thêm
+                                    </button>
+
+                                </div>
                             </div>
 
                         </div>
@@ -523,4 +963,5 @@ const submit = () => {
 .btn-gray {
     @apply px-4 py-2 bg-gray-200 rounded;
 }
+
 </style>

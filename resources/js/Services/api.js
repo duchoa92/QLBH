@@ -29,7 +29,7 @@ api.interceptors.response.use(
             )
         }
 
-        return Promise.reject(error)
+        return Promise.reject(error || new Error('Đã có lỗi xảy ra'))
     }
 )
 

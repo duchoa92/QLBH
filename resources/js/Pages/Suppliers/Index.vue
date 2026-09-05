@@ -42,7 +42,7 @@ const searchSupplier = () => {
                 class="
                     px-4
                     py-2
-                    bg-blue-600
+                    bg-cyan-600
                     text-white
                     rounded
                 "

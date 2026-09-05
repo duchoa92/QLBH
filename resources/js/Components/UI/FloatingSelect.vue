@@ -105,6 +105,7 @@ const handleChange = (event) => {
                 v-for="item in options"
                 :key="item[optionValue]"
                 :value="item[optionValue]"
+                
             >
                 {{ item[optionLabel] }}
             </option>

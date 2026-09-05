@@ -11,14 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('product_imeis', function (Blueprint $table) {
-
-            $table->foreignId('variant_id')
-                ->nullable()
-                ->after('product_id')
-                ->constrained('product_variants')
-                ->cascadeOnDelete();
-
+        Schema::create('stock_imports', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique();
+            $table->text('note')->nullable();
+            $table->timestamps();
         });
     }
 
@@ -27,8 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('product_imeis', function (Blueprint $table) {
-            //
-        });
+        Schema::dropIfExists('stock_imports');
     }
 };

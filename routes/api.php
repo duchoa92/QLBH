@@ -10,7 +10,6 @@ use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\SupplierController;
 
 
-
 Route::middleware(['web', 'auth'])->group(function ()
 {
 
@@ -32,6 +31,8 @@ Route::middleware(['web', 'auth'])->group(function ()
     // Lấy danh sách sản phẩm
     Route::get('/products', [ProductController::class, 'index']);
 
+    Route::get('/products/{id}', [ProductController::class, 'getProductApi']);
+    
 
     // Tìm kiếm khách hàng
     Route::get('/customers/search', [CustomerController::class, 'search']);

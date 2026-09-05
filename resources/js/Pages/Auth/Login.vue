@@ -7,6 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
+import { KeyRound, User } from 'lucide-vue-next';
 
 defineProps({
     canResetPassword: {
@@ -40,6 +41,7 @@ const submit = () => {
 
         <form @submit.prevent="submit">
             <div>
+                <User />
                 <FloatingInput
                     id="login"
                     type="text"
@@ -49,13 +51,14 @@ const submit = () => {
                     autofocus
                     autocomplete="username"
                     label="Tên đăng nhập hoặc số điện thoại"
+                    :error="form.errors.login"
                 />
 
-                <InputError class="mt-2" :message="form.errors.email" />
+                <InputError class="mt-2" :message="form.errors.login" />
             </div>
 
             <div class="mt-4">
-
+                <KeyRound />
                 <FloatingInput
                     id="password"
                     type="password"
@@ -64,6 +67,7 @@ const submit = () => {
                     required
                     autocomplete="current-password"
                     label="Nhập mật khẩu"
+                    :error="form.errors.password"
                 />
 
                 <InputError class="mt-2" :message="form.errors.password" />
@@ -73,7 +77,7 @@ const submit = () => {
                 <label class="flex items-center">
                     <Checkbox name="remember" v-model:checked="form.remember" />
                     <span class="ms-2 text-sm text-gray-600"
-                        >Remember me</span
+                        >Ghi nhớ đăng nhập</span
                     >
                 </label>
             </div>
@@ -84,7 +88,7 @@ const submit = () => {
                     :href="route('password.request')"
                     class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
-                    Forgot your password?
+                    Quên mật khẩu?
                 </Link>
 
                 <PrimaryButton
@@ -92,7 +96,7 @@ const submit = () => {
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
-                    Log in
+                    Đăng nhập
                 </PrimaryButton>
             </div>
         </form>

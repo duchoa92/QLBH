@@ -112,3 +112,11 @@ html {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+mark {
+    background-color: #fef08a !important;
+    color: #854d0e !important;
+    font-weight: 700 !important;
+    padding: 0 2px !important;
+    border-radius: 2px !important;
+}
