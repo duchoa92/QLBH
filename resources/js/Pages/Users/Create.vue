@@ -22,12 +22,12 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Create User" />
+    <Head title="Thêm người dùng" />
 
     <AuthenticatedLayout>
         <template #header>
             <h2 class="text-xl font-semibold leading-tight text-gray-800">
-                Create User
+                Thêm người dùng
             </h2>
         </template>
 
@@ -42,7 +42,7 @@ const submit = () => {
                             <!-- Name -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Name
+                                    Họ tên
                                 </label>
 
                                 <input
@@ -62,7 +62,7 @@ const submit = () => {
                             <!-- Username -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Username
+                                    Tên đăng nhập
                                 </label>
 
                                 <input
@@ -82,7 +82,7 @@ const submit = () => {
                             <!-- Phone -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Phone
+                                    Điện thoại
                                 </label>
 
                                 <input
@@ -122,7 +122,7 @@ const submit = () => {
                             <!-- Password -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Password
+                                    Mật khẩu
                                 </label>
 
                                 <input
@@ -142,7 +142,7 @@ const submit = () => {
                             <!-- Confirm Password -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Confirm Password
+                                    Xác nhận mật khẩu
                                 </label>
 
                                 <input
@@ -155,7 +155,7 @@ const submit = () => {
                             <!-- Role -->
                             <div class="md:col-span-2">
                                 <label class="mb-1 block text-sm font-medium">
-                                    Role
+                                    Vai trò
                                 </label>
 
                                 <select
@@ -163,7 +163,7 @@ const submit = () => {
                                     class="w-full rounded border-gray-300"
                                 >
                                     <option value="">
-                                        -- Select Role --
+                                        -- Chọn vai trò --
                                     </option>
 
                                     <option
@@ -190,7 +190,7 @@ const submit = () => {
                                 type="submit"
                                 class="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
                             >
-                                Create User
+                                Tạo người dùng
                             </button>
                         </div>
 

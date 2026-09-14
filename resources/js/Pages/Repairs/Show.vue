@@ -162,7 +162,7 @@ const updateStatus = event => {
                             <div
                                 class="font-semibold text-gray-800 mt-1"
                             >
-                               {{ repair.customer?.name }}
+                               {{ repair.customer?.full_name }}
                             </div>
 
                         </div>

@@ -151,7 +151,7 @@ const toggleStatus = (id) => {
     if (loadingStatus.value) return
     loadingStatus.value = id
 
-    // 👉 update UI trước
+    // update UI trước
     const item = props.brands.data.find(i => i.id === id)
     if (item) item.is_active = !item.is_active
 

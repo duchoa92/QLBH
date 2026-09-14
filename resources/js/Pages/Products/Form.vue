@@ -15,7 +15,11 @@ const props = defineProps({
     title: String,
     product: Object,
     categories: Array,
-    brands: Array
+    brands: Array,
+    units: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 
@@ -74,6 +78,7 @@ const form = useForm({
     name: props.product?.name ?? '',
     category_id: props.product?.category_id ?? null,
     brand_id: props.product?.brand_id ?? null,
+    unit_id: props.product?.unit_id ?? null,
     sku: props.product?.sku ?? '',
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
@@ -128,6 +133,19 @@ const filteredBrands = computed(() => {
     )
 })
 
+const unitOptions = computed(() => [
+    {
+        id: null,
+        name: 'Không chọn',
+    },
+    ...(props.units || []).map(unit => ({
+        ...unit,
+        name: unit.short_name
+            ? `${unit.name} (${unit.short_name})`
+            : unit.name,
+    })),
+])
+
 
 
 // reset form khi props.product thay đổi (chọn sửa sản phẩm khác)
@@ -147,6 +165,7 @@ watch(() => props.product, (p) => {
     form.name = p.name ?? ''
     form.category_id = p.category_id ?? null
     form.brand_id = p.brand_id ?? null
+    form.unit_id = p.unit_id ?? null
     form.sku = p.sku ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
@@ -733,8 +752,17 @@ const submit = () => {
                         :error="form.errors.brand_id"
                     />
 
+                    <FloatingSelect
+                        v-model="form.unit_id"
+                        :options="unitOptions"
+                        option-label="name"
+                        option-value="id"
+                        label="Đơn vị tính"
+                        :error="form.errors.unit_id"
+                    />
+
                     <!-- SKU + IMEI + BIẾN THỂ -->
-                    <div class="col-span-2 grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 gap-4">
 
                         <!-- SKU -->
                         <FloatingInput

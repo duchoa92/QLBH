@@ -17,11 +17,25 @@ return new class extends Migration
             $table->foreignId('stock_import_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_id')->constrained();
             $table->foreignId('variant_id')->nullable()->constrained('product_variants');
+            $table->foreignId('unit_id')
+                ->nullable()
+                ->constrained()
+                ->nullOnDelete();
+            $table->string('unit_name')
+                ->nullable();
+
+            $table->decimal('import_quantity', 12, 2)
+                ->default(0);
+
+            $table->decimal('conversion_factor', 12, 2)
+                ->default(1);
 
             $table->integer('quantity')->default(0);
             $table->decimal('cost_price', 12, 2)->default(0);
 
             $table->timestamps();
+
+
         });
     }
 

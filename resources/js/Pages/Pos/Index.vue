@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { toast } from 'vue-sonner'
@@ -10,7 +10,7 @@ import PosSidebar from '@/Modules/POS/Core/Components/PosSidebar.vue'
 import PosMainPanel from '@/Modules/POS/Core/Components/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
-
+import SelectProductModal from '@/Modules/POS/Product/Components/SelectProductModal.vue'
 
 const {
     tabs,
@@ -57,6 +57,40 @@ const showInvoice = ref(false)
 
 // loading khi nhấn checkout để tránh việc click nhiều lần vào nút checkout
 const loading = ref(false)
+
+const showSelectModal = ref(false)
+const selectedProduct = ref(null)
+
+const handleSelectProduct = (product) => {
+
+    const hasImei = product.has_imei || (product.imeis && product.imeis.length)
+    // 👉 có IMEI
+    if (hasImei) {
+        selectedProduct.value = product
+        showSelectModal.value = true
+        return
+    }
+
+    // 👉 có variant
+    if (product.variants && product.variants.length) {
+        selectedProduct.value = product
+        showSelectModal.value = true
+        return
+    }
+
+    // 👉 sản phẩm thường
+    addToCart(product)
+}
+const handleConfirmSelect = ({ variant, imei }) => {
+
+    addToCart({
+        ...selectedProduct.value,
+        variant,
+        imei
+    })
+
+    showSelectModal.value = false
+}
 
 const handleCheckout = async (data) => {
 
@@ -144,7 +178,8 @@ useBarcodeScanner(
     async (barcode) => {
         try {
             const result = await productService.scan(barcode)
-            addToCart(result.data)
+
+            handleSelectProduct(result.data)
         } catch (error) {
             console.error(error)
             toast.error('Không tìm thấy sản phẩm với mã vạch này')
@@ -154,13 +189,7 @@ useBarcodeScanner(
 
 
 
-watch(showCheckoutModal, (value) => {
 
-    console.log(
-        'showCheckoutModal =',
-        value
-    )
-})
 
 </script>
 
@@ -170,7 +199,7 @@ watch(showCheckoutModal, (value) => {
 
         <template #main>
             <PosMainPanel
-                @add-product="addToCart"
+                @add-product="handleSelectProduct"
             />
         </template>
 
@@ -201,6 +230,14 @@ watch(showCheckoutModal, (value) => {
         :selected-customer="selectedCustomer"
         @close="showCheckoutModal = false"
         @confirm="checkout($event)"
+    />
+
+    <SelectProductModal
+        v-if="selectedProduct"
+        :show="showSelectModal"
+        :product="selectedProduct"
+        @close="showSelectModal = false"
+        @confirm="handleConfirmSelect"
     />
 
 

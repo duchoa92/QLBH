@@ -25,6 +25,7 @@ class ProductController extends Controller
                 ->pluck('product_id');
 
             $products = Product::query()
+                ->with('unit:id,name,short_name')
                 ->whereIn('id', $productIds)
                 ->where('is_active', true)
                 ->get()
@@ -40,6 +41,8 @@ class ProductController extends Controller
                         'stock' => $product->stock,
                         'manage_stock_by_serial' => $product->manage_stock_by_serial,
                         'category_id' => $product->category_id,
+                        'unit_id' => $product->unit_id,
+                        'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
                         'product_type' => $product->product_type,
                         'sold_count' => $product->sold_count ?? 0,
                         'image_url' => $product->image_url,
@@ -53,6 +56,7 @@ class ProductController extends Controller
 
         $products = Product::query()
             ->with([
+                'unit:id,name,short_name',
                 'variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock',
             ])
             ->where('is_active', true)
@@ -102,6 +106,8 @@ class ProductController extends Controller
                     'stock' => $product->stock,
                     'manage_stock_by_serial' => $product->manage_stock_by_serial,
                     'category_id' => $product->category_id,
+                    'unit_id' => $product->unit_id,
+                    'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
                     'product_type' => $product->product_type,
                     'sold_count' => $product->sold_count ?? 0,
                     'image_url' => $product->image_url,

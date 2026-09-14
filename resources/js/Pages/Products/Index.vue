@@ -18,7 +18,11 @@ const props = defineProps({
     products: Object,
     filters: Object,
     categories: Array,
-    brands: Array
+    brands: Array,
+    units: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const confirmBox = useConfirm()
@@ -97,7 +101,8 @@ const openCreate = () => {
             title: 'Thêm sản phẩm',
             size: 'xl',
             categories: props.categories,
-            brands: props.brands
+            brands: props.brands,
+            units: props.units,
         },
         onUpdated: () => {
             loadData()
@@ -114,6 +119,7 @@ const openEdit = (item) => {
             product: item,
             categories: props.categories,
             brands: props.brands,
+            units: props.units,
         },
         onUpdated: () => {
             loadData()

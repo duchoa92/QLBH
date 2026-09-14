@@ -1,9 +1,11 @@
 <script setup>
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import Form from './Form.vue'
+import Form from './StockImportProductModal.vue'
 import {ref, computed,} from 'vue'
 import {useForm,} from '@inertiajs/vue3'
+import SupplierSection from './SupplierSection.vue'
+import { toast } from 'vue-sonner'
 
 import {
     Save,
@@ -41,10 +43,6 @@ const props = defineProps({
 |--------------------------------------------------------------------------
 */
 
-
-
-
-
 const showForm = ref(false)
 
 
@@ -53,16 +51,30 @@ const showForm = ref(false)
 | FORM
 |--------------------------------------------------------------------------
 */
-
 const form = useForm({
     supplier_id: null,
+    import_date: new Date()
+        .toISOString()
+        .slice(0, 10),
     items: [],
     discount: 0,
     extra_fee: 0,
     note: '',
-
 })
 
+const selectedSupplier = ref(null)
+const selectSupplier = (supplier) => {
+
+    selectedSupplier.value =
+        supplier
+
+    form.supplier_id =
+        supplier?.id || null
+
+    form.clearErrors(
+        'supplier_id'
+    )
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -76,7 +88,7 @@ const addItems = (selectedItems) => {
 
         const exist = form.items.find(item =>
             item.product_id === newItem.product_id &&
-            item.variant_id === newItem.variant_id
+            (item.variant_id ?? null) === (newItem.variant_id ?? null)
         )
 
 
@@ -119,28 +131,15 @@ const addItems = (selectedItems) => {
         } else {
 
             form.items.push({
-
                 ...newItem,
-
-                imeis:
-                    newItem.imeis || [],
-
-                quantity:
-                    Number(
-                        newItem.quantity || 1
-                    ),
-
-                cost_price:
-                    Number(
-                        newItem.cost_price || 0
-                    ),
-
+                product_id: newItem.product_id,
+                variant_id: newItem.variant_id ?? null,
+                imeis: newItem.imeis || [],
+                quantity: Number(newItem.quantity || 1),
+                cost_price: Number(newItem.cost_price || 0),
             })
-
         }
-
     })
-
 
     showForm.value = false
 
@@ -217,16 +216,38 @@ const money = (value) => {
 
 /*
 |--------------------------------------------------------------------------
-| LƯU
+| LƯU & VALIDATE
 |--------------------------------------------------------------------------
 */
-
 const submit = () => {
-    form.post('/stock-imports', {
+    let hasError = false
+
+    if (!form.supplier_id) {
+        form.setError('supplier_id', 'Vui lòng chọn nhà cung cấp.')
+        toast.error('Vui lòng chọn nhà cung cấp')
+        hasError = true
+    }
+
+    if (!form.items.length) {
+        form.setError('items', 'Vui lòng chọn ít nhất một sản phẩm')
+        toast.error('Chưa có sản phẩm nhập')
+        hasError = true
+    }
+
+    if (hasError) return
+
+    form.post('/stock-import', {
         preserveScroll: true,
+
+        onSuccess: () => {
+            toast.success('Tạo đơn nhập thành công')
+        },
+
+        onError: () => {
+            // backend validate sẽ tự toast rồi
+        }
     })
 }
-
 </script>
 
 
@@ -262,13 +283,9 @@ const submit = () => {
                 </div>
             </div>
 
-
             <!-- RIGHT -->
-
             <div class="flex items-center gap-4">
-
                 <div class="text-right">
-
                     <div
                         class="
                             text-xs
@@ -356,198 +373,18 @@ const submit = () => {
 
             <div class="space-y-5 xl:col-span-2">
 
-
-                <!-- PRODUCT CARD -->
-
-                <div
-                    class="
-                        overflow-hidden
-                        rounded-xl
-                        border
-                        border-slate-200
-                        bg-white
-                        shadow-sm
-                    "
+                <!-- PRODUCT CARD HEADER -->
+                <div 
+                    data-error="items"
+                    class="overflow-hidden rounded-xl border bg-white shadow-sm transition-colors"
+                    :class="form.errors.items ? 'border-red-400' : 'border-slate-200'"
                 >
-
-                    <!-- CARD HEADER -->
-
-                    <div
-                        class="
-                            flex
-                            items-center
-                            justify-between
-                            border-b
-                            border-slate-200
-                            px-5
-                            py-4
-                        "
-                    >
-
-                        <div class="flex items-center gap-3">
-
-                            <div
-                                class="
-                                    flex
-                                    h-9
-                                    w-9
-                                    items-center
-                                    justify-center
-                                    rounded-lg
-                                    bg-slate-100
-                                    text-slate-700
-                                "
-                            >
-
-                                <ShoppingCart
-                                    :size="19"
-                                />
-
-                            </div>
-
-
-                            <div>
-
-                                <div
-                                    class="
-                                        font-semibold
-                                        text-slate-900
-                                    "
-                                >
-                                    Hàng hóa
-                                </div>
-
-                                <div
-                                    class="
-                                        text-xs
-                                        text-slate-500
-                                    "
-                                >
-                                    {{ form.items.length }}
-                                    sản phẩm
-                                </div>
-
-                            </div>
-
-                        </div>
-
-
-                        <button
-                            type="button"
-                            @click="showForm = true"
-                            class="
-                                flex
-                                items-center
-                                gap-2
-                                rounded-lg
-                                border
-                                border-emerald-600
-                                px-3
-                                py-2
-                                text-sm
-                                font-semibold
-                                text-emerald-600
-                                transition
-                                hover:bg-emerald-50
-                            "
-                        >
-
-                            <Plus :size="17" />
-
-                            Chọn hàng hóa
-
-                        </button>
-
+                    <!-- THÔNG BÁO LỖI NẾU CHƯA CÓ MẶT HÀNG -->
+                    <div v-if="form.errors.items" class="bg-red-50 px-5 py-2.5 border-b border-red-100 text-xs font-semibold text-red-600">
+                        {{ form.errors.items }}
                     </div>
 
-
-                    <!-- EMPTY -->
-
-                    <div
-                        v-if="!form.items.length"
-                        class="
-                            flex
-                            min-h-[300px]
-                            flex-col
-                            items-center
-                            justify-center
-                            px-5
-                            text-center
-                        "
-                    >
-
-                        <div
-                            class="
-                                mb-4
-                                flex
-                                h-16
-                                w-16
-                                items-center
-                                justify-center
-                                rounded-full
-                                bg-slate-100
-                                text-slate-400
-                            "
-                        >
-
-                            <PackageOpen
-                                :size="30"
-                            />
-
-                        </div>
-
-
-                        <div
-                            class="
-                                font-medium
-                                text-slate-700
-                            "
-                        >
-                            Chưa có hàng hóa
-                        </div>
-
-
-                        <div
-                            class="
-                                mt-1
-                                text-sm
-                                text-slate-400
-                            "
-                        >
-                            Nhấn "Chọn hàng hóa" để thêm sản phẩm
-                        </div>
-
-
-                        <button
-                            type="button"
-                            @click="showForm = true"
-                            class="
-                                mt-4
-                                flex
-                                items-center
-                                gap-2
-                                rounded-lg
-                                bg-emerald-600
-                                px-4
-                                py-2
-                                text-sm
-                                font-semibold
-                                text-white
-                                hover:bg-emerald-700
-                            "
-                        >
-
-                            <Plus :size="17" />
-
-                            Chọn hàng hóa
-
-                        </button>
-
-                    </div>
-
-
-                    <!-- TABLE -->
-
+                    <!-- TABLE SẢN PHẨM HOẶC EMPTY STATE -->
                     <div
                         v-else
                         class="overflow-x-auto"
@@ -775,21 +612,9 @@ const submit = () => {
 
 
                                     <!-- PRICE -->
-
-                                    <td
-                                        class="
-                                            px-3
-                                            py-4
-                                            text-right
-                                            font-medium
-                                            text-slate-700
-                                        "
-                                    >
-
-                                        {{ money(item.price) }}
-
+                                    <td class="px-3 py-4 text-right font-medium text-slate-700">
+                                        {{ money(item.cost_price) }}
                                     </td>
-
 
                                     <!-- TOTAL -->
 
@@ -802,27 +627,16 @@ const submit = () => {
                                             text-slate-900
                                         "
                                     >
-
                                         {{
                                             money(
-                                                Number(item.qty || 0) *
-                                                Number(item.price || 0)
+                                                Number(item.quantity || 0) *
+                                                Number(item.cost_price || 0)
                                             )
                                         }}
-
                                     </td>
-
-
                                     <!-- REMOVE -->
-
-                                    <td
-                                        class="
-                                            px-3
-                                            py-4
-                                            text-center
-                                        "
+                                    <td class="px-3 py-4 text-center"
                                     >
-
                                         <button
                                             type="button"
                                             title="Xóa"
@@ -858,6 +672,198 @@ const submit = () => {
                         </table>
 
                     </div>
+                </div>
+
+                <!-- PRODUCT CARD -->
+
+                <div
+                    class="
+                        overflow-hidden
+                        rounded-xl
+                        border
+                        border-slate-200
+                        bg-white
+                        shadow-sm
+                    "
+                >
+
+                    <!-- CARD HEADER -->
+
+                    <div
+                        class="
+                            flex
+                            items-center
+                            justify-between
+                            border-b
+                            border-slate-200
+                            px-5
+                            py-4
+                        "
+                    >
+
+                        <div class="flex items-center gap-3">
+
+                            <div
+                                class="
+                                    flex
+                                    h-9
+                                    w-9
+                                    items-center
+                                    justify-center
+                                    rounded-lg
+                                    bg-slate-100
+                                    text-slate-700
+                                "
+                            >
+
+                                <ShoppingCart
+                                    :size="19"
+                                />
+
+                            </div>
+
+
+                            <div>
+
+                                <div
+                                    class="
+                                        font-semibold
+                                        text-slate-900
+                                    "
+                                >
+                                    Hàng hóa
+                                </div>
+
+                                <div
+                                    class="
+                                        text-xs
+                                        text-slate-500
+                                    "
+                                >
+                                    {{ form.items.length }}
+                                    sản phẩm
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            @click="showForm = true"
+                            class="
+                                flex
+                                items-center
+                                gap-2
+                                rounded-lg
+                                border
+                                border-emerald-600
+                                px-3
+                                py-2
+                                text-sm
+                                font-semibold
+                                text-emerald-600
+                                transition
+                                hover:bg-emerald-50
+                            "
+                        >
+
+                            <Plus :size="17" />
+
+                            Chọn hàng hóa
+
+                        </button>
+
+                    </div>
+
+
+                    <!-- EMPTY -->
+
+                    <div
+                        v-if="!form.items.length"
+                        class="
+                            flex
+                            min-h-[300px]
+                            flex-col
+                            items-center
+                            justify-center
+                            px-5
+                            text-center
+                        "
+                    >
+
+                        <div
+                            class="
+                                mb-4
+                                flex
+                                h-16
+                                w-16
+                                items-center
+                                justify-center
+                                rounded-full
+                                bg-slate-100
+                                text-slate-400
+                            "
+                        >
+
+                            <PackageOpen
+                                :size="30"
+                            />
+
+                        </div>
+
+
+                        <div
+                            class="
+                                font-medium
+                                text-slate-700
+                            "
+                        >
+                            Chưa có hàng hóa
+                        </div>
+
+
+                        <div
+                            class="
+                                mt-1
+                                text-sm
+                                text-slate-400
+                            "
+                        >
+                            Nhấn "Chọn hàng hóa" để thêm sản phẩm
+                        </div>
+
+
+                        <button
+                            type="button"
+                            @click="showForm = true"
+                            class="
+                                mt-4
+                                flex
+                                items-center
+                                gap-2
+                                rounded-lg
+                                bg-emerald-600
+                                px-4
+                                py-2
+                                text-sm
+                                font-semibold
+                                text-white
+                                hover:bg-emerald-700
+                            "
+                        >
+
+                            <Plus :size="17" />
+
+                            Chọn hàng hóa
+
+                        </button>
+
+                    </div>
+
+
+
 
                 </div>
 
@@ -927,118 +933,12 @@ const submit = () => {
 
             <div class="space-y-5">
 
-
-                <!-- SUPPLIER -->
-
-                <div
-                    class="
-                        rounded-xl
-                        border
-                        border-slate-200
-                        bg-white
-                        p-5
-                        shadow-sm
-                    "
-                >
-
-                    <div
-                        class="
-                            mb-4
-                            flex
-                            items-center
-                            justify-between
-                        "
-                    >
-
-                        <div class="flex items-center gap-2">
-
-                            <UserRound
-                                :size="18"
-                                class="text-slate-600"
-                            />
-
-                            <span
-                                class="
-                                    font-semibold
-                                    text-slate-800
-                                "
-                            >
-                                Nhà cung cấp
-                            </span>
-
-                        </div>
-
-
-                        <button
-                            type="button"
-                            class="
-                                flex
-                                items-center
-                                gap-1
-                                text-sm
-                                font-medium
-                                text-emerald-600
-                                hover:text-emerald-700
-                            "
-                        >
-
-                            Thay đổi
-
-                            <ChevronRight
-                                :size="15"
-                            />
-
-                        </button>
-
-                    </div>
-
-
-                    <div
-                        v-if="form.supplier_id"
-                        class="
-                            rounded-lg
-                            bg-slate-50
-                            p-3
-                        "
-                    >
-                        Nhà cung cấp đã chọn
-                    </div>
-
-
-                    <div
-                        v-else
-                        class="
-                            rounded-lg
-                            border
-                            border-dashed
-                            border-slate-300
-                            bg-slate-50
-                            p-5
-                            text-center
-                        "
-                    >
-
-                        <UserRound
-                            :size="25"
-                            class="
-                                mx-auto
-                                text-slate-300
-                            "
-                        />
-
-                        <div
-                            class="
-                                mt-2
-                                text-sm
-                                text-slate-500
-                            "
-                        >
-                            Chưa chọn nhà cung cấp
-                        </div>
-
-                    </div>
-
-                </div>
+            <!-- SUPPLIER -->
+           <SupplierSection
+                :supplier="selectedSupplier"
+                :error="form.errors.supplier_id"
+                @selected="selectSupplier"
+            />
 
 
                 <!-- PAYMENT -->
@@ -1116,125 +1016,48 @@ const submit = () => {
 
                     </div>
 
-
-                    <!-- DISCOUNT -->
-
+                    <!-- DISCOUNT INPUT -->
                     <div class="mt-4">
-
-                        <div
-                            class="
-                                mb-1.5
-                                flex
-                                justify-between
-                                text-sm
-                            "
-                        >
-
-                            <span class="text-slate-500">
-                                Chiết khấu
-                            </span>
-
+                        <div class="mb-1.5 flex justify-between text-sm">
+                            <span class="text-slate-500">Chiết khấu</span>
                         </div>
-
-
                         <div class="relative">
-
                             <input
-                                v-model.number="
-                                    form.discount
-                                "
+                                v-model.number="form.discount"
+                                name="discount"
                                 type="number"
                                 min="0"
-                                class="
-                                    w-full
-                                    rounded-lg
-                                    border
-                                    border-slate-200
-                                    py-2
-                                    pl-3
-                                    pr-10
-                                    text-right
-                                    text-sm
-                                    outline-none
-                                    focus:border-emerald-500
-                                    focus:ring-2
-                                    focus:ring-emerald-100
-                                "
+                                @input="form.clearErrors('discount')"
+                                class="w-full rounded-lg border py-2 pl-3 pr-10 text-right text-sm outline-none transition"
+                                :class="form.errors.discount ? 'border-red-500 bg-red-50/30' : 'border-slate-200 focus:border-emerald-500'"
                             />
-
-                            <span
-                                class="
-                                    absolute
-                                    right-3
-                                    top-1/2
-                                    -translate-y-1/2
-                                    text-xs
-                                    text-slate-400
-                                "
-                            >
-                                đ
-                            </span>
-
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">đ</span>
                         </div>
-
+                        <!-- DÒNG BÁO LỖI ĐỎ -->
+                        <p v-if="form.errors.discount" class="mt-1 text-xs text-red-600 font-medium">
+                            {{ form.errors.discount }}
+                        </p>
                     </div>
 
-
-                    <!-- EXTRA -->
-
+                    <!-- EXTRA FEE INPUT -->
                     <div class="mt-4">
-
-                        <div
-                            class="
-                                mb-1.5
-                                text-sm
-                                text-slate-500
-                            "
-                        >
-                            Phụ phí
-                        </div>
-
-
+                        <div class="mb-1.5 text-sm text-slate-500">Phụ phí</div>
                         <div class="relative">
-
                             <input
-                                v-model.number="
-                                    form.extra_fee
-                                "
+                                v-model.number="form.extra_fee"
+                                name="extra_fee"
                                 type="number"
                                 min="0"
-                                class="
-                                    w-full
-                                    rounded-lg
-                                    border
-                                    border-slate-200
-                                    py-2
-                                    pl-3
-                                    pr-10
-                                    text-right
-                                    text-sm
-                                    outline-none
-                                    focus:border-emerald-500
-                                    focus:ring-2
-                                    focus:ring-emerald-100
-                                "
+                                @input="form.clearErrors('extra_fee')"
+                                class="w-full rounded-lg border py-2 pl-3 pr-10 text-right text-sm outline-none transition"
+                                :class="form.errors.extra_fee ? 'border-red-500 bg-red-50/30' : 'border-slate-200 focus:border-emerald-500'"
                             />
-
-                            <span
-                                class="
-                                    absolute
-                                    right-3
-                                    top-1/2
-                                    -translate-y-1/2
-                                    text-xs
-                                    text-slate-400
-                                "
-                            >
-                                đ
-                            </span>
-
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">đ</span>
                         </div>
-
+                        <!-- DÒNG BÁO LỖI ĐỎ -->
+                        <p v-if="form.errors.extra_fee" class="mt-1 text-xs text-red-600 font-medium">
+                            {{ form.errors.extra_fee }}
+                        </p>
                     </div>
 
 

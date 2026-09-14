@@ -20,7 +20,7 @@ import {
 
 import CustomerAutocomplete from '@/Components/CustomerAutocomplete.vue';
 import PatternLock from '@/Components/PatternLock.vue';
-import { Toaster } from 'vue-sonner';
+import { Toaster, toast } from 'vue-sonner';
 
 const form = useForm({
 
@@ -109,7 +109,7 @@ const startScan = async () => {
 
         if (!selectedDeviceId) {
 
-            error('Không tìm thấy camera');
+            toast.error('Không tìm thấy camera');
 
             return;
         }
@@ -132,11 +132,11 @@ const startScan = async () => {
             }
         );
 
-    } catch (error) {
+    } catch (err) {
 
-        console.log(error);
+        console.error(err);
 
-        error('Không thể mở camera');
+        toast.error('Không thể mở camera');
     }
 };
 
@@ -186,7 +186,7 @@ onMounted(async () => {
 
     } catch (error) {
 
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -284,24 +284,6 @@ const submit = () => {
         route('repairs.store'),
         {
             forceFormData: true,
-
-            onError: errors => {
-
-                console.log(
-                    'VALIDATION',
-                    errors
-                );
-            },
-
-            onSuccess: () => {
-
-                console.log('SUCCESS');
-            },
-
-            onFinish: () => {
-
-                console.log('FINISH');
-            },
         }
     );
 };

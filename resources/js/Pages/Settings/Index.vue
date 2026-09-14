@@ -13,6 +13,7 @@ const form = useForm({
     shop_name: props.settings.shop_name || '',
     currency_symbol: props.settings.currency_symbol || '₫',
     currency_format: props.settings.currency_format || 'vi-VN',
+    app_locale: props.settings.app_locale || 'vi',
     allow_negative_stock: props.settings.allow_negative_stock || false,
 })
 
@@ -41,6 +42,12 @@ const save = () => {
         <select v-model="form.currency_format" class="border p-2 w-full">
             <option value="vi-VN">Việt Nam</option>
             <option value="en-US">US</option>
+        </select>
+
+        <label>Ngôn ngữ hệ thống</label>
+        <select v-model="form.app_locale" class="border p-2 w-full">
+            <option value="vi">Tiếng Việt</option>
+            <option value="en">English</option>
         </select>
     </div>
 

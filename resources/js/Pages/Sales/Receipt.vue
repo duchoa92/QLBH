@@ -1,5 +1,10 @@
 <script setup>
 
+defineOptions({
+    // Trang hóa đơn dùng để in trực tiếp — không bọc layout admin (sidebar/topbar)
+    layout: null,
+})
+
 const props = defineProps({
 
     sale: Object,
@@ -75,7 +80,7 @@ window.onload = () => {
             <div v-if="sale.customer">
 
                 KH:
-                {{ sale.customer.name }}
+                {{ sale.customer.full_name }}
 
             </div>
 
@@ -131,8 +136,7 @@ window.onload = () => {
                     v-for="gift in item.gifts"
                     :key="gift.id"
                 >
-                    🎁<gift-icon class="inline-block w-3 h-3 mr-1" />
-                    {{ gift.product?.name }}
+                    🎁 {{ gift.product?.name }}
                     x{{ gift.quantity }}
                 </div>
 

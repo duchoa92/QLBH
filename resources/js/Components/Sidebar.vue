@@ -7,6 +7,7 @@ import {
     Home,
     ShoppingBag,
     FileText,
+    BarChart3,
     Users,
     UserRound,
     Wrench,
@@ -112,6 +113,13 @@ const menuGroups = [
                 icon: FileText,
                 href: '/sales',
                 paths: ['/sales'],
+            },
+
+            {
+                label: 'Báo cáo',
+                icon: BarChart3,
+                href: '/reports',
+                paths: ['/reports'],
             },
         ],
     },

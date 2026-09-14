@@ -110,10 +110,6 @@ watch(() => props.category, (c) => {
     immediate: true
 })
 
-/* watch(() => props.category, (c) => {
-    console.log('CATEGORY:', c)
-}, { immediate: true }) */
-
 </script>
 
 <template>

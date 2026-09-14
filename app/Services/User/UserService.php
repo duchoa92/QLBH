@@ -32,9 +32,9 @@ class UserService extends BaseService
             $data
         );
 
-        if (isset($data['roles'])) {
+        if (isset($data['role'])) {
 
-            $model->syncRoles($data['roles']);
+            $model->syncRoles($data['role']);
         }
 
         return $model;

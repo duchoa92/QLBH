@@ -10,28 +10,25 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RepairController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 /*
 |--------------------------------------------------------------------------
-| Welcome & Public Routes
+| Trang gốc: điều hướng thẳng, không dùng trang Welcome mặc định của Laravel
 |--------------------------------------------------------------------------
 */
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    return auth()->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
 });
 
 /*
@@ -102,8 +99,6 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{id}/restore', [ProductController::class, 'restore'])->middleware('permission:products.edit')->name('restore');
         Route::delete('/{id}/force', [ProductController::class, 'forceDelete'])->name('forceDelete');
         Route::patch('/{product}/toggle-status', [ProductController::class, 'toggleStatus'])->name('toggleStatus');
-
-        Route::get('/products/{id}', [ProductController::class, 'getProductApi']);
     });
 
     Route::post('/scan', [ProductController::class, 'scan'])->name('products.scan');
@@ -123,10 +118,20 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // Stock Import (Nhập hàng)
-    Route::get('/stock-import', function () {
-        return Inertia::render('StockImports/Index');
-    })->name('stock.index');
-    Route::post('/stock-import', [StockImportController::class, 'store'])->name('stock.import');
+    Route::get(
+        '/stock-import',
+        [StockImportController::class, 'index']
+    )->name('stock.index');
+
+    Route::post(
+        '/stock-import',
+        [StockImportController::class, 'store']
+    )->name('stock.import');
+
+    Route::get(
+        '/stock-import/{stockImport}',
+        [StockImportController::class, 'show']
+    )->name('stock.show');
 
     Route::get('/api/products-with-variants', function () {
         return \App\Models\Product::with([
@@ -207,7 +212,22 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/imeis/{imei}', [ProductImeiController::class, 'show'])->name('product-imeis.show');
 
     Route::resource('customers', CustomerController::class);
+    Route::get('/api/suppliers/search', [SupplierController::class, 'search'])->name('api.suppliers.search');
     Route::resource('suppliers', SupplierController::class);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reports (Báo cáo & Thống kê)
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('reports')->name('reports.')->controller(ReportController::class)->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/revenue', 'revenue')->name('revenue');
+        Route::get('/best-sellers', 'bestSellers')->name('bestSellers');
+        Route::get('/inventory', 'inventory')->name('inventory');
+        Route::get('/debts', 'debts')->name('debts');
+        Route::get('/profit', 'profit')->name('profit');
+    });
 });
 
 require __DIR__ . '/auth.php';

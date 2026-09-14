@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Illuminate\Http\JsonResponse;
 
 class SupplierController extends Controller
 {
@@ -87,70 +88,32 @@ class SupplierController extends Controller
         );
     }
 
-    public function store(
-        Request $request
-    ): RedirectResponse {
-
-        $validated =
-            $request->validate([
-                'name' => [
-                    'required',
-                    'string',
-                    'max:255',
-                ],
-
-                'phone' => [
-                    'nullable',
-                    'string',
-                    'max:20',
-                ],
-
-                'email' => [
-                    'nullable',
-                    'email',
-                    'max:255',
-                ],
-
-                'address' => [
-                    'nullable',
-                    'string',
-                ],
-            ]);
-
-        Supplier::create([
-
-            'code' => 'NCC' .
-                str_pad(
-                    (string)
-                    (
-                        Supplier::count()
-                        + 1
-                    ),
-                    5,
-                    '0',
-                    STR_PAD_LEFT
-                ),
-
-            'name' =>
-                $validated['name'],
-
-            'phone' =>
-                $validated['phone']
-                ?? null,
-
-            'email' =>
-                $validated['email']
-                ?? null,
-
-            'address' =>
-                $validated['address']
-                ?? null,
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'address' => ['nullable', 'string'],
         ]);
 
-        return redirect()
-            ->route(
-                'suppliers.index'
-            );
+        $supplier = Supplier::create([
+            'code' => 'NCC' . str_pad(
+                (string)(Supplier::count() + 1),
+                5,
+                '0',
+                STR_PAD_LEFT
+            ),
+            'name' => $validated['name'],
+            'phone' => $validated['phone'] ?? null,
+            'email' => $validated['email'] ?? null,
+            'address' => $validated['address'] ?? null,
+        ]);
+
+        return back()->with([
+            'success' => 'Tạo nhà cung cấp thành công',
+            'newSupplier' => $supplier
+        ]);
     }
 
     public function edit(
@@ -214,5 +177,43 @@ class SupplierController extends Controller
         $supplier->delete();
 
         return back();
+    }
+
+    public function search(Request $request): JsonResponse
+    {
+        $search = $request
+            ->string('search')
+            ->trim()
+            ->toString();
+
+        if ($search === '') {
+            return response()->json([]);
+        }
+
+        $suppliers = Supplier::query()
+            ->where('is_active', true)
+            ->where(function ($query) use ($search) {
+
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
+
+            })
+            ->orderBy('name')
+            ->limit(20)
+            ->get([
+                'id',
+                'code',
+                'name',
+                'phone',
+                'email',
+                'debt_balance',
+            ]);
+
+        return response()->json(
+            $suppliers
+        );
     }
 }

@@ -21,6 +21,7 @@ class ProductsTemplateSheet implements WithHeadings, WithTitle, WithEvents
             'Giá bán*',
             'Giá nhập',
             'Tồn kho',
+            'Đơn vị tính',
             'Loại sản phẩm',
             'Trạng thái',
             'Ảnh'
@@ -40,7 +41,7 @@ class ProductsTemplateSheet implements WithHeadings, WithTitle, WithEvents
                 $sheet = $event->sheet;
 
                 /* ===== 1. STYLE HEADER ===== */
-                $sheet->getStyle('A1:L1')->applyFromArray([
+                $sheet->getStyle('A1:M1')->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 12
@@ -66,7 +67,7 @@ class ProductsTemplateSheet implements WithHeadings, WithTitle, WithEvents
                 $sheet->freezePane('A2');
 
                 /* ===== 4. AUTO WIDTH ===== */
-                foreach (range('A', 'L') as $col) {
+                foreach (range('A', 'M') as $col) {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
 

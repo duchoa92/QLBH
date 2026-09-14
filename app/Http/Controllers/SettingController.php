@@ -15,6 +15,7 @@ class SettingController extends Controller
                 'shop_name' => setting('shop_name'),
                 'currency_symbol' => setting('currency_symbol', '₫'),
                 'currency_format' => setting('currency_format', 'vi-VN'),
+                'app_locale' => setting('app_locale', 'vi'),
                 'allow_negative_stock' => setting('allow_negative_stock', false),
             ]
         ]);

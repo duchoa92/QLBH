@@ -23,6 +23,9 @@ class UserController extends Controller
             'Users/Index',
             [
                 'users' => $this->service->paginate(),
+                'roles' => Role::query()
+                    ->select('id', 'name')
+                    ->get(),
             ]
         );
     }

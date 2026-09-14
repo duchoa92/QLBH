@@ -54,7 +54,7 @@ const stats = [
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head title="Tổng quan" />
 
     <AuthenticatedLayout>
 

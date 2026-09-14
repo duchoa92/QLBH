@@ -54,6 +54,11 @@ class StoreProductRequest extends FormRequest
                 'exists:brands,id',
             ],
 
+            'unit_id' => [
+                'nullable',
+                'exists:units,id',
+            ],
+
             'image' => [
                 'nullable',
                 'image',

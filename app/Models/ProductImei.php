@@ -10,13 +10,10 @@ use App\Models\Product;
 class ProductImei extends Model
 {
 
-    public const STATUS_AVAILABLE = 0;
+    public const STATUS_IN_STOCK = 'in_stock';
 
-    public const STATUS_SOLD = 1;
+    public const STATUS_SOLD = 'sold';
 
-    public const STATUS_REPAIRING = 2;
-
-    public const STATUS_RETURNED = 3;
 
 
 
@@ -25,6 +22,10 @@ class ProductImei extends Model
     protected $fillable = [
 
         'product_id',
+
+        'variant_id',
+
+        'supplier_id',
 
         'imei',
 
@@ -41,6 +42,8 @@ class ProductImei extends Model
         'status',
 
         'sold_at',
+
+        'imported_at',
 
         'note',
 

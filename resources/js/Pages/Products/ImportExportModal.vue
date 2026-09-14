@@ -620,6 +620,7 @@ const downloadTemplate = () => {
                             <th class="border p-2">Giá bán</th>
                             <th class="border p-2">Giá nhập</th>
                             <th class="border p-2">Tồn kho</th>
+                            <th class="border p-2">Đơn vị</th>
                             <th class="border p-2">Trạng thái</th>
                         </tr>
 
@@ -666,6 +667,10 @@ const downloadTemplate = () => {
                                 <span v-else class="text-gray-400 italic">
                                     -
                                 </span>
+                            </td>
+
+                            <td class="border">
+                                {{ item.unit || '-' }}
                             </td>
 
                             <td

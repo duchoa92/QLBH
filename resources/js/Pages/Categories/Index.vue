@@ -94,8 +94,6 @@ const openCreate = () => {
 }
 
 const openEdit = (item) => {
-    console.log('EDIT CATEGORY:', item)
-
     openModal(CategoryForm, {
         props: {
             category: item,

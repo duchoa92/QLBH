@@ -26,7 +26,7 @@ class ProductsDataExport implements
 
     public function query()
     {
-        return Product::with(['category', 'brand'])
+        return Product::with(['category', 'brand', 'unit'])
             ->selectRaw('products.*, ROW_NUMBER() OVER (ORDER BY products.id) as row_num');
     }
 
@@ -42,6 +42,7 @@ class ProductsDataExport implements
             'Giá bán',
             'Giá vốn',
             'Tồn kho',
+            'Đơn vị tính',
             'Loại',
             'Kích hoạt',
             'Ảnh'
@@ -77,6 +78,7 @@ class ProductsDataExport implements
             $p->sell_price,
             $p->cost_price,
             $p->stock,
+            $p->unit?->short_name ?: $p->unit?->name,
             $p->product_type,
             $p->is_active ? 1 : 0,
             $p->image,
@@ -96,7 +98,7 @@ class ProductsDataExport implements
                 $sheet = $event->sheet;
 
                 /* ===== 1. STYLE HEADER ===== */
-                $sheet->getStyle('A1:L1')->applyFromArray([
+                $sheet->getStyle('A1:M1')->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 12
@@ -122,7 +124,7 @@ class ProductsDataExport implements
                 $sheet->freezePane('A2');
 
                 /* ===== 4. AUTO WIDTH ===== */
-                foreach (range('A', 'L') as $col) {
+                foreach (range('A', 'M') as $col) {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
 

@@ -42,6 +42,7 @@ class ProductRepository extends BaseRepository
             ->with([
                 'category:id,name',
                 'brand:id,name',
+                'unit:id,name,short_name',
                 'imeis:id,product_id,variant_id,imei',
                 'variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock'
             ])

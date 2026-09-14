@@ -29,16 +29,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
         
         <!-- overlay -->
         <div 
-            class="absolute inset-0 bg-black/50"
+            class="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
             @click="$emit('close')"
         ></div>
 
         <!-- modal -->
-        <div class="relative bg-gray-100 rounded-xl shadow-xl w-full mx-4"
+        <div class="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-900/10"
             :class="{
                 'max-w-md': size === 'sm',
                 'max-w-xl': size === 'md',
@@ -47,18 +47,25 @@ onBeforeUnmount(() => {
             }"
         >
             <!-- HEADER -->
-            <div class=" flex justify-between items-center p-3 border-b">
-                <h2 class="font-semibold text-lg">{{ title }}</h2>
-                <button @click="$emit('close')" class="hover:text-red-500">✕</button>
+            <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h2 class="text-base font-bold text-slate-900">{{ title }}</h2>
+                <button
+                    type="button"
+                    @click="$emit('close')"
+                    class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-500"
+                    aria-label="Đóng"
+                >
+                    ✕
+                </button>
             </div>
 
             <!-- BODY -->
-            <div class="bg-white max-h-[80vh] overflow-y-auto p-3">
+            <div class="min-h-0 flex-1 overflow-y-auto bg-white p-4">
                 <slot />
             </div>
 
             <!-- FOOTER -->
-            <div v-if="$slots.footer" class="p-3 border-t">
+            <div v-if="$slots.footer" class="border-t border-slate-200 bg-slate-50 px-4 py-3">
                 <slot name="footer" />
             </div>
 

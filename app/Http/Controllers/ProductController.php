@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Repositories\Product\ProductRepository;
 use App\Models\Brand;
+use App\Models\Unit;
 use App\Services\Product\ProductService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -70,6 +71,11 @@ class ProductController extends Controller
                 })
                 ->orderBy('name')
                 ->get(),
+            'units'      => Unit::query()
+                ->select('id', 'name', 'short_name')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -83,6 +89,12 @@ class ProductController extends Controller
             ->get(),
 
             'brands' => Brand::select('id', 'name', 'category_id')->get(),
+
+            'units' => Unit::query()
+                ->select('id', 'name', 'short_name')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -327,9 +339,7 @@ class ProductController extends Controller
 
         $images = [];
 
-        foreach ($request->file('images') as $file) {
-
-
+        foreach ($request->file('images', []) as $file) {
             $images[] = $file;
         }
 
@@ -374,9 +384,17 @@ class ProductController extends Controller
             $costPrice    = trim($row[7] ?? '');
             $stock        = trim($row[8] ?? '');
 
-            $type         = $row[9] ?? 'normal';
-            $active       = $row[10] ?? 1;
-            $rawImageName = trim($row[11] ?? '');
+            $unitName     = trim($row[9] ?? '');
+            $type         = trim($row[10] ?? 'normal');
+            $active       = $row[11] ?? 1;
+            $rawImageName = trim($row[12] ?? '');
+
+            if (in_array($unitName, ['normal', 'imei', 'service', 'combo'], true)) {
+                $type = $unitName;
+                $unitName = '';
+                $active = $row[10] ?? 1;
+                $rawImageName = trim($row[11] ?? '');
+            }
 
             $imageName = strtolower(
                 preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
@@ -465,6 +483,7 @@ class ProductController extends Controller
                 'sell_price' => $sellPrice,
                 'cost_price' => $costPrice,
                 'stock' => $stock,
+                'unit' => $unitName,
                 'status' => $status,
                 'image_name' => $rawImageName,
                 'is_error' => $isError
@@ -561,11 +580,7 @@ class ProductController extends Controller
         return response()->json($product);
     }
 
-    // 
-    public function variants()
-    {
-        return $this->hasMany(ProductVariant::class);
-    }
+
     // API lấy product + variant
     public function listForImport(Request $request)
     {
@@ -594,6 +609,7 @@ class ProductController extends Controller
             })
 
             ->with([
+                'unit:id,name,short_name',
                 'variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock',
             ])
 
@@ -609,6 +625,7 @@ class ProductController extends Controller
                 'product_type',
                 'manage_stock_by_serial',
                 'image',
+                'unit_id',
             ])
 
             ->orderBy('name')

@@ -23,13 +23,13 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Edit User" />
+    <Head title="Sửa người dùng" />
 
     <AuthenticatedLayout>
 
         <template #header>
             <h2 class="text-xl font-semibold leading-tight text-gray-800">
-                Edit User
+                Sửa người dùng
             </h2>
         </template>
 
@@ -46,7 +46,7 @@ const submit = () => {
                             <!-- Name -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Name
+                                    Họ tên
                                 </label>
 
                                 <input
@@ -66,7 +66,7 @@ const submit = () => {
                             <!-- Username -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Username
+                                    Tên đăng nhập
                                 </label>
 
                                 <input
@@ -86,7 +86,7 @@ const submit = () => {
                             <!-- Phone -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Phone
+                                    Điện thoại
                                 </label>
 
                                 <input
@@ -126,20 +126,21 @@ const submit = () => {
                             <!-- Password -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Password
+                                    Mật khẩu mới
                                 </label>
 
                                 <input
                                     v-model="form.password"
                                     type="password"
                                     class="w-full rounded border-gray-300"
+                                    placeholder="Để trống nếu không đổi mật khẩu"
                                 >
                             </div>
 
                             <!-- Confirm Password -->
                             <div>
                                 <label class="mb-1 block text-sm font-medium">
-                                    Confirm Password
+                                    Xác nhận mật khẩu mới
                                 </label>
 
                                 <input
@@ -153,7 +154,7 @@ const submit = () => {
                             <div class="md:col-span-2">
 
                                 <label class="mb-1 block text-sm font-medium">
-                                    Role
+                                    Vai trò
                                 </label>
 
                                 <select
@@ -162,7 +163,7 @@ const submit = () => {
                                 >
 
                                     <option value="">
-                                        -- Select Role --
+                                        -- Chọn vai trò --
                                     </option>
 
                                     <option
@@ -192,7 +193,7 @@ const submit = () => {
                                 type="submit"
                                 class="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
                             >
-                                Update User
+                                Cập nhật
                             </button>
 
                         </div>

@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
+use App\Models\Unit;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ProductImportService
 {
+    private string $currentUnitName = '';
 
     private function pushError(
         &$errors,
@@ -37,6 +39,7 @@ class ProductImportService
             'sell_price' => $sellPrice ?? '',
             'cost_price' => $costPrice ?? '',
             'stock'      => $stock ?? '',
+            'unit'       => $this->currentUnitName,
             'type'       => $type ?? '',
             'active'     => $active ?? '',
             'image_name' => $rawImageName ?? '',
@@ -77,9 +80,18 @@ class ProductImportService
                 $sellPrice    = trim($row[6] ?? '');
                 $costPrice    = trim($row[7] ?? '');
                 $stock        = trim($row[8] ?? '');
-                $type         = $row[9] ?? 'normal';
-                $active       = $row[10] ?? 1;
-                $rawImageName = trim($row[11] ?? '');
+                $unitName     = trim($row[9] ?? '');
+                $type         = trim($row[10] ?? 'normal');
+                $active       = $row[11] ?? 1;
+                $rawImageName = trim($row[12] ?? '');
+
+                if (in_array($unitName, ['normal', 'imei', 'service', 'combo'], true)) {
+                    $type = $unitName;
+                    $unitName = '';
+                    $active = $row[10] ?? 1;
+                    $rawImageName = trim($row[11] ?? '');
+                }
+                $this->currentUnitName = $unitName;
                                 
                 
 
@@ -194,6 +206,26 @@ class ProductImportService
                     continue;
                 }
 
+                if (!in_array($type, ['normal', 'imei', 'service', 'combo'], true)) {
+                    $this->pushError(
+                        $errors,
+                        $rowNumber,
+                        $name,
+                        $sku,
+                        $barcode,
+                        $categoryName,
+                        $brandName,
+                        $sellPrice,
+                        $costPrice,
+                        $stock,
+                        $type,
+                        $active,
+                        $rawImageName,
+                        'Loại sản phẩm không hợp lệ'
+                    );
+                    continue;
+                }
+
                 /* ========= CHECK TRÙNG SKU TRONG FILE ========= */
 
                 if (in_array($sku, $skuList)) {
@@ -252,6 +284,28 @@ class ProductImportService
                             'slug' => Str::slug($brandName),
                             'category_id' => $category?->id,
                             'is_active' => 1
+                        ]);
+                    }
+                }
+
+                /* ========= UNIT ========= */
+
+                $unit = null;
+
+                if ($unitName) {
+                    $unit = Unit::whereRaw('LOWER(name) = ?', [
+                        strtolower($unitName)
+                    ])
+                        ->orWhereRaw('LOWER(short_name) = ?', [
+                            strtolower($unitName)
+                        ])
+                        ->first();
+
+                    if (!$unit) {
+                        $unit = Unit::create([
+                            'name' => $unitName,
+                            'short_name' => $unitName,
+                            'is_active' => 1,
                         ]);
                     }
                 }
@@ -349,6 +403,7 @@ class ProductImportService
                     'barcode'     => $barcode ?: null,
                     'category_id' => $category?->id,
                     'brand_id'    => $brand?->id,
+                    'unit_id'     => $unit?->id,
 
                     'sell_price'  => $sellPrice,
 

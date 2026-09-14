@@ -13,8 +13,24 @@ return new class extends Migration
     {
         Schema::create('stock_imports', function (Blueprint $table) {
             $table->id();
+
             $table->string('code')->unique();
+
+            $table->foreignId('supplier_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+
+            $table->dateTime('import_date')->nullable();
+
+            $table->decimal('discount', 15, 2)->default(0);
+            $table->decimal('extra_fee', 15, 2)->default(0);
+
+            $table->decimal('total_amount', 15, 2)->default(0);
+            $table->decimal('grand_total', 15, 2)->default(0);
+
             $table->text('note')->nullable();
+
+            $table->string('status')->default('draft');
+
             $table->timestamps();
         });
     }

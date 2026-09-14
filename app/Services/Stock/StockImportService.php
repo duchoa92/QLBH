@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Services\Stock;
 
 use App\Models\StockImport;
@@ -7,6 +8,8 @@ use App\Models\ProductVariant;
 use App\Models\Product;
 use App\Models\ProductImei;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
 
 class StockImportService
 {
@@ -14,51 +17,214 @@ class StockImportService
     {
         return DB::transaction(function () use ($data) {
 
+            /*
+             * ==========================================================
+             * TÍNH TIỀN
+             * ==========================================================
+             */
+
+            $totalAmount = collect($data['items'])
+                ->sum(function (array $item): float {
+                    return (float) ($item['quantity'] ?? 0)
+                        * (float) ($item['cost_price'] ?? 0);
+                });
+
+            $discount = (float) ($data['discount'] ?? 0);
+            $extraFee = (float) ($data['extra_fee'] ?? 0);
+
+            $grandTotal = max(
+                0,
+                $totalAmount - $discount + $extraFee
+            );
+
+
+            /*
+             * ==========================================================
+             * TẠO PHIẾU NHẬP
+             * ==========================================================
+             */
+
             $import = StockImport::create([
-                'code' => 'IMP-' . time(),
+                'code' => 'IMP-' . now()->format('YmdHis'),
+
+                'supplier_id' => $data['supplier_id'],
+
+                'user_id' => auth()->id(),
+
+                'import_date' => $data['import_date'],
+
+                'discount' => $discount,
+
+                'extra_fee' => $extraFee,
+
+                'total_amount' => $totalAmount,
+
+                'grand_total' => $grandTotal,
+
                 'note' => $data['note'] ?? null,
+
+                'status' => 'completed',
             ]);
+
+
+            /*
+             * ==========================================================
+             * CHI TIẾT PHIẾU NHẬP
+             * ==========================================================
+             */
 
             foreach ($data['items'] as $item) {
 
-                // lưu chi tiết
-                StockImportItem::create([
-                    'stock_import_id' => $import->id,
-                    'product_id' => $item['product_id'],
-                    'variant_id' => $item['variant_id'],
-                    'quantity' => $item['quantity'],
-                    'cost_price' => $item['cost_price'],
-                ]);
+                $productId = (int) $item['product_id'];
+                $product = Product::with('unit:id,name,short_name')
+                    ->findOrFail($productId);
 
-                // ========================
-                // 1. CỘNG TỒN KHO
-                // ========================
-                if ($item['variant_id']) {
-                    ProductVariant::where('id', $item['variant_id'])
-                        ->increment('stock', $item['quantity']);
-                } else {
-                    Product::where('id', $item['product_id'])
-                        ->increment('stock', $item['quantity']);
+                $variantId = !empty($item['variant_id'])
+                    ? (int) $item['variant_id']
+                    : null;
+
+                $importQuantity = (float) ($item['import_quantity'] ?? $item['quantity']);
+                $conversionFactor = max(1, (float) ($item['conversion_factor'] ?? 1));
+                $quantity = (int) round((float) $item['quantity']);
+
+                $costPrice = (float) $item['cost_price'];
+                $imeis = $this->normalizeImeis($item['imeis'] ?? []);
+
+                if ($product->manage_stock_by_serial && count($imeis) !== $quantity) {
+                    throw ValidationException::withMessages([
+                        'items' => "Sản phẩm {$product->name} cần số IMEI khớp số lượng nhập.",
+                    ]);
                 }
 
-                // ========================
-                // 2. XỬ LÝ IMEI
-                // ========================
-                if (!empty($item['imeis'])) {
+                $duplicatedImeis = collect($imeis)
+                    ->pluck('imei')
+                    ->duplicates()
+                    ->values();
 
-                    foreach ($item['imeis'] as $imei) {
+                if ($duplicatedImeis->isNotEmpty()) {
+                    throw ValidationException::withMessages([
+                        'items' => 'IMEI bị trùng trong phiếu nhập: ' . $duplicatedImeis->join(', '),
+                    ]);
+                }
 
-                        ProductImei::create([
-                            'product_id' => $item['product_id'],
-                            'variant_id' => $item['variant_id'],
-                            'imei' => $imei,
-                            'status' => 'in_stock'
-                        ]);
-                    }
+                $existedImeis = ProductImei::query()
+                    ->whereIn('imei', collect($imeis)->pluck('imei'))
+                    ->pluck('imei');
+
+                if ($existedImeis->isNotEmpty()) {
+                    throw ValidationException::withMessages([
+                        'items' => 'IMEI đã tồn tại trong hệ thống: ' . $existedImeis->join(', '),
+                    ]);
+                }
+
+
+                /*
+                 * ------------------------------------------------------
+                 * TẠO CHI TIẾT
+                 * ------------------------------------------------------
+                 */
+
+                StockImportItem::create([
+                    'stock_import_id' => $import->id,
+
+                    'product_id' => $productId,
+
+                    'variant_id' => $variantId,
+
+                    'unit_id' => $item['unit_id'] ?? $product->unit_id,
+
+                    'unit_name' => $item['unit_name'] ?? ($product->unit?->short_name ?: $product->unit?->name),
+
+                    'import_quantity' => $importQuantity,
+
+                    'conversion_factor' => $conversionFactor,
+
+                    'quantity' => $quantity,
+
+                    'cost_price' => $costPrice,
+                ]);
+
+
+                /*
+                 * ------------------------------------------------------
+                 * CỘNG TỒN KHO
+                 * ------------------------------------------------------
+                 */
+
+                if ($variantId !== null) {
+
+                    ProductVariant::whereKey($variantId)
+                        ->increment(
+                            'stock',
+                            $quantity
+                        );
+
+                } else {
+
+                    Product::whereKey($productId)
+                        ->increment(
+                            'stock',
+                            $quantity
+                        );
+                }
+
+
+                /*
+                 * ------------------------------------------------------
+                 * LƯU IMEI
+                 * ------------------------------------------------------
+                 */
+
+                foreach ($imeis as $imeiData) {
+                    ProductImei::create([
+                        'product_id' => $productId,
+
+                        'variant_id' => $imeiData['variant_id'] ?? $variantId,
+
+                        'imei' => $imeiData['imei'],
+
+                        'cost_price' => $imeiData['cost_price'] ?? $costPrice,
+
+                        'sell_price' => $imeiData['sell_price'] ?? 0,
+
+                        'status' => ProductImei::STATUS_IN_STOCK,
+                    ]);
                 }
             }
 
             return $import;
         });
+    }
+
+    private function normalizeImeis(array $rawImeis): array
+    {
+        return collect($rawImeis)
+            ->map(function ($imeiData) {
+                $imei = is_array($imeiData)
+                    ? ($imeiData['imei'] ?? null)
+                    : $imeiData;
+
+                $imei = trim((string) $imei);
+
+                if ($imei === '') {
+                    return null;
+                }
+
+                return [
+                    'imei' => $imei,
+                    'variant_id' => is_array($imeiData) && !empty($imeiData['variant_id'])
+                        ? (int) $imeiData['variant_id']
+                        : null,
+                    'cost_price' => is_array($imeiData)
+                        ? (float) ($imeiData['cost_price'] ?? 0)
+                        : null,
+                    'sell_price' => is_array($imeiData)
+                        ? (float) ($imeiData['sell_price'] ?? 0)
+                        : null,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 }

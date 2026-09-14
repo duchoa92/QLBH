@@ -14,7 +14,7 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
--- Dumping data for table qlbh.brands: ~4 rows (approximately)
+-- Dumping data for table qlbh.brands: ~0 rows (approximately)
 REPLACE INTO `brands` (`id`, `name`, `search_text`, `slug`, `category_id`, `sort_order`, `is_active`, `deleted_at`, `created_at`, `updated_at`) VALUES
 	(1, 'Samsung', 'samsung', 'samsung', 1, 0, 1, NULL, '2026-08-15 16:46:06', '2026-08-15 16:46:06'),
 	(2, 'Apple', 'apple', 'apple', 1, 0, 1, NULL, '2026-08-15 16:46:20', '2026-08-15 16:46:20'),
@@ -25,13 +25,13 @@ REPLACE INTO `brands` (`id`, `name`, `search_text`, `slug`, `category_id`, `sort
 
 -- Dumping data for table qlbh.cache_locks: ~0 rows (approximately)
 
--- Dumping data for table qlbh.categories: ~3 rows (approximately)
+-- Dumping data for table qlbh.categories: ~0 rows (approximately)
 REPLACE INTO `categories` (`id`, `parent_id`, `name`, `slug`, `attributes`, `sort_order`, `is_active`, `created_at`, `updated_at`, `deleted_at`) VALUES
 	(1, NULL, 'Điện Thoại', 'dien-thoai', NULL, 0, 1, '2026-08-15 16:43:02', '2026-08-15 16:43:02', NULL),
 	(2, NULL, 'Camera', 'camera', NULL, 0, 1, '2026-08-15 16:44:39', '2026-08-15 16:44:39', NULL),
 	(3, NULL, 'Phụ kiện', 'phu-kien', NULL, 0, 1, '2026-08-15 16:45:09', '2026-08-15 16:45:09', NULL);
 
--- Dumping data for table qlbh.category_attributes: ~8 rows (approximately)
+-- Dumping data for table qlbh.category_attributes: ~0 rows (approximately)
 REPLACE INTO `category_attributes` (`id`, `category_id`, `name`, `created_at`, `updated_at`) VALUES
 	(1, 1, 'Màu sắc', '2026-08-15 16:43:02', '2026-08-15 16:43:02'),
 	(2, 1, 'Ram', '2026-08-15 16:43:02', '2026-08-15 16:43:02'),
@@ -42,7 +42,7 @@ REPLACE INTO `category_attributes` (`id`, `category_id`, `name`, `created_at`, `
 	(7, 2, 'Trong/Ngoài', '2026-08-15 16:44:39', '2026-08-15 16:44:39'),
 	(8, 3, 'OEM', '2026-08-15 16:45:09', '2026-08-15 16:45:09');
 
--- Dumping data for table qlbh.category_attribute_values: ~13 rows (approximately)
+-- Dumping data for table qlbh.category_attribute_values: ~0 rows (approximately)
 REPLACE INTO `category_attribute_values` (`id`, `attribute_id`, `value`, `created_at`, `updated_at`) VALUES
 	(1, 1, 'Đen', '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
 	(2, 2, '3G', '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
@@ -59,6 +59,9 @@ REPLACE INTO `category_attribute_values` (`id`, `attribute_id`, `value`, `create
 	(16, 3, '64Gb', '2026-08-17 07:39:25', '2026-08-17 07:39:25');
 
 -- Dumping data for table qlbh.customers: ~0 rows (approximately)
+REPLACE INTO `customers` (`id`, `code`, `full_name`, `search_text`, `phone`, `email`, `birthday`, `gender`, `cccd`, `province`, `district`, `ward`, `address`, `point_balance`, `debt_balance`, `total_spent`, `total_orders`, `last_order_at`, `customer_type`, `is_active`, `created_by`, `created_at`, `updated_at`, `deleted_at`) VALUES
+	(1, 'KH000001', 'Đức Hòa', 'duc hoa', '0906064789', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-09-12 17:18:11', '2026-09-12 17:18:11', NULL),
+	(2, 'KH000002', 'Kim Ngân', 'kim ngan', '1234567', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0, NULL, 'retail', 1, NULL, '2026-09-12 17:18:28', '2026-09-12 17:18:28', NULL);
 
 -- Dumping data for table qlbh.customer_debts: ~0 rows (approximately)
 
@@ -80,7 +83,7 @@ REPLACE INTO `category_attribute_values` (`id`, `attribute_id`, `value`, `create
 
 -- Dumping data for table qlbh.job_batches: ~0 rows (approximately)
 
--- Dumping data for table qlbh.migrations: ~30 rows (approximately)
+-- Dumping data for table qlbh.migrations: ~0 rows (approximately)
 REPLACE INTO `migrations` (`id`, `migration`, `batch`) VALUES
 	(1, '0001_01_01_000000_create_users_table', 1),
 	(2, '0001_01_01_000001_create_cache_table', 1),
@@ -112,7 +115,8 @@ REPLACE INTO `migrations` (`id`, `migration`, `batch`) VALUES
 	(28, '2026_08_06_143848_create_category_attributes_table', 1),
 	(29, '2026_08_06_143940_create_category_attribute_values_table', 1),
 	(30, '2026_08_17_232234_create_stock_imports_table', 2),
-	(31, '2026_08_17_232315_create_stock_import_items_table', 2);
+	(31, '2026_08_17_232315_create_stock_import_items_table', 2),
+	(32, '2026_09_13_000001_add_unit_conversion_to_stock_import_items_table', 1);
 
 -- Dumping data for table qlbh.model_has_permissions: ~0 rows (approximately)
 
@@ -144,7 +148,7 @@ REPLACE INTO `permissions` (`id`, `name`, `guard_name`, `created_at`, `updated_a
 
 -- Dumping data for table qlbh.personal_access_tokens: ~0 rows (approximately)
 
--- Dumping data for table qlbh.products: ~4 rows (approximately)
+-- Dumping data for table qlbh.products: ~0 rows (approximately)
 REPLACE INTO `products` (`id`, `category_id`, `brand_id`, `unit_id`, `name`, `search_text`, `slug`, `sku`, `barcode`, `product_type`, `image`, `warranty_days`, `allow_negative_stock`, `cost_price`, `sell_price`, `tax_percent`, `stock`, `sold_count`, `alert_stock`, `manage_stock_by_serial`, `is_active`, `description`, `deleted_at`, `created_at`, `updated_at`) VALUES
 	(1, 1, 1, NULL, 'Samsung A01', 'samsung a01 dthsam Điện thoại samsung', 'samsung-a01', 'DTHSAM', NULL, 'imei', 'products/KMSQXS12HHbGSgrurtiV7mo0KtLYaGKuK6ed0WzG.jpg', 0, 0, 100.00, 120.00, 0.00, 0, 0, 0, 1, 1, NULL, NULL, '2026-08-15 16:48:02', '2026-08-15 16:48:02'),
 	(2, 1, 2, NULL, 'Iphone 12 promax', 'iphone 12 promax dthapp Điện thoại apple', 'iphone-12-promax', 'DTHAPP', NULL, 'imei', 'products/fF3B8pKXVCEleDLxXJygQX8EGKz1ThxqCZHA69B4.jpg', 0, 0, 100.00, 120.00, 0.00, 0, 0, 0, 1, 1, NULL, NULL, '2026-08-15 16:49:37', '2026-08-15 16:49:37'),
@@ -153,7 +157,7 @@ REPLACE INTO `products` (`id`, `category_id`, `brand_id`, `unit_id`, `name`, `se
 
 -- Dumping data for table qlbh.product_imeis: ~0 rows (approximately)
 
--- Dumping data for table qlbh.product_variants: ~13 rows (approximately)
+-- Dumping data for table qlbh.product_variants: ~0 rows (approximately)
 REPLACE INTO `product_variants` (`id`, `product_id`, `sku`, `barcode`, `attributes`, `cost_price`, `sell_price`, `stock`, `created_at`, `updated_at`) VALUES
 	(76, 2, 'DTHAPP-DEN-128G-QUOC', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Bộ nhớ", "value": "128Gb"}, {"name": "Phiên bản", "value": "Quốc tế"}]', 100.00, 120.00, 0, '2026-08-17 07:40:51', '2026-08-17 07:40:51'),
 	(81, 1, 'DTHSAM-DEN-4G-32GB', NULL, '[{"name": "Màu sắc", "value": "Đen"}, {"name": "Ram", "value": "4G"}, {"name": "Bộ nhớ", "value": "32Gb"}]', 100.00, 120.00, 0, '2026-08-17 07:42:01', '2026-08-17 07:42:01'),
@@ -228,6 +232,10 @@ REPLACE INTO `role_has_permissions` (`permission_id`, `role_id`) VALUES
 -- Dumping data for table qlbh.stock_import_items: ~0 rows (approximately)
 
 -- Dumping data for table qlbh.suppliers: ~0 rows (approximately)
+REPLACE INTO `suppliers` (`id`, `code`, `name`, `search_text`, `contact_person`, `phone`, `email`, `tax_code`, `province`, `district`, `ward`, `address`, `debt_balance`, `total_purchase`, `total_orders`, `note`, `is_active`, `created_at`, `updated_at`, `deleted_at`) VALUES
+	(1, 'NCC00001', 'Shoppe', 'shoppe', NULL, '12345678', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0, NULL, 1, '2026-09-12 17:17:18', '2026-09-12 17:17:18', NULL),
+	(2, 'NCC00002', 'Thắng Hải', 'thang hai', NULL, '12345678', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0, NULL, 1, '2026-09-12 17:17:32', '2026-09-12 17:17:32', NULL),
+	(3, 'NCC00003', 'Quân', 'quan', NULL, '12345678', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0, NULL, 1, '2026-09-12 17:17:38', '2026-09-12 17:17:38', NULL);
 
 -- Dumping data for table qlbh.units: ~0 rows (approximately)
 

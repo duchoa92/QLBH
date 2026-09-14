@@ -135,7 +135,7 @@ class RepairController extends Controller
                         $repair->customer?->id,
 
                     'name' =>
-                        $repair->customer?->name,
+                        $repair->customer?->full_name,
 
                     'phone' =>
                         $repair->customer?->phone,

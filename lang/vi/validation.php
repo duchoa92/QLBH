@@ -198,6 +198,16 @@ return [
     'attributes' => [
         'name' => 'Tên thương hiệu',
         'category_id' => 'Danh mục',
+
+        // Thêm khai báo cho Nhập đơn hàng
+        'supplier_id'        => 'Nhà cung cấp',
+        'import_date'        => 'Ngày nhập hàng',
+        'items'              => 'Danh sách sản phẩm',
+        'items.*.product_id' => 'Sản phẩm',
+        'items.*.quantity'   => 'Số lượng',
+        'items.*.cost_price' => 'Giá nhập',
+        'items.*.imeis'      => 'Mã IMEI','discount'           => 'Chiết khấu',
+        'extra_fee'          => 'Phụ phí',
     ],
 
 ];

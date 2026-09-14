@@ -34,16 +34,16 @@ const go = (url) => {
 </script>
 
 <template>
-<div class="bg-white rounded-xl shadow border overflow-hidden">
+<div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div class="overflow-x-auto">
-        <table class="min-w-[500px] w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+        <table class="min-w-[500px] w-full text-sm">
 
             <!-- HEADER -->
             <thead>
-                <tr class="bg-gray-100 text-left uppercase">
+                <tr class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
 
                     <!-- checkbox -->
-                    <th v-if="selectable" class="text-center border-r p-1">
+                    <th v-if="selectable" class="w-10 border-r border-slate-200 p-2 text-center">
                         <input
                             type="checkbox"
                             :checked="isAllSelected"
@@ -55,7 +55,7 @@ const go = (url) => {
                     <th 
                         v-for="col in columns" 
                         :key="col.key"
-                        class="p-1 border-r text-left whitespace-nowrap"
+                        class="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-left"
                         :class="col.class"
                         :style="{ width: col.width }"
                     >
@@ -75,7 +75,7 @@ const go = (url) => {
 
                     </th>
 
-                    <th class="text-center p-1">Tác vụ</th>
+                    <th class="px-3 py-2.5 text-center">Tác vụ</th>
                 </tr>
             </thead>
 
@@ -83,10 +83,10 @@ const go = (url) => {
             <tbody>
                 <tr v-for="row in data.data"
                     :key="row.id"
-                    class="border-t hover:bg-gray-50 cursor-pointer"
+                    class="border-t border-slate-100 hover:bg-slate-50"
                 >
                     <!-- checkbox -->
-                    <td v-if="selectable" class="text-center p-1 border-r">
+                    <td v-if="selectable" class="border-r border-slate-100 p-2 text-center">
                         <input
                             type="checkbox"
                             :checked="selectedIds.includes(row.id)"
@@ -100,7 +100,7 @@ const go = (url) => {
 
                 <tr v-if="rows.length === 0">
                     <td :colspan="columns.length + (selectable ? 2 : 1)"
-                        class="text-center p-10 text-gray-500 bg-gray-50">
+                        class="bg-slate-50 p-10 text-center text-slate-500">
                         Không có dữ liệu
                     </td>
                 </tr>
@@ -109,8 +109,8 @@ const go = (url) => {
     </div>
 
     <!-- PAGINATION -->
-    <div class="flex items-center justify-between px-4 py-3 border-t bg-white text-sm">
-        <div class="text-gray-500 w-1/3">
+    <div class="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 text-sm">
+        <div class="w-1/3 text-slate-500">
             Trang {{ data.from }} - {{ data.to }} / {{ data.total }}
         </div>
 
@@ -121,10 +121,10 @@ const go = (url) => {
                     :key="link.label"
                     v-html="link.label"
                     @click="go(link.url)"
-                    class="px-3 py-1 border rounded text-sm"
+                    class="rounded border px-3 py-1 text-sm"
                     :class="link.active
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white hover:bg-gray-100'"
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'bg-white hover:bg-slate-100'"
                 />
             </div>
         </div>
@@ -133,7 +133,7 @@ const go = (url) => {
             <select
                 :value="filters?.per_page || 10"
                 @change="$emit('changePerPage', Number($event.target.value))"
-                class="border rounded px-6 py-2 text-sm"
+                class="rounded-lg border border-slate-200 px-6 py-2 text-sm"
             >
                 <option :value="10">10</option>
                 <option :value="20">20</option>
