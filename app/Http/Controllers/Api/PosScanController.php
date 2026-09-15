@@ -35,21 +35,6 @@ class PosScanController extends Controller
                 $imei->status !== ProductImei::STATUS_AVAILABLE
             ) {
 
-                    $message = match ($imei->status) {
-
-                    ProductImei::STATUS_SOLD
-                        => 'IMEI này đã được bán',
-
-                    ProductImei::STATUS_REPAIRING
-                        => 'IMEI này đang sửa chữa',
-
-                    ProductImei::STATUS_RETURNED
-                        => 'IMEI này đã được trả hàng',
-
-                    default
-                        => 'IMEI không khả dụng',
-                };
-
                 return response()->json([
                     'message' => 'IMEI này đã được bán'
                 ], 422);

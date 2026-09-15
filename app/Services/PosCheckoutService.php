@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Models\ProductVariant;
 use App\Models\Sale;
 use Illuminate\Support\Facades\DB;
 use App\Models\Customer;
@@ -119,6 +120,21 @@ class PosCheckoutService
 
                 /*
                 |--------------------------------------------------------------------------
+                | Lấy biến thể (nếu có)
+                |--------------------------------------------------------------------------
+                */
+                $variant = null;
+
+                if (!empty($item['variant_id'])) {
+
+                    $variant = ProductVariant::query()
+                        ->lockForUpdate()
+                        ->where('product_id', $product->id)
+                        ->findOrFail($item['variant_id']);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
                 | Kiểm tra IMEI
                 |--------------------------------------------------------------------------
                 */
@@ -140,11 +156,19 @@ class PosCheckoutService
 
                 /*
                 |--------------------------------------------------------------------------
-                | Kiểm tra tồn kho sản phẩm thường
+                | Kiểm tra tồn kho sản phẩm thường (theo biến thể nếu có)
                 |--------------------------------------------------------------------------
                 */
                 if ($product->product_type !== 'imei') {
-                    if ($product->stock < (int) $item['quantity']) {
+
+                    if ($variant) {
+
+                        if ($variant->stock < (int) $item['quantity']) {
+                            throw new \Exception("Phiên bản {$product->name} không đủ tồn kho");
+                        }
+
+                    } elseif ($product->stock < (int) $item['quantity']) {
+
                         throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho");
                     }
                 }
@@ -190,6 +214,9 @@ class PosCheckoutService
                 $saleItem = $sale->items()->create([
                     'product_id' => $item['id'],
 
+                    'variant_id' =>
+                        $variant?->id,
+
                     'product_imei_id' =>
                         $item['imei_id'] ?? null,
 
@@ -229,11 +256,19 @@ class PosCheckoutService
                 }
                 /*
                 |--------------------------------------------------------------------------
-                | Trừ tồn kho sản phẩm thường
+                | Trừ tồn kho sản phẩm thường (theo biến thể nếu có)
                 |--------------------------------------------------------------------------
                 */
                 if ($product->product_type !== 'imei') {
-                    $product->decrement('stock', (int) $item['quantity']);
+
+                    if ($variant) {
+
+                        $variant->decrement('stock', (int) $item['quantity']);
+
+                    } else {
+
+                        $product->decrement('stock', (int) $item['quantity']);
+                    }
                 }
 
                 /*

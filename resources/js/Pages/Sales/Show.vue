@@ -68,12 +68,18 @@ const props = defineProps({
                         <td class="py-2">
 
                             {{ item.product?.name }}
+                            <span
+                                v-if="item.variant?.attributes"
+                                class="block text-xs font-medium text-indigo-600"
+                            >
+                                {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
+                            </span>
 
                         </td>
 
                         <td class="py-2">
 
-                            {{ item.imei?.imei ?? '-' }}
+                            {{ item.product_imei?.imei ?? '-' }}
 
                         </td>
 

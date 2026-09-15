@@ -79,6 +79,8 @@ class PosController extends Controller
 
             'items.*.discount_value' => 'nullable|numeric',
 
+            'items.*.variant_id' => 'nullable|integer',
+
             'items.*.gift_product_id' => 'nullable|integer',
 
         ],
@@ -100,6 +102,7 @@ class PosController extends Controller
 
             $sale->load([
                 'items.product',
+                'items.variant',
                 'items.productImei',
                 'items.gifts.product',
                 'customer',
@@ -121,6 +124,12 @@ class PosController extends Controller
                             'unit_price' => $item->unit_price,
                             'subtotal' => $item->subtotal,
                             'imei' => $item->productImei?->imei,
+                            'variant' => $item->variant
+                                ? [
+                                    'id' => $item->variant->id,
+                                    'attributes' => $item->variant->attributes,
+                                ]
+                                : null,
                             'product' => [
                                 'name' => $item->product->name,
                             ],
@@ -150,6 +159,7 @@ class PosController extends Controller
     {
         $sale->load([
             'items.product',
+            'items.variant',
             'items.productImei',
             'items.gifts.product',
         ]);

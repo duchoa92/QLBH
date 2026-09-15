@@ -143,4 +143,38 @@ class ProductController extends Controller
 
         return response()->json($product);
     }
+
+    /**
+     * Danh sách IMEI còn trong kho của 1 sản phẩm (dùng cho màn hình POS
+     * khi người dùng bấm chọn sản phẩm quản lý theo IMEI).
+     * Có thể lọc theo biến thể qua query `variant_id`.
+     */
+    public function imeis(Request $request, $id): JsonResponse
+    {
+        $product = Product::find($id);
+
+        if (!$product) {
+            return response()->json([
+                'message' => 'Không tìm thấy sản phẩm'
+            ], 404);
+        }
+
+        $imeis = $product->imeis()
+            ->where('status', ProductImei::STATUS_AVAILABLE)
+            ->when(
+                $request->filled('variant_id'),
+                fn ($query) => $query->where('variant_id', $request->input('variant_id'))
+            )
+            ->orderBy('imei')
+            ->get([
+                'id',
+                'variant_id',
+                'imei',
+                'color',
+                'storage',
+                'sell_price',
+            ]);
+
+        return response()->json($imeis);
+    }
 }

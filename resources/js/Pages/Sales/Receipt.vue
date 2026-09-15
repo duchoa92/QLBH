@@ -101,6 +101,12 @@ window.onload = () => {
             <div class="font-medium">
 
                 {{ item.product?.name }}
+                <span
+                    v-if="item.variant?.attributes"
+                    class="block text-[11px] font-normal text-slate-600"
+                >
+                    {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
+                </span>
 
             </div>
             <!--Hiện giảm giá-->

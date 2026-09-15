@@ -32,17 +32,6 @@ const selectProduct = (
     product
 ) => {
 
-    if (
-        product.product_type === 'imei'
-    ) {
-
-        toast.error(
-            'Sản phẩm này phải quét IMEI'
-        )
-
-        return
-    }
-
     emit(
         'selected',
         product
@@ -241,6 +230,21 @@ const categoryOptions = computed(() => [
                                 text-white"
                         >
                             {{ formatPrice(product.price) }}
+                        </div>
+
+                        <!-- NHÃN IMEI / BIẾN THỂ -->
+                        <div
+                            v-if="product.product_type === 'imei' || product.manage_stock_by_serial"
+                            class="absolute top-2 right-2 rounded-md bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white"
+                        >
+                            IMEI
+                        </div>
+
+                        <div
+                            v-else-if="product.variants && product.variants.length"
+                            class="absolute top-2 right-2 rounded-md bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white"
+                        >
+                            {{ product.variants.length }} phiên bản
                         </div>
 
                     </div>

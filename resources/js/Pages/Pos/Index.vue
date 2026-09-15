@@ -63,16 +63,21 @@ const selectedProduct = ref(null)
 
 const handleSelectProduct = (product) => {
 
-    const hasImei = product.has_imei || (product.imeis && product.imeis.length)
-    // 👉 có IMEI
-    if (hasImei) {
-        selectedProduct.value = product
-        showSelectModal.value = true
+    // Đã xác định đúng 1 IMEI cụ thể rồi (quét mã hoặc quét barcode máy)
+    // -> thêm thẳng vào giỏ, không cần hỏi lại
+    if (product.imei_id) {
+        addToCart(product)
         return
     }
 
-    // 👉 có variant
-    if (product.variants && product.variants.length) {
+    const hasVariants = Boolean(product.variants && product.variants.length)
+
+    const hasImei =
+        product.product_type === 'imei'
+        || Boolean(product.manage_stock_by_serial)
+
+    // 👉 có biến thể hoặc quản lý theo IMEI -> mở modal cho chọn
+    if (hasVariants || hasImei) {
         selectedProduct.value = product
         showSelectModal.value = true
         return
@@ -81,12 +86,30 @@ const handleSelectProduct = (product) => {
     // 👉 sản phẩm thường
     addToCart(product)
 }
+
 const handleConfirmSelect = ({ variant, imei }) => {
+
+    // Giá theo IMEI (nếu có set > 0) > giá biến thể > giá gốc sản phẩm.
+    // Lưu ý: sell_price của IMEI mặc định = 0 trong DB (không phải null),
+    // nên không dùng "??" ở đây để tránh vô tình lấy giá 0.
+    const price =
+        (imei?.sell_price > 0 ? imei.sell_price : null)
+        ?? (variant?.sell_price > 0 ? variant.sell_price : null)
+        ?? selectedProduct.value?.sell_price
+        ?? selectedProduct.value?.price
 
     addToCart({
         ...selectedProduct.value,
+
         variant,
-        imei
+
+        imei_id: imei?.id ?? null,
+        imei: imei?.imei ?? null,
+        serial: imei?.serial ?? null,
+        color: imei?.color ?? null,
+        storage: imei?.storage ?? null,
+
+        sell_price: price,
     })
 
     showSelectModal.value = false

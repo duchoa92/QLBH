@@ -56,4 +56,20 @@ export const productService = {
 
         return response.data
     },
+
+    // Lấy danh sách IMEI còn trong kho của 1 sản phẩm (lọc theo biến thể nếu có)
+    async imeis(productId, variantId = null) {
+
+        const response =
+            await api.get(
+                `/api/products/${productId}/imeis`,
+                {
+                    params: variantId
+                        ? { variant_id: variantId }
+                        : {},
+                }
+            )
+
+        return response.data
+    },
 }

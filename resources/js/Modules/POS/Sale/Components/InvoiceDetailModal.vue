@@ -79,6 +79,13 @@ const formatDate = (date) => {
                                         {{ item.product?.name }}
                                     </div>
                                     
+                                    <div
+                                        v-if="item.variant?.attributes"
+                                        class="text-xs text-indigo-600 mt-0.5"
+                                    >
+                                        {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
+                                    </div>
+
                                     <div v-if="item.product_imei" class="text-xs text-blue-600 mt-0.5">
                                         IMEI: {{ item.product_imei.imei }}
                                     </div>

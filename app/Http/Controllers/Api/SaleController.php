@@ -28,6 +28,7 @@ class SaleController extends Controller
                 'customer',
                 'user',
                 'items.product',
+                'items.variant',
                 'items.productImei',
             ])
 
@@ -135,6 +136,8 @@ class SaleController extends Controller
             'user',
 
             'items.product',
+
+            'items.variant',
 
             'items.productImei',
             

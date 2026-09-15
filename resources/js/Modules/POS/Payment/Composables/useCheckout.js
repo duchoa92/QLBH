@@ -77,6 +77,9 @@ export function useCheckout(
 
                         quantity: item.quantity,
 
+                        variant_id:
+                            item.variant_id ?? null,
+
                         imei_id:
                             item.imei_id ?? null,
 

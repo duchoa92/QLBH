@@ -356,10 +356,18 @@ export function useCart() {
     */
 
     const addToCart = (product) => {
-     
+
+        const variant = product.variant ?? null
+
+        const variantLabel = variant
+            ? Object.values(variant.attributes || {})
+                .filter(Boolean)
+                .join(' / ')
+            : null
+
         /*
         |--------------------------------------------------
-        | Sản phẩm IMEI
+        | Sản phẩm IMEI (có thể kèm biến thể)
         |--------------------------------------------------
         */
 
@@ -385,6 +393,12 @@ export function useCart() {
 
             cart.value.push({
                 id: product.id,
+
+                variant_id:
+                    variant?.id ?? null,
+
+                variant_label:
+                    variantLabel,
 
                 image_url:
                     product.image_url ?? null,
@@ -433,6 +447,74 @@ export function useCart() {
 
         /*
         |--------------------------------------------------
+        | Sản phẩm có biến thể (không quản lý IMEI)
+        |--------------------------------------------------
+        */
+
+        if (variant) {
+
+            const existing =
+                cart.value.find((item) => {
+
+                    return (
+                        item.id === product.id
+                        &&
+                        item.variant_id === variant.id
+                    )
+                })
+
+            if (existing) {
+
+                existing.quantity++
+
+                return
+            }
+
+            cart.value.push({
+                id: product.id,
+
+                variant_id:
+                    variant.id,
+
+                variant_label:
+                    variantLabel,
+
+                sku:
+                    variant.sku ?? product.sku ?? null,
+
+                image_url:
+                    product.image_url ?? null,
+
+                name:
+                    product.name,
+
+                price:
+                    Number(
+                        (variant.sell_price > 0 ? variant.sell_price : null)
+                        ??
+                        (variant.price > 0 ? variant.price : null)
+                        ??
+                        product.price
+                        ??
+                        0
+                    ),
+
+                quantity: 1,
+
+                note: '',
+
+                discount_type: null,
+
+                discount_value: 0,
+
+                gifts: [],
+            })
+
+            return
+        }
+
+        /*
+        |--------------------------------------------------
         | Sản phẩm thường
         |--------------------------------------------------
         */
@@ -443,6 +525,8 @@ export function useCart() {
                 return (
                     item.id ===
                     product.id
+                    &&
+                    !item.variant_id
                 )
             })
 
@@ -455,6 +539,8 @@ export function useCart() {
 
         cart.value.push({
             id: product.id,
+
+            variant_id: null,
 
             image_url:
                 product.image_url ?? null,
@@ -524,7 +610,20 @@ export function useCart() {
                 return cartItem.imei_id === item.imei_id
             }
 
-            return cartItem.id === item.id
+            if (item.variant_id) {
+
+                return (
+                    cartItem.id === item.id
+                    &&
+                    cartItem.variant_id === item.variant_id
+                )
+            }
+
+            return (
+                cartItem.id === item.id
+                &&
+                !cartItem.variant_id
+            )
         })
 
         if (index !== -1) {

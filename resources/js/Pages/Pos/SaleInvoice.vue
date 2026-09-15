@@ -1,4 +1,6 @@
 <script setup>
+import { formatDateTime } from '@/utils/format'
+
 const props = defineProps({
 
     sale: Object,
@@ -49,7 +51,7 @@ const printInvoice = () => {
 
                 <p>
                     Ngày:
-                    {{ sale.created_at }}
+                    {{ formatDateTime(sale.created_at) }}
                 </p>
             </div>
 
@@ -63,8 +65,12 @@ const printInvoice = () => {
                             Sản phẩm
                         </th>
 
+                        <th class="text-center py-2">
+                            SL
+                        </th>
+
                         <th class="text-right py-2">
-                            Giá
+                            Thành tiền
                         </th>
                     </tr>
                 </thead>
@@ -74,17 +80,33 @@ const printInvoice = () => {
                     <tr
                         v-for="item in sale.items"
                         :key="item.id"
+                        class="border-b border-dashed"
                     >
 
-                        <td  v-if="item.imei"
-                            class="text-xs text-blue-600"
-                        >
-                            IMEI:
-                            {{ item.imei?.imei ?? '-' }}
+                        <td class="py-2">
+                            {{ item.product?.name }}
+
+                            <span
+                                v-if="item.variant?.attributes"
+                                class="block text-xs text-indigo-600"
+                            >
+                                {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
+                            </span>
+
+                            <span
+                                v-if="item.product_imei"
+                                class="block text-xs text-blue-600"
+                            >
+                                IMEI: {{ item.product_imei.imei }}
+                            </span>
                         </td>
 
-                        <td class="text-right">
-                            {{ Number(item.price).toLocaleString() }}
+                        <td class="text-center py-2">
+                            {{ item.quantity }}
+                        </td>
+
+                        <td class="text-right py-2">
+                            {{ Number(item.subtotal ?? (item.unit_price * item.quantity)).toLocaleString() }}
                         </td>
                     </tr>
                 </tbody>
@@ -97,7 +119,7 @@ const printInvoice = () => {
                     <span>Tổng tiền</span>
 
                     <strong>
-                        {{ Number(sale.total).toLocaleString() }}
+                        {{ Number(sale.grand_total).toLocaleString() }}
                     </strong>
                 </div>
 

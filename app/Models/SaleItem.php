@@ -16,6 +16,8 @@ class SaleItem extends Model
 
         'product_id',
 
+        'variant_id',
+
         'product_imei_id',
 
         'quantity',
@@ -48,6 +50,14 @@ class SaleItem extends Model
     {
         return $this->belongsTo(
             Product::class
+        );
+    }
+
+    public function variant(): BelongsTo
+    {
+        return $this->belongsTo(
+            ProductVariant::class,
+            'variant_id'
         );
     }
 

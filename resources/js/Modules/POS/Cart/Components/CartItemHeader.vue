@@ -147,6 +147,17 @@ const emit = defineEmits([
             </div>
 
             <div
+                v-if="item.variant_label"
+                class="
+                    text-[11px]
+                    text-indigo-600
+                    font-medium
+                "
+            >
+                {{ item.variant_label }}
+            </div>
+
+            <div
                 v-if="item.imei"
                 class="
                     text-[11px]

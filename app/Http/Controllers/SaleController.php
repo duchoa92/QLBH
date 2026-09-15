@@ -90,6 +90,7 @@ class SaleController extends Controller
         $sale->load([
 
             'items.product',
+            'items.variant',
             'items.productImei',
             'items.gifts.product',
         ]);

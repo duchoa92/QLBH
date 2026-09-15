@@ -32,6 +32,9 @@ Route::middleware(['web', 'auth'])->group(function ()
     Route::get('/products', [ProductController::class, 'index']);
 
     Route::get('/products/{id}', [ProductController::class, 'getProductApi']);
+
+    // Danh sách IMEI còn trong kho của 1 sản phẩm (POS chọn IMEI)
+    Route::get('/products/{id}/imeis', [ProductController::class, 'imeis']);
     
 
     // Tìm kiếm khách hàng
