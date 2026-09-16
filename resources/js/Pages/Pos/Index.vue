@@ -88,26 +88,36 @@ const handleSelectProduct = (product) => {
 }
 
 const handleConfirmSelect = ({ variant, imei }) => {
+    const resolvedVariant =
+        imei?.variant
+        ?? variant
+        ?? null
 
     // Giá theo IMEI (nếu có set > 0) > giá biến thể > giá gốc sản phẩm.
     // Lưu ý: sell_price của IMEI mặc định = 0 trong DB (không phải null),
     // nên không dùng "??" ở đây để tránh vô tình lấy giá 0.
     const price =
-        (imei?.sell_price > 0 ? imei.sell_price : null)
-        ?? (variant?.sell_price > 0 ? variant.sell_price : null)
+        (imei?.effective_sell_price > 0 ? imei.effective_sell_price : null)
+        ?? (imei?.price > 0 ? imei.price : null)
+        ?? (imei?.sell_price > 0 ? imei.sell_price : null)
+        ?? (resolvedVariant?.sell_price > 0 ? resolvedVariant.sell_price : null)
+        ?? (resolvedVariant?.price > 0 ? resolvedVariant.price : null)
         ?? selectedProduct.value?.sell_price
         ?? selectedProduct.value?.price
 
     addToCart({
         ...selectedProduct.value,
 
-        variant,
+        variant: resolvedVariant,
 
         imei_id: imei?.id ?? null,
-        imei: imei?.imei ?? null,
+        imei: imei?.imei ?? imei?.serial ?? imei?.display_code ?? null,
         serial: imei?.serial ?? null,
         color: imei?.color ?? null,
         storage: imei?.storage ?? null,
+        cost_price: imei?.cost_price ?? null,
+        imei_sell_price: imei?.sell_price ?? null,
+        price_source: imei?.price_source ?? null,
 
         sell_price: price,
     })
@@ -259,11 +269,10 @@ useBarcodeScanner(
         v-if="selectedProduct"
         :show="showSelectModal"
         :product="selectedProduct"
+        :cart="cart"
         @close="showSelectModal = false"
         @confirm="handleConfirmSelect"
     />
 
 
 </template>
-
-

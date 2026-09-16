@@ -35,6 +35,11 @@ export function useCartDiscount() {
         item
     ) => {
 
+        if (!item.discount_type) {
+
+            item.discount_type = 'amount'
+        }
+
         if (!item.discount_value) {
 
             item.discount_value = 0

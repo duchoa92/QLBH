@@ -83,8 +83,20 @@ class StockImportService
                     ? (int) $item['variant_id']
                     : null;
 
-                $importQuantity = (float) ($item['import_quantity'] ?? $item['quantity']);
-                $conversionFactor = max(1, (float) ($item['conversion_factor'] ?? 1));
+                if ($variantId !== null) {
+                    $variantExists = ProductVariant::query()
+                        ->whereKey($variantId)
+                        ->where('product_id', $productId)
+                        ->where('is_active', true)
+                        ->exists();
+
+                    if (! $variantExists) {
+                        throw ValidationException::withMessages([
+                            'items' => "Biến thể của sản phẩm {$product->name} không còn hoạt động.",
+                        ]);
+                    }
+                }
+
                 $quantity = (int) round((float) $item['quantity']);
 
                 $costPrice = (float) $item['cost_price'];
@@ -134,10 +146,6 @@ class StockImportService
                     'unit_id' => $item['unit_id'] ?? $product->unit_id,
 
                     'unit_name' => $item['unit_name'] ?? ($product->unit?->short_name ?: $product->unit?->name),
-
-                    'import_quantity' => $importQuantity,
-
-                    'conversion_factor' => $conversionFactor,
 
                     'quantity' => $quantity,
 

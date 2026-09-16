@@ -41,7 +41,7 @@ class PosCheckoutService
 
             $subtotal = collect($items)
                 ->sum(function (array $item): float {
-                    return ((float) $item['price'] * (int) $item['quantity']);
+                    return (float) $item['price'] * $this->itemQuantity($item);
                 });
 
             //
@@ -52,7 +52,7 @@ class PosCheckoutService
 
                         (float) $item['price']
                         *
-                        (int) $item['quantity'];
+                        $this->itemQuantity($item);
 
                     if (
                         ($item['discount_type'] ?? null)
@@ -116,7 +116,16 @@ class PosCheckoutService
                 | Lấy sản phẩm
                 |--------------------------------------------------------------------------
                 */
-                $product = Product::query()->findOrFail($item['id']);
+                $product = Product::query()
+                    ->with('unit:id,name,short_name')
+                    ->findOrFail($item['id']);
+                $requiresImei =
+                    $product->product_type === 'imei'
+                    || (bool) $product->manage_stock_by_serial;
+
+                $quantity = $requiresImei
+                    ? 1
+                    : $this->itemQuantity($item);
 
                 /*
                 |--------------------------------------------------------------------------
@@ -130,6 +139,7 @@ class PosCheckoutService
                     $variant = ProductVariant::query()
                         ->lockForUpdate()
                         ->where('product_id', $product->id)
+                        ->where('is_active', true)
                         ->findOrFail($item['variant_id']);
                 }
 
@@ -140,17 +150,36 @@ class PosCheckoutService
                 */
                 $imei = null;
 
-                if ($product->product_type === 'imei') {
+                if ($requiresImei) {
                     if (empty($item['imei_id'])) {
                         throw new \Exception("Sản phẩm {$product->name} phải quét IMEI");
                     }
 
                     $imei = ProductImei::query()
                         ->lockForUpdate()
+                        ->with('variant')
                         ->findOrFail($item['imei_id']);
 
-                    if ($imei->status !== ProductImei::STATUS_AVAILABLE) {
+                    if ((int) $imei->product_id !== (int) $product->id) {
+                        throw new \Exception("IMEI {$imei->imei} không thuộc sản phẩm {$product->name}");
+                    }
+
+                    if ($imei->status !== ProductImei::STATUS_IN_STOCK) {
                         throw new \Exception("IMEI {$imei->imei} không khả dụng");
+                    }
+
+                    if ($imei->variant_id) {
+                        if ($variant && (int) $variant->id !== (int) $imei->variant_id) {
+                            throw new \Exception("IMEI {$imei->imei} không thuộc phiên bản đã chọn");
+                        }
+
+                        if (! $variant) {
+                            $variant = ProductVariant::query()
+                                ->lockForUpdate()
+                                ->where('product_id', $product->id)
+                                ->where('is_active', true)
+                                ->findOrFail($imei->variant_id);
+                        }
                     }
                 }
 
@@ -159,15 +188,15 @@ class PosCheckoutService
                 | Kiểm tra tồn kho sản phẩm thường (theo biến thể nếu có)
                 |--------------------------------------------------------------------------
                 */
-                if ($product->product_type !== 'imei') {
+                if (! $requiresImei) {
 
                     if ($variant) {
 
-                        if ($variant->stock < (int) $item['quantity']) {
+                        if ($variant->stock < $quantity) {
                             throw new \Exception("Phiên bản {$product->name} không đủ tồn kho");
                         }
 
-                    } elseif ($product->stock < (int) $item['quantity']) {
+                    } elseif ($product->stock < $quantity) {
 
                         throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho");
                     }
@@ -178,7 +207,7 @@ class PosCheckoutService
                 $lineTotal =
                     (float) $item['price']
                     *
-                    (int) $item['quantity'];
+                    $quantity;
 
                 $lineDiscount = 0;
 
@@ -220,8 +249,14 @@ class PosCheckoutService
                     'product_imei_id' =>
                         $item['imei_id'] ?? null,
 
+                    'unit_id' =>
+                        $item['unit_id'] ?? $product->unit_id,
+
+                    'unit_name' =>
+                        $item['unit_name'] ?? ($product->unit?->short_name ?: $product->unit?->name),
+
                     'quantity' =>
-                        (int) $item['quantity'],
+                        $quantity,
 
                     'unit_price' =>
                         (float) $item['price'],
@@ -259,15 +294,15 @@ class PosCheckoutService
                 | Trừ tồn kho sản phẩm thường (theo biến thể nếu có)
                 |--------------------------------------------------------------------------
                 */
-                if ($product->product_type !== 'imei') {
+                if (! $requiresImei) {
 
                     if ($variant) {
 
-                        $variant->decrement('stock', (int) $item['quantity']);
+                        $variant->decrement('stock', $quantity);
 
                     } else {
 
-                        $product->decrement('stock', (int) $item['quantity']);
+                        $product->decrement('stock', $quantity);
                     }
                 }
 
@@ -276,7 +311,7 @@ class PosCheckoutService
                 | Cộng số lượng đã bán
                 |--------------------------------------------------------------------------
                 */
-                $product->increment('sold_count', (int) $item['quantity']);
+                $product->increment('sold_count', $quantity);
 
                 /*
                 |--------------------------------------------------------------------------
@@ -406,5 +441,10 @@ class PosCheckoutService
     private function generateCode(): string
     {
         return 'INV-' . now()->format('YmdHis');
+    }
+
+    private function itemQuantity(array $item): int
+    {
+        return max(1, (int) ($item['quantity'] ?? 1));
     }
 }

@@ -25,6 +25,7 @@ class Customer extends Model
         'district',
         'ward',
         'address',
+        'note',
         'point_balance',
         'debt_balance',
         'total_spent',

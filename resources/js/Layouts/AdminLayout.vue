@@ -1,16 +1,22 @@
 <script setup>
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
+import { Menu, X } from 'lucide-vue-next'
 
 import Sidebar from '@/Components/Sidebar.vue'
 import ConfirmBox from '@/Components/ConfirmBox.vue'
 import ModalRoot from '@/Components/ModalRoot.vue'
 
 const sidebarOpen = ref(false)
+const isDesktop = ref(false)
 
 // 👉 trạng thái collapse (sync với sidebar)
 const sidebarCollapsed = ref(
     JSON.parse(localStorage.getItem('sidebar-collapsed') || 'false')
+)
+
+const effectiveSidebarCollapsed = computed(() =>
+    isDesktop.value && sidebarCollapsed.value
 )
 
 const page = usePage()
@@ -42,6 +48,23 @@ const toggleSidebar = () => {
         JSON.stringify(sidebarCollapsed.value)
     )
 }
+
+const updateViewport = () => {
+    isDesktop.value = window.matchMedia('(min-width: 1024px)').matches
+
+    if (isDesktop.value) {
+        sidebarOpen.value = false
+    }
+}
+
+onMounted(() => {
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateViewport)
+})
 </script>
 
 <template>
@@ -62,11 +85,11 @@ const toggleSidebar = () => {
             class="fixed inset-y-0 left-0 z-40 transition-all duration-300 lg:static"
             :class="[
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-                sidebarCollapsed ? 'w-[70px]' : 'w-[240px]'
+                effectiveSidebarCollapsed ? 'lg:w-[70px]' : 'w-[280px] lg:w-[240px]'
             ]"
         >
             <Sidebar
-                    :collapsed="sidebarCollapsed"
+                    :collapsed="effectiveSidebarCollapsed"
                     @navigate="sidebarOpen = false"
                     @toggle="toggleSidebar"
             />
@@ -84,9 +107,17 @@ const toggleSidebar = () => {
                         <button
                             type="button"
                             class="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 lg:hidden"
-                            @click="sidebarOpen = true"
+                            @click="sidebarOpen = !sidebarOpen"
+                            aria-label="Mở menu"
                         >
-                            =
+                            <X
+                                v-if="sidebarOpen"
+                                :size="20"
+                            />
+                            <Menu
+                                v-else
+                                :size="20"
+                            />
                         </button>
 
                         <div>

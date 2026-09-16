@@ -13,6 +13,10 @@ import { X } from 'lucide-vue-next'
 
 const props = defineProps({
     title: String,
+    size: {
+        type: String,
+        default: 'xl',
+    },
     product: Object,
     categories: Array,
     brands: Array,
@@ -697,35 +701,49 @@ const submit = () => {
 </script>
 
 <template>
-    <BaseModal :title="title" @close="closeModal()">
-        <div class="flex overflow-hidden">
+    <BaseModal
+        :title="title"
+        :size="size"
+        @close="closeModal()"
+    >
+        <div class="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
             <!-- LEFT -->
-            <div class="w-1/3 border-r p-4 flex flex-col items-center justify-center">
-                <label class="w-full h-[300px] border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer overflow-hidden">
+            <div class="space-y-3">
+                <label class="group flex aspect-square w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-emerald-400 hover:bg-emerald-50/40">
 
                     <img
                         v-if="preview"
                         :src="preview"
-                        class="w-full h-full object-cover"
+                        class="h-full w-full object-cover"
                     />
 
-                    <span v-else class="text-gray-400">Thêm ảnh</span>
+                    <span
+                        v-else
+                        class="px-4 text-center text-sm font-semibold text-slate-400 group-hover:text-emerald-600"
+                    >
+                        Bấm để thêm ảnh sản phẩm
+                    </span>
 
                     <input
                         type="file"
                         class="hidden"
+                        accept="image/*"
                         @change="handleImage"
                     />
                 </label>
+
+                <div class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                    Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm.
+                </div>
             </div>
 
             <!-- RIGHT -->
-            <div class="flex-1 p-4 space-y-4 overflow-y-auto max-h-[80vh]">
+            <div class="min-w-0 space-y-5">
 
                 <!-- FORM -->
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid gap-4 md:grid-cols-2">
 
-                    <div class="col-span-2">
+                    <div class="md:col-span-2">
                         <FloatingInput
                             v-model="form.name"
                             label="Tên hàng hóa"
@@ -762,7 +780,7 @@ const submit = () => {
                     />
 
                     <!-- SKU + IMEI + BIẾN THỂ -->
-                    <div class="grid grid-cols-1 gap-4">
+                    <div class="grid gap-3">
 
                         <!-- SKU -->
                         <FloatingInput
@@ -772,18 +790,26 @@ const submit = () => {
                         />
 
                         <!-- CÓ IMEI + NÚT BIẾN THỂ -->
-                        <div class="flex items-center gap-4">
+                        <div class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                             <!-- IMEI -->
-                            <div class="flex items-center gap-2">
-                                <input type="checkbox" v-model="form.manage_stock_by_serial" />
-                                <label>Có IMEI</label>
-                            </div>
+                            <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                                <input
+                                    v-model="form.manage_stock_by_serial"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                Có IMEI
+                            </label>
 
                             <!-- VARIANT -->
-                            <div class="flex items-center gap-2">
-                                <input type="checkbox" v-model="showVariants" />
-                                <label>Có thuộc tính</label>
-                            </div>
+                            <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                                <input
+                                    v-model="showVariants"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                Có thuộc tính
+                            </label>
                         </div>
                     </div>
 
@@ -791,12 +817,23 @@ const submit = () => {
                     <!-- ========================= -->
                     <!-- DANH SÁCH Thuộc tính-->
                     <!-- ========================= -->
-                    <div v-if="form.variants.length" class="col-span-2 border rounded-lg p-4 space-y-4 bg-gray-50">
+                    <div
+                        v-if="form.variants.length"
+                        class="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2"
+                    >
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800">
+                                Thuộc tính biến thể
+                            </h3>
+                            <p class="mt-0.5 text-xs font-medium text-slate-500">
+                                Nhập giá trị rồi nhấn Enter hoặc dấu phẩy để thêm nhanh.
+                            </p>
+                        </div>
 
                         <div
                             v-for="(v, i) in form.variants"
                             :key="v.id || i"
-                            class="grid grid-cols-3 gap-4"
+                            class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
                         >
 
                             <!-- Thuộc tính mới -->
@@ -843,12 +880,12 @@ const submit = () => {
                                             dropdown.attrIndex === i2 &&
                                             suggestions.length
                                         "
-                                        class="absolute z-20 w-full bg-white border rounded shadow max-h-40 overflow-auto"
+                                        class="absolute z-20 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
                                     >
                                         <div
                                             v-for="(item, idx) in suggestions"
                                             :key="item + '-' + idx"
-                                            class="suggestion-item px-3 py-2 cursor-pointer"
+                                            class="suggestion-item cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
                                             @mousedown.prevent="selectSuggestion(item)"
                                         >
                                             {{ item }}
@@ -860,9 +897,9 @@ const submit = () => {
                                 <button
                                     type="button"
                                     @click="removeAttribute(v, i2)"
-                                    class="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-400 text-white text-xs flex items-center justify-center shadow hover:bg-red-600"
+                                    class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow hover:bg-red-600"
                                 >
-                                    <X />
+                                    <X :size="13" />
                                 </button>
 
                                 <!-- TAG -->
@@ -883,7 +920,7 @@ const submit = () => {
                             </div>
 
                             <!-- NÚT THÊM -->
-                            <div class="">
+                            <div>
                                 <div class="w-full">
 
                                    <div
@@ -894,7 +931,7 @@ const submit = () => {
                                         <input
                                             :id="'attr-input-' + i"
                                             :value="dropdown.type === 'attr' && dropdown.variantIndex === i ? dropdown.keyword : ''"
-                                            class="w-full h-[42px] border rounded px-2 text-sm"
+                                            class="h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                                             placeholder="Nhập hoặc chọn thuộc tính..."
                                             @focus="openAttrDropdown(i)"
                                             @input="e => {
@@ -907,7 +944,7 @@ const submit = () => {
 
                                         <div
                                             v-if="suggestions.length"
-                                            class="absolute z-10 w-full bg-white border rounded shadow max-h-40 overflow-auto"
+                                            class="absolute z-10 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
                                         >
                                             <div
                                                 v-for="(item, idx) in suggestions"
@@ -926,7 +963,8 @@ const submit = () => {
                                     <button
                                         v-else
                                         @click="openAttrDropdown(i)"
-                                        class="p-2 bg-green-600 text-white rounded"
+                                        type="button"
+                                        class="h-[42px] rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
                                     >
                                         + Thêm
                                     </button>
@@ -938,7 +976,7 @@ const submit = () => {
 
                     </div>
 
-                    <div class="col-span-2 grid grid-cols-3 gap-4">
+                    <div class="grid gap-4 md:col-span-2 md:grid-cols-2">
                         <FloatingInput
                             v-model="form.cost_price"
                             label="Giá vốn"

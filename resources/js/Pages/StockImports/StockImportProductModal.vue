@@ -64,7 +64,6 @@ const entryModal = ref({
     variant_input: null,
 
     quantity_input: 1,
-    conversion_factor_input: 1,
 
     cost_price_input: 0,
     sell_price_input: 0,
@@ -305,8 +304,6 @@ const openEntryModal = (item) => {
             defaultVariant?.id ?? null,
 
         quantity_input: 1,
-        conversion_factor_input:
-            Number(item.conversion_factor || 1),
 
         cost_price_input: defaultCost,
         sell_price_input: defaultSell,
@@ -340,7 +337,6 @@ const resetEntryModal = () => {
         variant_input: null,
 
         quantity_input: 1,
-        conversion_factor_input: 1,
 
         cost_price_input: 0,
         sell_price_input: 0,
@@ -397,10 +393,6 @@ const addEntry = () => {
         if (!item.rows) {
             item.rows = []
         }
-
-        item.conversion_factor = Number(
-            modal.conversion_factor_input || 1
-        )
 
         const exist = item.rows.find(
             row =>
@@ -606,20 +598,6 @@ onBeforeUnmount(() => {
                     />
                 </div>
 
-                <div
-                    v-if="entryModal.mode === 'normal'"
-                    class="w-24 shrink-0"
-                >
-                    <FloatingInput
-                        v-model.number="
-                            entryModal.item.conversion_factor
-                        "
-                        type="number"
-                        min="1"
-                        label="Quy đổi"
-                    />
-                </div>
-
                 <!-- BIẾN THỂ -->
                 <div
                     v-if="entryModal.mode === 'variant'"
@@ -760,20 +738,6 @@ onBeforeUnmount(() => {
                         type="number"
                         min="1"
                         label="Số lượng"
-                    />
-                </div>
-
-                <div
-                    v-if="entryModal.mode === 'variant'"
-                    class="w-24 shrink-0"
-                >
-                    <FloatingInput
-                        v-model.number="
-                            entryModal.conversion_factor_input
-                        "
-                        type="number"
-                        min="1"
-                        label="Quy đổi"
                     />
                 </div>
 

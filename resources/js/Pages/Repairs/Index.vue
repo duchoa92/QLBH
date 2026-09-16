@@ -1,6 +1,7 @@
 <script setup>
 import { Link, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
+import DetailModal from '@/Components/UI/DetailModal.vue'
 
 const props = defineProps({
 
@@ -16,6 +17,8 @@ const search = ref(
 const status = ref(
     props.filters?.status ?? ''
 );
+
+const detailRepair = ref(null)
 
 let timeout = null;
 
@@ -92,6 +95,17 @@ const statusLabels = {
 
     cancelled: 'Đã hủy',
 };
+
+const repairRows = (repair) => [
+    { label: 'Mã phiếu', value: repair.code },
+    { label: 'Khách hàng', value: repair.customer?.name },
+    { label: 'Số điện thoại', value: repair.customer?.phone },
+    { label: 'CCCD', value: repair.customer?.identity_card },
+    { label: 'Thiết bị', value: repair.device_name },
+    { label: 'IMEI', value: repair.imei },
+    { label: 'Trạng thái', value: statusLabels[repair.status] || repair.status },
+    { label: 'Ngày nhận', value: repair.created_at },
+]
 </script>
 
 <template>
@@ -398,12 +412,13 @@ const statusLabels = {
                                         class="flex justify-end gap-2"
                                     >
 
-                                        <Link
-                                            :href="route('repairs.show', repair.id)"
+                                        <button
+                                            type="button"
+                                            @click="detailRepair = repair"
                                             class="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm"
                                         >
                                             Xem
-                                        </Link>
+                                        </button>
 
                                         <Link
                                             :href="route('repairs.edit', repair.id)"
@@ -444,6 +459,13 @@ const statusLabels = {
             </div>
 
         </div>
+
+        <DetailModal
+            v-if="detailRepair"
+            title="Chi tiết phiếu sửa"
+            :rows="repairRows(detailRepair)"
+            @close="detailRepair = null"
+        />
 
     </div>
 

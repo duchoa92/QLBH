@@ -2,6 +2,38 @@ import { ref, watch, computed, } from 'vue'
 import { useLocalStorage } from '@/Composables/useLocalStorage'
 import { useCartTotals } from '@/Modules/POS/Cart/Composables/useCartTotals'
 
+const attributeText = (attribute) => {
+    if (attribute === null || attribute === undefined || attribute === '') {
+        return ''
+    }
+
+    if (typeof attribute !== 'object') {
+        return String(attribute)
+    }
+
+    return attribute.value
+        ?? attribute.label
+        ?? attribute.name
+        ?? attribute.title
+        ?? attribute.text
+        ?? ''
+}
+
+const getVariantLabel = (variant) => {
+    const attributes = Object.values(variant?.attributes || {})
+        .map(attributeText)
+        .filter(Boolean)
+
+    return attributes.join(' / ')
+        || variant?.sku
+        || (variant?.id ? `#${variant.id}` : null)
+}
+
+const unitPayload = (product) => ({
+    unit_id: product.unit_id ?? null,
+    unit_name: product.unit_name ?? product.unit?.short_name ?? product.unit?.name ?? 'Cái',
+})
+
 
 
 export function useCart() {
@@ -359,11 +391,7 @@ export function useCart() {
 
         const variant = product.variant ?? null
 
-        const variantLabel = variant
-            ? Object.values(variant.attributes || {})
-                .filter(Boolean)
-                .join(' / ')
-            : null
+        const variantLabel = getVariantLabel(variant)
 
         /*
         |--------------------------------------------------
@@ -393,6 +421,7 @@ export function useCart() {
 
             cart.value.push({
                 id: product.id,
+                ...unitPayload(product),
 
                 variant_id:
                     variant?.id ?? null,
@@ -417,6 +446,15 @@ export function useCart() {
 
                 storage:
                     product.storage ?? null,
+
+                cost_price:
+                    product.cost_price ?? null,
+
+                imei_sell_price:
+                    product.imei_sell_price ?? null,
+
+                price_source:
+                    product.price_source ?? null,
 
                 name:
                     product.name,
@@ -472,6 +510,7 @@ export function useCart() {
 
             cart.value.push({
                 id: product.id,
+                ...unitPayload(product),
 
                 variant_id:
                     variant.id,
@@ -539,6 +578,7 @@ export function useCart() {
 
         cart.value.push({
             id: product.id,
+            ...unitPayload(product),
 
             variant_id: null,
 

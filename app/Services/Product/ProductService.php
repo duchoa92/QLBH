@@ -109,8 +109,7 @@ class ProductService extends BaseService
             $product = $this->repository->update($model, $data);
 
             if ($hasVariants) {
-                $product->variants()->delete();
-                $this->syncVariants($product, $variants);
+                $this->syncVariants($product, $variants, true);
             }
 
             $this->syncProductImeis($product, $imeis);
@@ -149,9 +148,13 @@ class ProductService extends BaseService
         return $data;
     }
 
-    private function syncVariants(Product $product, array $variants): void
+    private function syncVariants(Product $product, array $variants, bool $pruneMissing = false): void
     {
         if (empty($variants)) {
+            if ($pruneMissing) {
+                $this->pruneMissingVariants($product, collect());
+            }
+
             return;
         }
 
@@ -165,6 +168,10 @@ class ProductService extends BaseService
         $combinations = $this->generateCombinations($attributes);
 
         $seen = [];
+        $desiredKeys = collect();
+        $existingVariants = $product->variants()
+            ->get()
+            ->keyBy(fn (ProductVariant $variant) => $this->variantAttributeKey($variant->attributes ?? []));
 
         foreach ($combinations as $combo) {
 
@@ -177,36 +184,116 @@ class ProductService extends BaseService
             })->values()->all();
 
             // tạo key unique theo attributes
-            $key = collect($formattedAttributes)
-                ->map(fn($a) => strtolower($a['name'].'='.$a['value']))
-                ->sort()
-                ->join('|');
+            $key = $this->variantAttributeKey($formattedAttributes);
 
             if (isset($seen[$key])) {
                 continue; // ❌ skip duplicate
             }
 
             $seen[$key] = true;
+            $desiredKeys->push($key);
 
-            // generate SKU
-            $sku = $this->generateSku($product, [
-                'attributes' => $formattedAttributes
-            ]);
+            $costPrice = $variants[0]['cost_price'] ?? 0;
+            $sellPrice = $variants[0]['sell_price'] ?? 0;
 
-            // tránh trùng SKU DB (phòng thêm)
-            if (ProductVariant::where('sku', $sku)->exists()) {
+            if ($existingVariants->has($key)) {
+                $existingVariants->get($key)->update([
+                    'attributes' => $formattedAttributes,
+                    'cost_price' => $costPrice,
+                    'sell_price' => $sellPrice,
+                    'is_active' => true,
+                ]);
+
                 continue;
             }
+
+            // generate SKU
+            $sku = $this->uniqueVariantSku(
+                $this->generateSku($product, [
+                    'attributes' => $formattedAttributes
+                ])
+            );
 
             ProductVariant::create([
                 'product_id' => $product->id,
                 'sku' => $sku,
                 'attributes' => $formattedAttributes,
-                'cost_price' => $variants[0]['cost_price'] ?? 0,
-                'sell_price' => $variants[0]['sell_price'] ?? 0,
+                'cost_price' => $costPrice,
+                'sell_price' => $sellPrice,
                 'stock' => 0,
+                'is_active' => true,
             ]);
         }
+
+        if ($pruneMissing) {
+            $this->pruneMissingVariants($product, $desiredKeys);
+        }
+    }
+
+    private function pruneMissingVariants(Product $product, $desiredKeys): void
+    {
+        $product->variants()
+            ->get()
+            ->each(function (ProductVariant $variant) use ($desiredKeys) {
+                $key = $this->variantAttributeKey($variant->attributes ?? []);
+
+                if ($desiredKeys->contains($key)) {
+                    return;
+                }
+
+                if ($this->variantHasTransactions($variant)) {
+                    $variant->update([
+                        'is_active' => false,
+                    ]);
+
+                    return;
+                }
+
+                $variant->delete();
+            });
+    }
+
+    private function variantHasTransactions(ProductVariant $variant): bool
+    {
+        return DB::table('stock_import_items')
+            ->where('variant_id', $variant->id)
+            ->exists()
+            || DB::table('sale_items')
+                ->where('variant_id', $variant->id)
+                ->exists()
+            || DB::table('product_imeis')
+                ->where('variant_id', $variant->id)
+                ->exists();
+    }
+
+    private function variantAttributeKey(array $attributes): string
+    {
+        return collect($attributes)
+            ->map(function ($attribute, $name) {
+                if (is_array($attribute)) {
+                    $name = $attribute['name'] ?? $attribute['key'] ?? $name;
+                    $value = $attribute['value'] ?? $attribute['label'] ?? '';
+                } else {
+                    $value = $attribute;
+                }
+
+                return mb_strtolower((string) $name) . '=' . mb_strtolower((string) $value);
+            })
+            ->sort()
+            ->join('|');
+    }
+
+    private function uniqueVariantSku(string $baseSku): string
+    {
+        $sku = $baseSku;
+        $i = 1;
+
+        while (ProductVariant::where('sku', $sku)->exists()) {
+            $sku = $baseSku . '-' . str_pad($i, 3, '0', STR_PAD_LEFT);
+            $i++;
+        }
+
+        return $sku;
     }
 
     private function syncAttributeMasters(Product $product, array $attributes): array

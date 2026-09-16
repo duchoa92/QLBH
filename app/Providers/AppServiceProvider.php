@@ -31,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
                 'currency_symbol' => setting('currency_symbol', '₫'),
                 'currency_format' => setting('currency_format', 'vi-VN'),
                 'app_locale' => setting('app_locale', 'vi'),
+                'bank_bin' => setting('bank_bin', ''),
+                'bank_account' => setting('bank_account', ''),
+                'bank_account_name' => setting('bank_account_name', ''),
+                'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
             ]
         ]);
     }

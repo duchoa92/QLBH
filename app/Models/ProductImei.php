@@ -12,6 +12,8 @@ class ProductImei extends Model
 
     public const STATUS_IN_STOCK = 'in_stock';
 
+    public const STATUS_AVAILABLE = self::STATUS_IN_STOCK;
+
     public const STATUS_SOLD = 'sold';
 
 

@@ -17,6 +17,40 @@ const money = (value) => {
         .toLocaleString('vi-VN')
 }
 
+const attributeText = (attribute) => {
+    if (attribute === null || attribute === undefined || attribute === '') {
+        return ''
+    }
+
+    if (typeof attribute !== 'object') {
+        return String(attribute)
+    }
+
+    return attribute.value
+        ?? attribute.label
+        ?? attribute.name
+        ?? attribute.title
+        ?? attribute.text
+        ?? ''
+}
+
+const variantLabel = (variant) => {
+    const attributes = Object.values(variant?.attributes || {})
+        .map(attributeText)
+        .filter(Boolean)
+
+    return attributes.join(' / ')
+        || variant?.sku
+        || ''
+}
+
+const saleQuantityText = (item) => {
+    const qty = Number(item.quantity ?? 0)
+    const unit = item.unit_name || 'Cái'
+
+    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+}
+
 // Ngày tháng
 const formatDate = (date) => {
 
@@ -83,7 +117,7 @@ const formatDate = (date) => {
                                         v-if="item.variant?.attributes"
                                         class="text-xs text-indigo-600 mt-0.5"
                                     >
-                                        {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
+                                        {{ variantLabel(item.variant) }}
                                     </div>
 
                                     <div v-if="item.product_imei" class="text-xs text-blue-600 mt-0.5">
@@ -111,7 +145,9 @@ const formatDate = (date) => {
                                         Sản phẩm
                                     </span>
                                 </td>
-                                <td class="p-2 text-center font-medium">{{ item.quantity }}</td>
+                                <td class="p-2 text-center font-medium">
+                                    <div>{{ saleQuantityText(item) }}</div>
+                                </td>
                                 <td class="p-2 text-right text-gray-600">{{ money(item.unit_price) }} đ</td>
                                 <td class="p-2 text-right font-semibold text-gray-900">{{ money(item.subtotal) }} đ</td>
                             </tr>

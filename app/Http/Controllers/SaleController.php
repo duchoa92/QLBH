@@ -14,6 +14,8 @@ class SaleController extends Controller
 
             ->with([
                 'items.product',
+                'items.productImei',
+                'items.gifts.product',
             ])
 
             ->when(

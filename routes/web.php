@@ -16,6 +16,7 @@ use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\UnitController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -46,6 +47,10 @@ Route::middleware(['auth'])->group(function () {
     // Settings
     Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('/units', [UnitController::class, 'store'])->name('units.store');
+    Route::put('/units/{unit}', [UnitController::class, 'update'])->name('units.update');
+    Route::patch('/units/{unit}/toggle-status', [UnitController::class, 'toggleStatus'])->name('units.toggleStatus');
+    Route::delete('/units/{unit}', [UnitController::class, 'destroy'])->name('units.destroy');
 
     // Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

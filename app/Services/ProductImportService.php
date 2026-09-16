@@ -91,6 +91,7 @@ class ProductImportService
                     $active = $row[10] ?? 1;
                     $rawImageName = trim($row[11] ?? '');
                 }
+
                 $this->currentUnitName = $unitName;
                                 
                 
@@ -440,4 +441,5 @@ class ProductImportService
             ];
         }
     }
+
 }

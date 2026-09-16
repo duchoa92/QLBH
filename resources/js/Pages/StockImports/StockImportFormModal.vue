@@ -229,8 +229,6 @@ const selectProduct = (product) => {
                 item.unit ??
                 'Cái',
 
-            conversion_factor: 1,
-
             quantity:
                 type === 'simple'
                     ? 1
@@ -337,15 +335,6 @@ const itemUnit = (item) =>
     item.unit ||
     'Cái'
 
-const baseQuantity = (quantity, conversionFactor = 1) =>
-    Math.max(
-        0,
-        Math.round(
-            Number(quantity || 0) *
-            Math.max(1, Number(conversionFactor || 1))
-        )
-    )
-
 /*
 |--------------------------------------------------------------------------
 | QUANTITY
@@ -356,10 +345,7 @@ const itemQuantity = (item) => {
     if (
         item.type === 'simple'
     ) {
-        return baseQuantity(
-            item.quantity,
-            item.conversion_factor
-        )
+        return Math.max(0, Number(item.quantity || 0))
     }
 
     if (
@@ -379,10 +365,7 @@ const itemQuantity = (item) => {
         ).reduce(
             (sum, row) =>
                 sum +
-                baseQuantity(
-                    row.quantity,
-                    item.conversion_factor
-                ),
+                Math.max(0, Number(row.quantity || 0)),
             0
         )
     }
@@ -514,10 +497,7 @@ const total = computed(() =>
                 return (
                     total +
                     Number(
-                        baseQuantity(
-                            item.quantity,
-                            item.conversion_factor
-                        )
+                        Math.max(0, Number(item.quantity || 0))
                     ) *
                     Number(
                         item.cost_price || 0
@@ -538,10 +518,7 @@ const total = computed(() =>
                         row
                     ) =>
                         sum +
-                        baseQuantity(
-                            row.quantity,
-                            item.conversion_factor
-                        ) *
+                        Math.max(0, Number(row.quantity || 0)) *
                         Number(
                             row.cost_price ||
                             0
@@ -616,9 +593,7 @@ const confirm = () => {
                 variant_id: null,
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
-                import_quantity: Number(item.quantity || 0),
-                conversion_factor: Number(item.conversion_factor || 1),
-                quantity: baseQuantity(item.quantity, item.conversion_factor),
+                quantity: Math.max(0, Math.round(Number(item.quantity || 0))),
                 cost_price: Number(item.cost_price || 0),
                 sell_price: Number(item.sell_price || 0),
                 imeis: [],
@@ -634,9 +609,7 @@ const confirm = () => {
                     variant_id: row.variant_id ?? null,
                     unit_id: item.unit_id ?? null,
                     unit_name: item.unit_name ?? itemUnit(item),
-                    import_quantity: Number(row.quantity || 0),
-                    conversion_factor: Number(item.conversion_factor || 1),
-                    quantity: baseQuantity(row.quantity, item.conversion_factor),
+                    quantity: Math.max(0, Math.round(Number(row.quantity || 0))),
                     cost_price: Number(row.cost_price || 0),
                     sell_price: Number(row.sell_price || 0),
                     imeis: [],
@@ -650,8 +623,6 @@ const confirm = () => {
                 variant_id: null,
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
-                import_quantity: 1,
-                conversion_factor: 1,
                 quantity: 1,
                 cost_price: Number(imei.cost_price || item.cost_price || 0),
                 sell_price: Number(imei.sell_price || item.sell_price || 0),
@@ -666,8 +637,6 @@ const confirm = () => {
                 variant_id: imei.variant_id ?? null,
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
-                import_quantity: 1,
-                conversion_factor: 1,
                 quantity: 1,
                 cost_price: Number(imei.cost_price || item.cost_price || 0),
                 sell_price: Number(imei.sell_price || item.sell_price || 0),
@@ -1047,19 +1016,6 @@ const confirm = () => {
                                         }}
                                     </div>
 
-                                    <div
-                                        v-if="
-                                            Number(
-                                                item.conversion_factor ||
-                                                1
-                                            ) > 1
-                                        "
-                                        class="mt-0.5 text-[11px] text-slate-400"
-                                    >
-                                        x{{
-                                            item.conversion_factor
-                                        }}
-                                    </div>
                                 </td>
 
                                 <td

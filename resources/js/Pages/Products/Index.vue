@@ -68,6 +68,7 @@ onBeforeUnmount(() => {
 const columns = [
     { key: 'id', label: 'ID', sortable: true, width: '60px' },
     { key: 'name', label: 'Tên hàng hóa', sortable: true },
+    { key: 'unit', label: 'Đơn vị', width: '130px' },
     { key: 'sell_price', label: 'Giá bán', sortable: true },
     { key: 'stock', label: 'Tồn kho', sortable: true },
     { key: 'is_active', label: 'Trạng thái', sortable: true, width: '120px' }
@@ -310,6 +311,12 @@ const openImportExport = () => {
     })
 }
 
+const formatMoney = (value) =>
+    Number(value || 0).toLocaleString('vi-VN')
+
+const productUnitName = (row) =>
+    row.unit?.short_name || row.unit?.name || 'Cái'
+
 </script>
 
 <template>
@@ -425,8 +432,14 @@ const openImportExport = () => {
                 {{ row.name }}
             </td>
 
+            <td class="border-r p-2 text-center">
+                <div class="font-medium text-slate-700">
+                    {{ productUnitName(row) }}
+                </div>
+            </td>
+
             <td class="border-r p-2 text-right">
-                {{ row.sell_price }}
+                {{ formatMoney(row.sell_price) }}
             </td>
 
             <td class="border-r p-2 text-center">

@@ -46,17 +46,35 @@ const lineTotal = computed(() => {
     return total
 })
 
+const originalTotal = computed(() =>
+    Number(props.item.price) * Number(props.item.quantity)
+)
+
+const hasDiscount = computed(() =>
+    Number(props.item.discount_value || 0) > 0
+)
+
 </script>
 
 <template>
 
     <div class="text-right shrink-0">
-        <div class="text-green-600 font-semibold">
+        <div
+            class="font-semibold"
+            :class="hasDiscount ? 'text-xs text-slate-400 line-through' : 'text-green-600'"
+        >
             {{ $money(item.price) }}
         </div>
 
         <div
-            v-if="item.discount_value && item.discount_value > 0"
+            v-if="hasDiscount"
+            class="text-base font-black text-green-700"
+        >
+            {{ $money(lineTotal) }}
+        </div>
+
+        <div
+            v-if="hasDiscount"
             class="inline-flex items-center bg-red-100 text-red-700 text-[11px] px-2 py-1 rounded"
         >
             -
@@ -71,11 +89,17 @@ const lineTotal = computed(() => {
             </button>
         </div>
 
-        <div v-if="item.quantity > 1" class="text-xs text-gray-500">
-            <div v-if="item.discount_value > 0" class="text-xs text-gray-400 line-through">
-                {{ $money(item.price * item.quantity) }}
+        <div
+            v-if="item.quantity > 1"
+            class="text-xs text-gray-500"
+        >
+            <div
+                v-if="hasDiscount"
+                class="text-xs text-gray-400 line-through"
+            >
+                {{ $money(originalTotal) }}
             </div>
-            = {{ $money(lineTotal.value) }}
+            = {{ $money(lineTotal) }}
         </div>
     </div>
 

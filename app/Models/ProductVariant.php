@@ -14,10 +14,12 @@ class ProductVariant extends Model
         'cost_price',
         'sell_price',
         'stock',
+        'is_active',
     ];
 
     protected $casts = [
         'attributes' => 'array',
+        'is_active' => 'boolean',
     ];
 
     // Quan hệ với Imeis

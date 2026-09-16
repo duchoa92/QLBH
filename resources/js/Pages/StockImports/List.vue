@@ -2,6 +2,11 @@
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import StockImportFormModal from './StockImportFormModal.vue'
+import api from '@/Services/api'
+import PageHeader from '@/Components/UI/PageHeader.vue'
+import ActionButton from '@/Components/UI/ActionButton.vue'
+import DataPanel from '@/Components/UI/DataPanel.vue'
+import BaseModal from '@/Components/UI/BaseModal.vue'
 
 import {
     ref,
@@ -58,6 +63,8 @@ const props = defineProps({
 */
 
 const showCreateModal = ref(false)
+const detailImport = ref(null)
+const loadingDetail = ref(false)
 
 
 const openCreateModal = () => {
@@ -141,10 +148,15 @@ const formatDate = (value) => {
 */
 
 const showImport = (id) => {
+    loadingDetail.value = true
 
-    router.get(
-        `/stock-import/${id}`
-    )
+    api.get(`/stock-import/${id}`)
+        .then((response) => {
+            detailImport.value = response.data
+        })
+        .finally(() => {
+            loadingDetail.value = false
+        })
 
 }
 
@@ -157,110 +169,22 @@ const showImport = (id) => {
 
     <!-- HEADER -->
 
-    <div class="border-b border-slate-200 bg-white">
-
-        <div
-            class="
-                flex
-                items-center
-                justify-between
-                px-6
-                py-4
-            "
-        >
-
-            <div class="flex items-center gap-3">
-
-                <div
-                    class="
-                        flex
-                        h-10
-                        w-10
-                        items-center
-                        justify-center
-                        rounded-lg
-                        bg-emerald-50
-                        text-emerald-600
-                    "
-                >
-
-                    <Truck :size="21" />
-
-                </div>
-
-
-                <div>
-
-                    <h1
-                        class="
-                            text-lg
-                            font-bold
-                            text-slate-900
-                        "
-                    >
-                        Đơn nhập hàng
-                    </h1>
-
-                    <div
-                        class="
-                            mt-0.5
-                            text-xs
-                            text-slate-500
-                        "
-                    >
-                        Quản lý các phiếu nhập kho
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <button
-                type="button"
-                @click="openCreateModal"
-                class="
-                    flex
-                    items-center
-                    gap-2
-                    rounded-lg
-                    bg-emerald-600
-                    px-4
-                    py-2.5
-                    text-sm
-                    font-semibold
-                    text-white
-                    shadow-sm
-                    transition
-                    hover:bg-emerald-700
-                "
-            >
-
-                <Plus :size="18" />
-
-                Tạo đơn nhập
-
-            </button>
-
-        </div>
-
-    </div>
-
-
     <!-- CONTENT -->
 
-    <div class="p-6">
-
-        <div
-            class="
-                overflow-hidden
-                rounded-xl
-                border
-                border-slate-200
-                bg-white
-                shadow-sm
-            "
+    <div class="space-y-4 p-6">
+        <PageHeader
+            title="Đơn nhập hàng"
+            description="Quản lý các phiếu nhập kho"
         >
+            <template #actions>
+                <ActionButton @click="openCreateModal">
+                    <Plus :size="18" />
+                    Tạo đơn nhập
+                </ActionButton>
+            </template>
+        </PageHeader>
+
+        <DataPanel>
 
             <!-- SEARCH -->
 
@@ -541,7 +465,7 @@ const showImport = (id) => {
 
             </div>
 
-        </div>
+        </DataPanel>
 
     </div>
 
@@ -557,6 +481,78 @@ const showImport = (id) => {
         @close="closeCreateModal"
         @created="handleCreated"
     />
+
+    <BaseModal
+        v-if="detailImport"
+        title="Chi tiết đơn nhập"
+        size="xl"
+        @close="detailImport = null"
+    >
+        <div class="space-y-4">
+            <div class="grid gap-3 md:grid-cols-4">
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div class="text-xs font-semibold uppercase text-slate-400">Mã đơn</div>
+                    <div class="mt-1 font-semibold text-slate-900">{{ detailImport.code }}</div>
+                </div>
+
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div class="text-xs font-semibold uppercase text-slate-400">Nhà cung cấp</div>
+                    <div class="mt-1 font-semibold text-slate-900">{{ detailImport.supplier?.name || '-' }}</div>
+                </div>
+
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div class="text-xs font-semibold uppercase text-slate-400">Ngày nhập</div>
+                    <div class="mt-1 font-semibold text-slate-900">{{ formatDate(detailImport.import_date) }}</div>
+                </div>
+
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div class="text-xs font-semibold uppercase text-slate-400">Tổng tiền</div>
+                    <div class="mt-1 font-semibold text-emerald-600">{{ money(detailImport.grand_total) }} đ</div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full min-w-[760px] text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                            <th class="px-3 py-2 text-left">Sản phẩm</th>
+                            <th class="px-3 py-2 text-left">Biến thể</th>
+                            <th class="px-3 py-2 text-center">Đơn vị</th>
+                            <th class="px-3 py-2 text-center">Số lượng</th>
+                            <th class="px-3 py-2 text-right">Giá nhập</th>
+                        </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-slate-100">
+                        <tr
+                            v-for="item in detailImport.items"
+                            :key="item.id"
+                        >
+                            <td class="px-3 py-2 font-medium text-slate-900">{{ item.product?.name || '-' }}</td>
+                            <td class="px-3 py-2 text-xs text-slate-600">{{ item.variant?.sku || '-' }}</td>
+                            <td class="px-3 py-2 text-center">{{ item.unit_name || item.unit?.short_name || '-' }}</td>
+                            <td class="px-3 py-2 text-center font-semibold">{{ item.quantity }}</td>
+                            <td class="px-3 py-2 text-right">{{ money(item.cost_price) }} đ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div
+                v-if="detailImport.note"
+                class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            >
+                {{ detailImport.note }}
+            </div>
+        </div>
+    </BaseModal>
+
+    <div
+        v-if="loadingDetail"
+        class="fixed bottom-4 right-4 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-lg"
+    >
+        Đang tải chi tiết...
+    </div>
 
 </div>
 

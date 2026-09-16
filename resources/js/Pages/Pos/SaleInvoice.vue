@@ -10,6 +10,40 @@ const printInvoice = () => {
 
     window.print();
 };
+
+const attributeText = (attribute) => {
+    if (attribute === null || attribute === undefined || attribute === '') {
+        return ''
+    }
+
+    if (typeof attribute !== 'object') {
+        return String(attribute)
+    }
+
+    return attribute.value
+        ?? attribute.label
+        ?? attribute.name
+        ?? attribute.title
+        ?? attribute.text
+        ?? ''
+}
+
+const variantLabel = (variant) => {
+    const attributes = Object.values(variant?.attributes || {})
+        .map(attributeText)
+        .filter(Boolean)
+
+    return attributes.join(' / ')
+        || variant?.sku
+        || ''
+}
+
+const saleQuantityText = (item) => {
+    const qty = Number(item.quantity ?? 0)
+    const unit = item.unit_name || 'Cái'
+
+    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+}
 </script>
 
 <template>
@@ -90,7 +124,7 @@ const printInvoice = () => {
                                 v-if="item.variant?.attributes"
                                 class="block text-xs text-indigo-600"
                             >
-                                {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
+                                {{ variantLabel(item.variant) }}
                             </span>
 
                             <span
@@ -102,7 +136,7 @@ const printInvoice = () => {
                         </td>
 
                         <td class="text-center py-2">
-                            {{ item.quantity }}
+                            <div>{{ saleQuantityText(item) }}</div>
                         </td>
 
                         <td class="text-right py-2">

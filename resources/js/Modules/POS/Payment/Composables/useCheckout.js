@@ -77,6 +77,12 @@ export function useCheckout(
 
                         quantity: item.quantity,
 
+                        unit_id:
+                            item.unit_id ?? null,
+
+                        unit_name:
+                            item.unit_name ?? 'Cái',
+
                         variant_id:
                             item.variant_id ?? null,
 

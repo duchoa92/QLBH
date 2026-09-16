@@ -25,6 +25,14 @@ class CustomerController extends Controller
                 'code',
                 'full_name',
                 'phone',
+                'birthday',
+                'gender',
+                'cccd',
+                'province',
+                'district',
+                'ward',
+                'address',
+                'note',
                 'point_balance',
                 'debt_balance',
                 'customer_type',
@@ -145,8 +153,7 @@ class CustomerController extends Controller
             }
         }
 
-        return redirect()
-            ->route('customers.index')
+        return back()
             ->with('success', 'Tạo khách hàng thành công');
     }
 
@@ -188,8 +195,7 @@ class CustomerController extends Controller
 
         $customer->update($data);
 
-        return redirect()
-            ->route('customers.index')
+        return back()
             ->with('success', 'Cập nhật khách hàng thành công');
     }
 

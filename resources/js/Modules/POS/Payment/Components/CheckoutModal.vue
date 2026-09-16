@@ -1,8 +1,10 @@
 <script setup>
 
 import { ref, computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import QrPayment from './QrPayment.vue'
 
 const props = defineProps({
     loading: Boolean,
@@ -29,6 +31,12 @@ const note = ref('')
 
 const payOldDebt = ref(false)
 
+const page = usePage()
+
+const bankSettings = computed(() =>
+    page.props.settings || {}
+)
+
 const totalNeedToPay = computed(() => {
 
     const debt = payOldDebt.value
@@ -45,10 +53,20 @@ const totalNeedToPay = computed(() => {
     )
 })
 
+const transferAmount = computed(() =>
+    Math.max(0, Number(totalNeedToPay.value || 0))
+)
+
+const effectivePaidAmount = computed(() =>
+    paymentMethod.value === 'bank'
+        ? Number(paidAmount.value || transferAmount.value || 0)
+        : Number(paidAmount.value || 0)
+)
+
 const balanceAmount = computed(() => {
 
     return (
-        Number(paidAmount.value || 0)
+        effectivePaidAmount.value
         - totalNeedToPay.value
     )
 })
@@ -60,17 +78,70 @@ const formatMoney = (value) => {
     ).toLocaleString('vi-VN')
 }
 
+const formatMoneyInput = (value) => {
+    const number = Number(value || 0)
+
+    return number > 0
+        ? number.toLocaleString('vi-VN')
+        : ''
+}
+
+const parseMoneyInput = (value) =>
+    Number(String(value || '').replace(/\D/g, ''))
+
+const handlePaidAmountInput = (event) => {
+    paidAmount.value = parseMoneyInput(event.target.value)
+}
+
+const balanceStatus = computed(() => {
+    if (balanceAmount.value < 0) {
+        return {
+            label: 'Thiếu',
+            amount: Math.abs(balanceAmount.value),
+            className: 'text-red-600',
+        }
+    }
+
+    if (balanceAmount.value > 0) {
+        return {
+            label: 'Thừa',
+            amount: balanceAmount.value,
+            className: 'text-green-600',
+        }
+    }
+
+    return {
+        label: 'Đủ',
+        amount: 0,
+        className: 'text-slate-700',
+    }
+})
+
+const hasBankSettings = computed(() =>
+    Boolean(bankSettings.value.bank_bin && bankSettings.value.bank_account)
+)
+
+const vietQrUrl = computed(() => {
+    if (!hasBankSettings.value) {
+        return ''
+    }
+
+    const description = encodeURIComponent(
+        bankSettings.value.bank_transfer_content
+        || 'Thanh toan don hang'
+    )
+
+    return `https://img.vietqr.io/image/${bankSettings.value.bank_bin}-${bankSettings.value.bank_account}-compact2.png?amount=${transferAmount.value}&addInfo=${description}`
+})
+
 
 
 const submit = () => {
-
     emit(
         'confirm',
         {
             payment_method: paymentMethod.value,
-            paid_amount: Number(
-                paidAmount.value || 0
-            ),
+            paid_amount: effectivePaidAmount.value,
             note: note.value,
             pay_old_debt: payOldDebt.value,
         }
@@ -158,11 +229,30 @@ const lineTotal = (item) => {
 
             <div>
                 <FloatingInput
-                    v-model="paidAmount"
-                    type="number"
-                    label="Khách đưa"
+                    :model-value="formatMoneyInput(paidAmount)"
+                    @input="handlePaidAmountInput"
+                    type="text"
+                    inputmode="numeric"
+                    :label="paymentMethod === 'bank' ? 'Số tiền đã chuyển' : 'Khách đưa'"
                 />
 
+            </div>
+
+            <div v-if="paymentMethod === 'bank'">
+                <QrPayment
+                    v-if="vietQrUrl"
+                    :url="vietQrUrl"
+                    :amount="transferAmount"
+                    :account="bankSettings.bank_account"
+                    :account-name="bankSettings.bank_account_name"
+                />
+
+                <div
+                    v-else
+                    class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-700"
+                >
+                    Chưa thiết lập tài khoản ngân hàng trong trang Cài đặt.
+                </div>
             </div>
 
             <div
@@ -238,15 +328,16 @@ const lineTotal = (item) => {
                     class="flex justify-between mt-2"
                 >
 
-                    <span>Tiền thừa</span>
+                    <span>{{ balanceStatus.label }}</span>
 
                     <span
-                        class="text-green-600"
+                        :class="balanceStatus.className"
+                        class="font-bold"
                     >
 
                         {{
                             formatMoney(
-                                balanceAmount
+                                balanceStatus.amount
                             )
                         }}
 

@@ -27,7 +27,9 @@ class PosController extends Controller
         ]);
 
         $imei = ProductImei::query()
-            ->with('product')
+            ->with([
+                'product.unit:id,name,short_name',
+            ])
             ->where(
                 'imei',
                 $request->imei
@@ -42,7 +44,7 @@ class PosController extends Controller
 
         if (
             $imei->status !==
-            ProductImei::STATUS_AVAILABLE
+            ProductImei::STATUS_IN_STOCK
         ) {
             return response()->json([
                 'message' => 'IMEI không khả dụng',
@@ -53,13 +55,15 @@ class PosController extends Controller
             'id' => $imei->id,
             'product_id' => $imei->product->id,
             'imei' => $imei->imei,
-            'product' => [
-                'id' => $imei->product->id,
-                'name' => $imei->product->name,
-                'sell_price' => $imei->product->sell_price,
-                'product_type' => $imei->product->product_type,
-            ],
-        ]);
+                'product' => [
+                    'id' => $imei->product->id,
+                    'name' => $imei->product->name,
+                    'sell_price' => $imei->product->sell_price,
+                    'product_type' => $imei->product->product_type,
+                    'unit_id' => $imei->product->unit_id,
+                    'unit_name' => $imei->product->unit?->short_name ?: $imei->product->unit?->name,
+                ],
+            ]);
     }
 
     // Thanh toán
@@ -82,6 +86,10 @@ class PosController extends Controller
             'items.*.variant_id' => 'nullable|integer',
 
             'items.*.gift_product_id' => 'nullable|integer',
+
+            'items.*.unit_id' => 'nullable|integer|exists:units,id',
+
+            'items.*.unit_name' => 'nullable|string|max:100',
 
         ],
         [
@@ -121,6 +129,7 @@ class PosController extends Controller
                         return [
                             'id' => $item->id,
                             'quantity' => $item->quantity,
+                            'unit_name' => $item->unit_name,
                             'unit_price' => $item->unit_price,
                             'subtotal' => $item->subtotal,
                             'imei' => $item->productImei?->imei,

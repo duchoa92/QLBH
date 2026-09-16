@@ -303,6 +303,7 @@ class ProductController extends Controller
         // 2. tìm theo barcode variant
         $variant = \App\Models\ProductVariant::with('product')
             ->where('barcode', $code)
+            ->where('is_active', true)
             ->first();
 
         if ($variant) {
@@ -569,7 +570,9 @@ class ProductController extends Controller
 
     public function getProductApi($id)
     {
-        $product = Product::with('variants')->find($id);
+        $product = Product::with([
+            'variants' => fn ($query) => $query->where('is_active', true),
+        ])->find($id);
 
         if (!$product) {
             return response()->json([
@@ -610,7 +613,9 @@ class ProductController extends Controller
 
             ->with([
                 'unit:id,name,short_name',
-                'variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock',
+                'variants' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
             ])
 
             ->select([
@@ -642,7 +647,9 @@ class ProductController extends Controller
     {
         $keyword = $request->q;
 
-        return Product::with('variants')
+        return Product::with([
+            'variants' => fn ($query) => $query->where('is_active', true),
+        ])
             ->where('name', 'like', "%$keyword%")
             ->orWhere('sku', 'like', "%$keyword%")
             ->limit(10)

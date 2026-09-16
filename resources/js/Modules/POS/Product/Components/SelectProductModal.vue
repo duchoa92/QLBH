@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { X, Search, Smartphone, Check } from 'lucide-vue-next'
+import { X, Check } from 'lucide-vue-next'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 
 /*
@@ -8,16 +8,19 @@ import { productService } from '@/Modules/POS/Product/Services/productService'
 | Modal chọn biến thể / IMEI khi thêm sản phẩm vào giỏ hàng POS
 |--------------------------------------------------------------------------
 |
-| - Sản phẩm có biến thể (product.variants) -> bắt buộc chọn 1 biến thể.
 | - Sản phẩm quản lý theo IMEI (product_type === 'imei' hoặc
-|   manage_stock_by_serial) -> tải danh sách IMEI còn trong kho (lọc theo
-|   biến thể vừa chọn, nếu có) và bắt buộc chọn 1 IMEI.
+|   manage_stock_by_serial) -> chọn IMEI trước, biến thể đi theo IMEI.
+| - Sản phẩm có biến thể nhưng không quản lý IMEI -> bắt buộc chọn 1 biến thể.
 |
 */
 
 const props = defineProps({
     show: Boolean,
     product: Object,
+    cart: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const emit = defineEmits(['close', 'confirm'])
@@ -28,13 +31,17 @@ const imeis = ref([])
 const loadingImeis = ref(false)
 const imeiKeyword = ref('')
 
-const needsVariant = computed(() =>
-    Boolean(props.product?.variants?.length)
-)
-
 const needsImei = computed(() =>
     props.product?.product_type === 'imei'
     || Boolean(props.product?.manage_stock_by_serial)
+)
+
+const hasVariants = computed(() =>
+    Boolean(props.product?.variants?.length)
+)
+
+const needsVariant = computed(() =>
+    hasVariants.value && !needsImei.value
 )
 
 const canConfirm = computed(() => {
@@ -53,21 +60,100 @@ const canConfirm = computed(() => {
 const formatMoney = (value) =>
     Number(value || 0).toLocaleString('vi-VN')
 
-const variantLabel = (variant) =>
-    Object.values(variant.attributes || {})
+const attributeText = (attribute) => {
+    if (attribute === null || attribute === undefined || attribute === '') {
+        return ''
+    }
+
+    if (typeof attribute !== 'object') {
+        return String(attribute)
+    }
+
+    return attribute.value
+        ?? attribute.label
+        ?? attribute.name
+        ?? attribute.title
+        ?? attribute.text
+        ?? ''
+}
+
+const variantLabel = (variant) => {
+    const attributes = Object.values(variant?.attributes || {})
+        .map(attributeText)
         .filter(Boolean)
-        .join(' / ') || variant.sku || `#${variant.id}`
+
+    return attributes.join(' / ')
+        || variant?.sku
+        || (variant?.id ? `#${variant.id}` : '')
+}
+
+const imeiDisplayCode = (item) =>
+    item?.display_code
+    || item?.imei
+    || item?.serial
+    || (item?.id ? `IMEI #${item.id}` : 'Chưa có mã IMEI')
+
+const imeiSellPrice = (item) =>
+    Number(
+        item?.effective_sell_price
+        ?? item?.price
+        ?? (item?.sell_price > 0 ? item.sell_price : null)
+        ?? (item?.variant?.sell_price > 0 ? item.variant.sell_price : null)
+        ?? props.product?.sell_price
+        ?? props.product?.price
+        ?? 0
+    )
+
+const priceSourceLabel = (item) => {
+    if (item?.price_source === 'imei' || item?.sell_price > 0) {
+        return 'Giá máy'
+    }
+
+    if (item?.price_source === 'variant' || item?.variant?.sell_price > 0) {
+        return 'Giá biến thể'
+    }
+
+    return 'Giá sản phẩm'
+}
+
+const expectedProfit = (item) => {
+    const costPrice = Number(item?.cost_price || 0)
+
+    if (costPrice <= 0) {
+        return null
+    }
+
+    return imeiSellPrice(item) - costPrice
+}
 
 const filteredImeis = computed(() => {
+    const selectedImeiIds = new Set(
+        props.cart
+            .map(item => item.imei_id)
+            .filter(Boolean)
+    )
+
+    const selectedImeiCodes = new Set(
+        props.cart
+            .map(item => item.imei || item.serial || item.display_code)
+            .filter(Boolean)
+    )
+
+    const availableImeis = imeis.value.filter(item =>
+        !selectedImeiIds.has(item.id)
+        && !selectedImeiCodes.has(item.imei || item.serial || item.display_code)
+    )
 
     if (!imeiKeyword.value.trim()) {
-        return imeis.value
+        return availableImeis
     }
 
     const keyword = imeiKeyword.value.trim().toLowerCase()
 
-    return imeis.value.filter(item =>
-        item.imei?.toLowerCase().includes(keyword)
+    return availableImeis.filter(item =>
+        imeiDisplayCode(item).toLowerCase().includes(keyword)
+        || item.serial?.toLowerCase().includes(keyword)
+        || variantLabel(item.variant)?.toLowerCase().includes(keyword)
     )
 })
 
@@ -83,10 +169,7 @@ const loadImeis = async () => {
 
     try {
 
-        imeis.value = await productService.imeis(
-            props.product.id,
-            selectedVariant.value?.id ?? null
-        )
+        imeis.value = await productService.imeis(props.product.id)
 
     } catch (error) {
 
@@ -101,10 +184,19 @@ const loadImeis = async () => {
 const selectVariant = (variant) => {
 
     selectedVariant.value = variant
+}
 
-    if (needsImei.value) {
-        loadImeis()
-    }
+const findVariantById = (variantId) => {
+    return props.product?.variants?.find(variant => variant.id === variantId)
+        ?? null
+}
+
+const selectImei = (imei) => {
+    selectedImei.value = imei
+    selectedVariant.value =
+        imei.variant
+        ?? findVariantById(imei.variant_id)
+        ?? null
 }
 
 // Reset state mỗi khi mở modal cho sản phẩm mới
@@ -121,8 +213,7 @@ watch(
         imeis.value = []
         imeiKeyword.value = ''
 
-        // Không cần chọn biến thể trước -> tải luôn IMEI (nếu có)
-        if (needsImei.value && !needsVariant.value) {
+        if (needsImei.value) {
             loadImeis()
         }
     },
@@ -214,7 +305,7 @@ const confirm = () => {
                     </div>
                 </div>
 
-                <!-- BƯỚC 2: IMEI -->
+                <!-- BƯỚC 1: IMEI -->
                 <div v-if="needsImei">
 
                     <div class="mb-2 flex items-center justify-between">
@@ -226,83 +317,86 @@ const confirm = () => {
                             v-if="imeis.length"
                             class="text-[11px] font-semibold text-slate-400"
                         >
-                            {{ filteredImeis.length }}/{{ imeis.length }} máy
+                            {{ filteredImeis.length }}/{{ imeis.length }} máy khả dụng
                         </div>
                     </div>
 
-                    <!-- Chưa chọn biến thể trước -->
                     <div
-                        v-if="needsVariant && !selectedVariant"
-                        class="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500"
+                        v-if="loadingImeis"
+                        class="flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 py-6 text-sm text-slate-500"
                     >
-                        <Smartphone :size="16" />
-                        Vui lòng chọn phiên bản trước
+                        Đang tải danh sách IMEI...
                     </div>
 
-                    <template v-else>
-
-                        <div class="relative mb-2">
-                            <Search
-                                :size="14"
-                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                            />
-                            <input
-                                v-model="imeiKeyword"
-                                type="text"
-                                placeholder="Tìm theo IMEI..."
-                                class="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-sm"
-                            >
-                        </div>
-
-                        <div
-                            v-if="loadingImeis"
-                            class="flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 py-6 text-sm text-slate-500"
+                    <div
+                        v-else-if="filteredImeis.length"
+                        class="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white"
+                    >
+                        <button
+                            v-for="item in filteredImeis"
+                            :key="item.id"
+                            type="button"
+                            class="flex min-h-16 w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 text-left text-sm transition last:border-b-0"
+                            :class="selectedImei?.id === item.id
+                                ? 'bg-blue-50'
+                                : 'bg-white hover:bg-slate-50'"
+                            @click="selectImei(item)"
                         >
-                            Đang tải danh sách IMEI...
-                        </div>
-
-                        <div
-                            v-else-if="filteredImeis.length"
-                            class="max-h-48 space-y-1.5 overflow-y-auto pr-1"
-                        >
-                            <button
-                                v-for="item in filteredImeis"
-                                :key="item.id"
-                                type="button"
-                                class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition"
-                                :class="selectedImei?.id === item.id
-                                    ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                                    : 'border-slate-200 hover:border-slate-300'"
-                                @click="selectedImei = item"
-                            >
-                                <span>
-                                    <span class="font-mono font-bold text-slate-800">
-                                        {{ item.imei }}
-                                    </span>
-                                    <span
-                                        v-if="item.color || item.storage"
-                                        class="ml-2 text-xs text-slate-500"
-                                    >
-                                        {{ [item.color, item.storage].filter(Boolean).join(' · ') }}
-                                    </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block break-all font-mono text-sm font-black text-slate-950">
+                                    {{ imeiDisplayCode(item) }}
                                 </span>
 
-                                <Check
-                                    v-if="selectedImei?.id === item.id"
-                                    :size="14"
-                                    class="shrink-0 text-blue-600"
-                                />
-                            </button>
-                        </div>
+                                <span
+                                    v-if="item.variant"
+                                    class="mt-1 block truncate text-xs font-bold text-blue-700"
+                                >
+                                    {{ variantLabel(item.variant) }}
+                                </span>
 
-                        <div
-                            v-else
-                            class="flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 py-6 text-sm text-slate-500"
-                        >
-                            Không còn IMEI nào trong kho
-                        </div>
+                                <span
+                                    v-if="item.serial || item.color || item.storage"
+                                    class="mt-1 block truncate text-xs font-semibold text-slate-500"
+                                >
+                                    {{ [item.serial, item.color, item.storage].filter(Boolean).join(' · ') }}
+                                </span>
 
-                    </template>
+                                <span class="mt-2 flex flex-wrap items-center gap-2">
+                                    <span class="text-sm font-black text-emerald-700">
+                                        {{ formatMoney(imeiSellPrice(item)) }} đ
+                                    </span>
+
+                                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500">
+                                        {{ priceSourceLabel(item) }}
+                                    </span>
+
+                                    <span
+                                        v-if="expectedProfit(item) !== null"
+                                        class="text-[11px] font-semibold"
+                                        :class="expectedProfit(item) >= 0 ? 'text-slate-500' : 'text-red-600'"
+                                    >
+                                        Lãi tạm: {{ formatMoney(expectedProfit(item)) }} đ
+                                    </span>
+                                </span>
+                            </span>
+
+                            <span
+                                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border"
+                                :class="selectedImei?.id === item.id
+                                    ? 'border-blue-600 bg-blue-600 text-white'
+                                    : 'border-slate-300 text-transparent'"
+                            >
+                                <Check :size="14" />
+                            </span>
+                        </button>
+                    </div>
+
+                    <div
+                        v-else
+                        class="flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 py-6 text-sm text-slate-500"
+                    >
+                        Không còn IMEI nào trong kho
+                    </div>
 
                 </div>
 

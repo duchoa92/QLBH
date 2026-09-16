@@ -16,6 +16,13 @@ const format = (number) => {
         .toLocaleString('vi-VN')
 }
 
+const saleQuantityText = (item) => {
+    const qty = Number(item.quantity ?? 0)
+    const unit = item.unit_name || 'Cái'
+
+    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+}
+
 /*
 |--------------------------------------------------------------------------
 | Print auto
@@ -168,9 +175,11 @@ window.onload = () => {
             >
 
                 <div>
-                    {{ item.quantity }}
-                    x
-                    {{ $money(item.unit_price) }}
+                    <div>
+                        {{ saleQuantityText(item) }}
+                        x
+                        {{ $money(item.unit_price) }}
+                    </div>
                 </div>
 
                 <div>

@@ -11,6 +11,27 @@ defineProps({
         Function,
 })
 
+const formatMoneyInput = (value) => {
+    const number = Number(value || 0)
+
+    return number > 0
+        ? number.toLocaleString('vi-VN')
+        : ''
+}
+
+const parseMoneyInput = (value) =>
+    Number(String(value || '').replace(/\D/g, ''))
+
+const handleDiscountInput = (item, event, normalizeDiscount) => {
+    if (!item.discount_type) {
+        item.discount_type = 'amount'
+    }
+
+    item.discount_value = parseMoneyInput(event.target.value)
+
+    normalizeDiscount(item)
+}
+
 </script>
 
 <template>
@@ -25,19 +46,21 @@ defineProps({
 
         <FloatingInput
 
-            v-model.number="
-                item.discount_value
+            :model-value="
+                formatMoneyInput(item.discount_value)
             "
 
             @input="
-                normalizeDiscount(
-                    item
+                handleDiscountInput(
+                    item,
+                    $event,
+                    normalizeDiscount
                 )
             "
 
-            type="number"
+            type="text"
 
-            min="0"
+            inputmode="numeric"
 
             class="
                 w-full
@@ -53,6 +76,9 @@ defineProps({
 
             @click="
                 item.discount_type =
+                item.discount_type || 'amount';
+
+                item.discount_type =
                 item.discount_type
                 ===
                 'percent'
@@ -60,6 +86,10 @@ defineProps({
                 ? 'amount'
 
                 : 'percent'
+
+                ;
+
+                normalizeDiscount(item)
             "
 
             class="

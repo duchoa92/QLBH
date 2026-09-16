@@ -9,6 +9,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Category;
 use App\Models\Supplier;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\Rule;
 
 class StockImportController extends Controller
 {
@@ -97,7 +99,7 @@ class StockImportController extends Controller
 
             'items.*.variant_id' => [
                 'nullable',
-                'exists:product_variants,id',
+                Rule::exists('product_variants', 'id')->where('is_active', true),
             ],
 
             'items.*.unit_id' => [
@@ -109,18 +111,6 @@ class StockImportController extends Controller
                 'nullable',
                 'string',
                 'max:50',
-            ],
-
-            'items.*.import_quantity' => [
-                'nullable',
-                'numeric',
-                'min:0.01',
-            ],
-
-            'items.*.conversion_factor' => [
-                'nullable',
-                'numeric',
-                'min:1',
             ],
 
             'items.*.quantity' => [
@@ -176,8 +166,9 @@ class StockImportController extends Controller
      * Xem chi tiết phiếu nhập
      */
     public function show(
+        Request $request,
         StockImport $stockImport
-    ): Response {
+    ): Response|JsonResponse {
         $stockImport->load([
             'supplier:id,name,phone,email,address',
             'user:id,name',
@@ -185,6 +176,10 @@ class StockImportController extends Controller
             'items.variant:id,product_id,sku,attributes,stock',
             'items.unit:id,name,short_name',
         ]);
+
+        if ($request->wantsJson()) {
+            return response()->json($stockImport);
+        }
 
         return Inertia::render('StockImports/Show', [
             'import' => $stockImport,

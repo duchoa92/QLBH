@@ -13,16 +13,12 @@ class StockImportItem extends Model
         'variant_id',
         'unit_id',
         'unit_name',
-        'import_quantity',
-        'conversion_factor',
         'quantity',
         'cost_price',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
-        'import_quantity' => 'decimal:2',
-        'conversion_factor' => 'decimal:2',
         'cost_price' => 'decimal:2',
     ];
 

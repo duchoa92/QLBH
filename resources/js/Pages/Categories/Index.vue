@@ -8,10 +8,12 @@ import { openModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
 import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
-import { SquarePen, Plus, Trash2, FilePlus } from 'lucide-vue-next'
+import { SquarePen, Trash2, FilePlus } from 'lucide-vue-next'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
-import { size } from 'lodash'
+import PageHeader from '@/Components/UI/PageHeader.vue'
+import DataPanel from '@/Components/UI/DataPanel.vue'
+import ActionButton from '@/Components/UI/ActionButton.vue'
 
 
 defineOptions({ layout: AdminLayout })
@@ -41,18 +43,6 @@ const confirmBox = useConfirm()
 
 const search = ref(props.filters?.search || '')
 const status = ref(props.filters?.status || '')
-
-watch([search, status], () => {
-    router.get('/categories', {
-        search: search.value,
-        status: status.value,
-        sort_by: props.filters?.sort_by,
-        sort_order: props.filters?.sort_order
-    }, {
-        preserveState: true,
-        replace: true
-    })
-})
 
 let timeout = null
 
@@ -176,46 +166,47 @@ const sort = ({ field, order }) => {
 </script>
 
 <template>
-<div>
+<div class="space-y-5">
+    <PageHeader
+        title="Danh mục"
+        description="Quản lý danh mục và trạng thái hiển thị sản phẩm."
+    >
+        <template #actions>
+            <ActionButton @click="openCreate">
+                <FilePlus :size="16" />
+                Thêm
+            </ActionButton>
 
-    <!-- HEADER -->
-    <div class="flex justify-between items-center">
-        <div>
-            <h1 class="text-2xl font-bold">Danh mục</h1>
-            <p class="text-sm text-gray-500">Quản lý các danh mục</p>
-        </div>
+            <ActionButton
+                variant="danger"
+                @click="openTrash"
+            >
+                <Trash2 :size="16" />
+                Thùng rác ({{ trashCount }})
+            </ActionButton>
+        </template>
+    </PageHeader>
 
-        <div class="flex gap-2">
-            <button @click="openCreate"
-                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
-                <FilePlus /> Thêm
-            </button>
+    <DataPanel>
+        <template #header>
+            <div class="grid gap-3 md:grid-cols-[260px_220px]">
+                <FloatingInput
+                    v-model="search"
+                    label="Tìm kiếm..."
+                />
 
-            <button @click="openTrash"
-                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white">
-                <Trash2 /> ({{ trashCount }})
-            </button>
-        </div>
-    </div>
+                <FloatingSelect
+                    v-model="status"
+                    label="Trạng thái"
+                    :options="[
+                        { value: '', label: 'Tất cả' },
+                        { value: 1, label: 'Hoạt động' },
+                        { value: 0, label: 'Ngừng' }
+                    ]"
+                />
+            </div>
+        </template>
 
-    <!-- FILTER -->
-    <div class="flex gap-3 my-5">
-        <FloatingInput v-model="search" label="Tìm kiếm..." class="w-64" />
-
-        <FloatingSelect
-            v-model="status"
-            label="Trạng thái"
-            :options="[
-                { value: '', label: 'Tất cả' },
-                { value: 1, label: 'Hoạt động' },
-                { value: 0, label: 'Ngừng' }
-            ]"
-            class="w-64"
-        />
-    </div>
-
-    <!-- TABLE -->
-    <div class="bg-white rounded-xl shadow border overflow-hidden">
         <BaseTable
             :data="categories"
             :columns="columns"
@@ -247,13 +238,13 @@ const sort = ({ field, order }) => {
                 <td class="text-center p-2">
                     <div class="flex justify-center gap-1">
                         <Tooltip text="Sửa">
-                            <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
+                            <button @click="openEdit(row)" title="Sửa" class="rounded p-1 text-blue-600 hover:bg-blue-50">
                                 <SquarePen size="17" class="text-blue-500" />
                             </button>
                         </Tooltip>
 
                         <Tooltip text="Chuyển vào thùng rác" position="top">
-                            <button @click="destroy(row.id)"  class="p-1 hover:bg-gray-200 rounded">
+                            <button @click="destroy(row.id)"  class="rounded p-1 text-red-600 hover:bg-red-50">
                                 <Trash2 size="17" class="text-red-500" />
                             </button>
                         </Tooltip>
@@ -263,7 +254,7 @@ const sort = ({ field, order }) => {
 
             </template>
         </BaseTable>
-    </div>
+    </DataPanel>
 
 </div>
 </template>

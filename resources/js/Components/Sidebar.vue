@@ -1,7 +1,7 @@
 <script setup>
 
 import {computed, ref, watch } from 'vue'
-import {Link, usePage, } from '@inertiajs/vue3'
+import {Link, router, usePage, } from '@inertiajs/vue3'
 
 import {
     Home,
@@ -38,6 +38,10 @@ const props = defineProps({
 const page = usePage()
 
 const openGroups = ref([])
+
+const currentPath = computed(() =>
+    page.url.split('?')[0]
+)
 /*
 |--------------------------------------------------------------------------
 | AUTH
@@ -83,6 +87,16 @@ const isActive = (paths = []) => {
 
     return paths.some(path =>
         page.url.startsWith(path)
+    )
+}
+
+const isCurrentMenu = (paths = [], href = '') => {
+    if (currentPath.value === href) {
+        return true
+    }
+
+    return paths.some(path =>
+        currentPath.value.startsWith(path)
     )
 }
 
@@ -314,13 +328,24 @@ const navigate = () => {
     emit('navigate')
 }
 
-// click hiện menu con
-const handleGroupClick = (group) => {
-    if (props.collapsed) {
-        openGroups.value.includes(group.key)
+const visitMenu = (href, paths = []) => {
+    if (isCurrentMenu(paths, href)) {
+        navigate()
         return
     }
 
+    router.visit(href, {
+        preserveState: false,
+        preserveScroll: false,
+        replace: false,
+        onStart: () => {
+            navigate()
+        },
+    })
+}
+
+// click hiện menu con
+const handleGroupClick = (group) => {
     toggleGroup(group)
 }
 
@@ -334,7 +359,7 @@ watch(() => props.collapsed, (val) => {
 
     <aside
         class="relative flex h-full flex-col bg-cyan-950 text-white transition-all duration-300 ease-in-out"
-        :class="props.collapsed ? 'w-[70px]' : 'w-[240px]'"
+        :class="props.collapsed ? 'w-[70px]' : 'w-[280px] lg:w-[240px]'"
     >
 
         <!-- ========================================================= -->
@@ -351,7 +376,7 @@ watch(() => props.collapsed, (val) => {
                 v-if="!props.collapsed"
                 href="/dashboard"
                 class="flex min-w-0 items-center gap-3"
-                @click="navigate"
+                @click="visitMenu('/dashboard', ['/dashboard'])"
             >
 
                 <div
@@ -453,10 +478,11 @@ watch(() => props.collapsed, (val) => {
 
             <!-- TRANG CHỦ -->
 
-            <Link
-                href="/dashboard"
+            <button
+                type="button"
                 @click="navigate"
                 class="
+                    w-full
                     mb-3
                     flex
                     h-11
@@ -488,7 +514,7 @@ watch(() => props.collapsed, (val) => {
                     Trang chủ
                 </span>
 
-            </Link>
+            </button>
 
 
             <!-- ===================================================== -->
@@ -584,25 +610,25 @@ watch(() => props.collapsed, (val) => {
                     >
                         <div
                             v-if="(props.collapsed && isGroupOpen(group)) || (!props.collapsed && isGroupOpen(group))"
-                            class="mt-1 ml-3 space-y-1"
+                            class="mt-1 space-y-1"
                             :class="props.collapsed
-                                ? 'absolute left-full top-0 ml-2 w-48 bg-slate-900 rounded-lg shadow-lg p-2 z-50'
-                                : ''"
+                                ? 'absolute left-full top-0 z-50 ml-2 w-56 rounded-xl border border-white/10 bg-cyan-950 p-2 shadow-2xl'
+                                : 'ml-3'"
                         >
-                            <Link
+                            <button
                                 v-for="item in visibleItems(group.items)"
                                 :key="item.href"
-                                :href="item.href"
-                                @click="navigate"
-                                class="group/item flex h-10 items-center rounded-lg transition"
+                                type="button"
+                                @click="visitMenu(item.href, item.paths)"
+                                class="group/item flex h-10 w-full items-center rounded-lg transition"
                                 :class="[
                                     props.collapsed
-                                        ? 'justify-center px-0'
+                                        ? 'justify-start gap-3 px-3'
                                         : 'gap-3 px-3',
 
                                     isActive(item.paths)
                                         ? props.collapsed
-                                            ? 'bg-cyan-500 text-blue-400'
+                                            ? 'bg-cyan-200 text-cyan-950 shadow-md'
                                             : 'bg-cyan-200 text-cyan-950 shadow-md'
                                         : 'text-slate-400 hover:bg-white/10 hover:text-white'
                                 ]"
@@ -616,20 +642,20 @@ watch(() => props.collapsed, (val) => {
                                 />
 
                                 <span
-                                    v-if="!props.collapsed"
+                                    v-if="!props.collapsed || isGroupOpen(group)"
                                     class="min-w-0 flex-1 truncate text-[13px] font-medium"
                                 >
                                     {{ item.label }}
                                 </span>
 
                                 <span
-                                    v-if="!props.collapsed && item.badge"
+                                    v-if="(!props.collapsed || isGroupOpen(group)) && item.badge"
                                     class="rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-950"
                                 >
                                     {{ item.badge }}
                                 </span>
 
-                            </Link>
+                            </button>
                         </div>
                     </transition>
                 </template>

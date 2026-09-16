@@ -3,6 +3,13 @@ const props = defineProps({
 
     sale: Object,
 });
+
+const saleQuantityText = (item) => {
+    const qty = Number(item.quantity ?? 0)
+    const unit = item.unit_name || 'Cái'
+
+    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+}
 </script>
 
 <template>
@@ -85,7 +92,9 @@ const props = defineProps({
 
                         <td class="py-2 text-center">
 
-                            {{ item.quantity }}
+                            <div>
+                                {{ saleQuantityText(item) }}
+                            </div>
 
                         </td>
 

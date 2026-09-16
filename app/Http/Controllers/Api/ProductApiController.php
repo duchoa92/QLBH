@@ -54,7 +54,7 @@ class ProductApiController extends Controller
 
                 if (
                     $imei->status !==
-                    ProductImei::STATUS_AVAILABLE
+                    ProductImei::STATUS_IN_STOCK
                 ) {
 
                     return response()->json([

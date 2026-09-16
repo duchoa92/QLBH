@@ -71,11 +71,23 @@ const scanImei = async () => {
             product_type:
                 'imei',
 
+            variant:
+                result.data.variant ?? null,
+
             imei_id:
                 result.data.imei_id,
 
             imei:
                 result.data.imei,
+
+            serial:
+                result.data.serial ?? null,
+
+            color:
+                result.data.color ?? null,
+
+            storage:
+                result.data.storage ?? null,
         }
 
 
@@ -109,6 +121,22 @@ const scanImei = async () => {
 const formatPrice = (value) => {
 
     return Number(value).toLocaleString('vi-VN')
+}
+
+const priceLabel = (product) => {
+    if (product.price_label) {
+        return product.price_label
+    }
+
+    if (
+        Number(product.price_min || 0) > 0
+        && Number(product.price_max || 0) > 0
+        && Number(product.price_min) !== Number(product.price_max)
+    ) {
+        return `${formatPrice(product.price_min)} - ${formatPrice(product.price_max)}`
+    }
+
+    return formatPrice(product.price)
 }
 
 const refreshProducts = () => {
@@ -229,7 +257,7 @@ const categoryOptions = computed(() => [
                                 font-bold
                                 text-white"
                         >
-                            {{ formatPrice(product.price) }}
+                            {{ priceLabel(product) }}
                         </div>
 
                         <!-- NHÃN IMEI / BIẾN THỂ -->

@@ -34,6 +34,14 @@ return new class extends Migration
                 ->constrained('product_imeis')
                 ->nullOnDelete();
 
+            $table->foreignId('unit_id')
+                ->nullable()
+                ->constrained('units')
+                ->nullOnDelete();
+
+            $table->string('unit_name')
+                ->nullable();
+
             /*
             |--------------------------------------------------------------------------
             | Quantity

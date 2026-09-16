@@ -20,6 +20,10 @@ class SaleItem extends Model
 
         'product_imei_id',
 
+        'unit_id',
+
+        'unit_name',
+
         'quantity',
 
         'unit_price',
@@ -31,6 +35,13 @@ class SaleItem extends Model
         'discount_type',
 
         'discount_value',
+    ];
+
+    protected $casts = [
+        'quantity' => 'integer',
+        'unit_price' => 'decimal:2',
+        'subtotal' => 'decimal:2',
+        'discount_value' => 'decimal:2',
     ];
 
     /*
