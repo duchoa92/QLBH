@@ -1,7 +1,6 @@
 <script setup>
-
-import {computed, ref, watch } from 'vue'
-import {Link, router, usePage, } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
+import { Link, router, usePage } from '@inertiajs/vue3'
 
 import {
     Home,
@@ -13,289 +12,187 @@ import {
     Wrench,
     Package,
     Boxes,
+    FolderTree,
     Tags,
-    Building2,
-    UserCog,
     Settings,
     ChevronDown,
     ChevronRight,
     Menu,
     X,
-    RotateCcw,
     Truck,
-    ChevronFirst,
-    GripVertical,
     EllipsisVertical,
+    Monitor,
+    UserCog,
 } from 'lucide-vue-next'
 
-
-const emit = defineEmits(['toggle', 'navigate',])
+const emit = defineEmits(['toggle', 'navigate'])
 
 const props = defineProps({
-    collapsed: Boolean
+    collapsed: Boolean,
 })
 
 const page = usePage()
+const isMobileOpen = ref(false)
+const currentPath = computed(() => page.url.split('?')[0])
 
-const openGroups = ref([])
+/* AUTH & PERMISSIONS */
+const permissions = computed(() => page.props.auth?.permissions || [])
+const roles = computed(() => page.props.auth?.roles || [])
 
-const currentPath = computed(() =>
-    page.url.split('?')[0]
+const isSuperAdmin = computed(() =>
+    roles.value.includes('Super Admin') || roles.value.includes('admin')
 )
-/*
-|--------------------------------------------------------------------------
-| AUTH
-|--------------------------------------------------------------------------
-*/
-
-const permissions = computed(() => {
-
-    return page.props.auth?.permissions || []
-})
-
-
-const roles = computed(() => {
-
-    return page.props.auth?.roles || []
-})
-
-
-const isSuperAdmin = computed(() => {
-
-    return roles.value.includes('Super Admin') ||
-        roles.value.includes('admin')
-})
-
 
 const can = (permission) => {
-
-    if (!permission || isSuperAdmin.value) {
-        return true
-    }
-
+    if (!permission || isSuperAdmin.value) return true
     return permissions.value.includes(permission)
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| ACTIVE
-|--------------------------------------------------------------------------
-*/
-
+/* ACTIVE ROUTE CHECKERS */
 const isActive = (paths = []) => {
-
-    return paths.some(path =>
-        page.url.startsWith(path)
-    )
+    return paths.some(path => page.url.startsWith(path))
 }
 
 const isCurrentMenu = (paths = [], href = '') => {
-    if (currentPath.value === href) {
-        return true
-    }
-
-    return paths.some(path =>
-        currentPath.value.startsWith(path)
-    )
+    if (currentPath.value === href) return true
+    return paths.some(path => currentPath.value.startsWith(path))
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| MENU
-|--------------------------------------------------------------------------
-*/
-
+/* MENU GROUPS */
 const menuGroups = [
     {
         key: 'sales',
         title: 'Bán hàng',
         icon: ShoppingBag,
-
         items: [
             {
                 label: 'POS bán hàng',
-                icon: ShoppingBag,
+                icon: Monitor,
                 href: '/pos',
                 paths: ['/pos'],
                 badge: 'Nhanh',
             },
-
             {
-                label: 'Hóa đơn',
+                label: 'Đơn hàng & Hóa đơn',
                 icon: FileText,
                 href: '/sales',
-                paths: ['/sales'],
+                paths: ['/sales', '/sales/*'],
             },
-
             {
-                label: 'Báo cáo',
-                icon: BarChart3,
-                href: '/reports',
-                paths: ['/reports'],
+                label: 'Dịch vụ sửa chữa',
+                icon: Wrench,
+                href: '/repairs',
+                paths: ['/repairs', '/repairs/*'],
             },
         ],
     },
-
     {
-        key: 'operation',
-        title: 'Vận hành',
-        icon: Wrench,
-
+        key: 'warehouse',
+        title: 'Kho & Hàng hóa',
+        icon: Package,
         items: [
             {
-                label: 'Khách hàng',
-                icon: UserRound,
-                href: '/customers',
-                paths: ['/customers'],
+                label: 'Nhập hàng',
+                icon: Package,
+                href: '/stock-import',
+                paths: ['/stock-import', '/stock-import/*'],
             },
-
+            {
+                label: 'Sản phẩm & IMEI',
+                icon: Boxes,
+                href: '/products',
+                paths: ['/products', '/products-trash', '/product-imeis', '/imeis'],
+                permission: 'products.view',
+            },
+            {
+                label: 'Danh mục',
+                icon: FolderTree,
+                href: '/categories',
+                paths: ['/categories'],
+                permission: 'categories.view',
+            },
+            {
+                label: 'Thương hiệu',
+                icon: Tags,
+                href: '/brands',
+                paths: ['/brands', '/brands-trash'],
+            },
             {
                 label: 'Nhà cung cấp',
                 icon: Truck,
                 href: '/suppliers',
                 paths: ['/suppliers'],
             },
-
-            {
-                label: 'Sửa chữa',
-                icon: Wrench,
-                href: '/repairs',
-                paths: ['/repairs'],
-            },
         ],
     },
-
     {
-        key: 'warehouse',
-        title: 'Kho hàng',
-        icon: Package,
-
+        key: 'crm',
+        title: 'Khách hàng',
+        icon: Users,
         items: [
             {
-                label: 'Nhập hàng',
-                icon: Package,
-                href: '/stock-import',
-                paths: ['/stock-import'],
-            },
-
-            {
-                label: 'Sản phẩm',
-                icon: Boxes,
-                href: '/products',
-                paths: [
-                    '/products',
-                    '/products-trash',
-                    '/product-imeis',
-                    '/imeis',
-                ],
-                permission: 'products.view',
-            },
-
-            {
-                label: 'Danh mục',
-                icon: Tags,
-                href: '/categories',
-                paths: ['/categories'],
-                permission: 'categories.view',
-            },
-
-            {
-                label: 'Thương hiệu',
-                icon: Tags,
-                href: '/brands',
-                paths: [
-                    '/brands',
-                    '/brands-trash',
-                ],
+                label: 'Danh sách khách hàng',
+                icon: UserRound,
+                href: '/customers',
+                paths: ['/customers', '/customers/*'],
             },
         ],
     },
-
+    {
+        key: 'reports',
+        title: 'Báo cáo & Tài chính',
+        icon: BarChart3,
+        items: [
+            {
+                label: 'Báo cáo bán hàng',
+                icon: BarChart3,
+                href: '/reports',
+                paths: ['/reports', '/reports/*'],
+                permission: 'reports.view',
+            },
+        ],
+    },
     {
         key: 'system',
         title: 'Hệ thống',
         icon: Settings,
-
         items: [
             {
-                label: 'Nhân viên',
+                label: 'Quản lý Nhân viên',
                 icon: Users,
                 href: '/users',
                 paths: ['/users'],
                 permission: 'users.view',
             },
-
             {
-                label: 'Tài khoản',
+                label: 'Tài khoản cá nhân',
                 icon: UserCog,
                 href: '/profile',
                 paths: ['/profile'],
             },
-
             {
-                label: 'Thiết lập',
+                label: 'Thiết lập cửa hàng',
                 icon: Settings,
                 href: '/settings',
                 paths: ['/settings'],
+                permission: 'settings.view',
             },
         ],
     },
 ]
 
+const visibleItems = (items) => items.filter(item => can(item.permission))
+const isGroupActive = (group) => visibleItems(group.items).some(item => isActive(item.paths))
 
-/*
-|--------------------------------------------------------------------------
-| VISIBLE ITEMS
-|--------------------------------------------------------------------------
-*/
-
-const visibleItems = (items) => {
-
-    return items.filter(item =>
-        can(item.permission)
-    )
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| GROUP ACTIVE
-|--------------------------------------------------------------------------
-*/
-
-const isGroupActive = (group) => {
-
-    return visibleItems(group.items).some(item =>
-        isActive(item.paths)
-    )
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| GROUP OPEN STATE
-|--------------------------------------------------------------------------
-|
-| Nếu chưa có state thì tự mở group đang active.
-|
-*/
-
-const openGroup = ref([])
-
-const isGroupOpen = (group) => {
-    return openGroups.value.includes(group.key)
-}
+/* GROUP OPEN STATE */
+const openGroups = ref([])
+const isGroupOpen = (group) => openGroups.value.includes(group.key)
 
 const toggleGroup = (group) => {
     const index = openGroups.value.indexOf(group.key)
-
     if (index > -1) {
-        // đang mở → đóng
         openGroups.value.splice(index, 1)
     } else {
-        // chưa mở → thêm vào
         openGroups.value.push(group.key)
     }
 }
@@ -308,27 +205,15 @@ const openActiveGroup = () => {
 
 openActiveGroup()
 
-
-/*
-|--------------------------------------------------------------------------
-| TOGGLE SIDEBAR
-|--------------------------------------------------------------------------
-*/
-const toggleSidebar = () => {
-    emit('toggle')
-}
-
-/*
-|--------------------------------------------------------------------------
-| NAVIGATE
-|--------------------------------------------------------------------------
-*/
-
+/* NAVIGATION */
+const toggleSidebar = () => emit('toggle')
 const navigate = () => {
+    isMobileOpen.value = false
     emit('navigate')
 }
 
 const visitMenu = (href, paths = []) => {
+    isMobileOpen.value = false
     if (isCurrentMenu(paths, href)) {
         navigate()
         return
@@ -338,450 +223,210 @@ const visitMenu = (href, paths = []) => {
         preserveState: false,
         preserveScroll: false,
         replace: false,
-        onStart: () => {
-            navigate()
-        },
+        onStart: () => navigate(),
     })
 }
 
-// click hiện menu con
-const handleGroupClick = (group) => {
-    toggleGroup(group)
-}
-
-// Auto đóng khi collapsed
 watch(() => props.collapsed, (val) => {
     if (val) openGroups.value = []
 })
-
 </script>
+
 <template>
-
     <aside
-        class="relative flex h-full flex-col bg-cyan-950 text-white transition-all duration-300 ease-in-out"
-        :class="props.collapsed ? 'w-[70px]' : 'w-[280px] lg:w-[240px]'"
+        class="flex h-screen w-full flex-col bg-cyan-950 text-white border-r border-white/10 select-none overflow-hidden"
     >
-
-        <!-- ========================================================= -->
-        <!-- HEADER -->
-        <!-- ========================================================= -->
-
+        <!-- 1. HEADER (CỐ ĐỊNH ĐỈNH) -->
         <div
-            class="flex h-[82px] shrink-0 items-center border-b border-white/10 px-4"
+            class="flex h-[64px] shrink-0 items-center border-b border-white/10 px-4"
             :class="props.collapsed ? 'justify-center' : 'justify-between'"
         >
-
-            <!-- LOGO -->
             <Link
                 v-if="!props.collapsed"
                 href="/dashboard"
                 class="flex min-w-0 items-center gap-3"
                 @click="visitMenu('/dashboard', ['/dashboard'])"
             >
-
-                <div
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950 shadow"
-                >
-                    <ShoppingBag :size="21" />
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950 shadow">
+                    <ShoppingBag :size="19" />
                 </div>
-
                 <div class="min-w-0">
-
-                    <div
-                        class="
-                            truncate
-                            text-[17px]
-                            font-black
-                            tracking-wide
-                        "
-                    >
+                    <div class="truncate text-[15px] font-black tracking-wide">
                         QLBH POS
                     </div>
-
-                    <div
-                        class="
-                            mt-0.5
-                            truncate
-                            text-[11px]
-                            font-medium
-                            text-slate-400
-                        "
-                    >
-                        Quản lý bán hàng
-                    </div>
-
                 </div>
-
             </Link>
 
-
-            <!-- props.collapsed LOGO -->
             <Link
                 v-else
                 href="/dashboard"
-                class="
-                    flex
-                    h-9
-                    w-9
-                    items-center
-                    justify-center
-                    rounded-xl
-                    text-slate-950
-                "
-                @click="navigate"
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950 shadow"
+                @click="visitMenu('/dashboard', ['/dashboard'])"
             >
-                
+                <ShoppingBag :size="19" />
             </Link>
 
-
-            <!-- MENU BUTTON -->
             <button
                 type="button"
-                class="
-                    flex
-                    h-9
-                    w-9
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-lg
-                    text-slate-300
-                    transition
-                    hover:bg-white/10
-                    hover:text-white
-                "
+                class="hidden lg:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition"
                 @click="toggleSidebar"
             >
-
-                 <EllipsisVertical
-                    v-if="!props.collapsed"
-                    :size="20"
-                />
-
-                <Menu
-                    v-else
-                    :size="20"
-                />
-
+                <EllipsisVertical v-if="!props.collapsed" :size="18" />
+                <Menu v-else :size="18" />
             </button>
-
         </div>
 
-
-        <!-- ========================================================= -->
-        <!-- NAV -->
-        <!-- ========================================================= -->
-
-        <nav
-            class="sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4"
-        >
-
+        <!-- 2. NAV (TỰ CUỘN ĐỘC LẬP KHI XỔ MENU DÀI) -->
+        <nav class="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1">
             <!-- TRANG CHỦ -->
-
             <button
                 type="button"
-                @click="navigate"
-                class="
-                    w-full
-                    mb-3
-                    flex
-                    h-11
-                    items-center
-                    rounded-xl
-                    transition
-                "
+                @click="visitMenu('/dashboard', ['/dashboard'])"
+                class="flex h-10 w-full items-center rounded-xl transition"
                 :class="[
-                    props.collapsed
-                        ? 'justify-center px-0'
-                        : 'gap-3 px-3',
-
+                    props.collapsed ? 'justify-center px-0' : 'gap-3 px-3',
                     isActive(['/dashboard'])
-                        ? 'bg-white text-slate-950 shadow-sm'
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                        ? 'bg-white text-slate-950 font-bold shadow-sm'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                 ]"
-                title="Trang chủ"
+                :title="props.collapsed ? 'Trang chủ' : undefined"
             >
-
-                <Home
-                    :size="20"
-                    class="shrink-0"
-                />
-
-                <span
-                    v-if="!props.collapsed"
-                    class="truncate text-sm font-semibold"
-                >
+                <Home :size="19" class="shrink-0" />
+                <span v-if="!props.collapsed" class="truncate text-sm">
                     Trang chủ
                 </span>
-
             </button>
 
-
-            <!-- ===================================================== -->
-            <!-- GROUPS -->
-            <!-- ===================================================== -->
-
+            <!-- CÁC NHÓM MENU -->
             <div
                 v-for="group in menuGroups"
                 :key="group.key"
-                class="mb-2 relative"
+                class="relative group/menu-group"
             >
-
-                <template
-                    v-if="visibleItems(group.items).length"
-                >
-
-                    <!-- ================================================= -->
-                    <!-- GROUP HEADER -->
-                    <!-- ================================================= -->
-
+                <template v-if="visibleItems(group.items).length">
+                    <!-- NÚT NHÓM CHA -->
                     <button
                         type="button"
-                        class="group flex w-full items-center rounded-xl transition"
+                        class="flex w-full items-center rounded-xl transition"
                         :class="[
-                            props.collapsed
-                                ? 'h-11 justify-center px-0'
-                                : 'h-11 justify-between px-3',
-
+                            props.collapsed ? 'h-10 justify-center px-0' : 'h-10 justify-between px-3',
                             isGroupActive(group)
-                                ? (props.collapsed
-                                    ? 'text-white bg-cyan-700'
-                                    : 'bg-cyan-700 text-white shadow-inner')
-                                : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                                ? 'bg-cyan-800 text-white font-bold'
+                                : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                         ]"
                         :title="props.collapsed ? group.title : undefined"
-                        @click="handleGroupClick(group)"
+                        @click="toggleGroup(group)"
                     >
-
-                        <span
-                            class="
-                                flex
-                                min-w-0
-                                items-center
-                            "
-                            :class="props.collapsed ? '' : 'gap-3'"
-                        >
-
-                            <component
-                                :is="group.icon"
-                                :size="20"
-                                class="shrink-0"
-                            />
-
-                            <span
-                                v-if="!props.collapsed"
-                                class="
-                                    truncate
-                                    text-sm
-                                    font-bold
-                                "
-                            >
+                        <span class="flex items-center" :class="props.collapsed ? '' : 'gap-3 min-w-0'">
+                            <component :is="group.icon" :size="19" class="shrink-0" />
+                            <span v-if="!props.collapsed" class="truncate text-sm font-bold">
                                 {{ group.title }}
                             </span>
-
                         </span>
 
-
-                        <ChevronDown
-                            v-if="!props.collapsed && isGroupOpen(group)"
-                            :size="17"
-                            class="shrink-0"
-                        />
-
-                        <ChevronRight
-                            v-if="!props.collapsed && !isGroupOpen(group)"
-                            :size="17"
-                            class="shrink-0"
-                        />
-
+                        <template v-if="!props.collapsed">
+                            <ChevronDown v-if="isGroupOpen(group)" :size="16" class="shrink-0" />
+                            <ChevronRight v-else :size="16" class="shrink-0" />
+                        </template>
                     </button>
 
-
-                    <!-- ================================================= -->
-                    <!-- Menu con -->
-                    <!-- ================================================= -->
-                    <transition
-                        enter-active-class="transition-all duration-300 ease-out"
-                        enter-from-class="opacity-0 -translate-y-2"
-                        enter-to-class="opacity-100 translate-y-0"
-                        leave-active-class="transition-all duration-200 ease-in"
-                        leave-from-class="opacity-100 translate-y-0"
-                        leave-to-class="opacity-0 -translate-y-2"
+                    <!-- DANH SÁCH CON (KHI MỞ RỘNG) -->
+                    <div
+                        v-if="!props.collapsed && isGroupOpen(group)"
+                        class="mt-1 space-y-1 ml-3 pl-2 border-l border-white/15"
                     >
-                        <div
-                            v-if="(props.collapsed && isGroupOpen(group)) || (!props.collapsed && isGroupOpen(group))"
-                            class="mt-1 space-y-1"
-                            :class="props.collapsed
-                                ? 'absolute left-full top-0 z-50 ml-2 w-56 rounded-xl border border-white/10 bg-cyan-950 p-2 shadow-2xl'
-                                : 'ml-3'"
+                        <button
+                            v-for="item in visibleItems(group.items)"
+                            :key="item.href"
+                            type="button"
+                            @click="visitMenu(item.href, item.paths)"
+                            class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 transition"
+                            :class="[
+                                isActive(item.paths)
+                                    ? 'bg-cyan-200 text-cyan-950 font-bold'
+                                    : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
+                            ]"
                         >
-                            <button
-                                v-for="item in visibleItems(group.items)"
-                                :key="item.href"
-                                type="button"
-                                @click="visitMenu(item.href, item.paths)"
-                                class="group/item flex h-10 w-full items-center rounded-lg transition"
-                                :class="[
-                                    props.collapsed
-                                        ? 'justify-start gap-3 px-3'
-                                        : 'gap-3 px-3',
+                            <component :is="item.icon" :size="17" class="shrink-0" />
+                            <span class="min-w-0 flex-1 truncate text-[13px] text-left">
+                                {{ item.label }}
+                            </span>
+                        </button>
+                    </div>
 
-                                    isActive(item.paths)
-                                        ? props.collapsed
-                                            ? 'bg-cyan-200 text-cyan-950 shadow-md'
-                                            : 'bg-cyan-200 text-cyan-950 shadow-md'
-                                        : 'text-slate-400 hover:bg-white/10 hover:text-white'
-                                ]"
-                                :title="props.collapsed ? item.label : undefined"
-                            >
-
-                                <component
-                                    :is="item.icon"
-                                    :size="18"
-                                    class="shrink-0"
-                                />
-
-                                <span
-                                    v-if="!props.collapsed || isGroupOpen(group)"
-                                    class="min-w-0 flex-1 truncate text-[13px] font-medium"
-                                >
-                                    {{ item.label }}
-                                </span>
-
-                                <span
-                                    v-if="(!props.collapsed || isGroupOpen(group)) && item.badge"
-                                    class="rounded bg-emerald-400 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-950"
-                                >
-                                    {{ item.badge }}
-                                </span>
-
-                            </button>
+                    <!-- POPUP FLYOUT (KHI THU GỌN DESKTOP HOVER) -->
+                    <div
+                        v-if="props.collapsed"
+                        class="hidden group-hover/menu-group:block absolute left-full top-0 z-[100] ml-2 w-52 rounded-xl border border-white/10 bg-cyan-950 p-2 shadow-2xl space-y-1"
+                    >
+                        <div class="px-3 py-1 text-[11px] font-extrabold uppercase text-slate-400 border-b border-white/10 mb-1">
+                            {{ group.title }}
                         </div>
-                    </transition>
+                        <button
+                            v-for="item in visibleItems(group.items)"
+                            :key="item.href"
+                            type="button"
+                            @click="visitMenu(item.href, item.paths)"
+                            class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 transition"
+                            :class="[
+                                isActive(item.paths)
+                                    ? 'bg-cyan-200 text-cyan-950 font-bold'
+                                    : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
+                            ]"
+                        >
+                            <component :is="item.icon" :size="17" class="shrink-0" />
+                            <span class="min-w-0 flex-1 truncate text-[13px] text-left">
+                                {{ item.label }}
+                            </span>
+                        </button>
+                    </div>
                 </template>
-
             </div>
-
         </nav>
 
-
-        <!-- ========================================================= -->
-        <!-- USER -->
-        <!-- ========================================================= -->
-
-        <div
-            class="
-                shrink-0
-                border-t
-                border-white/10
-                p-3
-            "
-        >
-
+        <!-- 3. FOOTER (CỐ ĐỊNH ĐÁY) -->
+        <div class="shrink-0 border-t border-white/10 p-2.5 bg-cyan-950">
             <div
-                class="
-                    flex
-                    items-center
-                    rounded-xl
-                    bg-white/5
-                "
-                :class="props.collapsed
-                    ? 'justify-center p-2'
-                    : 'gap-3 p-3'"
+                class="flex items-center rounded-xl bg-white/5"
+                :class="props.collapsed ? 'justify-center p-1.5' : 'gap-2.5 p-2'"
             >
-
-                <!-- AVATAR -->
-
-                <div
-                    class="
-                        flex
-                        h-9
-                        w-9
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-full
-                        bg-slate-700
-                        text-sm
-                        font-bold
-                    "
-                >
-                    {{
-                        (
-                            page.props.auth?.user?.name ||
-                            'T'
-                        ).charAt(0).toUpperCase()
-                    }}
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-bold">
+                    {{ (page.props.auth?.user?.name || 'T').charAt(0).toUpperCase() }}
                 </div>
 
-
-                <!-- USER INFO -->
-
-                <div
-                    v-if="!props.collapsed"
-                    class="min-w-0"
-                >
-
-                    <div
-                        class="
-                            truncate
-                            text-sm
-                            font-bold
-                        "
-                    >
-                        {{
-                            page.props.auth?.user?.name ||
-                            'Tài khoản'
-                        }}
+                <div v-if="!props.collapsed" class="min-w-0">
+                    <div class="truncate text-xs font-bold">
+                        {{ page.props.auth?.user?.name || 'Tài khoản' }}
                     </div>
-
-                    <div
-                        class="
-                            mt-0.5
-                            truncate
-                            text-[11px]
-                            text-slate-400
-                        "
-                    >
-                        {{
-                            page.props.auth?.user?.email ||
-                            page.props.auth?.user?.username
-                        }}
+                    <div class="truncate text-[10px] text-slate-400">
+                        {{ page.props.auth?.user?.email || page.props.auth?.user?.username }}
                     </div>
-
                 </div>
-
             </div>
-
         </div>
-
     </aside>
-
 </template>
-<style>
-    /* SCROLL NHỎ + ẨN */
-    .sidebar-scroll {
-        scrollbar-width: thin;
-        scrollbar-color: transparent transparent;
-    }
 
-    /* Chrome */
-    .sidebar-scroll::-webkit-scrollbar {
-        width: 4px;
-    }
+<style scoped>
+.sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
 
-    .sidebar-scroll::-webkit-scrollbar-track {
-        background: transparent;
-    }
+.sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+}
 
-    .sidebar-scroll::-webkit-scrollbar-thumb {
-        background: transparent;
-        border-radius: 10px;
-        transition: background 0.3s;
-    }
+.sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
 
-    /* Khi hover hoặc scroll thì hiện */
-    .sidebar-scroll:hover::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.3);
-    }
+.sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.4);
+}
 </style>

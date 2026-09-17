@@ -84,6 +84,8 @@ class PosController extends Controller
             'items.*.discount_value' => 'nullable|numeric',
 
             'items.*.variant_id' => 'nullable|integer',
+            
+            'items.*.imei_id' => 'nullable|integer|exists:product_imeis,id',
 
             'items.*.gift_product_id' => 'nullable|integer',
 

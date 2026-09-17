@@ -10,7 +10,7 @@ import ModalRoot from '@/Components/ModalRoot.vue'
 const sidebarOpen = ref(false)
 const isDesktop = ref(false)
 
-// 👉 trạng thái collapse (sync với sidebar)
+// Trang thai collapse
 const sidebarCollapsed = ref(
     JSON.parse(localStorage.getItem('sidebar-collapsed') || 'false')
 )
@@ -38,11 +38,8 @@ const currentTitle = computed(() => {
     return 'Dashboard'
 })
 
-
-// Chỉ lưu khi user click
 const toggleSidebar = () => {
     sidebarCollapsed.value = !sidebarCollapsed.value
-
     localStorage.setItem(
         'sidebar-collapsed',
         JSON.stringify(sidebarCollapsed.value)
@@ -51,7 +48,6 @@ const toggleSidebar = () => {
 
 const updateViewport = () => {
     isDesktop.value = window.matchMedia('(min-width: 1024px)').matches
-
     if (isDesktop.value) {
         sidebarOpen.value = false
     }
@@ -68,7 +64,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-<div class="min-h-screen bg-white text-slate-900">
+<div class="h-screen w-screen overflow-hidden bg-white text-slate-900 flex flex-col">
 
     <!-- MOBILE OVERLAY -->
     <div
@@ -78,28 +74,28 @@ onBeforeUnmount(() => {
     ></div>
 
     <!-- ====== LAYOUT FLEX ====== -->
-    <div class="flex min-h-screen">
+    <div class="flex h-full w-full overflow-hidden">
 
-        <!-- SIDEBAR -->
+        <!-- SIDEBAR WRAPPER -->
         <div
-            class="fixed inset-y-0 left-0 z-40 transition-all duration-300 lg:static"
+            class="fixed inset-y-0 left-0 z-40 h-screen transition-all duration-300 lg:static shrink-0"
             :class="[
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                 effectiveSidebarCollapsed ? 'lg:w-[70px]' : 'w-[280px] lg:w-[240px]'
             ]"
         >
             <Sidebar
-                    :collapsed="effectiveSidebarCollapsed"
-                    @navigate="sidebarOpen = false"
-                    @toggle="toggleSidebar"
+                :collapsed="effectiveSidebarCollapsed"
+                @navigate="sidebarOpen = false"
+                @toggle="toggleSidebar"
             />
         </div>
 
-        <!-- CONTENT -->
-        <div class="flex-1 flex flex-col transition-all duration-300">
+        <!-- MAIN CONTENT AREA -->
+        <div class="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
 
             <!-- HEADER -->
-            <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+            <header class="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur z-20">
                 <div class="flex h-16 items-center justify-between px-4 sm:px-6">
 
                     <!-- LEFT -->
@@ -110,14 +106,8 @@ onBeforeUnmount(() => {
                             @click="sidebarOpen = !sidebarOpen"
                             aria-label="Mở menu"
                         >
-                            <X
-                                v-if="sidebarOpen"
-                                :size="20"
-                            />
-                            <Menu
-                                v-else
-                                :size="20"
-                            />
+                            <X v-if="sidebarOpen" :size="20" />
+                            <Menu v-else :size="20" />
                         </button>
 
                         <div>
@@ -158,8 +148,8 @@ onBeforeUnmount(() => {
                 </div>
             </header>
 
-            <!-- MAIN -->
-            <main class="flex-1 p-4 sm:p-6">
+            <!-- MAIN CONTENT (CHỈ CUỘN Ở ĐÂY) -->
+            <main class="flex-1 overflow-y-auto p-4 sm:p-6">
                 <div class="mx-auto max-w-[1600px]">
                     <slot />
                 </div>

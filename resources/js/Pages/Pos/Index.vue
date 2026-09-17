@@ -220,18 +220,14 @@ useBarcodeScanner(
     }
 )
 
-
-
-
-
 </script>
 
 <template>
 
     <PosLayout>
-
         <template #main>
             <PosMainPanel
+                :cart="cart"
                 @add-product="handleSelectProduct"
             />
         </template>

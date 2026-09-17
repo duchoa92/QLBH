@@ -1,75 +1,60 @@
 <script setup>
-import { Wallet } from 'lucide-vue-next'
-
-
+import { Wallet, History } from 'lucide-vue-next'
 
 const props = defineProps({
-
     grandTotal: {
         type: Number,
         default: 0,
     },
-
     selectedCustomer: {
         type: Object,
         default: null,
     },
-
     loading: {
         type: Boolean,
         default: false,
     },
-
     cart: {
         type: Array,
         default: () => [],
     },
 })
 
-
-// 
 const emit = defineEmits([
     'checkout',
     'show-sale-history',
 ])
-
-
 </script>
 
 <template>
-<!-- khối thanh toán -->
-        <div class="shrink-0 border-t border-gray-200 bg-white p-2">
-            <div class="flex justify-between items-center mb-2 px-1">
-                <div class="flex gap-2">
-                    <button
-                        @click="emit('show-sale-history')"
-                        class="text-xs text-indigo-600 font-bold hover:underline"
-                    >
-                        DS hóa đơn
-                    </button>
-                </div>
-                <!-- Tổng tiền -->
-                <div class="text-right">
-                    <div>
-                        <span class="text-sm text-gray-500">
-                            Tiền hàng:
-                        </span>
-                        <span class="font-bold text-blue-700">
-                            {{ $money(grandTotal) }}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Thanh toán -->
+    <div class="shrink-0 border-t border-slate-200/80 bg-white p-3 space-y-2.5 rounded-b-2xl shadow-sm">
+        <div class="flex justify-between items-center px-1">
             <button
-                :disabled="cart.length === 0 || loading"
-                @click="emit('checkout')"
-                class="w-full flex items-center justify-center gap-2 h-14 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:bg-gray-300"
+                type="button"
+                @click="emit('show-sale-history')"
+                class="inline-flex items-center gap-1.5 text-xs text-indigo-600 font-bold hover:text-indigo-700 transition-colors"
             >
-                Thanh toán <Wallet />
+                <History class="w-3.5 h-3.5" />
+                <span>Lịch sử đơn</span>
             </button>
+
+            <!-- TỔNG TIỀN HÀNG -->
+            <div class="text-right">
+                <span class="text-xs text-slate-500 font-medium mr-1.5">Tiền hàng:</span>
+                <span class="text-base font-extrabold text-indigo-600">
+                    {{ $money(grandTotal) }}đ
+                </span>
+            </div>
         </div>
 
-        
+        <!-- NÚT THANH TOÁN -->
+        <button
+            :disabled="cart.length === 0 || loading"
+            @click="emit('checkout')"
+            class="w-full flex items-center justify-center gap-2 h-12 rounded-xl bg-indigo-600 text-white font-bold text-xs uppercase tracking-wider hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-md shadow-indigo-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed"
+        >
+            <span>Thanh toán</span>
+            <Wallet class="w-4 h-4" />
+        </button>
+    </div>
 </template>

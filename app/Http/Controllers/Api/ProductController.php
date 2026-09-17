@@ -30,9 +30,8 @@ class ProductController extends Controller
                     'variants' => fn ($query) => $query
                         ->where('is_active', true)
                         ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
-                    'imeis' => fn ($query) => $query
+                    'imeis' => fn ($query) => $this->availableImeiScope($query)
                         ->with('variant:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock')
-                        ->where('status', ProductImei::STATUS_IN_STOCK)
                         ->select([
                             'id',
                             'product_id',
@@ -42,7 +41,7 @@ class ProductController extends Controller
                 ])
                 ->withCount([
                     'imeis as available_imei_count' => fn ($query) =>
-                        $query->where('status', ProductImei::STATUS_IN_STOCK),
+                        $this->availableImeiScope($query),
                 ])
                 ->whereIn('id', $productIds)
                 ->where('is_active', true)
@@ -85,9 +84,8 @@ class ProductController extends Controller
                     'variants' => fn ($query) => $query
                         ->where('is_active', true)
                         ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
-                'imeis' => fn ($query) => $query
+                'imeis' => fn ($query) => $this->availableImeiScope($query)
                     ->with('variant:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock')
-                    ->where('status', ProductImei::STATUS_IN_STOCK)
                     ->select([
                         'id',
                         'product_id',
@@ -97,7 +95,7 @@ class ProductController extends Controller
             ])
             ->withCount([
                 'imeis as available_imei_count' => fn ($query) =>
-                    $query->where('status', ProductImei::STATUS_IN_STOCK),
+                    $this->availableImeiScope($query),
             ])
             ->where('is_active', true)
             ->when($keyword, function ($query) use ($keyword) {
@@ -249,15 +247,8 @@ class ProductController extends Controller
             ], 404);
         }
 
-        $imeis = $product->imeis()
+        $imeis = $this->availableImeiScope($product->imeis())
             ->with('variant:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock')
-            ->where('status', ProductImei::STATUS_IN_STOCK)
-            ->where(function ($query) {
-                $query->whereNull('variant_id')
-                    ->orWhereHas('variant', fn ($variantQuery) =>
-                        $variantQuery->where('is_active', true)
-                    );
-            })
             ->when(
                 $request->filled('variant_id'),
                 fn ($query) => $query->where('variant_id', $request->input('variant_id'))
@@ -316,5 +307,31 @@ class ProductController extends Controller
             ->values();
 
         return response()->json($imeis);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Điều kiện IMEI "khả dụng để bán"
+    |--------------------------------------------------------------------------
+    |
+    | Dùng chung cho: đếm tồn kho (available_imei_count), danh sách IMEI
+    | nạp kèm sản phẩm khi tìm kiếm, và modal chọn IMEI khi thêm vào giỏ.
+    | Trước đây available_imei_count chỉ lọc status = in_stock nên đếm
+    | luôn cả IMEI thuộc biến thể đã bị vô hiệu (is_active = false), dẫn
+    | tới số "Tồn" hiển thị ở danh sách sản phẩm CAO HƠN số IMEI thực sự
+    | chọn được trong modal (chỉ lọc biến thể còn active). Gộp về đây để
+    | 2 nơi luôn tính cùng một cách, không bị lệch số.
+    |
+    */
+    private function availableImeiScope($query)
+    {
+        return $query
+            ->where('status', ProductImei::STATUS_IN_STOCK)
+            ->where(function ($q) {
+                $q->whereNull('variant_id')
+                    ->orWhereHas('variant', fn ($variantQuery) =>
+                        $variantQuery->where('is_active', true)
+                    );
+            });
     }
 }

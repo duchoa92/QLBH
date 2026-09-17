@@ -2,6 +2,8 @@
 import { Link, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 import DetailModal from '@/Components/UI/DetailModal.vue'
+import { openModal } from '@/Stores/modal'
+import RepairFormModal from './RepairFormModal.vue'
 
 const props = defineProps({
 
@@ -19,6 +21,21 @@ const status = ref(
 );
 
 const detailRepair = ref(null)
+
+const reload = () => {
+
+    router.reload({
+        only: ['repairs'],
+        preserveScroll: true,
+    });
+};
+
+const openCreate = () => {
+
+    openModal(RepairFormModal, {
+        onUpdated: reload,
+    });
+};
 
 let timeout = null;
 
@@ -138,12 +155,13 @@ const repairRows = (repair) => [
 
                 </div>
 
-                <Link
-                    :href="route('repairs.create')"
+                <button
+                    type="button"
+                    @click="openCreate"
                     class="px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
                 >
                     + Nhận máy mới
-                </Link>
+                </button>
 
             </div>
 

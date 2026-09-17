@@ -1,66 +1,39 @@
 <script setup>
-
 defineProps({
-
     grand_total: {
         type: Number,
         default: 0,
     },
-
     changeAmount: {
         type: Number,
         default: 0,
     },
-
     formatMoney: {
         type: Function,
         required: true,
     },
 })
-
 </script>
 
 <template>
-
-    <div>
-
-        <!-- Total -->
-        <div class="mb-4">
-
-            <div class="text-gray-500 text-sm">
-                Tổng tiền
-            </div>
-
-            <div
-                class="text-3xl font-bold text-blue-600"
-            >
-                {{ formatMoney(grand_total) }} đ
-            </div>
-
+    <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-3">
+        <!-- TỔNG TIỀN -->
+        <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng tiền</span>
+            <span class="text-xl font-black text-indigo-600">
+                {{ formatMoney(grand_total) }}đ
+            </span>
         </div>
 
-        <!-- Change -->
-        <div class="mb-6">
-
-            <div class="text-sm text-gray-500">
-                Tiền thừa
-            </div>
-
-            <div
-                class="text-2xl font-bold"
-                :class="{
-                    'text-red-600':
-                        changeAmount < 0,
-
-                    'text-green-600':
-                        changeAmount >= 0,
-                }"
+        <!-- TIỀN THỪA KHÁCH -->
+        <div class="flex items-center justify-between pt-2 border-t border-slate-200/60">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tiền thừa</span>
+            <span
+                class="text-lg font-extrabold"
+                :class="changeAmount < 0 ? 'text-rose-600' : 'text-emerald-600'"
             >
-                {{ formatMoney(changeAmount) }} đ
-            </div>
-
+                {{ formatMoney(changeAmount) }}đ
+            </span>
         </div>
-
     </div>
-
 </template>

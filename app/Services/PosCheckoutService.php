@@ -118,6 +118,7 @@ class PosCheckoutService
                 */
                 $product = Product::query()
                     ->with('unit:id,name,short_name')
+                    ->lockForUpdate()
                     ->findOrFail($item['id']);
                 $requiresImei =
                     $product->product_type === 'imei'
@@ -290,20 +291,88 @@ class PosCheckoutService
                     }
                 }
                 /*
-                |--------------------------------------------------------------------------
-                | Trừ tồn kho sản phẩm thường (theo biến thể nếu có)
-                |--------------------------------------------------------------------------
+                |----------------------------------------------------------------------
+                | Trừ / đồng bộ tồn kho
+                |----------------------------------------------------------------------
+                |
+                | 1. IMEI:
+                |    - Đánh dấu IMEI đã bán.
+                |    - Variant.stock = số IMEI còn available của variant.
+                |    - Product.stock = tổng số IMEI còn available của product.
+                |
+                | 2. Không có IMEI:
+                |    - Nếu có variant: giảm variant.stock và product.stock.
+                |    - Nếu không có variant: giảm product.stock.
+                |
                 */
-                if (! $requiresImei) {
 
+                if ($imei) {
+
+                    // IMEI -> đã bán
+                    $imei->update([
+                        'status' => ProductImei::STATUS_SOLD,
+                        'sold_at' => now(),
+                    ]);
+
+                    /*
+                    * Đồng bộ tồn Variant theo số IMEI thực tế còn trong kho.
+                    */
                     if ($variant) {
 
-                        $variant->decrement('stock', $quantity);
+                        $variantStock = ProductImei::query()
+                            ->where('product_id', $product->id)
+                            ->where('variant_id', $variant->id)
+                            ->where(
+                                'status',
+                                ProductImei::STATUS_IN_STOCK
+                            )
+                            ->count();
 
-                    } else {
-
-                        $product->decrement('stock', $quantity);
+                        $variant->update([
+                            'stock' => $variantStock,
+                        ]);
                     }
+
+                    /*
+                    * Đồng bộ tồn Product theo tổng IMEI còn trong kho.
+                    */
+                    $productStock = ProductImei::query()
+                        ->where('product_id', $product->id)
+                        ->where(
+                            'status',
+                            ProductImei::STATUS_IN_STOCK
+                        )
+                        ->count();
+
+                    $product->update([
+                        'stock' => $productStock,
+                    ]);
+
+                } elseif ($variant) {
+
+                    /*
+                    * Sản phẩm thường có variant.
+                    * Giảm cả variant và tổng tồn của product.
+                    */
+                    $this->decrementStockSafely(
+                        $variant,
+                        $quantity
+                    );
+
+                    $this->decrementStockSafely(
+                        $product,
+                        $quantity
+                    );
+
+                } else {
+
+                    /*
+                    * Sản phẩm thường không có variant.
+                    */
+                    $this->decrementStockSafely(
+                        $product,
+                        $quantity
+                    );
                 }
 
                 /*
@@ -345,17 +414,7 @@ class PosCheckoutService
                         );
                     }
                 }
-                /*
-                |--------------------------------------------------------------------------
-                | Đánh dấu IMEI đã bán
-                |--------------------------------------------------------------------------
-                */
-                if ($imei) {
-                    $imei->update([
-                        'status' => ProductImei::STATUS_SOLD,
-                        'sold_at' => now(),
-                    ]);
-                }
+                
             }
 
             /*
@@ -446,5 +505,28 @@ class PosCheckoutService
     private function itemQuantity(array $item): int
     {
         return max(1, (int) ($item['quantity'] ?? 1));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trừ tồn kho an toàn (không cho về số âm)
+    |--------------------------------------------------------------------------
+    |
+    | Dùng CASE WHEN ngay trong câu UPDATE để: (1) vẫn atomic như
+    | decrement() bình thường (không cần lock thêm), (2) không bao giờ
+    | cho kết quả âm - tránh lỗi khi cột "stock" của bảng products là
+    | unsignedInteger (ví dụ sản phẩm IMEI được thêm IMEI trực tiếp từ
+    | form sửa sản phẩm mà chưa từng "Nhập kho" nên stock đang là 0).
+    |
+    */
+    private function decrementStockSafely(Product|ProductVariant $model, int $quantity): void
+    {
+        $model->newQuery()
+            ->whereKey($model->getKey())
+            ->update([
+                'stock' => DB::raw(
+                    'CASE WHEN stock > ' . $quantity . ' THEN stock - ' . $quantity . ' ELSE 0 END'
+                ),
+            ]);
     }
 }

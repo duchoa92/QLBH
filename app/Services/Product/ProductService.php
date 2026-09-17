@@ -345,6 +345,8 @@ class ProductService extends BaseService
 
         $imeis = preg_split('/\r\n|\r|\n/', trim($rawImeis));
 
+        $addedCount = 0;
+
         foreach ($imeis as $imei) {
             $imei = trim($imei);
 
@@ -357,6 +359,23 @@ class ProductService extends BaseService
                 'variant_id' => $variant?->id,
                 'imei' => $imei,
             ]);
+
+            $addedCount++;
+        }
+
+        // Đồng bộ cột "stock" (product/variant) với số IMEI thực sự vừa
+        // thêm mới, để khớp với available_imei_count - giống cách
+        // StockImportService cộng tồn kho khi nhập hàng qua phiếu nhập.
+        if ($addedCount > 0) {
+
+            if ($variant) {
+
+                $variant->increment('stock', $addedCount);
+
+            } else {
+
+                $product->increment('stock', $addedCount);
+            }
         }
     }
 
