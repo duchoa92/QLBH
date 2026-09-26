@@ -14,11 +14,15 @@ class StockImportItem extends Model
         'unit_id',
         'unit_name',
         'quantity',
+        'base_quantity',
+        'conversion_factor',
         'cost_price',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
+        'base_quantity' => 'integer',
+        'conversion_factor' => 'integer',
         'cost_price' => 'decimal:2',
     ];
 

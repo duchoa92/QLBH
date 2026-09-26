@@ -200,6 +200,8 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('sales')->name('sales.')->controller(SaleController::class)->group(function () {
         Route::get('/', 'index')->name('index');
         Route::get('/{sale}', 'show')->name('show');
+        // Hủy hóa đơn
+        Route::post('/{sale}/cancel', 'cancel')->name('cancel');
     });
     Route::get('/sales/{sale}/receipt', [SaleReceiptController::class, 'show'])->name('sales.receipt');
 
@@ -211,10 +213,14 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('repairs', RepairController::class);
 
     // IMEIs, Customers, Suppliers
+    Route::get('/api/imeis/lookup', [ProductImeiController::class, 'lookup'])->name('api.imeis.lookup');
+    Route::patch('/product-imeis/imei/{imei}/price', [ProductImeiController::class, 'updatePrice'])->name('product-imeis.update-price');
+
     Route::prefix('product-imeis')->name('product-imeis.')->controller(ProductImeiController::class)->group(function () {
         Route::get('/{product}', 'index')->name('index');
         Route::post('/{product}', 'store')->name('store');
     });
+    Route::get('/imeis/lookup', [ProductImeiController::class, 'lookupPage'])->name('product-imeis.lookup');
     Route::get('/imeis/{imei}', [ProductImeiController::class, 'show'])->name('product-imeis.show');
 
     Route::resource('customers', CustomerController::class);

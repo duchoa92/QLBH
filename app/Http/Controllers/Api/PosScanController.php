@@ -23,6 +23,7 @@ class PosScanController extends Controller
 
             ->with([
                 'product.unit:id,name,short_name',
+                'product.conversionUnit:id,name,short_name',
                 'variant:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock',
             ])
 
@@ -68,6 +69,8 @@ class PosScanController extends Controller
                     'product_type' => 'imei',
                     'unit_id' => $imei->product->unit_id,
                     'unit_name' => $imei->product->unit?->short_name ?: $imei->product->unit?->name,
+                    'conversion_factor' => 1,
+                    'inventory_unit_name' => $imei->product->unit?->short_name ?: $imei->product->unit?->name,
                     'variant' => $imei->variant
                         ? [
                             'id' => $imei->variant->id,
@@ -100,6 +103,7 @@ class PosScanController extends Controller
         $product = Product::query()
             ->with([
                 'unit:id,name,short_name',
+                'conversionUnit:id,name,short_name',
             ])
 
             ->where('barcode', $code)
@@ -120,6 +124,8 @@ class PosScanController extends Controller
                     'price' => $product->sell_price,
                     'unit_id' => $product->unit_id,
                     'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+                    'conversion_factor' => 1,
+                    'inventory_unit_name' => $product->unit?->short_name ?: $product->unit?->name,
                 ]
             ]);
         }

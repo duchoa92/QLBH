@@ -12,6 +12,7 @@ import api from '@/Services/api'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import { imageUrl } from '@/utils/imageUrl'
 
 import SupplierSection from './SupplierSection.vue'
 import StockImportProductModal from './StockImportProductModal.vue'
@@ -136,6 +137,12 @@ onBeforeUnmount(() => {
 
 const selectedItems = ref([])
 
+const unitLabel = (unit, fallback = 'Cái') => {
+    if (typeof unit === 'string') return unit || fallback
+
+    return unit?.short_name || unit?.name || fallback
+}
+
 const formErrorMessages = computed(() =>
     Object.values(form.errors || {})
         .flat()
@@ -216,18 +223,29 @@ const selectProduct = (product) => {
 
             name: item.name,
 
-            unit:
-                item.unit_name ??
-                item.unit ??
-                'Cái',
+            unit: item.has_unit_conversion
+                ? (item.import_unit_name ?? item.conversion_unit?.short_name ?? item.conversion_unit?.name ?? 'Đơn vị nhập')
+                : (item.unit_name ?? unitLabel(item.unit)),
 
-            unit_id:
-                item.unit_id ?? null,
+            unit_id: item.has_unit_conversion
+                ? (item.import_unit_id ?? item.conversion_unit?.id ?? null)
+                : (item.unit_id ?? null),
 
-            unit_name:
-                item.unit_name ??
-                item.unit ??
-                'Cái',
+            unit_name: item.has_unit_conversion
+                ? (item.import_unit_name ?? item.conversion_unit?.short_name ?? item.conversion_unit?.name ?? 'Đơn vị nhập')
+                : (item.unit_name ?? unitLabel(item.unit)),
+
+            has_unit_conversion:
+                Boolean(item.has_unit_conversion),
+
+            conversion_factor: Math.max(1, Number(item.import_conversion_factor ?? item.conversion_factor ?? 1)),
+
+            conversion_unit: item.conversion_unit ?? null,
+
+            base_unit_name: item.unit_name ?? unitLabel(item.unit),
+
+            inventory_unit_name:
+                item.inventory_unit_name ?? null,
 
             quantity:
                 type === 'simple'
@@ -332,8 +350,21 @@ const formatPrice = (value) =>
 
 const itemUnit = (item) =>
     item.unit_name ||
-    item.unit ||
-    'Cái'
+    unitLabel(item.unit)
+
+const itemConversionHint = (item) => {
+    const factor = Math.max(1, Number(item.conversion_factor || 1))
+
+    if (!item.has_unit_conversion || factor === 1) {
+        return null
+    }
+
+    const inventoryUnit = item.base_unit_name
+        || item.inventory_unit_name
+        || 'đơn vị bán'
+
+    return `1 ${itemUnit(item)} = ${factor} ${inventoryUnit}`
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -653,6 +684,7 @@ const confirm = () => {
 
     form.post('/stock-import', {
         preserveScroll: true,
+        forceFormData: true,
 
         onSuccess: () => {
             emit('created')
@@ -777,10 +809,10 @@ const confirm = () => {
                         >
                             <img
                                 v-if="
-                                    product.image_url
+                                    imageUrl(product.image_url ?? product.image)
                                 "
                                 :src="
-                                    product.image_url
+                                    imageUrl(product.image_url ?? product.image)
                                 "
                                 class="h-full w-full object-cover"
                             />
@@ -1008,13 +1040,20 @@ const confirm = () => {
                                 <td
                                     class="px-3 py-3 text-center text-slate-600"
                                 >
-                                    <div class="font-medium">
+                                <div class="font-medium">
                                         {{
                                             itemUnit(
                                                 item
                                             )
                                         }}
-                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="itemConversionHint(item)"
+                                    class="mt-1 text-[11px] font-medium text-indigo-600"
+                                >
+                                    {{ itemConversionHint(item) }}
+                                </div>
 
                                 </td>
 

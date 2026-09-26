@@ -19,7 +19,7 @@ const handleClose = (id) => {
         v-bind="state.modals[state.modals.length - 1].props"
         :modalId="state.modals[state.modals.length - 1].id"
         @close="handleClose(state.modals[state.modals.length - 1].id)"
-        @updated="state.modals[state.modals.length - 1].onUpdated?.()"
+        @updated="state.modals[state.modals.length - 1].onUpdated?.($event)"
     />
 
 </div>

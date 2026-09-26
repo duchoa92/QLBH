@@ -62,10 +62,7 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
 
             inputmode="numeric"
 
-            class="
-                w-full
-                no-spinner
-            "
+            class="w-full no-spinner"
 
             label="Nhập số tiền"
         />
@@ -97,8 +94,8 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
                 right-0
                 top-0
                 bottom-0
-                px-3
-                min-w-9
+                px-1
+                min-w-6
                 border-l
                 bg-transparent
                 text-sm

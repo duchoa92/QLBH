@@ -43,6 +43,7 @@ class ProductRepository extends BaseRepository
                 'category:id,name',
                 'brand:id,name',
                 'unit:id,name,short_name',
+                'conversionUnit:id,name,short_name',
                 'imeis:id,product_id,variant_id,imei',
                 'variants' => fn ($query) => $query
                     ->where('is_active', true)

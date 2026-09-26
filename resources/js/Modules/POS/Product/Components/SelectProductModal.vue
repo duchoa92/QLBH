@@ -93,6 +93,13 @@ const expectedProfit = (item) => {
     return imeiSellPrice(item) - costPrice
 }
 
+const displayVariantStock = (variant) => {
+    const quantity = Number(variant?.stock || 0)
+    const unit = props.product?.unit_name || ''
+
+    return `${quantity}${unit ? ` ${unit}` : ''}`
+}
+
 const filteredImeis = computed(() => {
     const selectedImeiIds = new Set(
         props.cart.map(item => item.imei_id).filter(Boolean)
@@ -261,7 +268,7 @@ const confirm = () => {
                                 </span>
 
                                 <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                    Tồn: {{ variant.stock ?? 0 }}
+                                    Tồn: {{ displayVariantStock(variant) }}
                                 </span>
                             </div>
                         </button>

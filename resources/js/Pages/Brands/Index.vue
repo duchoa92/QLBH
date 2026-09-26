@@ -14,6 +14,7 @@ import Tooltip from '@/Components/UI/Tooltip.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import { useReferenceData } from '@/Stores/referenceData'
 
 
 
@@ -23,6 +24,10 @@ const props = defineProps({
     brands: Object,
     filters: Object,
     categories: Array
+})
+
+const { categories } = useReferenceData({
+    categories: props.categories,
 })
 
 const columns = [
@@ -103,7 +108,7 @@ const destroy = (id) => {
 const openCreate = () => {
     openModal(BrandForm, {
         props: {
-            categories: props.categories,
+            categories: categories.value,
             title: 'Thêm thương hiệu',
             size: 'sm',
         },
@@ -115,7 +120,7 @@ const openEdit = (item) => {
     openModal(BrandForm, {
         props: {
             brand: item,
-            categories: props.categories,
+            categories: categories.value,
             title: 'Sửa thương hiệu',
             size: 'sm',
         },

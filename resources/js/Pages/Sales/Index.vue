@@ -1,6 +1,6 @@
 <script setup>
-import { ref, watch } from 'vue'
-import { router, Link } from '@inertiajs/vue3'
+import { ref, watch, computed } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
 import {
     Search,
     Eye,
@@ -8,12 +8,10 @@ import {
     FileText,
     DollarSign,
     CreditCard,
-    ShoppingBag,
-    Calendar,
-    Gift,
-    User,
-    Clock,
-    Tag
+    AlertTriangle,
+    CheckCircle2,
+    XCircle,
+    Undo2
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -21,6 +19,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
 
 defineOptions({
@@ -40,9 +39,17 @@ const props = defineProps({
     }
 })
 
+// Kiểm tra quyền Admin từ User đăng nhập
+const page = usePage()
+const isAdmin = page.props.auth?.user?.role === 'admin' || page.props.auth?.roles?.includes('Super Admin')
+
 // Trạng thái tìm kiếm & Modal
 const search = ref(props.filters?.search ?? '')
 const detailSale = ref(null)
+const cancelReason = ref('')
+const showCancelModal = ref(false)
+const selectedSaleForCancel = ref(null)
+
 let searchTimeout = null
 
 watch(search, (value) => {
@@ -60,13 +67,6 @@ watch(search, (value) => {
 const saleTotal = (sale) =>
     sale.grand_total ?? sale.total_amount ?? sale.subtotal ?? 0
 
-// Định dạng hiển thị số lượng
-const saleQuantityText = (item) => {
-    const qty = Number(item.quantity ?? 0)
-    const unit = item.unit_name || 'Cái'
-    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
-}
-
 // Xử lý lấy tên khách hàng chính xác
 const getCustomerName = (sale) => {
     if (!sale?.customer) return 'Khách lẻ'
@@ -75,53 +75,119 @@ const getCustomerName = (sale) => {
 
 // Mở cửa sổ in hóa đơn
 const openPrintWindow = (saleId) => {
-    window.open(route('sales.receipt', saleId), '_blank', 'width=400,height=600')
+    window.open(route('sales.receipt', saleId), '_blank', 'width=400,height=650')
 }
+
+// Mở Modal xác nhận Hủy hóa đơn
+const confirmCancel = (sale) => {
+    selectedSaleForCancel.value = sale
+    cancelReason.value = ''
+    showCancelModal.value = true
+}
+
+// Xử lý gửi request Hủy hóa đơn về Backend
+const handleCancelSale = () => {
+    if (!selectedSaleForCancel.value) return
+
+    const reasonText = cancelReason.value.trim()
+
+    router.post(route('sales.cancel', selectedSaleForCancel.value.id), {
+        reason: reasonText,
+        cancel_reason: reasonText
+    }, {
+        onSuccess: () => {
+            showCancelModal.value = false
+
+            // Tìm và cập nhật trực tiếp vào item tương ứng trong danh sách sales.data
+            const targetSale = props.sales?.data?.find(s => s.id === selectedSaleForCancel.value.id)
+            if (targetSale) {
+                targetSale.status = 'cancelled'
+                targetSale.cancel_reason = reasonText
+                targetSale.reason = reasonText
+            }
+
+            // Nếu đang mở Modal chi tiết của đơn này, cập nhật luôn
+            if (detailSale.value && detailSale.value.id === selectedSaleForCancel.value.id) {
+                detailSale.value.status = 'cancelled'
+                detailSale.value.cancel_reason = reasonText
+                detailSale.value.reason = reasonText
+            }
+
+            selectedSaleForCancel.value = null
+            cancelReason.value = ''
+
+            // Yêu cầu Inertia làm mới lại trang để đồng bộ CSDL
+            router.reload({ only: ['sales'] })
+        }
+    })
+}
+
+
+// 1. Danh sách các lý do hủy mẫu định sẵn
+const defaultReasons = [
+    'Khách đổi ý không mua nữa',
+    'Đổi sang sản phẩm khác',
+    'Nhầm sản phẩm / số lượng',
+    'Nhập sai giá / giảm giá',
+    'Chưa nhận được tiền',
+    'Trùng hóa đơn'
+]
+
+// 2. Tự động thu thập thêm các lý do hủy thực tế đã có trong danh sách hóa đơn
+const predefinedCancelReasons = computed(() => {
+    const existingReasons = (props.sales?.data || [])
+        .map(s => s.cancel_reason || s.reason)
+        .filter(Boolean)
+
+    // Nối lý do mẫu + lý do đã dùng trước đây, bỏ trùng lặp bằng Set
+    return Array.from(new Set([...defaultReasons, ...existingReasons]))
+})
+
 </script>
 
 <template>
-    <div class="space-y-5 p-6">
+    <div class="space-y-5 p-6 font-sans text-slate-800">
         <!-- HEADER TRANG -->
         <PageHeader
             title="Quản lý Hóa đơn & Bán hàng"
-            description="Tra cứu lịch sử giao dịch, chi tiết sản phẩm, IMEI và in lại hóa đơn"
+            description="Tra cứu lịch sử giao dịch, chi tiết sản phẩm, IMEI, in lại hóa đơn hoặc hoàn hủy đơn hàng"
         />
 
         <!-- THỐNG KÊ TÀI CHÍNH NHANH (KPI CARDS) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="p-4 bg-white rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                 <div>
                     <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Doanh thu kỳ này</div>
-                    <div class="text-lg font-black text-slate-900 mt-1">
-                        {{ formatMoney(stats.totalRevenue || sales.data.reduce((acc, s) => acc + saleTotal(s), 0)) }} đ
+                    <div class="text-xl font-black text-slate-900 mt-1">
+                        {{ formatMoney(stats.totalRevenue || sales.data.reduce((acc, s) => s.status !== 'cancelled' ? acc + saleTotal(s) : acc, 0)) }} đ
                     </div>
                 </div>
-                <div class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                    <DollarSign :size="18" />
+                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <DollarSign :size="20" />
                 </div>
             </div>
 
-            <div class="p-4 bg-white rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                 <div>
                     <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tổng số đơn hàng</div>
-                    <div class="text-lg font-black text-slate-900 mt-1">
+                    <div class="text-xl font-black text-slate-900 mt-1">
                         {{ stats.totalOrders || sales.total || sales.data.length }} hóa đơn
                     </div>
                 </div>
-                <div class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <FileText :size="18" />
+                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <FileText :size="20" />
                 </div>
             </div>
 
-            <div class="p-4 bg-white rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div class="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                 <div>
                     <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tổng công nợ gối đầu</div>
-                    <div class="text-lg font-black text-rose-600 mt-1">
+                    <div class="text-xl font-black text-rose-600 mt-1">
                         {{ formatMoney(stats.totalDebt || 0) }} đ
                     </div>
                 </div>
-                <div class="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                    <CreditCard :size="18" />
+                <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <CreditCard :size="20" />
                 </div>
             </div>
         </div>
@@ -136,7 +202,7 @@ const openPrintWindow = (saleId) => {
                             v-model="search"
                             type="text"
                             placeholder="Tìm mã HD, Tên khách hàng, SĐT hoặc IMEI..."
-                            class="w-full rounded-lg border border-slate-200 py-1.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                            class="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition"
                         >
                     </div>
 
@@ -147,15 +213,16 @@ const openPrintWindow = (saleId) => {
             </template>
 
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[760px] text-sm text-left border-collapse">
+                <table class="w-full min-w-[850px] text-sm text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50 text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
                             <th class="px-4 py-3">Mã HD</th>
                             <th class="px-4 py-3">Khách Hàng</th>
                             <th class="px-4 py-3">Thu Ngân</th>
                             <th class="px-4 py-3 text-right">Tổng Tiền</th>
-                            <th class="px-4 py-3">Ngày Tảo</th>
-                            <th class="w-24 px-4 py-3 text-center">Thao Tác</th>
+                            <th class="px-4 py-3 text-center">Trạng Thái</th>
+                            <th class="px-4 py-3">Ngày Tạo</th>
+                            <th class="w-28 px-4 py-3 text-center">Thao Tác</th>
                         </tr>
                     </thead>
 
@@ -163,11 +230,11 @@ const openPrintWindow = (saleId) => {
                         <tr
                             v-for="sale in sales.data"
                             :key="sale.id"
-                            class="hover:bg-slate-50 transition"
+                            class="hover:bg-slate-50/70 transition"
                         >
                             <!-- Mã HD -->
-                            <td class="px-4 py-3 font-semibold text-slate-900">
-                                {{ sale.code }}
+                            <td class="px-4 py-3 font-bold text-slate-900">
+                                #{{ sale.code }}
                             </td>
 
                             <!-- Tên Khách Hàng -->
@@ -186,12 +253,28 @@ const openPrintWindow = (saleId) => {
                             </td>
 
                             <!-- Tổng tiền -->
-                            <td class="px-4 py-3 text-right font-semibold text-slate-900">
+                            <td class="px-4 py-3 text-right font-bold text-slate-900">
                                 {{ formatMoney(saleTotal(sale)) }} đ
                             </td>
 
+                            <!-- Trạng thái -->
+                            <td class="px-4 py-3 text-center">
+                                <span
+                                    v-if="sale.status === 'cancelled'"
+                                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200"
+                                >
+                                    <XCircle :size="12" /> Đã hủy
+                                </span>
+                                <span
+                                    v-else
+                                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                >
+                                    <CheckCircle2 :size="12" /> Hoàn thành
+                                </span>
+                            </td>
+
                             <!-- Ngày tạo -->
-                            <td class="px-4 py-3 text-slate-600 text-xs">
+                            <td class="px-4 py-3 text-slate-500 text-xs">
                                 {{ formatDateTime(sale.created_at) }}
                             </td>
 
@@ -211,7 +294,17 @@ const openPrintWindow = (saleId) => {
                                         title="In hóa đơn"
                                         @click="openPrintWindow(sale.id)"
                                     >
-                                        <Printer class="h-4 w-4 text-blue-600" />
+                                        <Printer class="h-4 w-4 text-indigo-600" />
+                                    </ActionButton>
+
+                                    <!-- 🔴 NÚT HỦY ĐƠN HÀNG (Hiển thị nếu tài khoản là Admin & đơn chưa hủy) -->
+                                    <ActionButton
+                                        v-if="isAdmin && sale.status !== 'cancelled'"
+                                        variant="ghost"
+                                        title="Hủy hóa đơn & Hoàn kho"
+                                        @click="confirmCancel(sale)"
+                                    >
+                                        <Undo2 class="h-4 w-4 text-rose-500" />
                                     </ActionButton>
                                 </div>
                             </td>
@@ -219,7 +312,7 @@ const openPrintWindow = (saleId) => {
 
                         <!-- Dữ liệu trống -->
                         <tr v-if="!sales.data || !sales.data.length">
-                            <td colspan="6" class="px-4 py-12 text-center text-slate-400">
+                            <td colspan="7" class="px-4 py-12 text-center text-slate-400">
                                 Không có dữ liệu hóa đơn nào.
                             </td>
                         </tr>
@@ -228,148 +321,92 @@ const openPrintWindow = (saleId) => {
             </div>
         </DataPanel>
 
-        <!-- MODAL CHI TIẾT HÓA ĐƠN -->
-        <BaseModal
-            v-if="detailSale"
-            title="Chi tiết hóa đơn"
-            size="xl"
+        <InvoiceDetailModal
+            :show="Boolean(detailSale)"
+            :invoice="detailSale"
+            :can-cancel="isAdmin && detailSale?.status !== 'cancelled'"
+            can-print
             @close="detailSale = null"
+            @cancel="confirmCancel"
+            @print="openPrintWindow($event.id)"
+        />
+
+        <!-- 🔴 MODAL XÁC NHẬN HỦY HÓA ĐƠN (Tích hợp Gợi ý lý do) -->
+        <BaseModal
+            v-if="showCancelModal"
+            title="Xác nhận hủy hóa đơn"
+            size="md"
+            @close="showCancelModal = false"
         >
-            <div class="space-y-4">
-                <!-- Thông tin tóm tắt -->
-                <div class="grid gap-3 grid-cols-2 md:grid-cols-4">
-                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div class="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                            <Tag :size="12" /> Mã HD
-                        </div>
-                        <div class="mt-1 font-semibold text-slate-900 text-sm">{{ detailSale.code }}</div>
-                    </div>
-
-                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div class="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                            <User :size="12" /> Khách Hàng
-                        </div>
-                        <div class="mt-1 font-semibold text-slate-900 text-sm truncate">
-                            {{ getCustomerName(detailSale) }}
-                        </div>
-                    </div>
-
-                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div class="text-[11px] font-semibold uppercase text-slate-400 flex items-center gap-1">
-                            <Clock :size="12" /> Ngày
-                        </div>
-                        <div class="mt-1 font-medium text-slate-800 text-xs">
-                            {{ formatDateTime(detailSale.created_at) }}
-                        </div>
-                    </div>
-
-                    <div class="rounded-lg border border-slate-200 bg-emerald-50 px-3 py-2">
-                        <div class="text-[11px] font-semibold uppercase text-emerald-600 flex items-center gap-1">
-                            <DollarSign :size="12" /> Tổng Tiền
-                        </div>
-                        <div class="mt-1 font-bold text-emerald-600 text-sm">
-                            {{ formatMoney(saleTotal(detailSale)) }} đ
-                        </div>
+            <div class="space-y-4 p-1">
+                <!-- Cảnh báo hoàn kho -->
+                <div class="flex items-start gap-3 p-3.5 bg-amber-50 rounded-2xl border border-amber-200">
+                    <AlertTriangle class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div class="text-xs text-amber-800 leading-relaxed">
+                        <strong>Lưu ý quan trọng:</strong> Khi hủy hóa đơn <strong>#{{ selectedSaleForCancel?.code }}</strong>, toàn bộ số lượng sản phẩm và mã IMEI/Serial liên quan sẽ được <strong>tự động hoàn trả về kho</strong>.
                     </div>
                 </div>
 
-                <!-- Bảng chi tiết sản phẩm -->
-                <div class="overflow-x-auto rounded-xl border border-slate-200">
-                    <table class="w-full min-w-[650px] text-sm text-left">
-                        <thead>
-                            <tr class="bg-slate-50 text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
-                                <th class="px-3 py-2">Sản phẩm</th>
-                                <th class="px-3 py-2">IMEI</th>
-                                <th class="px-3 py-2 text-center">SL</th>
-                                <th class="px-3 py-2 text-right">Đơn giá</th>
-                                <th class="px-3 py-2 text-right">Thành tiền</th>
-                            </tr>
-                        </thead>
+                <!-- Ô nhập lý do & Danh sách gợi ý -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                        Lý do hủy hóa đơn:
+                    </label>
 
-                        <tbody class="divide-y divide-slate-100">
-                            <tr
-                                v-for="item in detailSale.items"
-                                :key="item.id"
-                                class="align-top"
+                    <!-- Ô nhập Textarea hỗ trợ gợi ý qua datalist -->
+                    <textarea
+                        v-model="cancelReason"
+                        rows="3"
+                        list="cancel-reasons-list"
+                        placeholder="Nhập lý do hủy hoặc chọn từ các gợi ý bên dưới..."
+                        class="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100 transition"
+                    ></textarea>
+
+                    <!-- Danh sách HTML datalist hỗ trợ autocomplete tự động -->
+                    <datalist id="cancel-reasons-list">
+                        <option v-for="(reason, index) in predefinedCancelReasons" :key="index" :value="reason" />
+                    </datalist>
+
+                    <!-- Dãy thẻ Gợi ý nhanh (Bấm để chọn) -->
+                    <div class="mt-2.5">
+                        <div class="text-[11px] font-semibold text-slate-400 mb-1.5">
+                            💡 Gợi ý lý do phổ biến (Bấm để chọn nhanh):
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button
+                                v-for="(reason, idx) in predefinedCancelReasons"
+                                :key="idx"
+                                type="button"
+                                @click="cancelReason = reason"
+                                :class="[
+                                    'px-2.5 py-1 rounded-lg text-xs font-medium transition border',
+                                    cancelReason === reason
+                                        ? 'bg-rose-50 border-rose-300 text-rose-700 font-bold'
+                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                ]"
                             >
-                                <td class="px-3 py-2">
-                                    <div class="font-medium text-slate-900">
-                                        {{ item.product?.name || '-' }}
-                                    </div>
-                                    <span
-                                        v-if="item.variant?.attributes"
-                                        class="block text-xs font-normal text-slate-500 mt-0.5"
-                                    >
-                                        {{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }}
-                                    </span>
-                                    <div v-if="item.discount_value > 0" class="text-xs text-rose-600 font-medium mt-0.5">
-                                        Giảm:
-                                        <span v-if="item.discount_type === 'percent'">{{ item.discount_value }}%</span>
-                                        <span v-else>{{ formatMoney(item.discount_value) }} đ</span>
-                                    </div>
-                                    <div v-if="item.gifts && item.gifts.length" class="mt-1 space-y-0.5">
-                                        <div
-                                            v-for="gift in item.gifts"
-                                            :key="gift.id"
-                                            class="text-xs text-emerald-700 flex items-center gap-1"
-                                        >
-                                            <Gift :size="11" />
-                                            <span>🎁 {{ gift.product?.name }} x{{ gift.quantity }}</span>
-                                        </div>
-                                    </div>
-                                </td>
-
-                                <td class="px-3 py-2 font-mono text-xs text-slate-600">
-                                    {{ item.product_imei?.imei ?? '-' }}
-                                </td>
-
-                                <td class="px-3 py-2 text-center">
-                                    <div class="font-semibold text-slate-800">
-                                        {{ saleQuantityText(item) }}
-                                    </div>
-                                </td>
-
-                                <td class="px-3 py-2 text-right text-slate-700">
-                                    {{ formatMoney(item.unit_price) }} đ
-                                </td>
-
-                                <td class="px-3 py-2 text-right font-semibold text-slate-900">
-                                    {{ formatMoney(item.subtotal) }} đ
-                                </td>
-                            </tr>
-                        </tbody>
-
-                        <tfoot class="bg-slate-50 font-semibold border-t border-slate-200">
-                            <tr v-if="detailSale.subtotal">
-                                <td colspan="4" class="px-3 py-2 text-right text-xs text-slate-500 uppercase">Tạm tính:</td>
-                                <td class="px-3 py-2 text-right text-slate-900">{{ formatMoney(detailSale.subtotal) }} đ</td>
-                            </tr>
-                            <tr>
-                                <td colspan="4" class="px-3 py-2 text-right text-xs text-slate-800 uppercase">Tổng cộng:</td>
-                                <td class="px-3 py-2 text-right text-emerald-600 font-bold">
-                                    {{ formatMoney(saleTotal(detailSale)) }} đ
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                                {{ reason }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Thao tác Modal -->
-                <div class="flex items-center justify-end gap-2 pt-2">
+                <!-- Nút thao tác -->
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
                     <button
                         type="button"
-                        @click="detailSale = null"
-                        class="px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                        @click="showCancelModal = false"
+                        class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
                     >
-                        Đóng
+                        Bỏ qua
                     </button>
                     <button
                         type="button"
-                        @click="openPrintWindow(detailSale.id)"
-                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
+                        @click="handleCancelSale"
+                        :disabled="!cancelReason.trim()"
+                        class="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <Printer :size="14" />
-                        <span>In Hóa Đơn</span>
+                        Xác nhận Hủy Đơn
                     </button>
                 </div>
             </div>

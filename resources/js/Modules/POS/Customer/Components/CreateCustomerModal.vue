@@ -1,7 +1,6 @@
 <script setup>
 
 import { ref, watch } from 'vue'
-import { Link } from '@inertiajs/vue3'
 
 const props = defineProps({
 
@@ -16,6 +15,7 @@ const props = defineProps({
 const emit = defineEmits([
     'close',
     'save',
+    'full-detail',
 ])
 
 const fullName = ref('')
@@ -48,6 +48,17 @@ const submit = () => {
     )
 }
 
+const openFullDetail = () => {
+
+    emit(
+        'full-detail',
+        {
+            full_name: fullName.value,
+            phone: phone.value,
+        }
+    )
+}
+
 </script>
 
 <template>
@@ -69,14 +80,13 @@ const submit = () => {
                 Tạo khách hàng
             </h2>
 
-            <a
-                href="/customers/create"
-                target="_blank"
-                rel="noopener noreferrer"
+            <button
+                type="button"
+                @click="openFullDetail"
                 class="text-sm text-blue-600 hover:underline"
             >
                 Tạo chi tiết →
-            </a>
+            </button>
 
             <button
                 @click="$emit('close')"

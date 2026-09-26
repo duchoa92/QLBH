@@ -16,6 +16,16 @@ class SaleItemGift extends Model
         'product_id',
 
         'quantity',
+
+        'base_quantity',
+
+        'conversion_factor',
+    ];
+
+    protected $casts = [
+        'quantity' => 'integer',
+        'base_quantity' => 'integer',
+        'conversion_factor' => 'integer',
     ];
 
     public function saleItem(): BelongsTo

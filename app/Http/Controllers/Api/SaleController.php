@@ -27,7 +27,7 @@ class SaleController extends Controller
             ->with([
                 'customer',
                 'user',
-                'items.product',
+                'items.product.conversionUnit',
                 'items.variant',
                 'items.productImei',
             ])
@@ -70,7 +70,7 @@ class SaleController extends Controller
 
                         ->orWhereHas(
 
-                            'items.product',
+                            'items.product.conversionUnit',
 
                             function ($product) use ($search) {
 
@@ -135,7 +135,7 @@ class SaleController extends Controller
 
             'user',
 
-            'items.product',
+            'items.product.conversionUnit',
 
             'items.variant',
 

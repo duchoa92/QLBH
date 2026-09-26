@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Link, router, usePage } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 
 import {
     Home,
@@ -23,6 +23,7 @@ import {
     EllipsisVertical,
     Monitor,
     UserCog,
+    SearchCheck,
 } from 'lucide-vue-next'
 
 const emit = defineEmits(['toggle', 'navigate'])
@@ -101,7 +102,14 @@ const menuGroups = [
                 label: 'Sản phẩm & IMEI',
                 icon: Boxes,
                 href: '/products',
-                paths: ['/products', '/products-trash', '/product-imeis', '/imeis'],
+                paths: ['/products', '/products-trash', '/product-imeis'],
+                permission: 'products.view',
+            },
+            {
+                label: 'Tra cứu IMEI',
+                icon: SearchCheck,
+                href: '/imeis/lookup',
+                paths: ['/imeis/lookup'],
                 permission: 'products.view',
             },
             {
@@ -241,9 +249,9 @@ watch(() => props.collapsed, (val) => {
             class="flex h-[64px] shrink-0 items-center border-b border-white/10 px-4"
             :class="props.collapsed ? 'justify-center' : 'justify-between'"
         >
-            <Link
+            <button
                 v-if="!props.collapsed"
-                href="/dashboard"
+                type="button"
                 class="flex min-w-0 items-center gap-3"
                 @click="visitMenu('/dashboard', ['/dashboard'])"
             >
@@ -255,16 +263,16 @@ watch(() => props.collapsed, (val) => {
                         QLBH POS
                     </div>
                 </div>
-            </Link>
+            </button>
 
-            <Link
+            <button
                 v-else
-                href="/dashboard"
+                type="button"
                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950 shadow"
                 @click="visitMenu('/dashboard', ['/dashboard'])"
             >
                 <ShoppingBag :size="19" />
-            </Link>
+            </button>
 
             <button
                 type="button"

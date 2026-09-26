@@ -7,6 +7,9 @@ use App\Models\StockImportItem;
 use App\Models\ProductVariant;
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Models\ProductImeiHistory;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -76,7 +79,10 @@ class StockImportService
             foreach ($data['items'] as $item) {
 
                 $productId = (int) $item['product_id'];
-                $product = Product::with('unit:id,name,short_name')
+                $product = Product::with([
+                    'unit:id,name,short_name',
+                    'conversionUnit:id,name,short_name',
+                ])
                     ->findOrFail($productId);
 
                 $variantId = !empty($item['variant_id'])
@@ -98,9 +104,17 @@ class StockImportService
                 }
 
                 $quantity = (int) round((float) $item['quantity']);
+                $conversionFactor = $product->inventoryConversionFactor();
+                $baseQuantity = $quantity * $conversionFactor;
 
                 $costPrice = (float) $item['cost_price'];
-                $imeis = $this->normalizeImeis($item['imeis'] ?? []);
+                $imeis = $this->normalizeImeis($item['imeis'] ?? [], $data['import_date'] ?? null);
+
+                if ($product->manage_stock_by_serial && $conversionFactor > 1) {
+                    throw ValidationException::withMessages([
+                        'items' => "Sản phẩm IMEI {$product->name} không hỗ trợ quy đổi đơn vị.",
+                    ]);
+                }
 
                 if ($product->manage_stock_by_serial && count($imeis) !== $quantity) {
                     throw ValidationException::withMessages([
@@ -119,13 +133,14 @@ class StockImportService
                     ]);
                 }
 
-                $existedImeis = ProductImei::query()
+                $existedInStockImeis = ProductImei::query()
                     ->whereIn('imei', collect($imeis)->pluck('imei'))
+                    ->where('status', ProductImei::STATUS_IN_STOCK)
                     ->pluck('imei');
 
-                if ($existedImeis->isNotEmpty()) {
+                if ($existedInStockImeis->isNotEmpty()) {
                     throw ValidationException::withMessages([
-                        'items' => 'IMEI đã tồn tại trong hệ thống: ' . $existedImeis->join(', '),
+                        'items' => 'IMEI đang còn trong kho, không thể nhập trùng: ' . $existedInStockImeis->join(', '),
                     ]);
                 }
 
@@ -143,11 +158,19 @@ class StockImportService
 
                     'variant_id' => $variantId,
 
-                    'unit_id' => $item['unit_id'] ?? $product->unit_id,
+                    'unit_id' => $product->has_unit_conversion
+                        ? $product->conversion_unit_id
+                        : $product->unit_id,
 
-                    'unit_name' => $item['unit_name'] ?? ($product->unit?->short_name ?: $product->unit?->name),
+                    'unit_name' => $product->has_unit_conversion
+                        ? ($product->conversionUnit?->short_name ?: $product->conversionUnit?->name)
+                        : ($product->unit?->short_name ?: $product->unit?->name),
 
                     'quantity' => $quantity,
+
+                    'base_quantity' => $baseQuantity,
+
+                    'conversion_factor' => $conversionFactor,
 
                     'cost_price' => $costPrice,
                 ]);
@@ -164,7 +187,7 @@ class StockImportService
                     ProductVariant::whereKey($variantId)
                         ->increment(
                             'stock',
-                            $quantity
+                            $baseQuantity
                         );
 
                 } else {
@@ -172,7 +195,7 @@ class StockImportService
                     Product::whereKey($productId)
                         ->increment(
                             'stock',
-                            $quantity
+                            $baseQuantity
                         );
                 }
 
@@ -184,18 +207,46 @@ class StockImportService
                  */
 
                 foreach ($imeis as $imeiData) {
-                    ProductImei::create([
+                    $imei = ProductImei::query()
+                        ->where('imei', $imeiData['imei'])
+                        ->first();
+
+                    $imeiPayload = [
                         'product_id' => $productId,
-
                         'variant_id' => $imeiData['variant_id'] ?? $variantId,
-
                         'imei' => $imeiData['imei'],
-
                         'cost_price' => $imeiData['cost_price'] ?? $costPrice,
-
                         'sell_price' => $imeiData['sell_price'] ?? 0,
-
+                        'extra_info' => $imeiData['extra_info'] ?? null,
+                        'warranty_expired_at' => $imeiData['warranty_expired_at'] ?? null,
                         'status' => ProductImei::STATUS_IN_STOCK,
+                        'sold_at' => null,
+                        'imported_at' => now(),
+                    ];
+
+                    if ($imei) {
+                        $imei->update($imeiPayload);
+                    } else {
+                        $imei = ProductImei::create($imeiPayload);
+                    }
+
+                    ProductImeiHistory::create([
+                        'product_imei_id' => $imei->id,
+                        'imei' => $imei->imei,
+                        'type' => 'import',
+                        'reference_type' => StockImport::class,
+                        'reference_id' => $import->id,
+                        'cost_price' => $imeiPayload['cost_price'],
+                        'sell_price' => $imeiPayload['sell_price'],
+                        'meta' => [
+                            'product_id' => $productId,
+                            'variant_id' => $imeiPayload['variant_id'],
+                            'supplier_id' => $data['supplier_id'] ?? null,
+                            'import_code' => $import->code,
+                            'extra_info' => $imeiPayload['extra_info'],
+                            'warranty_expired_at' => $imeiPayload['warranty_expired_at'],
+                        ],
+                        'happened_at' => $import->import_date,
                     ]);
                 }
             }
@@ -204,10 +255,10 @@ class StockImportService
         });
     }
 
-    private function normalizeImeis(array $rawImeis): array
+    private function normalizeImeis(array $rawImeis, ?string $importDate = null): array
     {
         return collect($rawImeis)
-            ->map(function ($imeiData) {
+            ->map(function ($imeiData) use ($importDate) {
                 $imei = is_array($imeiData)
                     ? ($imeiData['imei'] ?? null)
                     : $imeiData;
@@ -229,10 +280,59 @@ class StockImportService
                     'sell_price' => is_array($imeiData)
                         ? (float) ($imeiData['sell_price'] ?? 0)
                         : null,
+                    'extra_info' => is_array($imeiData)
+                        ? $this->normalizeImeiExtraInfo($imeiData)
+                        : null,
+                    'warranty_expired_at' => is_array($imeiData)
+                        ? $this->calculateSupplierWarrantyExpiredAt($imeiData, $importDate)
+                        : null,
                 ];
             })
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function normalizeImeiExtraInfo(array $imeiData): ?array
+    {
+        $extraInfo = is_array($imeiData['extra_info'] ?? null)
+            ? $imeiData['extra_info']
+            : [];
+
+        $imagePath = null;
+
+        if (($imeiData['info_image'] ?? null) instanceof UploadedFile) {
+            $imagePath = $imeiData['info_image']->store('product-imei-info', 'public');
+        }
+
+        $normalized = collect([
+            'note' => $extraInfo['note'] ?? null,
+            'image_path' => $imagePath,
+            'supplier_warranty_value' => $imeiData['warranty_duration_value'] ?? null,
+            'supplier_warranty_unit' => $imeiData['warranty_duration_unit'] ?? null,
+        ])
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn ($value) => $value !== '')
+            ->all();
+
+        return $normalized === [] ? null : $normalized;
+    }
+
+    private function calculateSupplierWarrantyExpiredAt(array $imeiData, ?string $importDate = null): ?Carbon
+    {
+        $value = (int) ($imeiData['warranty_duration_value'] ?? 0);
+        $unit = $imeiData['warranty_duration_unit'] ?? null;
+
+        if ($value <= 0 || ! in_array($unit, ['days', 'months'], true)) {
+            return null;
+        }
+
+        $date = $importDate
+            ? Carbon::parse($importDate)->startOfDay()
+            : now()->startOfDay();
+
+        return $unit === 'months'
+            ? $date->addMonths($value)
+            : $date->addDays($value);
     }
 }

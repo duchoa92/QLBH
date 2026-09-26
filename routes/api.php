@@ -6,12 +6,16 @@ use App\Http\Controllers\Api\PosScanController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ProductApiController;
+use App\Http\Controllers\Api\ReferenceDataController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\SupplierController;
 
 
 Route::middleware(['web', 'auth'])->group(function ()
 {
+    // Dữ liệu nền cho các ô chọn, luôn lấy mới mà không tải lại trang.
+    Route::get('/reference-data', [ReferenceDataController::class, 'index']);
+
 
     // Quét mã vạch để tìm sản phẩm
     Route::post(

@@ -13,6 +13,8 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { User, UserRoundPlus, X } from 'lucide-vue-next'
 import CreateCustomerModal from './CreateCustomerModal.vue'
 import { customerService } from '../Services/customerService'
+import { openModal } from '@/Stores/modal'
+import CustomerFormModal from '@/Pages/Customers/CustomerFormModal.vue'
 
 const emit = defineEmits([
     'selected',
@@ -145,6 +147,40 @@ const saveCustomer = async (
 
         console.error(error)
     }
+}
+
+// Mở modal "Tạo chi tiết" (dùng chung với trang Khách hàng)
+const openFullCustomerModal = (
+    prefill
+) => {
+
+    showCreateCustomerModal.value =
+        false
+
+    openModal(CustomerFormModal, {
+
+        props: {
+
+            title: 'Thêm khách hàng mới',
+
+            apiMode: true,
+
+            customer: {
+
+                full_name: prefill?.full_name || '',
+
+                phone: prefill?.phone || '',
+            },
+        },
+
+        onUpdated: (customer) => {
+
+            if (customer) {
+
+                selectCustomer(customer)
+            }
+        },
+    })
 }
 
 // Thêm hàm click ngoài
@@ -304,6 +340,7 @@ onBeforeUnmount(() => {
     :keyword="keyword"
     @close="showCreateCustomerModal = false"
     @save="saveCustomer"
+    @full-detail="openFullCustomerModal"
 />
 
 </template>

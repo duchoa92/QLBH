@@ -5,10 +5,8 @@ import {
     onBeforeUnmount,
 } from 'vue'
 import { productService } from '@/Modules/POS/Product/Services/productService'
-import { categoryService } from '@/Modules/POS/Product/Services/categoryService'
-
-
 import { useEventBus } from '@/Composables/useEventBus'
+import { useReferenceData } from '@/Stores/referenceData'
 
 export function useProductSearch(emit) {
 
@@ -24,7 +22,7 @@ export function useProductSearch(emit) {
 
     const products = ref([])
 
-    const categories = ref([])
+    const { categories } = useReferenceData()
 
     const loading = ref(false)
 
@@ -119,25 +117,6 @@ export function useProductSearch(emit) {
         )
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | LOAD CATEGORIES
-    |--------------------------------------------------------------------------
-    */
-
-    const loadCategories = async () => {
-
-        try {
-
-            categories.value =
-                await categoryService.getAll()
-
-        } catch (error) {
-
-            console.error(error)
-        }
-    }
-
     // Reset ô tìm sản phẩm
     const resetProductSearch = async () => {
 
@@ -173,8 +152,6 @@ export function useProductSearch(emit) {
     onMounted(() => {
 
         loadProducts()
-
-        loadCategories()
 
         onEvent(
             'products:refresh',

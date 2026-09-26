@@ -27,6 +27,7 @@ class ProductController extends Controller
             $products = Product::query()
                 ->with([
                     'unit:id,name,short_name',
+                    'conversionUnit:id,name,short_name',
                     'variants' => fn ($query) => $query
                         ->where('is_active', true)
                         ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
@@ -67,6 +68,13 @@ class ProductController extends Controller
                         'category_id' => $product->category_id,
                         'unit_id' => $product->unit_id,
                         'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+                        'has_unit_conversion' => $product->has_unit_conversion,
+                        'conversion_factor' => 1,
+                        'inventory_unit_id' => $product->unit_id,
+                        'inventory_unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+                        'import_unit_id' => $product->conversionUnit?->id,
+                        'import_unit_name' => $product->conversionUnit?->short_name ?: $product->conversionUnit?->name,
+                        'import_conversion_factor' => $product->inventoryConversionFactor(),
                         'product_type' => $product->product_type,
                         'sold_count' => $product->sold_count ?? 0,
                         'image_url' => $product->image_url,
@@ -81,6 +89,7 @@ class ProductController extends Controller
         $products = Product::query()
             ->with([
                 'unit:id,name,short_name',
+                'conversionUnit:id,name,short_name',
                     'variants' => fn ($query) => $query
                         ->where('is_active', true)
                         ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
@@ -153,6 +162,13 @@ class ProductController extends Controller
                     'category_id' => $product->category_id,
                     'unit_id' => $product->unit_id,
                     'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+                    'has_unit_conversion' => $product->has_unit_conversion,
+                    'conversion_factor' => 1,
+                    'inventory_unit_id' => $product->unit_id,
+                    'inventory_unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+                    'import_unit_id' => $product->conversionUnit?->id,
+                    'import_unit_name' => $product->conversionUnit?->short_name ?: $product->conversionUnit?->name,
+                    'import_conversion_factor' => $product->inventoryConversionFactor(),
                     'product_type' => $product->product_type,
                     'sold_count' => $product->sold_count ?? 0,
                     'image_url' => $product->image_url,
@@ -220,6 +236,8 @@ class ProductController extends Controller
     public function getProductApi($id)
     {
         $product = \App\Models\Product::with([
+            'unit:id,name,short_name',
+            'conversionUnit:id,name,short_name',
             'variants' => fn ($query) => $query->where('is_active', true),
         ])->find($id);
 
@@ -261,6 +279,7 @@ class ProductController extends Controller
                 'serial',
                 'color',
                 'storage',
+                'extra_info',
                 'cost_price',
                 'sell_price',
             ])
@@ -285,6 +304,7 @@ class ProductController extends Controller
                     'display_code' => $imei->imei ?: $imei->serial ?: 'IMEI #' . $imei->id,
                     'color' => $imei->color,
                     'storage' => $imei->storage,
+                    'extra_info' => $imei->extra_info,
                     'cost_price' => $imei->cost_price,
                     'sell_price' => $imei->sell_price,
                     'effective_sell_price' => $effectiveSellPrice,

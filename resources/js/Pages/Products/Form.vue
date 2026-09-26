@@ -8,6 +8,8 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
 import {toast} from 'vue-sonner'
 import { X } from 'lucide-vue-next'
+import { useReferenceData } from '@/Stores/referenceData'
+import { imageUrl } from '@/utils/imageUrl'
 
 
 
@@ -26,6 +28,11 @@ const props = defineProps({
     },
 })
 
+const { categories, brands, units } = useReferenceData({
+    categories: props.categories,
+    brands: props.brands,
+    units: props.units,
+})
 
 
 const showVariants = ref(!!props.product?.variants?.length)
@@ -83,6 +90,9 @@ const form = useForm({
     category_id: props.product?.category_id ?? null,
     brand_id: props.product?.brand_id ?? null,
     unit_id: props.product?.unit_id ?? null,
+    has_unit_conversion: props.product?.has_unit_conversion ?? false,
+    conversion_unit_id: props.product?.conversion_unit_id ?? null,
+    conversion_factor: props.product?.conversion_factor ?? 1,
     sku: props.product?.sku ?? '',
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
@@ -99,19 +109,6 @@ const form = useForm({
 |--------------------------------------------------------------------------
 */
 const preview = ref(null)
-
-const getImageUrl = (image) => {
-    if (!image) return null
-
-    // Nếu đã là URL đầy đủ
-    if (image.startsWith('http://') || image.startsWith('https://')) {
-        return image
-    }
-
-    return `/storage/${image}`
-}
-
-
 
 const handleImage = (e) => {
     const file = e.target.files[0]
@@ -132,7 +129,7 @@ const filteredBrands = computed(() => {
         return []
     }
 
-    return props.brands.filter(
+    return brands.value.filter(
         brand => Number(brand.category_id) === Number(form.category_id)
     )
 })
@@ -142,13 +139,40 @@ const unitOptions = computed(() => [
         id: null,
         name: 'Không chọn',
     },
-    ...(props.units || []).map(unit => ({
+    ...units.value.map(unit => ({
         ...unit,
         name: unit.short_name
             ? `${unit.name} (${unit.short_name})`
             : unit.name,
     })),
 ])
+
+const conversionUnitOptions = computed(() =>
+    units.value
+        .filter(unit => Number(unit.id) !== Number(form.unit_id))
+        .map(unit => ({
+            ...unit,
+            name: unit.short_name
+                ? `${unit.name} (${unit.short_name})`
+                : unit.name,
+        }))
+)
+
+const selectedUnitName = computed(() => {
+    const unit = units.value.find(
+        item => Number(item.id) === Number(form.unit_id)
+    )
+
+    return unit?.short_name || unit?.name || 'đơn vị bán'
+})
+
+const selectedImportUnitName = computed(() => {
+    const unit = units.value.find(
+        item => Number(item.id) === Number(form.conversion_unit_id)
+    )
+
+    return unit?.short_name || unit?.name || 'đơn vị nhập'
+})
 
 
 
@@ -170,6 +194,9 @@ watch(() => props.product, (p) => {
     form.category_id = p.category_id ?? null
     form.brand_id = p.brand_id ?? null
     form.unit_id = p.unit_id ?? null
+    form.has_unit_conversion = p.has_unit_conversion ?? false
+    form.conversion_unit_id = p.conversion_unit_id ?? null
+    form.conversion_factor = p.conversion_factor ?? 1
     form.sku = p.sku ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
@@ -177,7 +204,7 @@ watch(() => props.product, (p) => {
     // Ảnh cũ chỉ dùng để preview
     // Không đưa tên file cũ vào form.image
     form.image = null
-    preview.value = getImageUrl(p.image)
+    preview.value = imageUrl(p.image_url ?? p.image)
 
     autoSku.value = p.sku ?? ''
 
@@ -226,6 +253,12 @@ watch(() => props.product, (p) => {
     form.manage_stock_by_serial =
         p.manage_stock_by_serial ?? false
 
+    if (form.manage_stock_by_serial) {
+        form.has_unit_conversion = false
+        form.conversion_unit_id = null
+        form.conversion_factor = 1
+    }
+
     form.product_type =
         p.product_type ?? 'normal'
 
@@ -235,7 +268,7 @@ watch(() => props.product, (p) => {
 
 
 const categoryAttributes = computed(() => {
-    const cat = props.categories.find(
+    const cat = categories.value.find(
         c => Number(c.id) === Number(form.category_id)
     )
 
@@ -283,6 +316,30 @@ watch(showVariants, (value) => {
 
         // Tắt checkbox → xóa biến thể
         form.variants = []
+    }
+})
+
+watch(() => form.manage_stock_by_serial, (enabled) => {
+    if (!enabled) return
+
+    form.has_unit_conversion = false
+    form.conversion_unit_id = null
+    form.conversion_factor = 1
+})
+
+watch(() => form.has_unit_conversion, (enabled) => {
+    if (enabled) {
+        form.manage_stock_by_serial = false
+        return
+    }
+
+    form.conversion_unit_id = null
+    form.conversion_factor = 1
+})
+
+watch(() => form.unit_id, (unitId) => {
+    if (Number(unitId) === Number(form.conversion_unit_id)) {
+        form.conversion_unit_id = null
     }
 })
 
@@ -555,7 +612,7 @@ const suggestions = computed(() => {
     if (dropdown.value.type === 'attr') {
         const selected = variant.attributes.map(a => normalize(a.name))
 
-        const all = props.categories
+        const all = categories.value
             ?.flatMap(c => c.attributes || [])
             .map(a => a.name)
             .filter((v, i, arr) => arr.indexOf(v) === i) || []
@@ -666,6 +723,18 @@ const emit = defineEmits(['close', 'updated'])
 
 const submit = () => {
 
+    const normalizePayload = (data) => {
+        const payload = { ...data }
+
+        if (payload.manage_stock_by_serial || !payload.has_unit_conversion) {
+            payload.has_unit_conversion = false
+            payload.conversion_unit_id = null
+            payload.conversion_factor = null
+        }
+
+        return payload
+    }
+
     const options = {
         onSuccess: () => {
             form.reset()
@@ -679,7 +748,7 @@ const submit = () => {
         form
             .transform(data => {
                 const payload = {
-                    ...data,
+                    ...normalizePayload(data),
                     _method: 'PUT',
                 }
 
@@ -692,7 +761,9 @@ const submit = () => {
             })
             .post(route('products.update', form.id), options)
     } else {
-        form.post(route('products.store'), options)
+        form
+            .transform(normalizePayload)
+            .post(route('products.store'), options)
     }
 }
 
@@ -715,6 +786,7 @@ const submit = () => {
                         v-if="preview"
                         :src="preview"
                         class="h-full w-full object-cover"
+                        @error="preview = null"
                     />
 
                     <span
@@ -775,12 +847,12 @@ const submit = () => {
                         :options="unitOptions"
                         option-label="name"
                         option-value="id"
-                        label="Đơn vị tính"
+                        label="Đơn vị bán và tồn kho"
                         :error="form.errors.unit_id"
                     />
 
                     <!-- SKU + IMEI + BIẾN THỂ -->
-                    <div class="grid gap-3">
+                    <div class="grid gap-3 md:col-span-2">
 
                         <!-- SKU -->
                         <FloatingInput
@@ -790,9 +862,13 @@ const submit = () => {
                         />
 
                         <!-- CÓ IMEI + NÚT BIẾN THỂ -->
-                        <div class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
                             <!-- IMEI -->
-                            <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                            <label
+                                v-if="!form.has_unit_conversion"
+                                class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700"
+                            >
                                 <input
                                     v-model="form.manage_stock_by_serial"
                                     type="checkbox"
@@ -810,6 +886,48 @@ const submit = () => {
                                 />
                                 Có thuộc tính
                             </label>
+                            <label
+                                v-if="!form.manage_stock_by_serial"
+                                class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700"
+                            >
+                                <input
+                                    v-model="form.has_unit_conversion"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                Nhập theo cuộn / thùng
+                            </label>
+                            </div>
+
+                            <div
+                                v-if="form.has_unit_conversion"
+                                class="mt-3 grid items-end gap-3 border-t border-slate-200 pt-3 md:grid-cols-[minmax(180px,1fr)_minmax(110px,0.55fr)_auto]"
+                            >
+                                <FloatingSelect
+                                    v-model="form.conversion_unit_id"
+                                    :options="conversionUnitOptions"
+                                    option-label="name"
+                                    option-value="id"
+                                    label="Đơn vị nhập"
+                                    :error="form.errors.conversion_unit_id"
+                                />
+
+                                <FloatingInput
+                                    v-model.number="form.conversion_factor"
+                                    type="number"
+                                    min="2"
+                                    label="Số lượng"
+                                    :error="form.errors.conversion_factor"
+                                />
+
+                                <div class="pb-2 text-sm font-bold text-slate-700">
+                                    1 {{ selectedImportUnitName }} = {{ form.conversion_factor || 0 }} {{ selectedUnitName }}
+                                </div>
+                            </div>
+
+                            <p class="mt-2 text-xs font-medium text-slate-500">
+                                IMEI có thể đi cùng thuộc tính; quy đổi đơn vị không dùng cho sản phẩm IMEI.
+                            </p>
                         </div>
                     </div>
 

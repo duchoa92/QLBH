@@ -113,6 +113,9 @@ const priceLabel = (product) => {
 const getDisplayStock = (product) => {
     const productId = Number(product.product_id ?? product.id)
     const variantId = product.variant_id ? Number(product.variant_id) : null
+    const sellableQuantity = (baseQuantity) => Math.max(0, Number(baseQuantity || 0))
+    const cartBaseQuantity = (item) =>
+        Number(item.quantity ?? 1)
 
     // Danh sách IMEI nếu backend có trả về mảng chi tiết
     const imeiList = product.imeis || product.serials || product.product_imeis || []
@@ -157,12 +160,12 @@ const getDisplayStock = (product) => {
         const inCartQty = props.cart.reduce((sum, item) => {
             const itemProductId = Number(item.product_id ?? item.id)
             if (itemProductId === productId) {
-                return sum + Number(item.quantity ?? 1)
+                return sum + cartBaseQuantity(item)
             }
             return sum
         }, 0)
 
-        return Math.max(0, rawStock - inCartQty)
+        return sellableQuantity(rawStock - inCartQty)
     }
 
     // =========================================================================
@@ -176,12 +179,12 @@ const getDisplayStock = (product) => {
             const itemProductId = Number(item.product_id ?? item.id)
             const itemVariantId = item.variant_id ? Number(item.variant_id) : null
             if (itemProductId === productId && itemVariantId === variantId) {
-                return sum + Number(item.quantity ?? 1)
+                return sum + cartBaseQuantity(item)
             }
             return sum
         }, 0)
 
-        return Math.max(0, rawStock - inCartQty)
+        return sellableQuantity(rawStock - inCartQty)
     }
 
     // =========================================================================
@@ -196,12 +199,12 @@ const getDisplayStock = (product) => {
                 const itemVariantId = cartItem.variant_id ? Number(cartItem.variant_id) : null
                 
                 if (itemProductId === productId && itemVariantId === Number(variant.id)) {
-                    return sum + Number(cartItem.quantity ?? 1)
+                    return sum + cartBaseQuantity(cartItem)
                 }
                 return sum
             }, 0)
 
-            return total + Math.max(0, vStock - inCartQty)
+            return total + sellableQuantity(vStock - inCartQty)
         }, 0)
 
         return totalAvailable
@@ -214,12 +217,12 @@ const getDisplayStock = (product) => {
     const inCartQty = props.cart.reduce((sum, item) => {
         const itemProductId = Number(item.product_id ?? item.id)
         if (itemProductId === productId) {
-            return sum + Number(item.quantity ?? 1)
+            return sum + cartBaseQuantity(item)
         }
         return sum
     }, 0)
 
-    return Math.max(0, rawStock - inCartQty)
+    return sellableQuantity(rawStock - inCartQty)
 }
 
 const refreshProducts = () => {
@@ -375,7 +378,7 @@ const categoryOptions = computed(() => [
                                 class="font-bold px-1.5 py-0.5 rounded"
                                 :class="getDisplayStock(product) > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'"
                             >
-                                Tồn: {{ getDisplayStock(product) }}
+                                Tồn: {{ getDisplayStock(product) }} {{ product.unit_name || '' }}
                             </span>
 
                             <span class="text-slate-400">

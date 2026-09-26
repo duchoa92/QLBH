@@ -1,9 +1,11 @@
 <script setup>
+import { computed } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import { useReferenceData } from '@/Stores/referenceData'
 
 const props = defineProps({
     user: {
@@ -20,6 +22,10 @@ const props = defineProps({
     },
 })
 
+const { roles } = useReferenceData({
+    roles: props.roles,
+})
+
 const emit = defineEmits(['close', 'updated'])
 
 const form = useForm({
@@ -32,13 +38,13 @@ const form = useForm({
     role: props.user?.roles?.[0]?.name ?? props.user?.roles?.[0] ?? '',
 })
 
-const roleOptions = [
+const roleOptions = computed(() => [
     { name: 'Chọn vai trò', value: '' },
-    ...props.roles.map(role => ({
+    ...roles.value.map(role => ({
         name: role.name,
         value: role.name,
     })),
-]
+])
 
 const submit = () => {
     const options = {

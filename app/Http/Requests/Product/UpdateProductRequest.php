@@ -29,7 +29,26 @@ class UpdateProductRequest extends FormRequest
 
             'unit_id' => [
                 'nullable',
+                'required_if:has_unit_conversion,true',
                 'exists:units,id',
+            ],
+
+            'has_unit_conversion' => ['boolean'],
+
+            'conversion_unit_id' => [
+                Rule::when(
+                    $this->boolean('has_unit_conversion'),
+                    ['required', 'different:unit_id', 'exists:units,id'],
+                    ['nullable']
+                ),
+            ],
+
+            'conversion_factor' => [
+                Rule::when(
+                    $this->boolean('has_unit_conversion'),
+                    ['required', 'integer', 'min:2'],
+                    ['nullable', 'integer', 'min:1']
+                ),
             ],
 
             'name' => [

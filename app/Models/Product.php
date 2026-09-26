@@ -18,6 +18,9 @@ class Product extends Model
         'category_id',
         'brand_id',
         'unit_id',
+        'has_unit_conversion',
+        'conversion_unit_id',
+        'conversion_factor',
         'name',
         'slug',
         'sku',
@@ -47,6 +50,10 @@ class Product extends Model
         'allow_negative_stock' => 'boolean',
 
         'manage_stock_by_serial' => 'boolean',
+
+        'has_unit_conversion' => 'boolean',
+
+        'conversion_factor' => 'integer',
     ];
 
     protected $attributes = [
@@ -79,6 +86,18 @@ class Product extends Model
         return $this->belongsTo(
             Unit::class
         );
+    }
+
+    public function conversionUnit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class, 'conversion_unit_id');
+    }
+
+    public function inventoryConversionFactor(): int
+    {
+        return $this->has_unit_conversion
+            ? max(1, (int) $this->conversion_factor)
+            : 1;
     }
 
     public function imeis(): HasMany

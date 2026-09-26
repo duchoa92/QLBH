@@ -3,12 +3,17 @@ import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import { useReferenceData } from '@/Stores/referenceData'
 
 const props = defineProps({
     brand: Object,
     categories: Array,
     title: String,
     modalId: Number
+})
+
+const { categories } = useReferenceData({
+    categories: props.categories,
 })
 
 const emit = defineEmits(['close', 'updated'])

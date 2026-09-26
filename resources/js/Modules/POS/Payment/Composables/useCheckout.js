@@ -83,6 +83,9 @@ export function useCheckout(
                         unit_name:
                             item.unit_name ?? 'Cái',
 
+                        conversion_factor:
+                            item.conversion_factor ?? 1,
+
                         variant_id:
                             item.variant_id ?? null,
 

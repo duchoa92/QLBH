@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\StockImport;
+use App\Models\ProductImeiHistory;
 use App\Services\Stock\StockImportService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -125,6 +126,12 @@ class StockImportController extends Controller
                 'min:0',
             ],
 
+            'items.*.sell_price' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
             'items.*.imeis' => [
                 'nullable',
                 'array',
@@ -134,6 +141,35 @@ class StockImportController extends Controller
                 'nullable',
                 'string',
                 'max:100',
+            ],
+
+            'items.*.imeis.*.extra_info' => [
+                'nullable',
+                'array',
+            ],
+
+            'items.*.imeis.*.extra_info.note' => [
+                'nullable',
+                'string',
+                'max:2000',
+            ],
+
+            'items.*.imeis.*.info_image' => [
+                'nullable',
+                'image',
+                'max:5120',
+            ],
+
+            'items.*.imeis.*.warranty_duration_value' => [
+                'nullable',
+                'integer',
+                'min:0',
+            ],
+
+            'items.*.imeis.*.warranty_duration_unit' => [
+                'nullable',
+                'string',
+                Rule::in(['days', 'months']),
             ],
 
             'discount' => [
@@ -172,10 +208,36 @@ class StockImportController extends Controller
         $stockImport->load([
             'supplier:id,name,phone,email,address',
             'user:id,name',
-            'items.product:id,name,sku,image,unit_id',
+            'items.product:id,name,sku,image,unit_id,conversion_unit_id',
+            'items.product.unit:id,name,short_name',
+            'items.product.conversionUnit:id,name,short_name',
             'items.variant:id,product_id,sku,attributes,stock',
             'items.unit:id,name,short_name',
         ]);
+
+        $imeiHistories = ProductImeiHistory::query()
+            ->with([
+                'productImei:id,product_id,variant_id,imei,serial,extra_info,warranty_expired_at,status,cost_price,sell_price',
+                'productImei.product:id,name,sku',
+                'productImei.variant:id,product_id,sku,attributes',
+            ])
+            ->where('reference_type', StockImport::class)
+            ->where('reference_id', $stockImport->id)
+            ->where('type', 'import')
+            ->latest('id')
+            ->get();
+
+        $stockImport->items->each(function ($item) use ($imeiHistories): void {
+            $item->setRelation(
+                'import_imeis',
+                $imeiHistories
+                    ->filter(function (ProductImeiHistory $history) use ($item): bool {
+                        return (int) ($history->meta['product_id'] ?? 0) === (int) $item->product_id
+                            && (int) ($history->meta['variant_id'] ?? 0) === (int) ($item->variant_id ?? 0);
+                    })
+                    ->values()
+            );
+        });
 
         if ($request->wantsJson()) {
             return response()->json($stockImport);

@@ -93,6 +93,8 @@ class PosController extends Controller
 
             'items.*.unit_name' => 'nullable|string|max:100',
 
+            'items.*.conversion_factor' => 'nullable|integer|min:1',
+
         ],
         [
             'items.required' => 'Giỏ hàng không được để trống.',
@@ -111,7 +113,7 @@ class PosController extends Controller
             );
 
             $sale->load([
-                'items.product',
+                'items.product.conversionUnit',
                 'items.variant',
                 'items.productImei',
                 'items.gifts.product',
@@ -169,10 +171,12 @@ class PosController extends Controller
     public function showSale(Sale $sale): Response 
     {
         $sale->load([
-            'items.product',
+            'items.product.conversionUnit',
             'items.variant',
             'items.productImei',
             'items.gifts.product',
+            'customer',
+            'user'
         ]);
 
         return Inertia::render(

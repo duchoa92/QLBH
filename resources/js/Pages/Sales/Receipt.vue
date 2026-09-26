@@ -20,6 +20,16 @@ const saleQuantityText = (item) => {
     return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
 }
 
+const baseQuantityText = (item) => {
+    if (Number(item.conversion_factor || 1) <= 1) return ''
+
+    const unit = item.product?.unit?.short_name
+        || item.product?.unit?.name
+        || 'đơn vị gốc'
+
+    return ` = ${item.base_quantity} ${unit}`
+}
+
 onMounted(() => {
     setTimeout(() => {
         window.print()
@@ -27,9 +37,19 @@ onMounted(() => {
 })
 </script>
 
+<!-- Receipt.vue -->
 <template>
     <div class="receipt-wrapper">
-        <div class="receipt-container">
+        <div class="receipt-container relative">
+            
+            <!-- 🔴 DẤU CON DẤU "ĐÃ HỦY" ĐÓNG MỜ NỔI BẬT -->
+            <div 
+                v-if="sale.status === 'cancelled'" 
+                class="absolute transform -translate-x-1/2 -translate-y-1/2 border-4 border-red-600 top-1/2 left-1/2 text-red-600 font-extrabold text-3xl uppercase tracking-widest px-4 py-1 rotate-[-25deg] opacity-35 select-none pointer-events-none z-10"
+            >
+                ĐÃ HỦY
+            </div>
+
             <!-- Nút bấm thủ công (Tự động ẩn khi in) -->
             <div class="no-print print-bar">
                 <span>Xem trước hóa đơn (K80)</span>
@@ -76,7 +96,7 @@ onMounted(() => {
                     </div>
 
                     <div class="item-calc">
-                        <span>{{ saleQuantityText(item) }} x {{ formatMoney(item.unit_price) }}</span>
+                        <span>{{ saleQuantityText(item) }}{{ baseQuantityText(item) }} x {{ formatMoney(item.unit_price) }}</span>
                         <strong>{{ formatMoney(item.subtotal) }}</strong>
                     </div>
                 </div>
@@ -105,6 +125,16 @@ onMounted(() => {
             </div>
 
             <div class="divider"></div>
+
+            <!-- 🔴 THÔNG TIN LÝ DO HỦY TRÊN HOÁ ĐƠN IN -->
+            <div 
+                v-if="sale.status === 'cancelled'" 
+                class="pt-2 mb-2 text-xs text-red-600 border-t-2 border-dashed border-red-400"
+            >
+                <p class="font-bold uppercase">HÓA ĐƠN NÀY ĐÃ BỊ HỦY</p>
+                <p>Lý do: {{ sale.cancel_reason || sale.reason || 'Chưa ghi nhận' }}</p>
+                <p v-if="sale.cancelled_at">Thời gian: {{ sale.cancelled_at }}</p>
+            </div>
 
             <!-- Footer -->
             <div class="footer">

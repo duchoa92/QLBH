@@ -32,6 +32,8 @@ const getVariantLabel = (variant) => {
 const unitPayload = (product) => ({
     unit_id: product.unit_id ?? null,
     unit_name: product.unit_name ?? product.unit?.short_name ?? product.unit?.name ?? 'Cái',
+    conversion_factor: 1,
+    inventory_unit_name: product.unit_name ?? product.unit?.short_name ?? product.unit?.name ?? 'Cái',
 })
 
 
@@ -503,6 +505,7 @@ export function useCart() {
 
             if (existing) {
 
+                Object.assign(existing, unitPayload(product))
                 existing.quantity++
 
                 return
@@ -571,6 +574,7 @@ export function useCart() {
 
         if (existing) {
 
+            Object.assign(existing, unitPayload(product))
             existing.quantity++
 
             return

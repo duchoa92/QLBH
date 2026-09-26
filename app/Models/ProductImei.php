@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Product;
 
 class ProductImei extends Model
@@ -37,9 +38,13 @@ class ProductImei extends Model
 
         'storage',
 
+        'extra_info',
+
         'cost_price',
 
         'sell_price',
+
+        'warranty_expired_at',
 
         'status',
 
@@ -49,6 +54,11 @@ class ProductImei extends Model
 
         'note',
 
+    ];
+
+    protected $casts = [
+        'extra_info' => 'array',
+        'warranty_expired_at' => 'datetime',
     ];
 
     // Thêm quan hệ với Product
@@ -72,5 +82,10 @@ class ProductImei extends Model
     public function variant()
     {
         return $this->belongsTo(ProductVariant::class);
+    }
+
+    public function histories(): HasMany
+    {
+        return $this->hasMany(ProductImeiHistory::class);
     }
 }

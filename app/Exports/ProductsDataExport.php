@@ -3,19 +3,25 @@
 namespace App\Exports;
 
 use App\Models\Product;
-use App\Models\ExportHistory;
+use App\Support\ProductImportColumns;
 use Maatwebsite\Excel\Concerns\{
     FromQuery,
+    ShouldAutoSize,
+    WithEvents,
     WithHeadings,
     WithMapping,
+    WithTitle,
 };
 use Maatwebsite\Excel\Events\AfterSheet;
 
 
-class ProductsDataExport implements 
+class ProductsDataExport implements
     FromQuery,
+    ShouldAutoSize,
+    WithEvents,
     WithHeadings,
-    WithMapping
+    WithMapping,
+    WithTitle
 {
     protected $export;
 
@@ -32,21 +38,7 @@ class ProductsDataExport implements
 
     public function headings(): array
     {
-        return [
-            'STT',
-            'Tên sản phẩm',
-            'SKU',
-            'Barcode',
-            'Danh mục',
-            'Thương hiệu',
-            'Giá bán',
-            'Giá vốn',
-            'Tồn kho',
-            'Đơn vị tính',
-            'Loại',
-            'Kích hoạt',
-            'Ảnh'
-        ];
+        return ProductImportColumns::HEADINGS;
     }
 
     public function map($p): array
@@ -68,7 +60,6 @@ class ProductsDataExport implements
         }
 
         return [
-            
             $p->row_num,
             $p->name,
             $p->sku,
@@ -80,8 +71,10 @@ class ProductsDataExport implements
             $p->stock,
             $p->unit?->short_name ?: $p->unit?->name,
             $p->product_type,
+            $p->manage_stock_by_serial ? 1 : 0,
             $p->is_active ? 1 : 0,
             $p->image,
+            $p->description,
         ];
     }
 
@@ -98,7 +91,7 @@ class ProductsDataExport implements
                 $sheet = $event->sheet;
 
                 /* ===== 1. STYLE HEADER ===== */
-                $sheet->getStyle('A1:M1')->applyFromArray([
+                $sheet->getStyle('A1:O1')->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 12
@@ -115,16 +108,17 @@ class ProductsDataExport implements
                 ]);
 
                 /* ===== 2. TÔ ĐỎ CỘT BẮT BUỘC ===== */
-                // B, C, G = Tên, SKU, Giá bán
+                // B, C, E, G = Tên, SKU, Danh mục, Giá bán
                 $sheet->getStyle('B1')->getFont()->getColor()->setARGB('FFFF0000');
                 $sheet->getStyle('C1')->getFont()->getColor()->setARGB('FFFF0000');
+                $sheet->getStyle('E1')->getFont()->getColor()->setARGB('FFFF0000');
                 $sheet->getStyle('G1')->getFont()->getColor()->setARGB('FFFF0000');
 
                 /* ===== 3. FREEZE HEADER ===== */
                 $sheet->freezePane('A2');
 
                 /* ===== 4. AUTO WIDTH ===== */
-                foreach (range('A', 'M') as $col) {
+                foreach (range('A', 'O') as $col) {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
 

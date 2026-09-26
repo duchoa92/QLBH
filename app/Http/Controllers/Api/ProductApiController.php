@@ -22,7 +22,11 @@ class ProductApiController extends Controller
 
         $product = Product::query()
 
-            ->with('imeis')
+            ->with([
+                'imeis',
+                'unit:id,name,short_name',
+                'conversionUnit:id,name,short_name',
+            ])
 
             ->where(
                 'barcode',
@@ -91,6 +95,14 @@ class ProductApiController extends Controller
                 : $product->sell_price,
 
             'stock' => $product->stock,
+
+            'unit_id' => $product->unit_id,
+
+            'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+
+            'conversion_factor' => 1,
+
+            'inventory_unit_name' => $product->unit?->short_name ?: $product->unit?->name,
 
             'imei_id' =>
                 $imei?->id,

@@ -23,7 +23,7 @@ const submit = () => {
     const options = {
         preserveScroll: true,
         onSuccess: (page) => {
-            emit('updated', page.props.newSupplier)
+            emit('updated', page.props.flash?.newSupplier ?? null)
             emit('close')
         }
     }

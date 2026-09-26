@@ -16,7 +16,30 @@ const api = axios.create({
 // thêm interceptor để bắt lỗi 401 Unauthenticated
 api.interceptors.response.use(
 
-    (response) => response,
+    (response) => {
+        const method = response.config?.method?.toLowerCase()
+
+        if (method && !['get', 'head'].includes(method)) {
+            window.dispatchEvent(new Event('reference-data:changed'))
+
+            try {
+                window.localStorage.setItem(
+                    'reference-data:version',
+                    String(Date.now())
+                )
+            } catch {
+                // Không ảnh hưởng yêu cầu vừa hoàn tất.
+            }
+
+            if ('BroadcastChannel' in window) {
+                const channel = new BroadcastChannel('reference-data')
+                channel.postMessage({ type: 'reference-data:changed' })
+                channel.close()
+            }
+        }
+
+        return response
+    },
 
     (error) => {
 

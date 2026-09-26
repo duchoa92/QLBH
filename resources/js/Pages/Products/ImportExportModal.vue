@@ -616,11 +616,16 @@ const downloadTemplate = () => {
                         <tr>
                             <th class="border p-2">#</th>
                             <th class="border p-2">Tên</th>
+                            <th class="border p-2">SKU</th>
+                            <th class="border p-2">Danh mục</th>
+                            <th class="border p-2">Thương hiệu</th>
                             <th class="border p-2">Ảnh</th>
                             <th class="border p-2">Giá bán</th>
                             <th class="border p-2">Giá nhập</th>
                             <th class="border p-2">Tồn kho</th>
                             <th class="border p-2">Đơn vị</th>
+                            <th class="border p-2">Loại</th>
+                            <th class="border p-2">IMEI</th>
                             <th class="border p-2">Trạng thái</th>
                         </tr>
 
@@ -632,6 +637,9 @@ const downloadTemplate = () => {
                             <td class="border">{{ i + 1 }}</td>
 
                             <td class="border">{{ item.name }}</td>
+                            <td class="border">{{ item.sku }}</td>
+                            <td class="border">{{ item.category || '-' }}</td>
+                            <td class="border">{{ item.brand || '-' }}</td>
                             <td class="border">
                                 <img 
                                     v-if="findImage(item.image_name)"
@@ -639,7 +647,8 @@ const downloadTemplate = () => {
                                     class="w-12 h-12 object-cover rounded"
                                 />
 
-                                <span v-else class="text-red-500">Thiếu ảnh</span>
+                                <span v-else-if="item.image_name" class="text-red-500">Thiếu ảnh</span>
+                                <span v-else class="text-gray-400 italic">-</span>
                             </td>
 
                             <td class="border">
@@ -671,6 +680,14 @@ const downloadTemplate = () => {
 
                             <td class="border">
                                 {{ item.unit || '-' }}
+                            </td>
+
+                            <td class="border">
+                                {{ item.type || 'normal' }}
+                            </td>
+
+                            <td class="border">
+                                {{ item.manage_stock_by_serial || '-' }}
                             </td>
 
                             <td

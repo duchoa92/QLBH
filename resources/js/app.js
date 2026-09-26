@@ -12,6 +12,7 @@ import clickOutside from '@/Directives/clickOutside'
 import ModalRoot from '@/Components/ModalRoot.vue'
 import { Ziggy } from './ziggy'
 import { formatMoney, formatDate, formatDateTime } from '@/utils/format'
+import { notifyReferenceDataChanged } from '@/Stores/referenceData'
 
 
 const app = createApp({})
@@ -50,6 +51,12 @@ if (!window._inertiaToastRegistered) {
     let shownMessages = new Set()
 
     router.on('success', (event) => {
+
+    const method = event.detail.visit?.method?.toLowerCase()
+
+    if (method && !['get', 'head'].includes(method)) {
+        notifyReferenceDataChanged()
+    }
 
     const page = event.detail.page
     const flash = page.props.flash

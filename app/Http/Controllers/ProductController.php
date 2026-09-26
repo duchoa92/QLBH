@@ -336,7 +336,7 @@ class ProductController extends Controller
     {
         $rows = Excel::toArray([], $request->file('file'))[0];
 
-        $allowDuplicate = $request->get('force', false);
+        $allowDuplicate = $request->boolean('force');
 
         $images = [];
 
@@ -347,6 +347,7 @@ class ProductController extends Controller
         $result = $service->handle($rows, $allowDuplicate, $images);
 
         return response()->json([
+            'success' => $result['success'] ?? true,
             'count' => $result['count'] ?? 0,
             'errors' => $result['errors'] ?? [],
             'error_count' => $result['error_count'] ?? 0,
@@ -362,134 +363,16 @@ class ProductController extends Controller
     }
 
 
-    public function previewImport(Request $request)
+    public function previewImport(Request $request, ProductImportService $service)
     {
         $rows = Excel::toArray([], $request->file('file'))[0];
+        $images = [];
 
-        $valid = [];
-
-        // LẤY HEADER (QUAN TRỌNG)
-        $header = array_map(fn($h) => strtolower(trim($h)), $rows[0]);
-
-        foreach ($rows as $index => $row) {
-
-            if ($index === 0) continue;
-
-            $name         = trim($row[1] ?? '');
-            $sku          = trim($row[2] ?? '');
-            $barcode      = trim($row[3] ?? '');
-            $categoryName = trim($row[4] ?? '');
-            $brandName    = trim($row[5] ?? '');
-            $sellPrice    = trim($row[6] ?? '');
-
-            $costPrice    = trim($row[7] ?? '');
-            $stock        = trim($row[8] ?? '');
-
-            $unitName     = trim($row[9] ?? '');
-            $type         = trim($row[10] ?? 'normal');
-            $active       = $row[11] ?? 1;
-            $rawImageName = trim($row[12] ?? '');
-
-            if (in_array($unitName, ['normal', 'imei', 'service', 'combo'], true)) {
-                $type = $unitName;
-                $unitName = '';
-                $active = $row[10] ?? 1;
-                $rawImageName = trim($row[11] ?? '');
-            }
-
-            $imageName = strtolower(
-                preg_replace('/[^a-z0-9]/', '', pathinfo($rawImageName, PATHINFO_FILENAME))
-            );
-            $rowNumber = $index + 1;
-
-            $status = 'OK';
-            $isError = false;
-
-            /* ===== VALIDATE ===== */
-
-            if (!$name) {
-                $status = 'Thiếu tên';
-                $isError = true;
-            }
-            elseif (!$sku) {
-                $status = 'Thiếu SKU';
-                $isError = true;
-            }
-            elseif ($sellPrice === '' || $sellPrice === null || !is_numeric($sellPrice)) {
-                $status = 'Thiếu giá';
-                $isError = true;
-            }
-            // cost_price optional
-            elseif ($costPrice !== '' && !is_numeric($costPrice)) {
-                $status = 'Giá nhập không hợp lệ';
-                $isError = true;
-            }
-
-            // stock optional
-            elseif ($stock !== '' && !is_numeric($stock)) {
-                $status = 'Tồn kho không hợp lệ';
-                $isError = true;
-            }
-            elseif (!in_array($type, ['normal','imei','service','combo'])) {
-                $status = 'Sai loại';
-                $isError = true;
-            }
-            elseif ($sku && Product::where('sku', $sku)->exists()) {
-                $status = 'Trùng SKU';
-                $isError = true;
-            }
-
-            /* ===== CHECK ẢNH ===== */
-            if (!$isError && $rawImageName) {
-                $imageFiles = [];
-
-                if ($request->hasFile('images')) {
-                    foreach ($request->file('images') as $file) {
-
-                        $fileName = strtolower(
-                            preg_replace('/[^a-z0-9]/', '', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
-                        );
-
-                        $imageFiles[$fileName] = $file;
-                    }
-                }
-
-                $found = false;
-
-                foreach ($imageFiles as $key => $originalName) {
-
-                    // match gần đúng
-                    if (
-                        str_contains($key, $imageName) ||
-                        str_contains($imageName, $key)
-                    ) {
-                        $imageName = $originalName; // trả về đúng tên file upload
-                        $found = true;
-                        break;
-                    }
-                }
-
-                if (!$found) {
-                    $status = 'Thiếu ảnh';
-                    $isError = true;
-                }
-            }
-
-            $valid[] = [
-                'row' => $rowNumber,
-                'name' => $name,
-                'sku' => $sku,
-                'category' => $categoryName,
-                'brand' => $brandName,
-                'sell_price' => $sellPrice,
-                'cost_price' => $costPrice,
-                'stock' => $stock,
-                'unit' => $unitName,
-                'status' => $status,
-                'image_name' => $rawImageName,
-                'is_error' => $isError
-            ];
+        foreach ($request->file('images', []) as $file) {
+            $images[] = $file;
         }
+
+        $valid = $service->preview($rows, $images);
 
         return response()->json([
             'valid' => $valid,
@@ -571,6 +454,8 @@ class ProductController extends Controller
     public function getProductApi($id)
     {
         $product = Product::with([
+            'unit:id,name,short_name',
+            'conversionUnit:id,name,short_name',
             'variants' => fn ($query) => $query->where('is_active', true),
         ])->find($id);
 
@@ -613,6 +498,7 @@ class ProductController extends Controller
 
             ->with([
                 'unit:id,name,short_name',
+                'conversionUnit:id,name,short_name',
                 'variants' => fn ($query) => $query
                     ->where('is_active', true)
                     ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
@@ -631,6 +517,9 @@ class ProductController extends Controller
                 'manage_stock_by_serial',
                 'image',
                 'unit_id',
+                'has_unit_conversion',
+                'conversion_unit_id',
+                'conversion_factor',
             ])
 
             ->orderBy('name')

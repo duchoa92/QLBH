@@ -65,7 +65,18 @@ defineProps({
 
                 <div>
                     <strong>Tồn kho:</strong>
-                    {{ product.stock }}
+                    <template v-if="product.has_unit_conversion">
+                        {{ product.stock }} {{ product.unit?.short_name || product.unit?.name }}
+                    </template>
+                    <template v-else>
+                        {{ product.stock }} {{ product.unit?.short_name || product.unit?.name }}
+                    </template>
+                </div>
+
+                <div v-if="product.has_unit_conversion">
+                    <strong>Quy đổi:</strong>
+                    1 {{ product.conversion_unit?.short_name || product.conversion_unit?.name }} =
+                    {{ product.conversion_factor }} {{ product.unit?.short_name || product.unit?.name }}
                 </div>
 
             </div>

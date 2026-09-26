@@ -26,6 +26,10 @@ class SaleItem extends Model
 
         'quantity',
 
+        'base_quantity',
+
+        'conversion_factor',
+
         'unit_price',
 
         'subtotal',
@@ -39,6 +43,8 @@ class SaleItem extends Model
 
     protected $casts = [
         'quantity' => 'integer',
+        'base_quantity' => 'integer',
+        'conversion_factor' => 'integer',
         'unit_price' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'discount_value' => 'decimal:2',

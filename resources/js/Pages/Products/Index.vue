@@ -3,7 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
-import { ArrowDownUp, ArrowUpDown, FileDown, FileInput, FileOutput, FilePlus, Plus, Printer, SquarePen, Trash2 } from 'lucide-vue-next'
+import { ArrowDownUp, ArrowUpDown, FileDown, FileInput, FileOutput, FilePlus, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
@@ -12,6 +12,8 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
 import ImportExportModal from './ImportExportModal.vue'
+import { useReferenceData } from '@/Stores/referenceData'
+import { imageUrl } from '@/utils/imageUrl'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({
@@ -23,6 +25,12 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+})
+
+const { categories, brands, units } = useReferenceData({
+    categories: props.categories,
+    brands: props.brands,
+    units: props.units,
 })
 
 const confirmBox = useConfirm()
@@ -101,9 +109,9 @@ const openCreate = () => {
         props: {
             title: 'Thêm sản phẩm',
             size: 'xl',
-            categories: props.categories,
-            brands: props.brands,
-            units: props.units,
+            categories: categories.value,
+            brands: brands.value,
+            units: units.value,
         },
         onUpdated: () => {
             loadData()
@@ -118,9 +126,9 @@ const openEdit = (item) => {
             title: 'Sửa sản phẩm',
             size: 'xl',
             product: item,
-            categories: props.categories,
-            brands: props.brands,
-            units: props.units,
+            categories: categories.value,
+            brands: brands.value,
+            units: units.value,
         },
         onUpdated: () => {
             loadData()
@@ -317,6 +325,20 @@ const formatMoney = (value) =>
 const productUnitName = (row) =>
     row.unit?.short_name || row.unit?.name || 'Cái'
 
+const productStockDisplay = (row) => {
+    const factor = Math.max(1, Number(row.conversion_factor || 1))
+
+    if (!row.has_unit_conversion || factor === 1) {
+        return `${Number(row.stock || 0)} ${productUnitName(row)}`
+    }
+
+    const importUnit = row.conversion_unit?.short_name
+        || row.conversion_unit?.name
+        || 'đơn vị nhập'
+
+    return `${Number(row.stock || 0)} ${productUnitName(row)} (nhập: 1 ${importUnit} = ${factor} ${productUnitName(row)})`
+}
+
 </script>
 
 <template>
@@ -428,7 +450,17 @@ const productUnitName = (row) =>
             <td class="border-r p-2 text-center">{{ row.id }}</td>
 
             <td class="border-r p-2 flex items-center gap-2">
-                <img :src="row.image_url" class="w-8 h-8 rounded"/>
+                <img
+                    v-if="imageUrl(row.image_url ?? row.image)"
+                    :src="imageUrl(row.image_url ?? row.image)"
+                    class="h-8 w-8 rounded object-cover"
+                />
+                <div
+                    v-else
+                    class="flex h-8 w-8 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-400"
+                >
+                    SP
+                </div>
                 {{ row.name }}
             </td>
 
@@ -443,7 +475,7 @@ const productUnitName = (row) =>
             </td>
 
             <td class="border-r p-2 text-center">
-                {{ row.stock }}
+                {{ productStockDisplay(row) }}
             </td>
 
             <!-- STATUS -->
@@ -473,6 +505,16 @@ const productUnitName = (row) =>
                     <Tooltip text="Sửa">
                         <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
                             <SquarePen size="17" class="text-blue-500" />
+                        </button>
+                    </Tooltip>
+
+                    <Tooltip v-if="row.manage_stock_by_serial" text="Quản lý IMEI">
+                        <button
+                            type="button"
+                            class="p-1 hover:bg-gray-200 rounded"
+                            @click="router.visit(route('product-imeis.index', row.id))"
+                        >
+                            <QrCode size="17" class="text-indigo-500" />
                         </button>
                     </Tooltip>
 

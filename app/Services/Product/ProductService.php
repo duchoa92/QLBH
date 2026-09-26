@@ -145,6 +145,24 @@ class ProductService extends BaseService
             $data['product_type'] = $data['product_type'] ?? 'normal';
         }
 
+        $data['has_unit_conversion'] = filter_var(
+            $data['has_unit_conversion'] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        if ($data['manage_stock_by_serial'] || ! $data['has_unit_conversion']) {
+            $data['has_unit_conversion'] = false;
+            $data['conversion_unit_id'] = null;
+            $data['conversion_factor'] = 1;
+
+            return $data;
+        }
+
+        $data['conversion_factor'] = max(
+            2,
+            (int) ($data['conversion_factor'] ?? 1)
+        );
+
         return $data;
     }
 

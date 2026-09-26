@@ -23,6 +23,14 @@ class CustomerController extends Controller
         $data = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
+            'birthday' => ['nullable', 'date'],
+            'gender' => ['nullable', 'string'],
+            'cccd' => ['nullable', 'string'],
+            'province' => ['nullable', 'string'],
+            'district' => ['nullable', 'string'],
+            'ward' => ['nullable', 'string'],
+            'address' => ['nullable', 'string'],
+            'note' => ['nullable', 'string'],
         ]);
 
         $customer = $this->service->create($data);

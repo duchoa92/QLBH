@@ -127,6 +127,10 @@ class PosCheckoutService
                 $quantity = $requiresImei
                     ? 1
                     : $this->itemQuantity($item);
+                // POS luôn bán theo đơn vị tồn kho (chiếc, mét...). Quy cách
+                // cuộn/thùng chỉ được áp dụng khi nhập hàng.
+                $conversionFactor = 1;
+                $baseQuantity = $quantity * $conversionFactor;
 
                 /*
                 |--------------------------------------------------------------------------
@@ -193,11 +197,11 @@ class PosCheckoutService
 
                     if ($variant) {
 
-                        if ($variant->stock < $quantity) {
+                        if ($variant->stock < $baseQuantity) {
                             throw new \Exception("Phiên bản {$product->name} không đủ tồn kho");
                         }
 
-                    } elseif ($product->stock < $quantity) {
+                    } elseif ($product->stock < $baseQuantity) {
 
                         throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho");
                     }
@@ -250,14 +254,16 @@ class PosCheckoutService
                     'product_imei_id' =>
                         $item['imei_id'] ?? null,
 
-                    'unit_id' =>
-                        $item['unit_id'] ?? $product->unit_id,
+                    'unit_id' => $product->unit_id,
 
-                    'unit_name' =>
-                        $item['unit_name'] ?? ($product->unit?->short_name ?: $product->unit?->name),
+                    'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
 
                     'quantity' =>
                         $quantity,
+
+                    'base_quantity' => $baseQuantity,
+
+                    'conversion_factor' => $conversionFactor,
 
                     'unit_price' =>
                         (float) $item['price'],
@@ -281,12 +287,16 @@ class PosCheckoutService
 
                 if (!empty($item['gifts'])) {
                     foreach ($item['gifts'] as $gift) {
+                        $giftProduct = Product::query()->find($gift['id']);
+                        $giftQuantity = max(1, (int) ($gift['quantity'] ?? 1));
+                        $giftFactor = 1;
+
                         SaleItemGift::create([
                             'sale_item_id' => $saleItem->id,
                             'product_id' => $gift['id'],
-                            'quantity' => (int) (
-                                $gift['quantity'] ?? 1
-                            ),
+                            'quantity' => $giftQuantity,
+                            'base_quantity' => $giftQuantity * $giftFactor,
+                            'conversion_factor' => $giftFactor,
                         ]);
                     }
                 }
@@ -356,12 +366,12 @@ class PosCheckoutService
                     */
                     $this->decrementStockSafely(
                         $variant,
-                        $quantity
+                        $baseQuantity
                     );
 
                     $this->decrementStockSafely(
                         $product,
-                        $quantity
+                        $baseQuantity
                     );
 
                 } else {
@@ -371,7 +381,7 @@ class PosCheckoutService
                     */
                     $this->decrementStockSafely(
                         $product,
-                        $quantity
+                        $baseQuantity
                     );
                 }
 
@@ -396,8 +406,9 @@ class PosCheckoutService
                         if (!$giftProduct) {
                             continue;
                         }
-                        $qty = (int) ($gift['quantity'] ?? 1);
-                        if ($giftProduct->stock < $qty) {
+                        $qty = max(1, (int) ($gift['quantity'] ?? 1));
+                        $giftBaseQuantity = $qty;
+                        if ($giftProduct->stock < $giftBaseQuantity) {
                             throw new \Exception(
                                 'Quà tặng '
                                 . $giftProduct->name
@@ -406,7 +417,7 @@ class PosCheckoutService
                         }
                         $giftProduct->decrement(
                             'stock',
-                            $qty
+                            $giftBaseQuantity
                         );
                         $giftProduct->increment(
                             'sold_count',

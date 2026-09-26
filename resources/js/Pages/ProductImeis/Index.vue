@@ -1,5 +1,8 @@
 <script setup>
-import { useForm, Link } from '@inertiajs/vue3';
+import { useForm, Link, router } from '@inertiajs/vue3';
+import { Pencil } from 'lucide-vue-next';
+import { openModal } from '@/Stores/modal';
+import PriceFormModal from './PriceFormModal.vue';
 
 const props = defineProps({
 
@@ -31,6 +34,29 @@ const submit = () => {
             },
         }
     );
+};
+
+const hasExtraInfo = (imei) => {
+    const info = imei.extra_info || {};
+
+    return Boolean(
+        info.note ||
+        info.image_path
+    );
+};
+
+const extraInfoImageUrl = (imei) =>
+    imei?.extra_info?.image_path
+        ? `/storage/${imei.extra_info.image_path}`
+        : null;
+
+const money = (value) => Number(value || 0).toLocaleString('vi-VN');
+
+const openPriceEditor = (imei) => {
+    openModal(PriceFormModal, {
+        props: { imei },
+        onUpdated: () => router.reload({ only: ['product'] }),
+    });
 };
 </script>
 
@@ -106,6 +132,14 @@ const submit = () => {
                         <th class="p-3 text-left">
                             Trạng thái
                         </th>
+
+                        <th class="p-3 text-right">
+                            Giá bán
+                        </th>
+
+                        <th class="p-3 text-left">
+                            Thông tin thêm
+                        </th>
                     </tr>
                 </thead>
 
@@ -133,14 +167,14 @@ const submit = () => {
                         <td class="p-3">
 
                             <span
-                                v-if="imei.status === 0"
+                                v-if="imei.status === 'in_stock' || imei.status === 0"
                                 class="text-green-600"
                             >
                                 Còn hàng
                             </span>
 
                             <span
-                                v-else-if="imei.status === 1"
+                                v-else-if="imei.status === 'sold' || imei.status === 1"
                                 class="text-red-600"
                             >
                                 Đã bán
@@ -158,12 +192,49 @@ const submit = () => {
                                 Đã trả
                             </span>
                         </td>
+
+                        <td class="p-3 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <span class="font-semibold text-slate-800">{{ money(imei.sell_price) }} đ</span>
+                                <button
+                                    v-if="imei.status === 'in_stock' || imei.status === 0"
+                                    type="button"
+                                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-blue-600 hover:bg-blue-50"
+                                    title="Sửa giá bán"
+                                    @click="openPriceEditor(imei)"
+                                >
+                                    <Pencil class="h-4 w-4" />
+                                </button>
+                            </div>
+                        </td>
+
+                        <td class="p-3 text-sm text-slate-600">
+                            <div
+                                v-if="hasExtraInfo(imei)"
+                                class="space-y-0.5"
+                            >
+                                <div v-if="imei.extra_info?.note">
+                                    {{ imei.extra_info.note }}
+                                </div>
+
+                                <a
+                                    v-if="extraInfoImageUrl(imei)"
+                                    :href="extraInfoImageUrl(imei)"
+                                    target="_blank"
+                                    class="inline-flex font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                    Xem ảnh
+                                </a>
+                            </div>
+
+                            <span v-else class="text-slate-400">-</span>
+                        </td>
                     </tr>
 
                     <tr v-if="!product.imeis.length">
 
                         <td
-                            colspan="2"
+                            colspan="4"
                             class="p-5 text-center text-gray-500"
                         >
                             Chưa có IMEI

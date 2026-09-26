@@ -4,6 +4,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import api from '@/Services/api'
 
 const props = defineProps({
     customer: {
@@ -13,6 +14,13 @@ const props = defineProps({
     title: {
         type: String,
         default: 'Khách hàng',
+    },
+    // Khi dùng ở những nơi không thể điều hướng cả trang (ví dụ màn POS):
+    // lưu qua API JSON thay vì Inertia form.post, rồi trả khách hàng vừa
+    // tạo về qua sự kiện "updated" để nơi gọi tự chọn luôn khách đó.
+    apiMode: {
+        type: Boolean,
+        default: false,
     },
 })
 
@@ -38,7 +46,47 @@ const genderOptions = [
     { label: 'Khác', value: 'other' },
 ]
 
+const submitViaApi = async () => {
+    form.processing = true
+    form.clearErrors()
+
+    try {
+        const { data } = await api.post('/api/customers', form.data())
+
+        // Trả khách hàng vừa tạo về cho nơi gọi (ví dụ POS chọn luôn
+        // khách này vào đơn), tái dùng đúng cơ chế "updated" đã có sẵn.
+        emit('updated', data.data)
+        emit('close')
+
+    } catch (error) {
+
+        if (error.response?.status === 422) {
+
+            const errors = error.response.data.errors || {}
+
+            form.errors = Object.fromEntries(
+                Object.entries(errors).map(
+                    ([field, messages]) => [field, messages[0]]
+                )
+            )
+
+        } else {
+
+            console.error(error)
+        }
+
+    } finally {
+
+        form.processing = false
+    }
+}
+
 const submit = () => {
+    if (props.apiMode && !props.customer?.id) {
+        submitViaApi()
+        return
+    }
+
     const options = {
         preserveScroll: true,
         onSuccess: () => {

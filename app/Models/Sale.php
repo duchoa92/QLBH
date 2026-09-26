@@ -11,27 +11,18 @@ class Sale extends Model
     protected $fillable = [
 
         'code',
-
         'customer_id',
-
         'user_id',
-
         'subtotal',
-
         'discount',
-
         'tax',
-
         'grand_total',
-
         'paid_amount',
-
         'change_amount',
-
         'payment_method',
-
         'status',
-
+        'cancel_reason', 
+        'cancelled_at',
         'note',
 
     ];
