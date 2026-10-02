@@ -19,13 +19,11 @@ class DashboardController extends Controller
      */
     private const REPAIR_STATUS_LABELS = [
 
-        'pending' => 'Mới nhận',
-        'checking' => 'Đang kiểm tra',
-        'waiting_parts' => 'Chờ linh kiện',
+        'pending' => 'Tiếp nhận',
         'repairing' => 'Đang sửa',
-        'done' => 'Đã sửa xong',
+        'done' => 'Hoàn tất sửa',
         'returned' => 'Đã trả khách',
-        'cancelled' => 'Đã hủy',
+        'cancelled' => 'Hủy',
     ];
 
     /**

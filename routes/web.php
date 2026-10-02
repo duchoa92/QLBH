@@ -11,6 +11,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RepairController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleReceiptController;
@@ -38,6 +39,11 @@ Route::get('/', function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth'])->group(function () {
+
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
 
     // Dashboard
     Route::get(
@@ -209,8 +215,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/repairs/customer-search', [RepairController::class, 'customerSearch'])->name('repairs.customer-search');
     Route::get('/repairs/suggestions', [RepairController::class, 'suggestions'])->name('repairs.suggestions');
     Route::patch('/repairs/{repair}/status', [RepairController::class, 'updateStatus'])->name('repairs.update-status');
+    Route::post('/repairs/{repair}/complete', [RepairController::class, 'complete'])->name('repairs.complete');
+    Route::post('/repairs/{repair}/return', [RepairController::class, 'returnToCustomer'])->name('repairs.return');
     Route::get('/repairs/{repair}/print', [RepairController::class, 'print'])->name('repairs.print');
-    Route::resource('repairs', RepairController::class);
+    Route::get('/repairs', [RepairController::class, 'index'])->name('repairs.index');
+    Route::post('/repairs', [RepairController::class, 'store'])->name('repairs.store');
+    Route::match(['put', 'patch'], '/repairs/{repair}', [RepairController::class, 'update'])->name('repairs.update');
 
     // IMEIs, Customers, Suppliers
     Route::get('/api/imeis/lookup', [ProductImeiController::class, 'lookup'])->name('api.imeis.lookup');

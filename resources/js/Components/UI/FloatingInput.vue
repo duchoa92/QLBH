@@ -17,6 +17,7 @@ defineProps({
         default: 'text',
     },
     name: String,
+    id: String,
     error: String
     
 })
@@ -52,7 +53,7 @@ const handleInput = (event) => {
 
         <input
             :name="name"
-            :id="name"
+            :id="id || name"
             ref="input"
             v-bind="$attrs" 
             :value="modelValue"
@@ -72,7 +73,7 @@ const handleInput = (event) => {
         </p>
 
         <label
-            for="input-id"
+            :for="id || name"
             class="
                 pointer-events-none
                 absolute

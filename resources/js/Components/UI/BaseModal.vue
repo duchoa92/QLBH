@@ -7,7 +7,11 @@ const props = defineProps({
     size: {
         type: String,
         default: 'lg' // sm | md | lg | xl
-    }
+    },
+    bodyClass: {
+        type: String,
+        default: 'px-4 pb-4 pt-2',
+    },
 })
 
 const emit = defineEmits(['close', 'updated'])
@@ -60,7 +64,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- BODY -->
-            <div class="min-h-0 flex-1 overflow-y-auto bg-white p-4">
+            <div class="min-h-0 flex-1 overflow-y-auto bg-white" :class="bodyClass">
                 <slot />
             </div>
 

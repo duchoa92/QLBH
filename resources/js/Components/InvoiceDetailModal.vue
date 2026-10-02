@@ -7,6 +7,15 @@ import {
     Printer,
     Undo2,
     XCircle,
+    X,
+    FileText,
+    User,
+    UserCheck,
+    CreditCard,
+    Hash,
+    AlertTriangle,
+    Tag,
+    MessageSquare
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -30,14 +39,16 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'cancel', 'print'])
 
+// Format tiền tệ
 const money = (value) => Number(value || 0).toLocaleString('vi-VN')
 
+// Format ngày tháng
 const formatDate = (date) => {
     if (!date) return '-'
-
     return new Date(date).toLocaleString('vi-VN')
 }
 
+// Lấy thuộc tính biến thể
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') return ''
     if (typeof attribute !== 'object') return String(attribute)
@@ -58,13 +69,15 @@ const variantLabel = (variant) => {
     return attributes.join(' / ') || variant?.name || variant?.sku || ''
 }
 
+// Đơn vị & Số lượng bán
 const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
-    const unit = item.unit_name || 'Cái'
+    const unit = item.unit_name || 'Chiếc'
 
     return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
 }
 
+// Quy đổi đơn vị gốc
 const baseQuantityText = (item) => {
     if (Number(item.conversion_factor || 1) <= 1) return ''
 
@@ -75,6 +88,7 @@ const baseQuantityText = (item) => {
     return ` = ${item.base_quantity} ${unit}`
 }
 
+// Tổng tiền hóa đơn
 const saleTotal = computed(() =>
     props.invoice?.grand_total
     ?? props.invoice?.total_amount
@@ -82,6 +96,7 @@ const saleTotal = computed(() =>
     ?? 0
 )
 
+// Tên khách hàng
 const customerName = computed(() =>
     props.invoice?.customer?.full_name
     || props.invoice?.customer?.name
@@ -90,6 +105,7 @@ const customerName = computed(() =>
 
 const isCancelled = computed(() => props.invoice?.status === 'cancelled')
 
+// Trạng thái thanh toán / Hủy
 const paymentStatusMeta = computed(() => {
     if (isCancelled.value) {
         return {
@@ -106,6 +122,7 @@ const paymentStatusMeta = computed(() => {
     }
 })
 
+// Tiền thừa / thiếu
 const balanceText = computed(() => {
     if (!props.invoice || isCancelled.value) return null
 
@@ -115,7 +132,7 @@ const balanceText = computed(() => {
 
     if (balance < 0) {
         return {
-            label: 'Thiếu',
+            label: 'Còn thiếu',
             value: Math.abs(balance),
             class: 'text-rose-600',
         }
@@ -123,19 +140,20 @@ const balanceText = computed(() => {
 
     if (balance > 0) {
         return {
-            label: 'Thừa',
+            label: 'Tiền thừa',
             value: balance,
             class: 'text-emerald-600',
         }
     }
 
     return {
-        label: 'Đủ',
+        label: 'Thanh toán đủ',
         value: 0,
         class: 'text-slate-600',
     }
 })
 
+// Lý do hủy
 const cancelReason = computed(() =>
     props.invoice?.cancel_reason
     || props.invoice?.reason
@@ -145,275 +163,326 @@ const cancelReason = computed(() =>
 </script>
 
 <template>
+    <Teleport to="body">
     <div
         v-if="show"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3 sm:p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 sm:p-3 backdrop-blur-xs transition-opacity"
         @click.self="emit('close')"
     >
-        <div class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
-                <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h2 class="text-base font-bold text-slate-900 sm:text-lg">
-                            Chi tiết hóa đơn
-                        </h2>
-                        <span
-                            v-if="invoice?.code"
-                            class="rounded-lg border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
-                        >
-                            #{{ invoice.code }}
-                        </span>
-                        <span
-                            v-if="invoice"
-                            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold"
-                            :class="paymentStatusMeta.class"
-                        >
-                            <component :is="paymentStatusMeta.icon" :size="13" />
-                            {{ paymentStatusMeta.label }}
-                        </span>
+        <!-- NỀN MODAL DÙNG BG-SLATE-50 ĐỒNG BỘ VỚI HEADER VÀ DÙNG RING BẢO VỆ MÉP -->
+        <div class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-black/5">
+            
+            <!-- 1. HEADER CỐ ĐỊNH (MÀU NỀN ĐẶC BG-SLATE-50 VÀ KHÔNG BỊ HỞ VIỀN SÁNG) -->
+            <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 font-bold shrink-0">
+                        <FileText :size="18" />
                     </div>
-                    <p v-if="invoice" class="mt-1 text-xs text-slate-500">
-                        {{ customerName }} • {{ formatDate(invoice.created_at) }}
-                    </p>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-base font-extrabold text-slate-900">Chi tiết hóa đơn</h3>
+                            <span
+                                v-if="invoice?.code"
+                                class="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
+                            >
+                                #{{ invoice.code }}
+                            </span>
+                            <span
+                                v-if="invoice"
+                                class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold"
+                                :class="paymentStatusMeta.class"
+                            >
+                                <component :is="paymentStatusMeta.icon" :size="13" />
+                                {{ paymentStatusMeta.label }}
+                            </span>
+                        </div>
+                        <p v-if="invoice" class="mt-0.5 text-xs font-medium text-slate-500">
+                            {{ customerName }} • {{ formatDate(invoice.created_at) }}
+                        </p>
+                    </div>
                 </div>
 
                 <button
                     type="button"
-                    class="rounded-lg px-2 text-2xl font-bold leading-none text-slate-400 transition hover:bg-slate-100 hover:text-rose-500"
+                    class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
                     @click="emit('close')"
                 >
-                    &times;
+                    <X :size="20" />
                 </button>
             </div>
 
-            <div v-if="invoice" class="flex-1 overflow-y-auto p-4 sm:p-5">
+            <!-- 2. BODY SCROLLABLE (MÀU NỀN TRẮNG BG-WHITE BÊN TRONG) -->
+            <div v-if="invoice" class="flex-1 overflow-y-auto bg-white p-3.5 space-y-3">
+                
+                <!-- KHỐI THÔNG BÁO HỦY ĐƠN -->
                 <div
                     v-if="isCancelled"
-                    class="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
+                    class="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-xs text-rose-800"
                 >
-                    <div class="flex items-center gap-2 font-bold text-rose-700">
-                        <XCircle :size="18" />
-                        <span>Hóa đơn đã hủy {{ invoice.cancelled_at ? `lúc ${formatDate(invoice.cancelled_at)}` : '' }}</span>
-                    </div>
-                    <div class="mt-1 pl-7 text-xs text-rose-800">
-                        Lý do hủy: <span class="font-semibold italic">{{ cancelReason }}</span>
-                    </div>
-                    <div class="mt-1 pl-7 text-xs text-rose-600">
-                        Toàn bộ sản phẩm và IMEI thuộc hóa đơn này đã được hoàn trả về kho.
-                    </div>
-                </div>
-
-                <div class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div class="text-[11px] font-bold uppercase text-slate-400">Mã hóa đơn</div>
-                        <div class="mt-1 font-bold text-slate-900">#{{ invoice.code }}</div>
-                    </div>
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div class="text-[11px] font-bold uppercase text-slate-400">Khách hàng</div>
-                        <div class="mt-1 truncate font-semibold text-slate-900">{{ customerName }}</div>
-                    </div>
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div class="text-[11px] font-bold uppercase text-slate-400">Thu ngân</div>
-                        <div class="mt-1 truncate font-medium text-slate-800">{{ invoice.user?.name || '-' }}</div>
-                    </div>
-                    <div class="rounded-2xl border border-indigo-200 bg-indigo-50 p-3">
-                        <div class="text-[11px] font-bold uppercase text-indigo-500">Tổng thanh toán</div>
-                        <div class="mt-1 font-black text-indigo-700">{{ money(saleTotal) }} đ</div>
+                    <AlertTriangle :size="18" class="text-rose-600 shrink-0 mt-0.5" />
+                    <div class="space-y-0.5">
+                        <div class="font-bold text-sm">
+                            Hóa đơn hủy do: <span class="italic font-semibold text-xs text-rose-700">{{ cancelReason }}</span>. {{ invoice.cancelled_at ? `lúc ${formatDate(invoice.cancelled_at)}` : '' }}
+                        </div>
+                        <div class="text-[11px] text-rose-500 italic">
+                            * Toàn bộ sản phẩm và mã IMEI/Serial thuộc hóa đơn này đã được hoàn trả về kho.
+                        </div>
                     </div>
                 </div>
 
-                <div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-                    <table class="w-full min-w-[760px] text-left text-sm">
-                        <thead>
-                            <tr class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                                <th class="w-12 px-4 py-3 text-center">STT</th>
-                                <th class="px-4 py-3">Sản phẩm</th>
-                                <th class="w-28 px-4 py-3 text-center">Loại</th>
-                                <th class="w-28 px-4 py-3 text-center">SL</th>
-                                <th class="w-32 px-4 py-3 text-right">Đơn giá</th>
-                                <th class="w-32 px-4 py-3 text-right">Thành tiền</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <template
-                                v-for="(item, index) in invoice.items || []"
-                                :key="item.id || index"
-                            >
-                                <tr class="align-top hover:bg-slate-50/70">
-                                    <td class="px-4 py-3 text-center text-slate-400">{{ index + 1 }}</td>
-                                    <td class="px-4 py-3">
-                                        <div class="font-semibold text-slate-900">
-                                            {{ item.product?.name || item.product_name || '-' }}
-                                        </div>
-                                        <div
-                                            v-if="variantLabel(item.variant)"
-                                            class="mt-1 inline-flex rounded-lg bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700"
-                                        >
-                                            {{ variantLabel(item.variant) }}
-                                        </div>
-                                        <div
-                                            v-if="item.product_imei?.imei || item.imei"
-                                            class="mt-1 font-mono text-xs font-semibold text-blue-600"
-                                        >
-                                            IMEI: {{ item.product_imei?.imei || item.imei }}
-                                        </div>
-                                        <div
-                                            v-if="Number(item.discount_value || 0) > 0"
-                                            class="mt-1 text-xs font-medium text-rose-600"
-                                        >
-                                            <template v-if="item.discount_type === 'percent'">
-                                                Giảm {{ item.discount_value }}%
-                                            </template>
-                                            <template v-else>
-                                                Giảm {{ money(item.discount_value) }} đ
-                                            </template>
-                                        </div>
-                                        <div v-if="item.note" class="mt-1 text-xs italic text-slate-400">
-                                            Ghi chú: {{ item.note }}
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 text-center">
-                                        <span class="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
-                                            Sản phẩm
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-center font-semibold text-slate-800">
-                                        <div>{{ saleQuantityText(item) }}</div>
-                                        <div
-                                            v-if="baseQuantityText(item)"
-                                            class="mt-0.5 text-[11px] font-medium text-indigo-600"
-                                        >
-                                            {{ baseQuantityText(item) }}
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 text-right font-medium text-slate-700">
-                                        {{ money(item.unit_price) }} đ
-                                    </td>
-                                    <td class="px-4 py-3 text-right font-bold text-slate-900">
-                                        {{ money(item.subtotal) }} đ
-                                    </td>
+                <!-- THÔNG TIN CHUNG -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                        <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <Hash :size="12" /> Mã hóa đơn
+                        </div>
+                        <div class="mt-0.5 font-bold text-slate-900 text-sm">#{{ invoice.code }}</div>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                        <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <User :size="12" /> Khách hàng
+                        </div>
+                        <div class="mt-0.5 font-bold text-slate-900 text-sm truncate">{{ customerName }}</div>
+                        <div v-if="invoice.customer?.phone" class="text-xs text-slate-400 font-medium">
+                            {{ invoice.customer.phone }}
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                        <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <UserCheck :size="12" /> Thu ngân
+                        </div>
+                        <div class="mt-0.5 font-bold text-slate-900 text-sm truncate">
+                            {{ invoice.user?.name || '-' }}
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5">
+                        <div class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500 flex items-center gap-1">
+                            <CreditCard :size="12" /> Tổng thanh toán
+                        </div>
+                        <div class="mt-0.5 font-black text-indigo-700 text-base">
+                            {{ money(saleTotal) }} đ
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BẢNG SẢN PHẨM -->
+                <div class="overflow-hidden rounded-xl border border-slate-200/80 shadow-2xs bg-white">
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[700px] text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                                    <th class="w-10 px-3 py-2 text-center">STT</th>
+                                    <th class="px-3 py-2">Sản phẩm</th>
+                                    <th class="w-28 min-w-[100px] px-3 py-2 text-center whitespace-nowrap">Loại</th>
+                                    <th class="w-24 px-3 py-2 text-center whitespace-nowrap">SL</th>
+                                    <th class="w-28 px-3 py-2 text-right whitespace-nowrap">Đơn giá</th>
+                                    <th class="w-32 px-3 py-2 text-right whitespace-nowrap">Thành tiền</th>
                                 </tr>
-
-                                <tr
-                                    v-for="(gift, giftIndex) in item.gifts || []"
-                                    :key="`gift-${item.id || index}-${gift.id || giftIndex}`"
-                                    class="bg-emerald-50/35 text-sm"
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 font-medium text-xs">
+                                <template
+                                    v-for="(item, index) in invoice.items || []"
+                                    :key="item.id || index"
                                 >
-                                    <td class="px-4 py-2 text-center text-slate-300">-</td>
-                                    <td class="px-4 py-2 pl-8 text-emerald-800">
-                                        <span class="inline-flex items-center gap-1 font-semibold">
-                                            <Gift :size="13" />
-                                            {{ gift.product?.name || gift.product_name || 'Quà tặng' }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2 text-center">
-                                        <span class="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                                            Quà tặng
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2 text-center font-medium text-slate-700">
-                                        {{ gift.quantity || 1 }}
-                                    </td>
-                                    <td class="px-4 py-2 text-right text-xs text-slate-400 line-through">
-                                        {{ money(gift.product?.retail_price || gift.product?.sell_price || gift.product?.price) }} đ
-                                    </td>
-                                    <td class="px-4 py-2 text-right font-bold text-emerald-600">0 đ</td>
-                                </tr>
+                                    <tr class="hover:bg-slate-50/60 transition">
+                                        <td class="px-3 py-2.5 text-center text-slate-400 font-bold">
+                                            {{ index + 1 }}
+                                        </td>
+                                        <td class="px-3 py-2.5">
+                                            <div class="font-bold text-slate-900 text-sm">
+                                                {{ item.product?.name || item.product_name || '-' }}
+                                            </div>
 
-                                <tr v-if="item.gift_product" class="bg-emerald-50/35 text-sm">
-                                    <td class="px-4 py-2 text-center text-slate-300">-</td>
-                                    <td class="px-4 py-2 pl-8 text-emerald-800">
-                                        <span class="inline-flex items-center gap-1 font-semibold">
-                                            <Gift :size="13" />
-                                            {{ item.gift_product.name }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2 text-center">
-                                        <span class="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                                            Quà tặng
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2 text-center font-medium text-slate-700">1</td>
-                                    <td class="px-4 py-2 text-right text-xs text-slate-400 line-through">
-                                        {{ money(item.gift_product.retail_price || item.gift_product.sell_price || item.gift_product.price) }} đ
-                                    </td>
-                                    <td class="px-4 py-2 text-right font-bold text-emerald-600">0 đ</td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                                            <div
+                                                v-if="variantLabel(item.variant)"
+                                                class="mt-1 inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700"
+                                            >
+                                                {{ variantLabel(item.variant) }}
+                                            </div>
+
+                                            <div v-if="item.product_imei?.imei || item.imei" class="mt-1">
+                                                <span class="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-mono font-bold text-blue-600 border border-blue-100">
+                                                    <Tag :size="11" /> IMEI: {{ item.product_imei?.imei || item.imei }}
+                                                </span>
+                                            </div>
+
+                                            <div
+                                                v-if="Number(item.discount_value || 0) > 0"
+                                                class="mt-1 text-xs font-bold text-rose-600"
+                                            >
+                                                <template v-if="item.discount_type === 'percent'">
+                                                    (Giảm {{ item.discount_value }}%)
+                                                </template>
+                                                <template v-else>
+                                                    (Giảm {{ money(item.discount_value) }} đ)
+                                                </template>
+                                            </div>
+
+                                            <div v-if="item.note" class="mt-1 text-xs italic text-slate-400">
+                                                Ghi chú: {{ item.note }}
+                                            </div>
+                                        </td>
+
+                                        <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                            <span class="inline-block rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-600 whitespace-nowrap">
+                                                Sản phẩm
+                                            </span>
+                                        </td>
+
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-800 text-xs whitespace-nowrap">
+                                            <div>{{ saleQuantityText(item) }}</div>
+                                            <div
+                                                v-if="baseQuantityText(item)"
+                                                class="mt-0.5 text-[11px] font-semibold text-indigo-600"
+                                            >
+                                                {{ baseQuantityText(item) }}
+                                            </div>
+                                        </td>
+
+                                        <td class="px-3 py-2.5 text-right font-medium text-slate-700 text-xs whitespace-nowrap">
+                                            {{ money(item.unit_price) }} đ
+                                        </td>
+
+                                        <td class="px-3 py-2.5 text-right font-extrabold text-slate-900 text-sm whitespace-nowrap">
+                                            {{ money(item.subtotal) }} đ
+                                        </td>
+                                    </tr>
+
+                                    <!-- QUÀ TẶNG -->
+                                    <tr
+                                        v-for="(gift, giftIndex) in item.gifts || []"
+                                        :key="`gift-${item.id || index}-${gift.id || giftIndex}`"
+                                        class="bg-emerald-50/40 text-xs"
+                                    >
+                                        <td class="px-3 py-2 text-center text-slate-300">-</td>
+                                        <td class="px-3 py-2 text-emerald-800">
+                                            <span class="inline-flex items-center gap-1 font-bold">
+                                                <Gift :size="13" class="text-emerald-600" />
+                                                {{ gift.product?.name || gift.product_name || 'Quà tặng' }}
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                                            <span class="inline-block rounded-full border border-emerald-200 bg-emerald-100/60 px-2.5 py-0.5 text-xs font-bold text-emerald-700 whitespace-nowrap">
+                                                Quà tặng
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2 text-center font-bold text-slate-700">
+                                            {{ gift.quantity || 1 }}
+                                        </td>
+                                        <td class="px-3 py-2 text-right text-xs text-slate-400 line-through whitespace-nowrap">
+                                            {{ money(gift.product?.retail_price || gift.product?.sell_price || gift.product?.price) }} đ
+                                        </td>
+                                        <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">0 đ</td>
+                                    </tr>
+
+                                    <tr v-if="item.gift_product" class="bg-emerald-50/40 text-xs">
+                                        <td class="px-3 py-2 text-center text-slate-300">-</td>
+                                        <td class="px-3 py-2 text-emerald-800">
+                                            <span class="inline-flex items-center gap-1 font-bold">
+                                                <Gift :size="13" class="text-emerald-600" />
+                                                {{ item.gift_product.name }}
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                                            <span class="inline-block rounded-full border border-emerald-200 bg-emerald-100/60 px-2.5 py-0.5 text-xs font-bold text-emerald-700 whitespace-nowrap">
+                                                Quà tặng
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2 text-center font-bold text-slate-700">1</td>
+                                        <td class="px-3 py-2 text-right text-xs text-slate-400 line-through whitespace-nowrap">
+                                            {{ money(item.gift_product.retail_price || item.gift_product.sell_price || item.gift_product.price) }} đ
+                                        </td>
+                                        <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">0 đ</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
-                        <div class="font-bold uppercase text-slate-400">Ghi chú</div>
-                        <div class="mt-1 text-slate-700">
+                <!-- TỔNG TÍNH TIỀN & GHI CHÚ -->
+                <div class="grid gap-2.5 lg:grid-cols-[1fr_320px]">
+                    <div class="rounded-xl border border-slate-200/80 bg-slate-50/50 p-2.5 text-xs">
+                        <div class="font-extrabold uppercase text-[10px] tracking-wider text-slate-400 flex items-center gap-1 mb-1">
+                            <MessageSquare :size="12" /> Ghi chú đơn hàng
+                        </div>
+                        <div class="text-slate-700 font-medium italic text-xs">
                             {{ invoice.note || 'Không có ghi chú.' }}
                         </div>
                     </div>
 
-                    <div class="rounded-2xl border border-slate-200 p-4 text-sm">
-                        <div class="space-y-2">
-                            <div class="flex justify-between gap-4">
-                                <span class="text-slate-500">Tiền hàng</span>
-                                <span class="font-semibold text-slate-900">{{ money(invoice.subtotal) }} đ</span>
-                            </div>
-                            <div
-                                v-if="Number(invoice.discount || 0) > 0"
-                                class="flex justify-between gap-4 text-rose-600"
-                            >
-                                <span>Giảm giá hóa đơn</span>
-                                <span class="font-semibold">-{{ money(invoice.discount) }} đ</span>
-                            </div>
-                            <div class="flex justify-between gap-4 border-t border-dashed border-slate-200 pt-2 text-base font-black text-indigo-700">
-                                <span>Tổng thanh toán</span>
-                                <span>{{ money(saleTotal) }} đ</span>
-                            </div>
-                            <div class="flex justify-between gap-4 pt-1 text-slate-600">
-                                <span>Khách trả</span>
-                                <span class="font-semibold">{{ money(invoice.paid_amount) }} đ</span>
-                            </div>
-                            <div
-                                v-if="balanceText"
-                                class="flex justify-between gap-4 font-bold"
-                                :class="balanceText.class"
-                            >
-                                <span>{{ balanceText.label }}</span>
-                                <span>{{ money(balanceText.value) }} đ</span>
-                            </div>
-                            <div class="flex justify-between gap-4 pt-1 text-xs uppercase text-slate-400">
-                                <span>Thanh toán</span>
-                                <span class="font-bold text-slate-600">{{ invoice.payment_method || '-' }}</span>
-                            </div>
+                    <div class="rounded-xl border border-slate-200/80 p-3 text-xs space-y-1.5 bg-white">
+                        <div class="flex justify-between text-slate-500">
+                            <span>Tiền hàng:</span>
+                            <span class="font-semibold text-slate-800 text-xs">{{ money(invoice.subtotal) }} đ</span>
+                        </div>
+
+                        <div
+                            v-if="Number(invoice.discount || 0) > 0"
+                            class="flex justify-between text-rose-600 font-medium"
+                        >
+                            <span>Giảm giá hóa đơn:</span>
+                            <span>-{{ money(invoice.discount) }} đ</span>
+                        </div>
+
+                        <div class="flex justify-between items-center border-t border-slate-200/80 pt-1.5 text-sm">
+                            <span class="font-bold text-slate-900">Tổng thanh toán:</span>
+                            <span class="font-black text-indigo-600 text-base">{{ money(saleTotal) }} đ</span>
+                        </div>
+
+                        <div class="flex justify-between text-slate-600 border-t border-dashed border-slate-100 pt-1">
+                            <span>Khách đã trả:</span>
+                            <span class="font-bold text-slate-800">{{ money(invoice.paid_amount) }} đ</span>
+                        </div>
+
+                        <div
+                            v-if="balanceText"
+                            class="flex justify-between font-bold pt-0.5"
+                            :class="balanceText.class"
+                        >
+                            <span>{{ balanceText.label }}:</span>
+                            <span>{{ money(balanceText.value) }} đ</span>
+                        </div>
+
+                        <div class="flex justify-between text-[11px] uppercase text-slate-400 pt-1 border-t border-slate-100">
+                            <span>Phương thức:</span>
+                            <span class="font-bold text-slate-700">{{ invoice.payment_method || 'Tiền mặt' }}</span>
                         </div>
                     </div>
                 </div>
+
             </div>
 
-            <div class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                <button
-                    v-if="canCancel && invoice && !isCancelled"
-                    type="button"
-                    class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 px-4 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-100"
-                    @click="emit('cancel', invoice)"
-                >
-                    <Undo2 :size="14" />
-                    Hủy hóa đơn này
-                </button>
-                <div v-else></div>
+            <!-- 3. FOOTER CỐ ĐỊNH (MÀU NỀN ĐẶC BG-SLATE-50) -->
+            <div class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5 shrink-0">
+                <div>
+                    <button
+                        v-if="canCancel && invoice && !isCancelled"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3.5 py-1.5 text-xs font-bold text-rose-600 transition hover:bg-rose-50 active:scale-95"
+                        @click="emit('cancel', invoice)"
+                    >
+                        <Undo2 :size="14" />
+                        Hủy hóa đơn
+                    </button>
+                </div>
 
-                <div class="flex items-center justify-end gap-2">
+                <div class="flex items-center gap-2">
                     <button
                         type="button"
-                        class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
+                        class="rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                         @click="emit('close')"
                     >
                         Đóng
                     </button>
+                    
                     <button
                         v-if="canPrint && invoice && !isCancelled"
                         type="button"
-                        class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-indigo-700 active:scale-95"
                         @click="emit('print', invoice)"
                     >
                         <Printer :size="14" />
@@ -421,6 +490,8 @@ const cancelReason = computed(() =>
                     </button>
                 </div>
             </div>
+
         </div>
     </div>
+    </Teleport>
 </template>

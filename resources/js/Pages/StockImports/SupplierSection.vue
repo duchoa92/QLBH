@@ -163,6 +163,7 @@ const createSupplier = () => {
             name: keyword.value,
             title: 'Thêm nhà cung cấp',
             size: 'sm',
+            apiMode: true,
         },
 
         onUpdated: newSupplier => {

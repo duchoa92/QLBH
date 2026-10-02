@@ -176,8 +176,15 @@ const selectEntryVariant = () => {
     if (!variant) return
 
     modal.variant_input = variant.id
-    const cost = Number(variant.cost_price ?? variant.import_price ?? item.cost_price ?? 0)
-    const sell = Number(variant.sell_price ?? variant.retail_price ?? variant.price ?? item.sell_price ?? 0)
+    const factor = item.has_unit_conversion ? Math.max(1, Number(item.conversion_factor || 1)) : 1
+    const rawCost = variant.cost_price ?? variant.import_price
+    const rawSell = variant.sell_price ?? variant.retail_price ?? variant.price
+    const cost = rawCost === null || rawCost === undefined
+        ? Number(item.cost_price || 0)
+        : Number(rawCost) * factor
+    const sell = rawSell === null || rawSell === undefined
+        ? Number(item.sell_price || 0)
+        : Number(rawSell) * factor
 
     entryModal.value.cost_price_input = cost
     entryModal.value.sell_price_input = sell
@@ -202,8 +209,15 @@ const openEntryModal = (item) => {
 
     const variants = item.available_variants || item.variants || []
     const defaultVariant = (mode === 'variant' || item.type === 'imei_variant') && variants.length ? variants[0] : null
-    const defaultCost = defaultVariant ? Number(defaultVariant.cost_price ?? defaultVariant.import_price ?? item.cost_price ?? 0) : Number(item.cost_price ?? item.import_price ?? 0)
-    const defaultSell = defaultVariant ? Number(defaultVariant.sell_price ?? defaultVariant.retail_price ?? defaultVariant.price ?? item.sell_price ?? 0) : Number(item.sell_price ?? item.price ?? 0)
+    const factor = item.has_unit_conversion ? Math.max(1, Number(item.conversion_factor || 1)) : 1
+    const rawVariantCost = defaultVariant?.cost_price ?? defaultVariant?.import_price
+    const rawVariantSell = defaultVariant?.sell_price ?? defaultVariant?.retail_price ?? defaultVariant?.price
+    const defaultCost = defaultVariant
+        ? (rawVariantCost == null ? Number(item.cost_price || 0) : Number(rawVariantCost) * factor)
+        : Number(item.cost_price ?? item.import_price ?? 0)
+    const defaultSell = defaultVariant
+        ? (rawVariantSell == null ? Number(item.sell_price || 0) : Number(rawVariantSell) * factor)
+        : Number(item.sell_price ?? item.price ?? 0)
 
     entryModal.value = {
         mode,
@@ -312,6 +326,15 @@ const addEntry = async () => {
 
 const removeImei = (item, index) => { item.imeis.splice(index, 1) }
 const removeVariantRow = (item, index) => { item.rows.splice(index, 1) }
+
+const sellPriceLabel = (item) => {
+    if (!item?.has_unit_conversion || Number(item.conversion_factor || 1) <= 1) {
+        return 'Giá bán / đơn vị bán'
+    }
+    const importUnit = item.unit || 'đơn vị nhập'
+    const baseUnit = item.base_unit_name || 'đơn vị bán'
+    return `Giá bán / ${importUnit} (quy đổi về ${baseUnit})`
+}
 
 const handleClickOutside = (event) => {
     if (
@@ -462,13 +485,13 @@ onBeforeUnmount(() => {
                             v-if="entryModal.mode !== 'normal'"
                             v-model.number="entryModal.sell_price_input"
                             type="number"
-                            label="Giá bán"
+                            :label="sellPriceLabel(entryModal.item)"
                         />
                         <FloatingInput
                             v-else
                             v-model.number="entryModal.item.sell_price"
                             type="number"
-                            label="Giá bán"
+                            :label="sellPriceLabel(entryModal.item)"
                         />
                     </div>
 

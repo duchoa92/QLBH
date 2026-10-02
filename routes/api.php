@@ -8,11 +8,13 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\ReferenceDataController;
 use App\Http\Controllers\Api\SaleController;
+use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\SupplierController;
 
 
 Route::middleware(['web', 'auth'])->group(function ()
 {
+    Route::get('/global-search', GlobalSearchController::class);
     // Dữ liệu nền cho các ô chọn, luôn lấy mới mà không tải lại trang.
     Route::get('/reference-data', [ReferenceDataController::class, 'index']);
 

@@ -202,19 +202,23 @@ const selectProduct = (product) => {
         )
 
     if (!target) {
+        const conversionFactor = item.has_unit_conversion
+            ? Math.max(1, Number(item.import_conversion_factor ?? item.conversion_factor ?? 1))
+            : 1
+
         const costPrice =
             Number(
                 item.cost_price ??
                 item.import_price ??
                 0
-            )
+            ) * conversionFactor
 
         const sellPrice =
             Number(
                 item.sell_price ??
                 item.price ??
                 0
-            )
+            ) * conversionFactor
 
         target = {
             type,

@@ -18,7 +18,6 @@ import {
     ChevronDown,
     ChevronRight,
     Menu,
-    X,
     Truck,
     EllipsisVertical,
     Monitor,
@@ -242,7 +241,7 @@ watch(() => props.collapsed, (val) => {
 
 <template>
     <aside
-        class="flex h-screen w-full flex-col bg-cyan-950 text-white border-r border-white/10 select-none overflow-hidden"
+        class="flex h-screen w-full flex-col bg-cyan-950 text-white border-r border-white/10 select-none overflow-hidden shadow-2xl lg:shadow-none"
     >
         <!-- 1. HEADER (CỐ ĐỊNH ĐỈNH) -->
         <div
@@ -252,15 +251,18 @@ watch(() => props.collapsed, (val) => {
             <button
                 v-if="!props.collapsed"
                 type="button"
-                class="flex min-w-0 items-center gap-3"
+                class="flex min-w-0 items-center gap-3 active:scale-95 transition"
                 @click="visitMenu('/dashboard', ['/dashboard'])"
             >
-                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950 shadow">
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/30">
                     <ShoppingBag :size="19" />
                 </div>
-                <div class="min-w-0">
-                    <div class="truncate text-[15px] font-black tracking-wide">
+                <div class="min-w-0 text-left">
+                    <div class="truncate text-[15px] font-black tracking-wide leading-tight">
                         QLBH POS
+                    </div>
+                    <div class="truncate text-[10px] text-cyan-300/70 font-medium">
+                        Hệ thống quản lý
                     </div>
                 </div>
             </button>
@@ -268,7 +270,7 @@ watch(() => props.collapsed, (val) => {
             <button
                 v-else
                 type="button"
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950 shadow"
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md active:scale-95 transition"
                 @click="visitMenu('/dashboard', ['/dashboard'])"
             >
                 <ShoppingBag :size="19" />
@@ -276,7 +278,7 @@ watch(() => props.collapsed, (val) => {
 
             <button
                 type="button"
-                class="hidden lg:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition"
+                class="hidden lg:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition active:scale-90"
                 @click="toggleSidebar"
             >
                 <EllipsisVertical v-if="!props.collapsed" :size="18" />
@@ -285,22 +287,22 @@ watch(() => props.collapsed, (val) => {
         </div>
 
         <!-- 2. NAV (TỰ CUỘN ĐỘC LẬP KHI XỔ MENU DÀI) -->
-        <nav class="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1">
+        <nav class="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1.5">
             <!-- TRANG CHỦ -->
             <button
                 type="button"
                 @click="visitMenu('/dashboard', ['/dashboard'])"
-                class="flex h-10 w-full items-center rounded-xl transition"
+                class="flex h-10 w-full items-center rounded-xl transition-all duration-200"
                 :class="[
-                    props.collapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                    props.collapsed ? 'justify-center px-0' : 'gap-3 px-3.5',
                     isActive(['/dashboard'])
-                        ? 'bg-white text-slate-950 font-bold shadow-sm'
+                        ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-600/30'
                         : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                 ]"
                 :title="props.collapsed ? 'Trang chủ' : undefined"
             >
-                <Home :size="19" class="shrink-0" />
-                <span v-if="!props.collapsed" class="truncate text-sm">
+                <Home :size="18" class="shrink-0" />
+                <span v-if="!props.collapsed" class="truncate text-xs font-bold">
                     Trang chủ
                 </span>
             </button>
@@ -315,59 +317,59 @@ watch(() => props.collapsed, (val) => {
                     <!-- NÚT NHÓM CHA -->
                     <button
                         type="button"
-                        class="flex w-full items-center rounded-xl transition"
+                        class="flex w-full items-center rounded-xl transition-all duration-200"
                         :class="[
-                            props.collapsed ? 'h-10 justify-center px-0' : 'h-10 justify-between px-3',
+                            props.collapsed ? 'h-10 justify-center px-0' : 'h-10 justify-between px-3.5',
                             isGroupActive(group)
-                                ? 'bg-cyan-800 text-white font-bold'
+                                ? 'bg-cyan-900/90 text-white font-bold'
                                 : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                         ]"
                         :title="props.collapsed ? group.title : undefined"
                         @click="toggleGroup(group)"
                     >
                         <span class="flex items-center" :class="props.collapsed ? '' : 'gap-3 min-w-0'">
-                            <component :is="group.icon" :size="19" class="shrink-0" />
-                            <span v-if="!props.collapsed" class="truncate text-sm font-bold">
+                            <component :is="group.icon" :size="18" class="shrink-0" />
+                            <span v-if="!props.collapsed" class="truncate text-xs font-bold">
                                 {{ group.title }}
                             </span>
                         </span>
 
                         <template v-if="!props.collapsed">
-                            <ChevronDown v-if="isGroupOpen(group)" :size="16" class="shrink-0" />
-                            <ChevronRight v-else :size="16" class="shrink-0" />
+                            <ChevronDown v-if="isGroupOpen(group)" :size="15" class="shrink-0 text-cyan-300" />
+                            <ChevronRight v-else :size="15" class="shrink-0 text-slate-400" />
                         </template>
                     </button>
 
-                    <!-- DANH SÁCH CON (KHI MỞ RỘNG) -->
+                    <!-- DANH SÁCH CON (KHI MỞ RỘNG - XỔ XUỐNG DẠNG TREE) -->
                     <div
                         v-if="!props.collapsed && isGroupOpen(group)"
-                        class="mt-1 space-y-1 ml-3 pl-2 border-l border-white/15"
+                        class="mt-1.5 space-y-1.5 ml-4 pl-3 border-l-2 border-white/10"
                     >
                         <button
                             v-for="item in visibleItems(group.items)"
                             :key="item.href"
                             type="button"
                             @click="visitMenu(item.href, item.paths)"
-                            class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 transition"
+                            class="flex h-9 w-full items-center gap-3 rounded-xl px-3 transition-all duration-150"
                             :class="[
                                 isActive(item.paths)
-                                    ? 'bg-cyan-200 text-cyan-950 font-bold'
+                                    ? 'bg-blue-600 text-white font-bold shadow-sm shadow-blue-600/30'
                                     : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                             ]"
                         >
-                            <component :is="item.icon" :size="17" class="shrink-0" />
-                            <span class="min-w-0 flex-1 truncate text-[13px] text-left">
+                            <component :is="item.icon" :size="16" class="shrink-0 opacity-80" />
+                            <span class="min-w-0 flex-1 truncate text-xs text-left">
                                 {{ item.label }}
                             </span>
                         </button>
                     </div>
 
-                    <!-- POPUP FLYOUT (KHI THU GỌN DESKTOP HOVER) -->
+                    <!-- POPUP FLYOUT (KHI THU GỌN SIDEBAR VÀ HOVER VÀO) -->
                     <div
                         v-if="props.collapsed"
-                        class="hidden group-hover/menu-group:block absolute left-full top-0 z-[100] ml-2 w-52 rounded-xl border border-white/10 bg-cyan-950 p-2 shadow-2xl space-y-1"
+                        class="hidden group-hover/menu-group:block absolute left-full top-0 z-[100] ml-2 w-56 rounded-2xl border border-white/10 bg-cyan-950 p-2 shadow-2xl space-y-1.5"
                     >
-                        <div class="px-3 py-1 text-[11px] font-extrabold uppercase text-slate-400 border-b border-white/10 mb-1">
+                        <div class="px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-cyan-300 border-b border-white/10 mb-1">
                             {{ group.title }}
                         </div>
                         <button
@@ -375,19 +377,20 @@ watch(() => props.collapsed, (val) => {
                             :key="item.href"
                             type="button"
                             @click="visitMenu(item.href, item.paths)"
-                            class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 transition"
+                            class="flex h-9 w-full items-center gap-3 rounded-xl px-3 transition-all duration-150"
                             :class="[
                                 isActive(item.paths)
-                                    ? 'bg-cyan-200 text-cyan-950 font-bold'
+                                    ? 'bg-blue-600 text-white font-bold shadow-sm shadow-blue-600/30'
                                     : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                             ]"
                         >
-                            <component :is="item.icon" :size="17" class="shrink-0" />
-                            <span class="min-w-0 flex-1 truncate text-[13px] text-left">
+                            <component :is="item.icon" :size="16" class="shrink-0 opacity-80" />
+                            <span class="min-w-0 flex-1 truncate text-xs text-left">
                                 {{ item.label }}
                             </span>
                         </button>
                     </div>
+
                 </template>
             </div>
         </nav>
@@ -395,15 +398,15 @@ watch(() => props.collapsed, (val) => {
         <!-- 3. FOOTER (CỐ ĐỊNH ĐÁY) -->
         <div class="shrink-0 border-t border-white/10 p-2.5 bg-cyan-950">
             <div
-                class="flex items-center rounded-xl bg-white/5"
+                class="flex items-center rounded-xl bg-white/5 border border-white/5"
                 :class="props.collapsed ? 'justify-center p-1.5' : 'gap-2.5 p-2'"
             >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-bold">
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600/30 text-blue-300 text-xs font-bold border border-blue-400/30">
                     {{ (page.props.auth?.user?.name || 'T').charAt(0).toUpperCase() }}
                 </div>
 
-                <div v-if="!props.collapsed" class="min-w-0">
-                    <div class="truncate text-xs font-bold">
+                <div v-if="!props.collapsed" class="min-w-0 text-left">
+                    <div class="truncate text-xs font-bold text-slate-100">
                         {{ page.props.auth?.user?.name || 'Tài khoản' }}
                     </div>
                     <div class="truncate text-[10px] text-slate-400">

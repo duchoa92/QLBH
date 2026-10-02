@@ -3,12 +3,17 @@ import {
     ref,
     onMounted,
     onBeforeUnmount,
+    watch,
 } from 'vue';
 
 const props = defineProps({
     modelValue: {
         type: String,
         default: '',
+    },
+    readonly: {
+        type: Boolean,
+        default: false,
     },
 });
 
@@ -26,11 +31,19 @@ const dots = [
 // các chấm đã chọn
 const selectedDots = ref([]);
 
+watch(() => props.modelValue, (value) => {
+    selectedDots.value = value
+        ? value.split('-').map(Number).filter((dot) => dots.includes(dot))
+        : [];
+}, { immediate: true });
+
 // trạng thái đang vẽ
 const isDrawing = ref(false);
 
 // bắt đầu vẽ
 const startDraw = dot => {
+
+    if (props.readonly) return;
 
     isDrawing.value = true;
 
@@ -121,12 +134,13 @@ onBeforeUnmount(() => {
                 v-for="dot in dots"
                 :key="dot"
 
-                class="w-14 h-14 rounded-full border-4 flex items-center justify-center cursor-pointer transition"
+                class="w-14 h-14 rounded-full border-4 flex items-center justify-center transition"
 
                 :class="
                     selectedDots.includes(dot)
                         ? 'bg-blue-500 border-blue-600 text-white'
-                        : 'bg-white border-gray-400'
+                        : 'bg-white border-gray-400',
+                    readonly ? 'cursor-default' : 'cursor-pointer'
                 "
 
                 @mousedown="startDraw(dot)"
@@ -146,7 +160,7 @@ onBeforeUnmount(() => {
             {{ modelValue || 'Chưa nhập' }}
         </div>
 
-        <div class="mt-4 flex justify-center">
+        <div v-if="!readonly" class="mt-4 flex justify-center">
 
             <button
                 type="button"

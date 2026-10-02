@@ -17,6 +17,8 @@ class RepairRequest extends FormRequest
     {
         return [
 
+            'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+
             'customer_name' => [
                 'required',
                 'string',
@@ -46,6 +48,8 @@ class RepairRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+
+            'estimated_cost' => ['nullable', 'numeric', 'min:0'],
 
             'screen_password' => [
                 'nullable',

@@ -234,7 +234,14 @@ class CustomerController extends Controller
                 'code',
                 'full_name',
                 'phone',
+                'cccd',
             ])
+
+            ->withSum([
+                'sales as debt_balance' => function ($query) {
+                    $query->where('status', 'unpaid');
+                },
+            ], 'remaining_amount')
 
             ->withSum([
                 'sales as total_debt' => function ($query) {
@@ -255,6 +262,8 @@ class CustomerController extends Controller
                     'like',
                     "%{$search}%"
                 )
+
+                ->orWhere('cccd', 'like', "%{$search}%")
 
                 ->orWhere(
                     'search_text',

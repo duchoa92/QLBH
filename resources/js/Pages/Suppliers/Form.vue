@@ -3,11 +3,13 @@ import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import SupplierFormFields from '@/Pages/Suppliers/Partials/SupplierFormFields.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import api from '@/Services/api'
 
 const props = defineProps({
     supplier: Object,
     name: String,
-    title: String
+    title: String,
+    apiMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close', 'updated'])
@@ -19,7 +21,32 @@ const form = useForm({
     address: props.supplier?.address || ''
 })
 
+const submitViaApi = async () => {
+    form.processing = true
+    form.clearErrors()
+    try {
+        const { data } = await api.post('/suppliers', form.data())
+        emit('updated', data.data)
+        emit('close')
+    } catch (error) {
+        if (error.response?.status === 422) {
+            form.errors = Object.fromEntries(
+                Object.entries(error.response.data.errors || {}).map(([field, messages]) => [field, messages[0]])
+            )
+        } else {
+            form.errors.name = error.response?.data?.message || 'Không thể lưu nhà cung cấp.'
+        }
+    } finally {
+        form.processing = false
+    }
+}
+
 const submit = () => {
+    if (props.apiMode && !props.supplier?.id) {
+        submitViaApi()
+        return
+    }
+
     const options = {
         preserveScroll: true,
         onSuccess: (page) => {

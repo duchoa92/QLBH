@@ -17,6 +17,7 @@ class Repair extends Model
     protected $fillable = [
 
         'code',
+        'customer_id',
 
         'customer_name',
         'customer_phone',
@@ -38,7 +39,14 @@ class Repair extends Model
         'accessories',
 
         'estimated_cost',
+        'parts_total',
+        'labor_cost',
+        'surcharge',
         'final_cost',
+        'paid_amount',
+        'change_amount',
+        'payment_method',
+        'payment_note',
 
         'status',
 
@@ -96,6 +104,11 @@ class Repair extends Model
         return $this->hasMany(
             RepairTimeline::class
         )->latest();
+    }
+
+    public function parts(): HasMany
+    {
+        return $this->hasMany(RepairPart::class);
     }
 
         /**

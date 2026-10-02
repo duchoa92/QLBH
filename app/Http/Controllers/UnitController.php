@@ -10,7 +10,11 @@ class UnitController extends Controller
 {
     public function store(Request $request)
     {
-        Unit::create($this->normalizedData($request));
+        $unit = Unit::create($this->normalizedData($request));
+
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $unit], 201);
+        }
 
         return back()->with('success', 'Đã thêm đơn vị tính');
     }

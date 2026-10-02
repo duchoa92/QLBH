@@ -16,6 +16,8 @@ class RepairImage extends Model
 
         'repair_id',
 
+        'timeline_id',
+
         'image_path',
     ];
 
@@ -27,5 +29,10 @@ class RepairImage extends Model
         return $this->belongsTo(
             Repair::class
         );
+    }
+
+    public function timeline(): BelongsTo
+    {
+        return $this->belongsTo(RepairTimeline::class, 'timeline_id');
     }
 }

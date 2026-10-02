@@ -41,6 +41,7 @@ const props = defineProps({
         default: () => [],
     },
 
+
     suppliers: {
         type: Array,
         default: () => [],

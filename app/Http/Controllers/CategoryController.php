@@ -106,6 +106,10 @@ class CategoryController extends Controller
             }
         });
 
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $category], 201);
+        }
+
         return back()->with('success', 'Đã thêm danh mục');
     }
 

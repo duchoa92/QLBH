@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductVariant;
+use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -15,36 +17,61 @@ use Inertia\Response;
 class SaleController extends Controller
 {
     // Danh sách hóa đơn bán hàng
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $sales = Sale::query()
+        $search = trim((string) $request->query('search', ''));
+        $status = in_array($request->query('status'), ['completed', 'cancelled'], true)
+            ? $request->query('status')
+            : '';
+        $dateFrom = (string) $request->query('date_from', '');
+        $dateTo = (string) $request->query('date_to', '');
+        $sortBy = in_array($request->query('sort_by'), ['code', 'customer', 'user', 'total_amount', 'created_at'], true)
+            ? $request->query('sort_by')
+            : 'created_at';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
+
+        $query = Sale::query()
             ->with([
-                'customer', // Nạp mối quan hệ khách hàng[cite: 6]
-                'user',     // Nạp thông tin thu ngân[cite: 6]
+                'customer',
+                'user',
                 'items.product.conversionUnit',
                 'items.variant',
                 'items.productImei',
                 'items.gifts.product',
             ])
-            ->when(
-                request('search'),
-                function ($query) {
-                    $search = request('search');
-                    $query->where(function ($q) use ($search) {
-                        $q->where('code', 'like', '%' . $search . '%')
-                          ->orWhereHas('customer', function ($customerQuery) use ($search) {
-                              $customerQuery->where('full_name', 'like', '%' . $search . '%')
-                                           ->orWhere('phone', 'like', '%' . $search . '%');
-                          })
-                          ->orWhereHas('items', function ($itemQuery) use ($search) {
-                              $itemQuery->whereHas('productImei', function ($imeiQuery) use ($search) {
-                                  $imeiQuery->where('imei', 'like', '%' . $search . '%');
-                              });
-                          });
-                    });
-                }
-            )
-            ->latest()
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($saleQuery) use ($search): void {
+                    $like = '%' . $search . '%';
+                    $saleQuery->where('code', 'like', $like)
+                        ->orWhereHas('customer', fn ($customer) => $customer
+                            ->where('full_name', 'like', $like)
+                            ->orWhere('phone', 'like', $like))
+                        ->orWhereHas('user', fn ($user) => $user->where('name', 'like', $like))
+                        ->orWhereHas('items.productImei', fn ($imei) => $imei
+                            ->where('imei', 'like', $like)
+                            ->orWhere('serial', 'like', $like))
+                        ->orWhereHas('items.product', fn ($product) => $product->where('name', 'like', $like));
+                });
+            })
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($dateFrom !== '', fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
+            ->when($dateTo !== '', fn ($query) => $query->whereDate('created_at', '<=', $dateTo));
+
+        match ($sortBy) {
+            'code' => $query->orderBy('code', $sortOrder),
+            'customer' => $query->orderBy(
+                Customer::query()->select('full_name')->whereColumn('customers.id', 'sales.customer_id'),
+                $sortOrder
+            ),
+            'user' => $query->orderBy(
+                User::query()->select('name')->whereColumn('users.id', 'sales.user_id'),
+                $sortOrder
+            ),
+            'total_amount' => $query->orderBy('grand_total', $sortOrder),
+            default => $query->orderBy('created_at', $sortOrder),
+        };
+
+        $sales = $query
             ->paginate(10)
             ->withQueryString();
 
@@ -53,7 +80,12 @@ class SaleController extends Controller
             [
                 'sales' => $sales,
                 'filters' => [
-                    'search' => request('search'),
+                    'search' => $search,
+                    'status' => $status,
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
+                    'sort_by' => $sortBy,
+                    'sort_order' => $sortOrder,
                 ],
             ]
         );

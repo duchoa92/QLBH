@@ -7,9 +7,9 @@ namespace App\Http\Controllers;
 use App\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Http\JsonResponse;
 
 class SupplierController extends Controller
 {
@@ -88,7 +88,7 @@ class SupplierController extends Controller
         );
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -109,6 +109,10 @@ class SupplierController extends Controller
             'email' => $validated['email'] ?? null,
             'address' => $validated['address'] ?? null,
         ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $supplier], 201);
+        }
 
         return back()->with([
             'success' => 'Tạo nhà cung cấp thành công',

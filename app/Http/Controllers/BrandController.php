@@ -62,7 +62,10 @@ class BrandController extends Controller
 
     public function store(StoreBrandRequest $request)
     {
-        $this->brandService->create($request->validated());
+        $brand = $this->brandService->create($request->validated());
+        if ($request->expectsJson()) {
+            return response()->json(['data' => $brand->load('category:id,name')], 201);
+        }
         return back()->with('success', 'Đã thêm thương hiệu thành công');
     }
 

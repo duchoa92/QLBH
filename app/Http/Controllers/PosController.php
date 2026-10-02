@@ -8,6 +8,9 @@ use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Sale;
 use App\Services\PosCheckoutService;
+use App\Models\User;
+use App\Notifications\SystemNotification;
+use Illuminate\Support\Facades\Notification;
 
 class PosController extends Controller
 {
@@ -119,6 +122,16 @@ class PosController extends Controller
                 'items.gifts.product',
                 'customer',
             ]);
+
+            Notification::send(
+                User::query()->get(),
+                new SystemNotification(
+                    'Đơn hàng mới',
+                    'Hóa đơn ' . $sale->code . ' đã được tạo cho ' . ($sale->customer?->full_name ?? 'khách lẻ') . '.',
+                    'sale',
+                    route('sales.index')
+                )
+            );
 
             return response()->json([
                 'success' => true,

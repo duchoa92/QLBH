@@ -108,6 +108,9 @@ class StockImportService
                 $baseQuantity = $quantity * $conversionFactor;
 
                 $costPrice = (float) $item['cost_price'];
+                $sellPrice = array_key_exists('sell_price', $item) && $item['sell_price'] !== null
+                    ? round((float) $item['sell_price'] / $conversionFactor, 2)
+                    : null;
                 $imeis = $this->normalizeImeis($item['imeis'] ?? [], $data['import_date'] ?? null);
 
                 if ($product->manage_stock_by_serial && $conversionFactor > 1) {
@@ -184,6 +187,10 @@ class StockImportService
 
                 if ($variantId !== null) {
 
+                    if ($sellPrice !== null && ! $product->manage_stock_by_serial) {
+                        ProductVariant::whereKey($variantId)->update(['sell_price' => $sellPrice]);
+                    }
+
                     ProductVariant::whereKey($variantId)
                         ->increment(
                             'stock',
@@ -191,6 +198,10 @@ class StockImportService
                         );
 
                 } else {
+
+                    if ($sellPrice !== null && ! $product->manage_stock_by_serial) {
+                        Product::whereKey($productId)->update(['sell_price' => $sellPrice]);
+                    }
 
                     Product::whereKey($productId)
                         ->increment(

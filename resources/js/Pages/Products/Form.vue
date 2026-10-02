@@ -3,13 +3,14 @@ import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
-import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import SearchableReferenceSelect from '@/Components/UI/SearchableReferenceSelect.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
 import {toast} from 'vue-sonner'
 import { X } from 'lucide-vue-next'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
+import ReferenceCreateModal from './ReferenceCreateModal.vue'
 
 
 
@@ -134,6 +135,10 @@ const filteredBrands = computed(() => {
     )
 })
 
+const selectedCategoryName = computed(() =>
+    categories.value.find(item => Number(item.id) === Number(form.category_id))?.name || ''
+)
+
 const unitOptions = computed(() => [
     {
         id: null,
@@ -157,6 +162,39 @@ const conversionUnitOptions = computed(() =>
                 : unit.name,
         }))
 )
+
+const referenceModal = ref({ type: null, initialName: '', target: 'primary' })
+
+const openReferenceCreate = (type, initialName = '', target = 'primary') => {
+    if (type === 'brand' && !form.category_id) {
+        toast.warning('Vui lòng chọn danh mục trước khi thêm thương hiệu.')
+        return
+    }
+    referenceModal.value = { type, initialName, target }
+}
+
+const closeReferenceCreate = () => {
+    referenceModal.value = { type: null, initialName: '', target: 'primary' }
+}
+
+const handleReferenceCreated = (record) => {
+    const type = referenceModal.value.type
+    if (!record || !type) return
+
+    if (type === 'category') {
+        if (!categories.value.some(item => Number(item.id) === Number(record.id))) categories.value.push(record)
+        form.category_id = record.id
+        form.brand_id = null
+    } else if (type === 'brand') {
+        if (!brands.value.some(item => Number(item.id) === Number(record.id))) brands.value.push(record)
+        form.category_id = record.category_id
+        form.brand_id = record.id
+    } else {
+        if (!units.value.some(item => Number(item.id) === Number(record.id))) units.value.push(record)
+        if (referenceModal.value.target === 'conversion') form.conversion_unit_id = record.id
+        else form.unit_id = record.id
+    }
+}
 
 const selectedUnitName = computed(() => {
     const unit = units.value.find(
@@ -823,32 +861,29 @@ const submit = () => {
                         />
                     </div>
 
-                    <FloatingSelect
+                    <SearchableReferenceSelect
                         v-model="form.category_id"
                         :options="categories"
-                        option-label="name"
-                        option-value="id"
                         label="Danh mục"
-
                         :error="form.errors.category_id"
+                        @create="openReferenceCreate('category', $event)"
                     />
 
-                    <FloatingSelect
+                    <SearchableReferenceSelect
                         v-model="form.brand_id"
                         :options="filteredBrands"
-                        option-label="name"
-                        option-value="id"
                         label="Thương hiệu"
+                        :disabled="!form.category_id"
                         :error="form.errors.brand_id"
+                        @create="openReferenceCreate('brand', $event)"
                     />
 
-                    <FloatingSelect
+                    <SearchableReferenceSelect
                         v-model="form.unit_id"
                         :options="unitOptions"
-                        option-label="name"
-                        option-value="id"
                         label="Đơn vị bán và tồn kho"
                         :error="form.errors.unit_id"
+                        @create="openReferenceCreate('unit', $event)"
                     />
 
                     <!-- SKU + IMEI + BIẾN THỂ -->
@@ -866,12 +901,12 @@ const submit = () => {
                             <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
                             <!-- IMEI -->
                             <label
-                                v-if="!form.has_unit_conversion"
-                                class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700"
+                                :class="['inline-flex items-center gap-2 text-sm font-semibold', form.has_unit_conversion ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']"
                             >
                                 <input
                                     v-model="form.manage_stock_by_serial"
                                     type="checkbox"
+                                    :disabled="form.has_unit_conversion"
                                     class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                 />
                                 Có IMEI
@@ -887,12 +922,12 @@ const submit = () => {
                                 Có thuộc tính
                             </label>
                             <label
-                                v-if="!form.manage_stock_by_serial"
-                                class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700"
+                                :class="['inline-flex items-center gap-2 text-sm font-semibold', form.manage_stock_by_serial ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']"
                             >
                                 <input
                                     v-model="form.has_unit_conversion"
                                     type="checkbox"
+                                    :disabled="form.manage_stock_by_serial"
                                     class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                 />
                                 Nhập theo cuộn / thùng
@@ -900,16 +935,16 @@ const submit = () => {
                             </div>
 
                             <div
-                                v-if="form.has_unit_conversion"
                                 class="mt-3 grid items-end gap-3 border-t border-slate-200 pt-3 md:grid-cols-[minmax(180px,1fr)_minmax(110px,0.55fr)_auto]"
+                                :class="{ 'opacity-50': form.manage_stock_by_serial }"
                             >
-                                <FloatingSelect
+                                <SearchableReferenceSelect
                                     v-model="form.conversion_unit_id"
                                     :options="conversionUnitOptions"
-                                    option-label="name"
-                                    option-value="id"
                                     label="Đơn vị nhập"
+                                    :disabled="form.manage_stock_by_serial"
                                     :error="form.errors.conversion_unit_id"
+                                    @create="openReferenceCreate('unit', $event, 'conversion')"
                                 />
 
                                 <FloatingInput
@@ -918,6 +953,7 @@ const submit = () => {
                                     min="2"
                                     label="Số lượng"
                                     :error="form.errors.conversion_factor"
+                                    :disabled="form.manage_stock_by_serial"
                                 />
 
                                 <div class="pb-2 text-sm font-bold text-slate-700">
@@ -1136,6 +1172,16 @@ const submit = () => {
     </template>
 
     </BaseModal>
+
+    <ReferenceCreateModal
+        v-if="referenceModal.type"
+        :type="referenceModal.type"
+        :initial-name="referenceModal.initialName"
+        :category-id="form.category_id"
+        :category-name="selectedCategoryName"
+        @close="closeReferenceCreate"
+        @created="handleReferenceCreated"
+    />
 
 </template>
 
