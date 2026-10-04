@@ -60,8 +60,22 @@ const onRepairCompleted = (repair) => {
     reload();
 };
 
-const onProgressPayment = (repair) => {
+const onProgressPayment = async (repair) => {
     progressingRepair.value = null;
+    if (Number(repair.final_cost || 0) <= 0) {
+        try {
+            await axios.post(route('repairs.return', repair.id), {
+                payment_method: 'cash',
+                paid_amount: 0,
+                note: repair.warranty_covered_amount > 0 ? 'Toàn bộ chi phí được bảo hành' : 'Không phát sinh thanh toán',
+            });
+            toast.success('Đã xác nhận trả máy, không phát sinh thanh toán');
+            reload();
+        } catch (error) {
+            toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể xác nhận trả máy');
+        }
+        return;
+    }
     paymentRepair.value = repair;
 };
 
@@ -75,6 +89,11 @@ const detailRows = computed(() => {
         { label: 'CCCD', value: repair.customer?.identity_card || '-' },
         { label: 'Thiết bị', value: repair.device_name },
         { label: 'IMEI / Serial', value: repair.imei || '-' },
+        { label: 'Loại xử lý', value: repair.intake_type === 'warranty' ? 'Bảo hành' : repair.warranty_status === 'declined' ? 'Sửa dịch vụ (đã từ chối BH)' : repair.warranty_status === 'service' ? 'Sửa dịch vụ (có căn cứ BH)' : repair.warranty_source_type && ['pending', 'repairing'].includes(repair.status) ? 'Chưa chốt · có căn cứ BH' : ['pending', 'repairing'].includes(repair.status) ? 'Chưa chốt loại sửa' : 'Sửa dịch vụ' },
+        ...(repair.warranty_expires_at ? [{ label: 'Hạn bảo hành gốc', value: new Date(repair.warranty_expires_at).toLocaleDateString('vi-VN') }] : []),
+        ...(repair.warranty_decline_reason ? [{ label: 'Lý do từ chối BH', value: repair.warranty_decline_reason, full: true }] : []),
+        ...(Number(repair.warranty_covered_amount || 0) > 0 ? [{ label: 'Chi phí được bảo hành', value: `${Number(repair.warranty_covered_amount).toLocaleString('vi-VN')} đ` }] : []),
+        ...(repair.repair_warranty_expires_at ? [{ label: 'BH sau sửa đến', value: new Date(repair.repair_warranty_expires_at).toLocaleDateString('vi-VN') }] : []),
         { label: 'Mật khẩu màn hình', value: repair.screen_password || '-' },
         { label: 'Mẫu hình (thứ tự chấm)', value: repair.screen_pattern || '-' },
         { label: 'Loại tài khoản', value: repair.account_type || '-' },

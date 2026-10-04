@@ -24,7 +24,6 @@ const form = useForm({
 })
 
 const issueText = ref('')
-
 const submit = (targetStatus = 'repairing') => {
     form.issue = issueText.value.split(',').map((item) => item.trim()).filter(Boolean)
     // Keep multipart uploads compatible with PHP request parsing.

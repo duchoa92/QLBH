@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, computed } from 'vue';
+import { ref, watch, onMounted, nextTick } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -20,6 +20,9 @@ const form = useForm({
     customer_phone: '',
     contact_phone: '',
     identity_card: '',
+    intake_type: 'repair',
+    warranty_source_type: '',
+    warranty_source_id: null,
     device_name: '',
     imei: '',
     screen_password: '',
@@ -42,10 +45,45 @@ const form = useForm({
 */
 const selectedCustomer = ref(null);
 const searchQuery = ref('');
+const customerDeviceSuggestions = ref([]);
+const customerDeviceLoading = ref(false);
+const selectedDevice = ref(null);
+const isNewDevice = ref(false);
+const selectedWarranty = ref(null);
+let customerDeviceRequest = 0;
+
+const displayWarrantyDate = (value) => value
+    ? new Date(value).toLocaleDateString('vi-VN')
+    : 'Không có hạn';
+
+watch(searchQuery, (value) => {
+    if (!selectedCustomer.value) form.customer_name = value.trim();
+});
+
+const loadCustomerDeviceSuggestions = async (customerId) => {
+    const requestId = ++customerDeviceRequest;
+    customerDeviceSuggestions.value = [];
+    if (!customerId) {
+        customerDeviceLoading.value = false;
+        return;
+    }
+    customerDeviceLoading.value = true;
+    try {
+        const { data } = await axios.get(route('repairs.customer-devices', customerId));
+        if (requestId === customerDeviceRequest) customerDeviceSuggestions.value = data.devices || [];
+    } catch {
+        if (requestId === customerDeviceRequest) customerDeviceSuggestions.value = [];
+    } finally {
+        if (requestId === customerDeviceRequest) customerDeviceLoading.value = false;
+    }
+};
 
 const onSelectCustomer = (customer) => {
     if (!customer) {
-        clearCustomer();
+        selectedCustomer.value = null;
+        form.customer_id = null;
+        clearSelectedDevice();
+        loadCustomerDeviceSuggestions(null);
         return;
     }
     selectedCustomer.value = customer;
@@ -54,11 +92,13 @@ const onSelectCustomer = (customer) => {
     form.customer_phone = customer.phone || customer.customer_phone || '';
     form.identity_card = customer.cccd || customer.identity_card || '';
     form.contact_phone = customer.contact_phone || form.customer_phone || '';
+    clearSelectedDevice();
     searchQuery.value = '';
-    toast.success(`Đã chọn khách hàng: ${form.customer_name}`);
+    loadCustomerDeviceSuggestions(customer.id);
 };
 
 const clearCustomer = () => {
+    clearSelectedDevice();
     selectedCustomer.value = null;
     searchQuery.value = '';
     form.customer_id = null;
@@ -66,6 +106,7 @@ const clearCustomer = () => {
     form.customer_phone = '';
     form.contact_phone = '';
     form.identity_card = '';
+    loadCustomerDeviceSuggestions(null);
 };
 
 /*
@@ -73,17 +114,55 @@ const clearCustomer = () => {
 | Trạng thái Bảo mật (Ẩn/Hiện)
 |--------------------------------------------------------------------------
 */
-const showSecurity = ref(false);
+const lockType = ref('');
+const lockTypeOptions = [
+    { value: '', label: '-- Chọn kiểu khóa --' },
+    { value: 'pin', label: 'Mã PIN' },
+    { value: 'password', label: 'Mật khẩu' },
+    { value: 'pattern', label: 'Mẫu hình' },
+];
 
-watch(showSecurity, (val) => {
-    if (!val) {
-        form.screen_password = '';
-        form.screen_pattern = '';
-        form.account_type = '';
+watch(lockType, (value) => {
+    if (applyingHistoryDevice.value) return;
+    if (value !== 'pattern') form.screen_pattern = '';
+    if (!['pin', 'password'].includes(value)) form.screen_password = '';
+});
+watch(() => form.account_type, (value) => {
+    if (!value && !applyingHistoryDevice.value) {
         form.account_email = '';
         form.account_password = '';
     }
 });
+
+const applyingHistoryDevice = ref(false);
+const selectCustomerDevice = async (device) => {
+    applyingHistoryDevice.value = true;
+    selectedDevice.value = { name: device.device_name || '', imei: device.imei || device.serial || '', source: device.source };
+    isNewDevice.value = false;
+    deviceSearchQuery.value = '';
+    form.device_name = device.device_name || '';
+    form.imei = device.imei || device.serial || '';
+    form.screen_password = device.screen_password || '';
+    form.screen_pattern = device.screen_pattern || '';
+    form.account_type = device.account_type || '';
+    form.account_email = device.account_email || '';
+    form.account_password = device.account_password || '';
+    form.issue = Array.isArray(device.issue) ? [...device.issue] : (device.issue ? [device.issue] : []);
+    form.repair_request = device.repair_request || '';
+    form.accessories = Array.isArray(device.accessories) ? [...device.accessories] : [];
+    form.estimated_cost = device.estimated_cost || '';
+    form.note = device.note || '';
+    const eligibleWarranty = device.warranty?.active ? device.warranty : null;
+    selectedWarranty.value = eligibleWarranty;
+    form.warranty_source_type = eligibleWarranty?.source_type || '';
+    form.warranty_source_id = eligibleWarranty?.source_id || null;
+
+    lockType.value = device.screen_pattern ? 'pattern' : (device.screen_password ? 'password' : '');
+    deviceFocused.value = false;
+    newImeiConfirmed.value = false;
+    await nextTick();
+    applyingHistoryDevice.value = false;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -119,6 +198,7 @@ const codeReader = new BrowserMultiFormatReader();
 const startScan = async () => {
     try {
         scanning.value = true;
+        await nextTick();
         const devices = await BrowserMultiFormatReader.listVideoInputDevices();
         const selectedDeviceId = devices[0]?.deviceId;
 
@@ -131,9 +211,13 @@ const startScan = async () => {
         codeReader.decodeFromVideoDevice(
             selectedDeviceId,
             videoRef.value,
-            (result) => {
+                (result) => {
                 if (result) {
-                    form.imei = result.getText();
+                    lookupAfterScan = true;
+                    form.imei = result.getText().trim();
+                    deviceSearchQuery.value = form.imei;
+                    deviceFocused.value = true;
+                    searchDeviceCatalog(deviceSearchQuery.value);
                     stopScan();
                 }
             }
@@ -158,19 +242,121 @@ const stopScan = () => {
 const issueInput = ref('');
 const issueSuggestions = ref([]);
 const deviceSuggestions = ref([]);
-const imeiSuggestions = ref([]);
+const deviceSearchQuery = ref('');
 const deviceFocused = ref(false);
-const imeiFocused = ref(false);
+const deviceSearching = ref(false);
+const newImeiConfirmed = ref(false);
+let lookupAfterScan = false;
+let deviceSearchTimer;
+let deviceSearchSequence = 0;
 
-const matchingDevices = computed(() => {
-    const query = form.device_name.trim().toLocaleLowerCase();
-    return query ? deviceSuggestions.value.filter((name) => name.toLocaleLowerCase().includes(query)).slice(0, 8) : [];
+const combineDeviceSuggestions = (data) => {
+    const fromDevices = (data.devices || []).map((item) => ({ ...item, name: item.name || '' }));
+    const fromImeis = (data.imeis || []).map((item) => ({ ...item, name: item.name || '' }));
+    return [...fromDevices, ...fromImeis]
+        .filter((item) => item.name || item.imei)
+        .filter((item, index, items) => items.findIndex((candidate) => candidate.name === item.name && candidate.imei === item.imei) === index)
+        .slice(0, 12);
+};
+
+const searchDeviceCatalog = (value) => {
+    clearTimeout(deviceSearchTimer);
+    const keyword = value.trim();
+    const sequence = ++deviceSearchSequence;
+    deviceSuggestions.value = [];
+    if (keyword.length < 2) {
+        deviceSearching.value = false;
+        return;
+    }
+    deviceSearching.value = true;
+    deviceSearchTimer = setTimeout(async () => {
+        try {
+            const { data } = await axios.get(route('repairs.suggestions'), { params: { keyword } });
+            if (sequence !== deviceSearchSequence) return;
+            deviceSuggestions.value = combineDeviceSuggestions(data);
+            if (lookupAfterScan) {
+                lookupAfterScan = false;
+                const match = deviceSuggestions.value.find((item) => item.imei?.toLocaleLowerCase() === keyword.toLocaleLowerCase());
+                if (match) {
+                    selectDevice(match);
+                    newImeiConfirmed.value = false;
+                } else {
+                    newImeiConfirmed.value = true;
+                    toast.info('IMEI chưa có trong hệ thống, sẽ được ghi nhận cho máy mới.');
+                }
+            }
+        } catch {
+            if (sequence === deviceSearchSequence) {
+                deviceSuggestions.value = [];
+                if (lookupAfterScan) {
+                    lookupAfterScan = false;
+                    newImeiConfirmed.value = true;
+                    toast.info('Không tìm thấy IMEI trong hệ thống, sẽ ghi nhận cho máy mới.');
+                }
+            }
+        } finally {
+            if (sequence === deviceSearchSequence) deviceSearching.value = false;
+        }
+    }, 220);
+};
+
+watch(deviceSearchQuery, (value) => {
+    newImeiConfirmed.value = false;
+    if (deviceFocused.value) searchDeviceCatalog(value || '');
 });
 
-const matchingImeis = computed(() => {
-    const query = form.imei.trim().toLocaleLowerCase();
-    return query ? imeiSuggestions.value.filter((imei) => imei.toLocaleLowerCase().includes(query)).slice(0, 8) : [];
-});
+const selectDevice = (item) => {
+    form.device_name = item.name || '';
+    form.imei = item.imei || '';
+    selectedDevice.value = { ...item, name: form.device_name, imei: form.imei };
+    isNewDevice.value = false;
+    selectedWarranty.value = null;
+    form.warranty_source_type = '';
+    form.warranty_source_id = null;
+    deviceSearchQuery.value = '';
+    newImeiConfirmed.value = false;
+    deviceFocused.value = false;
+};
+
+const useNewDevice = () => {
+    const value = deviceSearchQuery.value.trim();
+    if (!value) return;
+    const scannedImei = newImeiConfirmed.value && form.imei === value;
+    form.device_name = scannedImei ? '' : value;
+    form.imei = scannedImei ? value : '';
+    selectedDevice.value = { name: form.device_name || 'Máy mới', imei: form.imei, source: 'Máy mới' };
+    isNewDevice.value = true;
+    selectedWarranty.value = null;
+    form.warranty_source_type = '';
+    form.warranty_source_id = null;
+    newImeiConfirmed.value = false;
+    deviceSearchQuery.value = '';
+    deviceFocused.value = false;
+};
+
+const clearSelectedDevice = () => {
+    selectedDevice.value = null;
+    isNewDevice.value = false;
+    form.device_name = '';
+    form.imei = '';
+    form.screen_password = '';
+    form.screen_pattern = '';
+    form.account_type = '';
+    form.account_email = '';
+    form.account_password = '';
+    form.issue = [];
+    form.repair_request = '';
+    form.accessories = [];
+    form.estimated_cost = '';
+    form.note = '';
+    selectedWarranty.value = null;
+    form.warranty_source_type = '';
+    form.warranty_source_id = null;
+    lockType.value = '';
+    newImeiConfirmed.value = false;
+};
+
+const handleDeviceSearchEnter = () => useNewDevice();
 
 const filteredIssues = ref([]);
 
@@ -187,8 +373,6 @@ onMounted(async () => {
     try {
         const response = await axios.get(route('repairs.suggestions'));
         issueSuggestions.value = response.data.issues ?? [];
-        deviceSuggestions.value = response.data.devices ?? [];
-        imeiSuggestions.value = response.data.imeis ?? [];
     } catch (error) {
         console.error(error);
     }
@@ -249,14 +433,20 @@ const submit = () => {
 <template>
     <BaseModal
         title="Tiếp nhận máy sửa chữa"
-        size="lg"
+        size="xl"
+        body-class="px-4 pb-4 pt-2"
         @close="emit('close')"
     >
-        <!-- BỐ CỤC ĐƯỢC ÉP CHIỀU RỘNG CHUẨN ĐỂ KHÔNG BỊ TRÀN -->
-        <div class="max-w-xl mx-auto space-y-3 text-xs p-1">
+        <div class="grid grid-cols-1 items-start gap-3 text-xs lg:grid-cols-12 lg:gap-4">
+        <div class="space-y-3 lg:col-span-8">
             
             <!-- 1. TÌM KIẾM KHÁCH HÀNG -->
-            <div class="space-y-1">
+            <section class="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+                <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
+                    <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">♙ Khách hàng</h2>
+                    <span class="text-[10px] text-slate-500">Tìm khách hàng hiện hữu hoặc nhập mới</span>
+                </header>
+                <div class="space-y-2 p-3">
                 <div 
                     v-if="selectedCustomer" 
                     class="flex items-center justify-between gap-2 px-3.5 py-2 bg-blue-50/70 border border-blue-200/90 rounded-xl transition"
@@ -269,6 +459,9 @@ const submit = () => {
                             <span class="font-bold text-slate-800 text-xs">{{ form.customer_name }}</span>
                             <span v-if="form.customer_phone" class="text-blue-600 text-xs font-medium">
                                 - {{ form.customer_phone }}
+                            </span>
+                            <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="text-rose-600 text-[11px] font-semibold">
+                                · Nợ {{ Number(selectedCustomer.debt_balance).toLocaleString('vi-VN') }} đ
                             </span>
                         </div>
                     </div>
@@ -296,10 +489,11 @@ const submit = () => {
                 <p v-if="form.errors.customer_name" class="text-rose-500 text-[11px] mt-1 font-medium">
                     {{ form.errors.customer_name }}
                 </p>
-            </div>
+                </div>
+            </section>
 
             <!-- 2. THÔNG TIN THIẾT BỊ & BẢO MẬT -->
-            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div class="relative z-20 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-visible" :class="{ 'z-40': deviceFocused }">
                 <div class="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70">
                     <h2 class="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                         <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -310,137 +504,113 @@ const submit = () => {
                 </div>
 
                 <div class="p-3 space-y-2.5">
-                    <!-- Tên máy & IMEI -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div class="relative">
-                            <FloatingInput
-                                v-model="form.device_name"
-                                label="Tên máy / Model *"
-                                id="device_name"
-                                :error="form.errors.device_name"
-                                required
-                                autocomplete="off"
-                                @focus="deviceFocused = true"
-                                @blur="deviceFocused = false"
-                            />
-                            <div v-if="deviceFocused && matchingDevices.length" class="absolute left-0 right-0 top-full z-[100] mt-1 max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                                <button 
-                                    v-for="device in matchingDevices" 
-                                    :key="device" 
-                                    type="button" 
-                                    class="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition" 
-                                    @mousedown.prevent="form.device_name = device; deviceFocused = false"
-                                >
-                                    {{ device }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex gap-1.5">
-                                <div class="relative flex-1">
-                                    <FloatingInput
-                                        v-model="form.imei"
-                                        label="Số IMEI / Serial"
-                                        id="imei"
-                                        :error="form.errors.imei"
-                                        autocomplete="off"
-                                        @focus="imeiFocused = true"
-                                        @blur="imeiFocused = false"
-                                    />
-                                    <div v-if="imeiFocused && matchingImeis.length" class="absolute left-0 right-0 top-full z-[100] mt-1 max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                                        <button 
-                                            v-for="imei in matchingImeis" 
-                                            :key="imei" 
-                                            type="button" 
-                                            class="block w-full px-3 py-1.5 text-left font-mono text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition" 
-                                            @mousedown.prevent="form.imei = imei; imeiFocused = false"
-                                        >
-                                            {{ imei }}
-                                        </button>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    @click="startScan"
-                                    title="Quét IMEI từ Camera"
-                                    class="px-3 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 active:bg-indigo-200 transition flex items-center justify-center shrink-0"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <div v-if="scanning" class="mt-2 border rounded-xl overflow-hidden bg-slate-900 relative">
-                                <video ref="videoRef" class="w-full h-32 object-cover" />
-                                <button
-                                    type="button"
-                                    @click="stopScan"
-                                    class="absolute top-2 right-2 bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-lg shadow hover:bg-rose-700 transition"
-                                >
-                                    Tắt camera
-                                </button>
-                            </div>
-                        </div>
+                    <div v-if="selectedWarranty" class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-[11px] text-emerald-900">
+                        <strong>Thiết bị có căn cứ bảo hành.</strong> Hệ thống sẽ xác minh lại khi hoàn tất sửa; lúc đó chọn sửa dịch vụ hoặc bảo hành.
+                        <div class="mt-1 font-semibold">Căn cứ: {{ selectedWarranty.invoice_code || selectedDevice?.source }} · đến {{ displayWarrantyDate(selectedWarranty.expires_at) }}</div>
+                    </div>
+                    <div v-else class="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-[11px] text-slate-600">
+                        Có thể tiếp nhận máy trước; loại sửa dịch vụ hay bảo hành sẽ được chốt sau khi kiểm tra.
                     </div>
 
-                    <!-- TOGGLE BẢO MẬT -->
-                    <div>
-                        <label class="flex items-center gap-2 cursor-pointer select-none p-2 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-100/70 transition">
-                            <input 
-                                type="checkbox" 
-                                v-model="showSecurity" 
-                                class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                            />
-                            <span class="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                                <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    <div v-if="selectedCustomer" class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-2.5">
+                        <div class="mb-2 flex items-center justify-between gap-2">
+                            <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Thiết bị khách đã mua / từng sửa</p>
+                            <span v-if="customerDeviceLoading" class="text-[10px] text-slate-400">Đang tải...</span>
+                        </div>
+                        <div v-if="customerDeviceSuggestions.length" class="flex gap-2 overflow-x-auto pb-0.5">
+                            <button
+                                v-for="device in customerDeviceSuggestions"
+                                :key="device.key"
+                                type="button"
+                                class="min-w-[190px] max-w-[250px] rounded-lg border border-indigo-100 bg-white px-2.5 py-2 text-left transition hover:border-indigo-300 hover:bg-indigo-50"
+                                @click="selectCustomerDevice(device)"
+                            >
+                                <span class="block truncate text-[11px] font-semibold text-slate-800">{{ device.device_name }}</span>
+                                <span class="mt-0.5 block truncate text-[10px] text-slate-500">{{ device.source }}<template v-if="device.imei || device.serial"> · {{ device.imei || device.serial }}</template></span>
+                                <span v-if="device.warranty" class="mt-1 block text-[10px] font-semibold" :class="device.warranty.active ? 'text-emerald-700' : 'text-rose-600'">
+                                    {{ device.warranty.voided_at ? 'BH đã vô hiệu' : device.warranty.active ? `Còn BH đến ${displayWarrantyDate(device.warranty.expires_at)}` : `Hết BH ${displayWarrantyDate(device.warranty.expires_at)}` }}
+                                </span>
+                                <span v-else class="mt-1 block text-[10px] text-slate-400">Không có hạn BH khách hàng</span>
+                            </button>
+                        </div>
+                        <p v-else-if="!customerDeviceLoading" class="text-[10px] text-slate-500">Chưa có thiết bị trong lịch sử. Có thể tìm hoặc nhập máy mới bên dưới.</p>
+                    </div>
+
+                    <div v-if="selectedDevice" class="rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-2.5 transition">
+                        <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
+                            <div v-if="form.device_name" class="flex min-w-0 items-center gap-2.5">
+                                <svg class="h-4 w-4 shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                 </svg>
-                                Khai báo mật khẩu / Khóa màn hình
-                            </span>
-                        </label>
+                                <div class="min-w-0 truncate text-xs leading-tight">
+                                    <span class="font-bold text-slate-800">{{ form.device_name }}</span>
+                                    <span v-if="!isNewDevice && selectedDevice.source" class="ml-1.5 text-slate-500">· {{ selectedDevice.source }}</span>
+                                </div>
+                            </div>
+                            <FloatingInput v-else v-model="form.device_name" label="Tên máy / Model *" id="device_name" :error="form.errors.device_name" required />
+                            <FloatingInput v-model="form.imei" label="Số IMEI / Serial" id="imei" :error="form.errors.imei" />
+                            <button type="button" @click="clearSelectedDevice" class="shrink-0 p-1 text-blue-400 transition hover:text-rose-600" title="Bỏ chọn máy" aria-label="Bỏ chọn máy">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <p v-if="newImeiConfirmed" class="mt-1 text-[10px] text-emerald-700">IMEI mới sẽ được lưu cùng phiếu tiếp nhận.</p>
                     </div>
 
-                    <!-- KHU VỰC BẢO MẬT -->
-                    <div v-if="showSecurity" class="space-y-2.5 pt-2 border-t border-slate-100">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <FloatingInput
-                                v-model="form.screen_password"
-                                label="Mật khẩu màn hình"
-                                id="screen_password"
-                            />
-
-                            <FloatingSelect
-                                v-model="form.account_type"
-                                label="Tài khoản máy"
-                                id="account_type"
-                                :options="accountTypeOptions"
-                            />
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" v-if="form.account_type">
-                            <FloatingInput
-                                v-model="form.account_email"
-                                label="Email / SĐT tài khoản"
-                                id="account_email"
-                            />
-
-                            <FloatingInput
-                                v-model="form.account_password"
-                                label="Mật khẩu tài khoản"
-                                id="account_password"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">
-                                Mẫu hình khóa màn hình
-                            </label>
-                            <div class="flex justify-center rounded-xl border border-slate-200/80 bg-slate-50/50 p-2">
-                                <PatternLock v-model="form.screen_pattern" />
+                    <div v-else class="relative">
+                        <div class="flex items-center gap-1.5">
+                            <div class="relative min-w-0 flex-1">
+                                <FloatingInput
+                                    v-model="deviceSearchQuery"
+                                    label="Tìm máy theo tên hoặc IMEI / Serial"
+                                    id="device_search"
+                                    autocomplete="off"
+                                    @keydown.enter.prevent="handleDeviceSearchEnter"
+                                    @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)"
+                                    @blur="deviceFocused = false"
+                                />
+                                <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                                    <button v-for="device in deviceSuggestions" :key="`${device.name}-${device.imei || ''}-${device.source}`" type="button" class="block w-full border-b border-slate-50 px-3 py-2 text-left text-xs last:border-0 hover:bg-blue-50" @mousedown.prevent="selectDevice(device)">
+                                        <span class="flex items-center justify-between gap-2">
+                                            <span class="truncate font-semibold text-slate-800">{{ device.name || 'Chưa có tên máy' }}</span>
+                                            <span v-if="device.imei" class="shrink-0 font-mono text-[10px] text-indigo-700">{{ device.imei }}</span>
+                                        </span>
+                                        <span class="text-[10px] text-slate-500">{{ device.source }}</span>
+                                    </button>
+                                    <p v-if="deviceSearching" class="px-3 py-2 text-[10px] text-slate-400">Đang tìm theo tên máy và IMEI...</p>
+                                    <button v-if="!deviceSearching" type="button" class="block w-full border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-blue-700 hover:bg-blue-50" @mousedown.prevent="useNewDevice">
+                                        + Dùng tên máy này, nhập IMEI riêng
+                                    </button>
+                                    <p v-if="!deviceSearching && !deviceSuggestions.length" class="px-3 py-1 text-[10px] text-slate-400">Chưa tìm thấy máy phù hợp. Có thể dùng thông tin mới bên trên.</p>
+                                </div>
                             </div>
+                            <button
+                                type="button"
+                                @click="startScan"
+                                title="Quét IMEI từ Camera"
+                                class="flex shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-indigo-600 transition hover:bg-indigo-100 active:bg-indigo-200"
+                            >
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div v-if="scanning" class="relative mt-2 overflow-hidden rounded-xl border bg-slate-900">
+                            <video ref="videoRef" class="h-32 w-full object-cover" />
+                            <button type="button" @click="stopScan" class="absolute right-2 top-2 rounded-lg bg-rose-600 px-2 py-0.5 text-[10px] text-white shadow transition hover:bg-rose-700">Tắt camera</button>
+                        </div>
+                    </div>
+
+                    <p v-if="form.errors.device_name && !selectedDevice" class="text-[11px] font-medium text-rose-500">{{ form.errors.device_name }}</p>
+                    <div class="grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-2.5 sm:grid-cols-2">
+                        <FloatingSelect v-model="lockType" label="Kiểu khóa màn hình" id="repair_lock_type" :options="lockTypeOptions" />
+                        <FloatingInput v-if="['pin', 'password'].includes(lockType)" v-model="form.screen_password" :type="lockType === 'password' ? 'password' : 'text'" :inputmode="lockType === 'pin' ? 'numeric' : 'text'" :label="lockType === 'pin' ? 'Mã PIN màn hình' : 'Mật khẩu màn hình'" id="repair_screen_password" />
+                        <FloatingSelect v-model="form.account_type" label="Loại tài khoản máy" id="repair_account_type" :options="accountTypeOptions" />
+                        <FloatingInput v-if="form.account_type" v-model="form.account_email" label="Email / SĐT tài khoản" id="repair_account_email" />
+                        <FloatingInput v-if="form.account_type" v-model="form.account_password" type="password" label="Mật khẩu tài khoản" id="repair_account_password" />
+                        <div v-if="lockType === 'pattern'" class="sm:col-span-2">
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">Vẽ mẫu hình khóa màn hình</label>
+                            <div class="inline-flex rounded-xl border border-slate-200 bg-white p-2"><PatternLock v-model="form.screen_pattern" /></div>
                         </div>
                     </div>
 
@@ -460,9 +630,6 @@ const submit = () => {
 
                 <div class="p-3 space-y-2.5">
                     <div>
-                        <label class="block text-[11px] font-medium text-slate-600 mb-1">
-                            Lỗi máy ghi nhận
-                        </label>
                         <div v-if="form.issue.length > 0" class="flex flex-wrap gap-1.5 mb-2">
                             <span
                                 v-for="(item, index) in form.issue"
@@ -543,61 +710,64 @@ const submit = () => {
                         />
                     </div>
 
-                    <!-- ẢNH NGOẠI QUAN MÁY -->
-                    <div class="pt-1">
-                        <div class="flex items-center justify-between gap-2 mb-1.5">
-                            <span class="text-[11px] font-semibold text-slate-700">Ảnh ngoại quan máy</span>
-                            <label class="cursor-pointer text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center gap-1">
-                                <input type="file" multiple accept="image/*" class="hidden" @change="handleImages" />
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                                Thêm ảnh
-                            </label>
-                        </div>
-
-                        <div v-if="imagePreviews.length > 0" class="grid grid-cols-6 gap-1.5">
-                            <div
-                                v-for="(image, index) in imagePreviews"
-                                :key="index"
-                                class="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
-                            >
-                                <img :src="image" class="w-full h-full object-cover" />
-                                <button
-                                    type="button"
-                                    @click="removeImage(index)"
-                                    class="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition shadow"
-                                >
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
+        </div>
+
+        <aside class="space-y-3 lg:col-span-4">
+            <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <header class="border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
+                    <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">▧ Ảnh ngoại quan</h2>
+                </header>
+                <div class="p-3">
+                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
+                        <input type="file" multiple accept="image/*" class="hidden" @change="handleImages" />
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7a2 2 0 012-2h2l1.2 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
+                            <circle cx="12" cy="13" r="3" stroke-width="1.8" />
+                        </svg>
+                        <span>Chọn ảnh</span>
+                    </label>
+                    <span class="ml-2 text-[10px] text-slate-400">{{ imagePreviews.length ? `${imagePreviews.length} ảnh đã chọn` : 'Có thể chọn nhiều ảnh' }}</span>
+                    <div v-if="imagePreviews.length" class="mt-2 grid grid-cols-4 gap-1.5">
+                        <div v-for="(image, index) in imagePreviews" :key="index" class="group relative aspect-square overflow-hidden rounded-lg border border-slate-200">
+                            <img :src="image" alt="Ảnh ngoại quan máy" class="h-full w-full object-cover" />
+                            <button type="button" @click="removeImage(index)" class="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow group-hover:opacity-100" aria-label="Xóa ảnh">×</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- 4. TÓM TẮT PHIẾU -->
-            <div class="bg-slate-900 rounded-2xl shadow-md p-3 text-white space-y-1.5 border border-slate-800">
+            <div class="space-y-1.5 rounded-xl border border-slate-800 bg-slate-900 p-3.5 text-white shadow-md">
                 <div class="border-b border-slate-800 pb-1 flex justify-between items-center">
                     <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-300">Tóm tắt tiếp nhận</h2>
                     <span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] px-2 py-0.5 rounded-full font-medium">Phiếu mới</span>
                 </div>
 
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                    <div class="flex items-center justify-between sm:justify-start sm:gap-2">
+                <div class="space-y-1 text-[11px]">
+                    <div class="flex items-center justify-between gap-2 border-b border-slate-800 py-1.5">
                         <span class="text-slate-400">Khách:</span>
                         <span class="font-semibold text-slate-100 truncate max-w-[120px]">{{ form.customer_name || '---' }}</span>
                     </div>
 
-                    <div class="flex items-center justify-between sm:justify-start sm:gap-2">
+                    <div class="flex items-center justify-between gap-2 border-b border-slate-800 py-1.5">
                         <span class="text-slate-400">SĐT:</span>
                         <span class="font-semibold text-slate-100">{{ form.customer_phone || '---' }}</span>
                     </div>
 
-                    <div class="flex items-center justify-between sm:justify-start sm:gap-2">
+                    <div class="flex items-center justify-between gap-2 border-b border-slate-800 py-1.5">
                         <span class="text-slate-400">Thiết bị:</span>
                         <span class="font-semibold text-slate-100 truncate max-w-[120px]">{{ form.device_name || '---' }}</span>
                     </div>
 
-                    <div class="flex items-center justify-between sm:justify-start sm:gap-2">
+                    <div class="flex items-center justify-between gap-2 border-b border-slate-800 py-1.5">
+                        <span class="text-slate-400">IMEI:</span>
+                        <span class="max-w-[65%] truncate text-right font-mono font-semibold text-slate-100">{{ form.imei || '---' }}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2 py-1.5">
                         <span class="text-slate-400">Số lỗi:</span>
                         <span class="bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-bold text-[10px]">
                             {{ form.issue.length }} lỗi
@@ -606,11 +776,12 @@ const submit = () => {
                 </div>
             </div>
 
+        </aside>
         </div>
 
         <!-- FOOTER ACTIONS -->
         <template #footer>
-            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div class="flex items-center justify-end gap-2">
                 <ActionButton variant="secondary" @click="emit('close')">
                     Hủy bỏ
                 </ActionButton>

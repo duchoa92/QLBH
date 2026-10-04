@@ -319,9 +319,15 @@ class PosCheckoutService
                 if ($imei) {
 
                     // IMEI -> đã bán
+                    $soldAt = now();
+                    $warrantyDays = max(0, (int) $product->warranty_days);
                     $imei->update([
                         'status' => ProductImei::STATUS_SOLD,
-                        'sold_at' => now(),
+                        'sold_at' => $soldAt,
+                        'customer_warranty_expires_at' => $warrantyDays > 0 ? $soldAt->copy()->addDays($warrantyDays) : null,
+                        'customer_warranty_voided_at' => null,
+                        'customer_warranty_void_reason' => null,
+                        'customer_warranty_voided_by' => null,
                     ]);
 
                     /*

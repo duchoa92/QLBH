@@ -46,6 +46,11 @@ class ProductImei extends Model
 
         'warranty_expired_at',
 
+        'customer_warranty_expires_at',
+        'customer_warranty_voided_at',
+        'customer_warranty_void_reason',
+        'customer_warranty_voided_by',
+
         'status',
 
         'sold_at',
@@ -59,6 +64,8 @@ class ProductImei extends Model
     protected $casts = [
         'extra_info' => 'array',
         'warranty_expired_at' => 'datetime',
+        'customer_warranty_expires_at' => 'datetime',
+        'customer_warranty_voided_at' => 'datetime',
     ];
 
     // Thêm quan hệ với Product

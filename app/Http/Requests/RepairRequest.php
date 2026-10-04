@@ -18,6 +18,9 @@ class RepairRequest extends FormRequest
         return [
 
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'intake_type' => ['nullable', 'in:repair,warranty'],
+            'warranty_source_type' => ['nullable', 'required_with:warranty_source_id', 'in:sale_item,repair'],
+            'warranty_source_id' => ['nullable', 'required_with:warranty_source_type', 'integer', 'min:1'],
 
             'customer_name' => [
                 'required',

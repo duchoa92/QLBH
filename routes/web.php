@@ -214,7 +214,9 @@ Route::middleware(['auth'])->group(function () {
     // Repairs (Đã đưa các Route tĩnh lên TRƯỚC Resource)
     Route::get('/repairs/customer-search', [RepairController::class, 'customerSearch'])->name('repairs.customer-search');
     Route::get('/repairs/suggestions', [RepairController::class, 'suggestions'])->name('repairs.suggestions');
+    Route::get('/repairs/customers/{customer}/devices', [RepairController::class, 'customerDevices'])->name('repairs.customer-devices');
     Route::patch('/repairs/{repair}/status', [RepairController::class, 'updateStatus'])->name('repairs.update-status');
+    Route::patch('/repairs/{repair}/warranty/decline', [RepairController::class, 'declineWarranty'])->name('repairs.warranty-decline');
     Route::post('/repairs/{repair}/complete', [RepairController::class, 'complete'])->name('repairs.complete');
     Route::post('/repairs/{repair}/return', [RepairController::class, 'returnToCustomer'])->name('repairs.return');
     Route::get('/repairs/{repair}/print', [RepairController::class, 'print'])->name('repairs.print');

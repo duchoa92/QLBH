@@ -50,6 +50,22 @@ class Repair extends Model
 
         'status',
 
+        'intake_type',
+        'warranty_source_type',
+        'warranty_source_id',
+        'warranty_expires_at',
+        'warranty_status',
+        'warranty_declined_at',
+        'warranty_decline_reason',
+        'warranty_covered_amount',
+
+        'repair_warranty_days',
+        'repair_warranty_started_at',
+        'repair_warranty_expires_at',
+        'repair_warranty_voided_at',
+        'repair_warranty_void_reason',
+        'repair_warranty_voided_by',
+
         'note',
 
         'technician_id',
@@ -73,6 +89,11 @@ class Repair extends Model
         'completed_at' => 'datetime',
 
         'returned_at' => 'datetime',
+        'warranty_expires_at' => 'datetime',
+        'warranty_declined_at' => 'datetime',
+        'repair_warranty_started_at' => 'datetime',
+        'repair_warranty_expires_at' => 'datetime',
+        'repair_warranty_voided_at' => 'datetime',
     ];
 
     /**

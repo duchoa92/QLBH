@@ -14,6 +14,12 @@ const products = ref([])
 const parts = ref([])
 const laborCost = ref('')
 const surcharge = ref('')
+const warrantyCoveredAmount = ref(Number(props.repair.warranty_covered_amount || 0))
+const repairWarrantyDays = ref(30)
+const coverageTouched = ref(false)
+const billingType = ref('service')
+const declineWarranty = ref(false)
+const declineReason = ref('')
 const loadingProducts = ref(false)
 const saving = ref(false)
 const errors = ref({})
@@ -22,7 +28,28 @@ let searchSequence = 0
 
 const totalParts = computed(() => parts.value.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0), 0))
 const total = computed(() => totalParts.value + Number(laborCost.value || 0) + Number(surcharge.value || 0))
+const hasWarrantyCandidate = computed(() => {
+    if (!props.repair.warranty_source_type || !props.repair.warranty_source_id || !props.repair.warranty_expires_at || props.repair.warranty_status === 'declined') return false
+    const expiresAt = new Date(props.repair.warranty_expires_at)
+    expiresAt.setHours(23, 59, 59, 999)
+    return expiresAt.getTime() >= Date.now()
+})
+const isWarrantyBilling = computed(() => billingType.value === 'warranty')
+const coveredAmount = computed(() => isWarrantyBilling.value ? Math.min(total.value, Number(warrantyCoveredAmount.value || 0)) : 0)
+const payableTotal = computed(() => Math.max(0, total.value - coveredAmount.value))
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`
+
+watch([total, billingType], ([value, type]) => {
+    if (type === 'warranty' && !coverageTouched.value) warrantyCoveredAmount.value = value
+});
+
+watch(billingType, (value) => {
+    declineWarranty.value = false
+    if (value === 'warranty') {
+        coverageTouched.value = false
+        warrantyCoveredAmount.value = total.value
+    }
+});
 
 watch(keyword, (value) => {
     clearTimeout(searchTimer)
@@ -72,12 +99,17 @@ const submit = async () => {
     errors.value = {}
     try {
         await axios.post(route('repairs.complete', props.repair.id), {
+            billing_type: billingType.value,
+            decline_warranty: declineWarranty.value,
+            decline_reason: declineWarranty.value ? declineReason.value.trim() : null,
             parts: parts.value.map(({ product_id, variant_id, quantity, unit_price }) => ({ product_id, variant_id, quantity: Number(quantity), unit_price: Number(unit_price) })),
             labor_cost: Number(laborCost.value || 0),
             surcharge: Number(surcharge.value || 0),
+            warranty_covered_amount: coveredAmount.value,
+            repair_warranty_days: Number(repairWarrantyDays.value || 0),
         })
         toast.success('Đã hoàn tất sửa chữa')
-        emit('updated', { ...props.repair, final_cost: total.value, parts_total: totalParts.value, labor_cost: Number(laborCost.value || 0), surcharge: Number(surcharge.value || 0), status: 'done' })
+        emit('updated', { ...props.repair, intake_type: isWarrantyBilling.value ? 'warranty' : 'repair', warranty_status: declineWarranty.value ? 'declined' : (isWarrantyBilling.value ? 'accepted' : (hasWarrantyCandidate.value ? 'service' : null)), warranty_covered_amount: coveredAmount.value, final_cost: payableTotal.value, parts_total: totalParts.value, labor_cost: Number(laborCost.value || 0), surcharge: Number(surcharge.value || 0), status: 'done' })
         emit('close')
     } catch (error) {
         errors.value = error.response?.data?.errors || {}
@@ -93,6 +125,27 @@ const submit = async () => {
         <h3 v-if="inline" class="mb-3 text-sm font-bold text-emerald-800">Hoàn tất sửa · tính chi phí</h3>
         <div class="space-y-4">
             <div class="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{{ repair.device_name }} <span v-if="repair.customer?.name">· {{ repair.customer.name }}</span></div>
+            <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div class="text-xs font-bold uppercase tracking-wide text-slate-600">Chốt loại sửa sau kiểm tra</div>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button type="button" class="rounded-xl border px-3 py-2 text-left text-sm font-semibold transition" :class="billingType === 'service' ? 'border-blue-400 bg-blue-50 text-blue-800 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-600'" @click="billingType = 'service'">
+                        Sửa dịch vụ
+                        <span class="mt-0.5 block text-[11px] font-normal">Khách thanh toán theo chi phí thực tế</span>
+                    </button>
+                    <button v-if="hasWarrantyCandidate" type="button" class="rounded-xl border px-3 py-2 text-left text-sm font-semibold transition" :class="billingType === 'warranty' ? 'border-emerald-400 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' : 'border-slate-200 bg-white text-slate-600'" @click="billingType = 'warranty'">
+                        Bảo hành
+                        <span class="mt-0.5 block text-[11px] font-normal">Chọn phần chi phí được bảo hành</span>
+                    </button>
+                    <div v-if="!hasWarrantyCandidate && repair.warranty_source_type" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:col-span-2">
+                        Căn cứ bảo hành đã hết hạn hoặc không còn hiệu lực; phiếu sẽ tính theo sửa dịch vụ.
+                    </div>
+                </div>
+            </div>
+            <div v-if="isWarrantyBilling" class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                <strong>Phiếu xử lý bảo hành</strong>
+                <span v-if="repair.warranty_expires_at"> · Căn cứ còn hạn đến {{ new Date(repair.warranty_expires_at).toLocaleDateString('vi-VN') }}</span>
+                <p class="mt-1">Phần chi phí được duyệt bảo hành sẽ trừ khỏi số tiền khách cần thanh toán; phần ngoài phạm vi vẫn tính phí.</p>
+            </div>
             <div class="relative">
                 <FloatingInput v-model="keyword" label="Tìm linh kiện thay thế theo tên hoặc mã" id="repair_part_search" />
                 <div v-if="keyword.trim().length >= 2" class="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
@@ -133,17 +186,33 @@ const submit = async () => {
                 <FloatingInput v-model="laborCost" type="number" min="0" step="1000" label="Công sửa (VNĐ)" id="repair_labor_cost" :error="errors.labor_cost?.[0]" />
                 <FloatingInput v-model="surcharge" type="number" min="0" step="1000" label="Phụ phí (VNĐ)" id="repair_surcharge" :error="errors.surcharge?.[0]" />
             </div>
+            <div v-if="isWarrantyBilling" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FloatingInput v-model.number="warrantyCoveredAmount" type="number" min="0" :max="total" step="1000" label="Chi phí được bảo hành (VNĐ)" id="repair_warranty_covered" @input="coverageTouched = true" />
+                <FloatingInput v-model.number="repairWarrantyDays" type="number" min="0" max="3650" step="1" label="BH cho lần sửa này (ngày, 0 = không BH)" id="repair_warranty_days" />
+            </div>
+            <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FloatingInput v-model.number="repairWarrantyDays" type="number" min="0" max="3650" step="1" label="BH cho lần sửa này (ngày, 0 = không BH)" id="repair_warranty_days" />
+            </div>
+            <div v-if="hasWarrantyCandidate && billingType === 'service'" class="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <label class="flex cursor-pointer items-start gap-2 text-xs text-amber-900">
+                    <input v-model="declineWarranty" type="checkbox" class="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500" />
+                    <span><strong>Từ chối yêu cầu bảo hành này.</strong> Hạn bảo hành gốc sẽ bị vô hiệu cho các lần tiếp nhận sau.</span>
+                </label>
+                <FloatingInput v-if="declineWarranty" v-model="declineReason" label="Lý do từ chối bảo hành *" id="repair_warranty_decline_reason" :error="errors.decline_reason?.[0]" />
+            </div>
             <div class="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm">
                 <div class="flex justify-between"><span>Tiền linh kiện</span><strong>{{ money(totalParts) }}</strong></div>
                 <div class="flex justify-between"><span>Công sửa + phụ phí</span><strong>{{ money(Number(laborCost || 0) + Number(surcharge || 0)) }}</strong></div>
-                <div class="flex justify-between border-t border-emerald-200 pt-2 text-base font-bold text-emerald-800"><span>Thành tiền</span><span>{{ money(total) }}</span></div>
+                <div v-if="isWarrantyBilling" class="flex justify-between"><span>Tổng chi phí sửa</span><strong>{{ money(total) }}</strong></div>
+                <div v-if="isWarrantyBilling" class="flex justify-between text-emerald-700"><span>Được bảo hành</span><strong>− {{ money(coveredAmount) }}</strong></div>
+                <div class="flex justify-between border-t border-emerald-200 pt-2 text-base font-bold text-emerald-800"><span>{{ isWarrantyBilling ? 'Khách cần thanh toán' : 'Thành tiền' }}</span><span>{{ money(payableTotal) }}</span></div>
             </div>
         </div>
         <div v-if="inline" class="mt-4 flex justify-end">
-            <ActionButton :disabled="saving" @click="submit">{{ saving ? 'Đang lưu...' : 'Hoàn tất sửa' }}</ActionButton>
+            <ActionButton :disabled="saving || (declineWarranty && declineReason.trim().length < 5)" @click="submit">{{ saving ? 'Đang lưu...' : 'Hoàn tất sửa' }}</ActionButton>
         </div>
         <template v-if="!inline" #footer>
-            <div class="flex justify-end gap-2"><ActionButton variant="secondary" @click="emit('close')">Hủy</ActionButton><ActionButton :disabled="saving" @click="submit">{{ saving ? 'Đang lưu...' : 'Hoàn tất sửa' }}</ActionButton></div>
+            <div class="flex justify-end gap-2"><ActionButton variant="secondary" @click="emit('close')">Hủy</ActionButton><ActionButton :disabled="saving || (declineWarranty && declineReason.trim().length < 5)" @click="submit">{{ saving ? 'Đang lưu...' : 'Hoàn tất sửa' }}</ActionButton></div>
         </template>
     </component>
 </template>
