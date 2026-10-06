@@ -241,6 +241,9 @@ class RepairController extends Controller
                     'created_at' => $timeline->created_at?->format('d/m/Y H:i'),
                     'user' => $timeline->user?->name,
                 ]),
+                'waiting_for_parts' => (bool) ($repair->timelines->first()?->waiting_for_parts ?? false),
+                'parts_needed' => $repair->timelines->first()?->parts_needed,
+                'expected_days' => $repair->timelines->first()?->expected_days,
 
                 'imei' =>
                     $repair->imei,
@@ -306,9 +309,20 @@ class RepairController extends Controller
         }
         $devices = collect();
         $imeis = collect();
+        $customers = collect();
 
         if (mb_strlen($keyword) >= 2) {
             $like = '%' . $keyword . '%';
+
+            $customers = Customer::query()
+                ->where(fn ($query) => $query
+                    ->where('full_name', 'like', $like)
+                    ->orWhere('phone', 'like', $like)
+                    ->orWhere('cccd', 'like', $like)
+                    ->orWhere('code', 'like', $like))
+                ->orderBy('full_name')
+                ->limit(8)
+                ->get(['id', 'code', 'full_name', 'phone', 'cccd', 'debt_balance']);
 
             $devices = Repair::query()
                 ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('imei', 'like', $like))
@@ -349,35 +363,214 @@ class RepairController extends Controller
                 ->values();
 
             $repairImeis = Repair::query()
-                ->whereNotNull('imei')
-                ->where('imei', 'like', $like)
+                ->with('customer:id,full_name,phone,cccd,debt_balance')
+                ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
                 ->latest('id')
                 ->limit(10)
-                ->get(['device_name', 'imei'])
-                ->map(fn (Repair $repair): array => ['imei' => $repair->imei, 'name' => $repair->device_name, 'source' => 'Đã từng sửa']);
+                ->get([
+                    'id', 'customer_id', 'device_name', 'imei', 'serial', 'screen_password', 'screen_pattern',
+                    'account_type', 'account_email', 'account_password', 'issue', 'repair_request', 'accessories',
+                    'estimated_cost', 'note', 'created_at', 'repair_warranty_expires_at',
+                    'repair_warranty_voided_at', 'repair_warranty_void_reason',
+                ])
+                ->map(fn (Repair $repair): array => [
+                    'imei' => $repair->imei ?: $repair->serial,
+                    'name' => $repair->device_name,
+                    'source' => 'Đã sửa · ' . $repair->created_at?->format('d/m/Y'),
+                    'source_date' => $repair->created_at?->toAtomString(),
+                    'customer' => $repair->customer ? [
+                        'id' => $repair->customer->id,
+                        'full_name' => $repair->customer->full_name,
+                        'phone' => $repair->customer->phone,
+                        'cccd' => $repair->customer->cccd,
+                        'debt_balance' => (float) $repair->customer->debt_balance,
+                    ] : null,
+                    'device_data' => [
+                        'screen_password' => $repair->screen_password,
+                        'screen_pattern' => $repair->screen_pattern,
+                        'account_type' => $repair->account_type,
+                        'account_email' => $repair->account_email,
+                        'account_password' => $repair->account_password,
+                        'issue' => $repair->issue ?? [],
+                        'repair_request' => $repair->repair_request,
+                        'accessories' => $repair->accessories ?? [],
+                        'estimated_cost' => $repair->estimated_cost,
+                        'note' => $repair->note,
+                    ],
+                    'warranty' => $repair->repair_warranty_expires_at ? [
+                        'source_type' => 'repair',
+                        'source_id' => $repair->id,
+                        'source_customer_id' => $repair->customer_id,
+                        'expires_at' => $repair->repair_warranty_expires_at->toAtomString(),
+                        'voided_at' => $repair->repair_warranty_voided_at?->toAtomString(),
+                        'void_reason' => $repair->repair_warranty_void_reason,
+                        'active' => ! $repair->repair_warranty_voided_at && $repair->repair_warranty_expires_at->endOfDay()->gte(now()),
+                    ] : null,
+                ]);
 
             $customerImeis = CustomerDevice::query()
-                ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like))
+                ->with('customer:id,full_name,phone,cccd,debt_balance')
+                ->where(fn ($query) => $query->where('brand', 'like', $like)->orWhere('model', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
                 ->latest('id')
                 ->limit(10)
-                ->get(['model', 'brand', 'imei', 'serial'])
+                ->get(['id', 'customer_id', 'model', 'brand', 'imei', 'serial', 'created_at'])
                 ->map(fn (CustomerDevice $device): array => [
                     'imei' => $device->imei ?: $device->serial,
                     'name' => trim(implode(' ', array_filter([$device->brand, $device->model]))) ?: null,
                     'source' => 'Thiết bị khách hàng',
+                    'source_date' => $device->created_at?->toAtomString(),
+                    'customer' => $device->customer ? [
+                        'id' => $device->customer->id,
+                        'full_name' => $device->customer->full_name,
+                        'phone' => $device->customer->phone,
+                        'cccd' => $device->customer->cccd,
+                        'debt_balance' => (float) $device->customer->debt_balance,
+                    ] : null,
                 ]);
 
             $productImeis = ProductImei::query()
-                ->with('product:id,name')
-                ->where('imei', 'like', $like)
+                ->with('product:id,name,warranty_days')
+                ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like)->orWhereHas('product', fn ($productQuery) => $productQuery->where('name', 'like', $like)))
                 ->latest('id')
                 ->limit(10)
-                ->get(['imei', 'product_id'])
-                ->map(fn (ProductImei $item): array => ['imei' => $item->imei, 'name' => $item->product?->name, 'source' => 'Đã mua bán']);
+                ->get([
+                    'id', 'imei', 'serial', 'product_id', 'status', 'sold_at', 'customer_warranty_days',
+                    'customer_warranty_expires_at', 'customer_warranty_voided_at', 'customer_warranty_void_reason',
+                ])
+                ->map(function (ProductImei $item): array {
+                    $saleItems = $item->saleItems()
+                        ->with('sale:id,code,customer_id,created_at,status', 'sale.customer:id,full_name,phone,cccd,debt_balance')
+                        ->whereHas('sale', fn ($query) => $query->where('status', '!=', 'cancelled'))
+                        ->latest('id')
+                        ->get();
+                    $saleItem = $saleItems->first();
+                    $soldAt = $item->sold_at
+                        ? Carbon::parse($item->sold_at)
+                        : ($saleItem?->sale?->created_at ? Carbon::parse($saleItem->sale->created_at) : null);
+                    $days = $item->customer_warranty_days;
+                    $expiresAt = $days !== null
+                        ? ($item->customer_warranty_expires_at
+                            ? Carbon::parse($item->customer_warranty_expires_at)
+                            : ((int) $days > 0 && $soldAt ? $soldAt->copy()->addDays((int) $days) : null))
+                        : ($item->customer_warranty_expires_at
+                            ? Carbon::parse($item->customer_warranty_expires_at)
+                            : ((int) ($item->product?->warranty_days ?? 0) > 0 && $soldAt
+                                ? $soldAt->copy()->addDays((int) $item->product->warranty_days)
+                                : null));
+                    $purchasers = $saleItems
+                        ->filter(fn ($row) => $row->sale?->customer)
+                        ->map(function ($row) use ($saleItem, $item, $expiresAt): array {
+                            $purchasedAt = $row->sale?->created_at ? Carbon::parse($row->sale->created_at) : null;
+                            $isLatestSale = $saleItem && (int) $row->id === (int) $saleItem->id;
+                            $purchaserWarrantyDays = $isLatestSale
+                                ? (int) ($item->customer_warranty_days ?? $item->product?->warranty_days ?? 0)
+                                : (int) ($item->product?->warranty_days ?? 0);
+                            $purchaserExpiresAt = $isLatestSale
+                                ? $expiresAt
+                                : ($purchaserWarrantyDays > 0 && $purchasedAt
+                                    ? $purchasedAt->copy()->addDays($purchaserWarrantyDays)
+                                    : null);
+                            $purchaserWarrantyVoidedAt = $isLatestSale
+                                ? $item->customer_warranty_voided_at
+                                : null;
+
+                            return [
+                                'id' => $row->sale->customer->id,
+                                'full_name' => $row->sale->customer->full_name,
+                                'phone' => $row->sale->customer->phone,
+                                'cccd' => $row->sale->customer->cccd,
+                                'debt_balance' => (float) $row->sale->customer->debt_balance,
+                                'invoice_code' => $row->sale->code,
+                                'purchased_at' => $purchasedAt?->toAtomString(),
+                                'warranty_expires_at' => $purchaserExpiresAt?->toAtomString(),
+                                'warranty_active' => $purchaserExpiresAt
+                                    && ! $purchaserWarrantyVoidedAt
+                                    && $purchaserExpiresAt->endOfDay()->gte(now()),
+                                'warranty_voided_at' => $purchaserWarrantyVoidedAt?->toAtomString(),
+                                'sale_item_id' => $row->id,
+                            ];
+                        })
+                        ->unique(fn (array $purchaser) => $purchaser['sale_item_id'])
+                        ->values();
+
+                    return [
+                        'imei' => $item->imei ?: $item->serial,
+                        'name' => $item->product?->name,
+                        'source' => $item->status === ProductImei::STATUS_IN_STOCK ? 'Còn trong kho' : 'Đã mua bán',
+                        'inventory_status' => $item->status,
+                        'in_stock' => $item->status === ProductImei::STATUS_IN_STOCK,
+                        'source_date' => $soldAt?->toAtomString(),
+                        'purchase_info' => $saleItem?->sale
+                            ? 'Hóa đơn ' . $saleItem->sale->code . ' · ' . Carbon::parse($saleItem->sale->created_at)->format('d/m/Y')
+                            : null,
+                        'customer' => $saleItem?->sale?->customer ? [
+                            'id' => $saleItem->sale->customer->id,
+                            'full_name' => $saleItem->sale->customer->full_name,
+                            'phone' => $saleItem->sale->customer->phone,
+                            'cccd' => $saleItem->sale->customer->cccd,
+                            'debt_balance' => (float) $saleItem->sale->customer->debt_balance,
+                        ] : null,
+                        'purchasers' => $purchasers,
+                        'warranty' => ($expiresAt || $item->customer_warranty_voided_at) ? [
+                            'source_type' => $saleItem ? 'sale_item' : null,
+                            'source_id' => $saleItem?->id,
+                            'sale_id' => $saleItem?->sale?->id,
+                            'sale_customer_id' => $saleItem?->sale?->customer_id,
+                            'invoice_code' => $saleItem?->sale?->code,
+                            'expires_at' => $expiresAt?->toAtomString(),
+                            'voided_at' => $item->customer_warranty_voided_at?->toAtomString(),
+                            'void_reason' => $item->customer_warranty_void_reason,
+                            'active' => ! $item->customer_warranty_voided_at && $expiresAt?->endOfDay()->gte(now()),
+                        ] : null,
+                    ];
+                });
 
             $imeis = $repairImeis->concat($customerImeis)->concat($productImeis)
                 ->filter(fn (array $item) => filled($item['imei']))
-                ->unique('imei')
+                ->groupBy(fn (array $item) => mb_strtolower(trim((string) $item['imei'])))
+                ->map(function ($matches): array {
+                    $withWarranty = $matches
+                        ->filter(fn (array $item) => filled($item['warranty'] ?? null))
+                        ->sortByDesc(fn (array $item) => ($item['warranty']['active'] ?? false)
+                            ? 3
+                            : (filled($item['warranty']['voided_at'] ?? null) ? 2 : 1))
+                        ->first();
+                    $item = $withWarranty ?: $matches->first();
+                    if ($withWarranty) {
+                        $item['warranty'] = $withWarranty['warranty'];
+                    }
+                    $withCustomer = $matches->first(fn (array $match) => ! empty($match['customer']));
+                    $withDeviceData = $matches->first(fn (array $match) => ! empty($match['device_data']));
+                    $withDate = $matches->first(fn (array $match) => ! empty($match['source_date']));
+                    $withPurchase = $matches->first(fn (array $match) => ! empty($match['purchase_info']));
+                    $inventoryMatch = $matches->first(fn (array $match) => array_key_exists('inventory_status', $match));
+                    $purchasers = $matches
+                        ->flatMap(fn (array $match) => $match['purchasers'] ?? [])
+                        ->unique(fn (array $purchaser) => $purchaser['sale_item_id'] ?? $purchaser['id'])
+                        ->values();
+                    if (! empty($withWarranty['customer'] ?? null)) {
+                        $item['customer'] = $withWarranty['customer'];
+                    } elseif ($withCustomer) {
+                        $item['customer'] = $withCustomer['customer'];
+                    }
+                    if ($withDeviceData) $item['device_data'] = $withDeviceData['device_data'];
+                    if (empty($item['source_date']) && $withDate) $item['source_date'] = $withDate['source_date'];
+                    if ($withPurchase) $item['purchase_info'] = $withPurchase['purchase_info'];
+                    if ($inventoryMatch) {
+                        $item['inventory_status'] = $inventoryMatch['inventory_status'];
+                        $item['in_stock'] = (bool) ($inventoryMatch['in_stock'] ?? false);
+                        if ($item['in_stock']) $item['source'] = 'Còn trong kho';
+                    }
+                    $item['purchasers'] = $purchasers;
+                    $uniquePurchaserCustomers = $purchasers->unique('id')->values();
+                    if ($uniquePurchaserCustomers->count() === 1) {
+                        $item['customer'] = $uniquePurchaserCustomers->first();
+                    } elseif ($uniquePurchaserCustomers->count() > 1) {
+                        // Do not auto-select an arbitrary buyer when an IMEI has multiple purchase owners.
+                        $item['customer'] = null;
+                    }
+                    return $item;
+                })
                 ->take(10)
                 ->values();
         }
@@ -387,6 +580,7 @@ class RepairController extends Controller
             'accessories' => $accessories,
             'devices' => $devices,
             'imeis' => $imeis,
+            'customers' => $customers,
         ]);
     }
 
@@ -418,7 +612,8 @@ class RepairController extends Controller
                 'accessories' => $repair->accessories ?? [],
                 'estimated_cost' => $repair->estimated_cost,
                 'note' => $repair->note,
-                'source' => 'Đã sửa',
+                'source' => 'Đã sửa · ' . $repair->created_at?->format('d/m/Y'),
+                'source_date' => $repair->created_at?->toAtomString(),
                 'warranty' => $repair->repair_warranty_expires_at ? [
                     'source_type' => 'repair',
                     'source_id' => $repair->id,
@@ -454,10 +649,18 @@ class RepairController extends Controller
                 'warranty' => null,
             ]);
 
+        $latestImeiSales = DB::table('sale_items as latest_imei_items')
+            ->join('sales as latest_imei_sales', 'latest_imei_sales.id', '=', 'latest_imei_items.sale_id')
+            ->where('latest_imei_sales.status', '!=', 'cancelled')
+            ->whereNotNull('latest_imei_items.product_imei_id')
+            ->groupBy('latest_imei_items.product_imei_id')
+            ->selectRaw('latest_imei_items.product_imei_id, MAX(latest_imei_items.id) as latest_sale_item_id');
+
         $purchases = DB::table('sales')
             ->join('sale_items', 'sale_items.sale_id', '=', 'sales.id')
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->leftJoin('product_imeis', 'product_imeis.id', '=', 'sale_items.product_imei_id')
+            ->leftJoinSub($latestImeiSales, 'latest_imei_sale', fn ($join) => $join->on('latest_imei_sale.product_imei_id', '=', 'sale_items.product_imei_id'))
             ->where('sales.customer_id', $customer->id)
             ->where('sales.status', '!=', 'cancelled')
             ->orderByDesc('sales.created_at')
@@ -465,15 +668,27 @@ class RepairController extends Controller
             ->get([
                 'sale_items.id', 'sale_items.product_imei_id', 'sales.id as sale_id', 'sales.code as invoice_code',
                 'sales.created_at as purchased_at', 'products.name as device_name', 'products.warranty_days',
+                'latest_imei_sale.latest_sale_item_id',
                 'product_imeis.imei', 'product_imeis.serial', 'product_imeis.customer_warranty_expires_at',
+                'product_imeis.customer_warranty_days',
                 'product_imeis.customer_warranty_voided_at', 'product_imeis.customer_warranty_void_reason',
             ])
             ->map(function (object $item): array {
-                $expiresAt = $item->customer_warranty_expires_at
-                    ? Carbon::parse($item->customer_warranty_expires_at)
-                    : ((int) $item->warranty_days > 0
-                        ? Carbon::parse($item->purchased_at)->addDays((int) $item->warranty_days)
-                        : null);
+                $isLatestSale = $item->product_imei_id && (int) $item->id === (int) $item->latest_sale_item_id;
+                $expiresAt = $isLatestSale && $item->customer_warranty_days !== null
+                    ? ($item->customer_warranty_expires_at
+                        ? Carbon::parse($item->customer_warranty_expires_at)
+                        : ((int) $item->customer_warranty_days > 0
+                            ? Carbon::parse($item->purchased_at)->addDays((int) $item->customer_warranty_days)
+                            : null))
+                    : ($isLatestSale && $item->customer_warranty_expires_at
+                        ? Carbon::parse($item->customer_warranty_expires_at)
+                        : ((int) $item->warranty_days > 0
+                            ? Carbon::parse($item->purchased_at)->addDays((int) $item->warranty_days)
+                            : null));
+                $warrantyVoidedAt = $isLatestSale && $item->customer_warranty_voided_at
+                    ? Carbon::parse($item->customer_warranty_voided_at)
+                    : null;
 
                 return [
                 'key' => 'purchase-' . $item->id,
@@ -490,7 +705,8 @@ class RepairController extends Controller
                 'accessories' => [],
                 'estimated_cost' => null,
                 'note' => null,
-                'source' => 'Đã mua · ' . $item->invoice_code,
+                'source' => 'Đã mua · ' . $item->invoice_code . ' · ' . Carbon::parse($item->purchased_at)->format('d/m/Y'),
+                'source_date' => Carbon::parse($item->purchased_at)->toAtomString(),
                 'warranty' => $item->product_imei_id && $expiresAt ? [
                     'source_type' => 'sale_item',
                     'source_id' => $item->id,
@@ -498,9 +714,9 @@ class RepairController extends Controller
                     'invoice_code' => $item->invoice_code,
                     'started_at' => Carbon::parse($item->purchased_at)->toAtomString(),
                     'expires_at' => $expiresAt->toAtomString(),
-                    'voided_at' => $item->customer_warranty_voided_at ? Carbon::parse($item->customer_warranty_voided_at)->toAtomString() : null,
-                    'void_reason' => $item->customer_warranty_void_reason,
-                    'active' => ! $item->customer_warranty_voided_at && $expiresAt->endOfDay()->gte(now()),
+                    'voided_at' => $warrantyVoidedAt?->toAtomString(),
+                    'void_reason' => $isLatestSale ? $item->customer_warranty_void_reason : null,
+                    'active' => ! $warrantyVoidedAt && $expiresAt->endOfDay()->gte(now()),
                 ] : null,
                 ];
             });
@@ -541,9 +757,15 @@ class RepairController extends Controller
                     'phone' => $request->customer_phone,
                     'cccd' => $request->identity_card,
                 ]);
+            } else {
+                // Keep the selected customer's editable intake fields in sync with the customer record.
+                $customer->fill([
+                    'full_name' => $request->customer_name,
+                    'phone' => $request->customer_phone,
+                    'cccd' => $request->identity_card,
+                ])->save();
             }
 
-            $intakeType = 'repair';
             $hasWarrantySource = $request->filled('warranty_source_type') && $request->filled('warranty_source_id');
             $warranty = $hasWarrantySource
                 ? $this->resolveWarrantySource(
@@ -612,7 +834,7 @@ class RepairController extends Controller
                     'status' =>
                         'pending',
 
-                    'intake_type' => $intakeType,
+                    'intake_type' => 'repair',
                     'warranty_source_type' => $warranty['source_type'] ?? null,
                     'warranty_source_id' => $warranty['source_id'] ?? null,
                     'warranty_expires_at' => $warranty['expires_at'] ?? null,
@@ -628,7 +850,7 @@ class RepairController extends Controller
             } else {
                 $deviceLookup['model'] = $request->device_name;
             }
-            CustomerDevice::query()->firstOrCreate($deviceLookup, [
+            CustomerDevice::query()->updateOrCreate($deviceLookup, [
                 'model' => $request->device_name,
                 'serial' => $request->imei,
             ]);
@@ -713,62 +935,6 @@ class RepairController extends Controller
     }
 
     /**
-     * Tìm khách hàng.
-     */
-    public function customerSearch(
-        Request $request
-    ): JsonResponse {
-
-        $keyword = trim(
-            (string) $request->keyword
-        );
-
-        if ($keyword === '') {
-
-            return response()->json([]);
-        }
-
-        $customers = Customer::query()
-
-            ->where(
-
-                function ($query)
-                use ($keyword): void {
-
-                    $query
-
-                        ->where(
-            'full_name as name',
-                            'like',
-                            '%' . $keyword . '%'
-                        )
-
-                        ->orWhere(
-                            'phone',
-                            'like',
-                            '%' . $keyword . '%'
-                        )
-
-                        ->orWhere(
-                            'identity_card',
-                            'like',
-                            '%' . $keyword . '%'
-                        );
-                }
-            )
-
-            ->latest()
-
-            ->limit(10)
-
-            ->get();
-
-        return response()->json(
-            $customers
-        );
-    }
-
-        /**
      * Cập nhật trạng thái sửa chữa.
      */
     public function updateStatus(
@@ -795,6 +961,12 @@ class RepairController extends Controller
             throw ValidationException::withMessages(['status' => 'Phiếu này không còn trong giai đoạn tiếp nhận hoặc đang sửa.']);
         }
 
+        $wasWaitingForParts = (bool) RepairTimeline::query()
+            ->where('repair_id', $repair->id)
+            ->latest('id')
+            ->value('waiting_for_parts');
+        $waitingForParts = $status !== 'cancelled' && $request->boolean('waiting_for_parts');
+
         $progressIssues = $request->input('issue', []);
         $repairChanges = ['status' => $status];
         if ($progressIssues !== []) {
@@ -809,9 +981,11 @@ class RepairController extends Controller
         */
 
         $titles = [
-            'repairing' => 'Đang sửa',
             'cancelled' => 'Đã hủy phiếu sửa',
         ];
+        $title = $status === 'cancelled'
+            ? $titles['cancelled']
+            : ($waitingForParts ? 'Chờ linh kiện' : ($wasWaitingForParts ? 'Đã có linh kiện · tiếp tục sửa' : 'Đang sửa'));
 
         $timeline = RepairTimeline::create([
 
@@ -823,16 +997,14 @@ class RepairController extends Controller
 
             'status' => $status,
 
-            'title' =>
-                $titles[$status]
-                ?? 'Cập nhật trạng thái',
+            'title' => $title,
 
             'description' =>
                 $request->input('description'),
             'issue' => $request->input('issue', []),
             'parts_needed' => $request->input('parts_needed'),
             'expected_days' => $request->input('expected_days'),
-            'waiting_for_parts' => $request->boolean('waiting_for_parts'),
+            'waiting_for_parts' => $waitingForParts,
         ]);
 
         if ($request->hasFile('images')) {
@@ -846,7 +1018,7 @@ class RepairController extends Controller
             }
         }
 
-        $statusLabel = $status === 'cancelled' ? 'đã hủy phiếu' : 'đang sửa';
+        $statusLabel = $status === 'cancelled' ? 'đã hủy phiếu' : ($waitingForParts ? 'đang chờ linh kiện' : 'đang sửa');
         $this->notifyRepairEvent($repair, 'Cập nhật phiếu sửa ' . $repair->code, 'Phiếu ' . $repair->code . ' chuyển sang trạng thái ' . $statusLabel . '.', $status === 'cancelled' ? 'warning' : 'repair');
 
         return back();
@@ -870,14 +1042,20 @@ class RepairController extends Controller
             'repair_warranty_days' => ['required', 'integer', 'min:0', 'max:3650'],
         ]);
 
-        if ($repair->status !== 'repairing') {
-            throw ValidationException::withMessages(['status' => 'Chỉ phiếu đang sửa mới có thể hoàn tất.']);
+        if (! in_array($repair->status, ['pending', 'repairing'], true)) {
+            throw ValidationException::withMessages(['status' => 'Chỉ phiếu mới tiếp nhận hoặc đang sửa mới có thể hoàn tất.']);
+        }
+        if (RepairTimeline::query()->where('repair_id', $repair->id)->latest('id')->value('waiting_for_parts')) {
+            throw ValidationException::withMessages(['status' => 'Phiếu đang chờ linh kiện. Hãy xác nhận đã nhận đủ linh kiện trước khi hoàn tất sửa.']);
         }
 
         $completed = DB::transaction(function () use ($repair, $data): Repair {
             $repair = Repair::query()->with('customer')->lockForUpdate()->findOrFail($repair->id);
-            if ($repair->status !== 'repairing') {
+            if (! in_array($repair->status, ['pending', 'repairing'], true)) {
                 throw ValidationException::withMessages(['status' => 'Phiếu sửa đã được cập nhật ở nơi khác.']);
+            }
+            if (RepairTimeline::query()->where('repair_id', $repair->id)->latest('id')->value('waiting_for_parts')) {
+                throw ValidationException::withMessages(['status' => 'Phiếu đang chờ linh kiện. Hãy xác nhận đã nhận đủ linh kiện trước khi hoàn tất sửa.']);
             }
 
             $hasWarrantySource = filled($repair->warranty_source_type) && filled($repair->warranty_source_id);
@@ -1129,7 +1307,7 @@ class RepairController extends Controller
             $saleItem = DB::table('sale_items')
                 ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
                 ->where('sale_items.id', $claim->warranty_source_id)
-                ->where('sales.customer_id', $claim->customer_id)
+                ->where(fn ($query) => $query->where('sales.customer_id', $claim->customer_id)->orWhereNull('sales.customer_id'))
                 ->lockForUpdate()
                 ->first(['sale_items.product_imei_id']);
             if (! $saleItem?->product_imei_id) {
@@ -1176,13 +1354,14 @@ class RepairController extends Controller
                 ->join('products', 'products.id', '=', 'sale_items.product_id')
                 ->leftJoin('product_imeis', 'product_imeis.id', '=', 'sale_items.product_imei_id')
                 ->where('sale_items.id', $sourceId)
-                ->where('sales.customer_id', $customer->id)
+                ->where(fn ($query) => $query->where('sales.customer_id', $customer->id)->orWhereNull('sales.customer_id'))
                 ->where('sales.status', '!=', 'cancelled')
                 ->first([
                     'sale_items.id', 'sales.code', 'sales.created_at as purchased_at',
                     'products.warranty_days', 'sale_items.product_imei_id',
                     'product_imeis.imei', 'product_imeis.serial',
                     'product_imeis.customer_warranty_expires_at',
+                    'product_imeis.customer_warranty_days',
                     'product_imeis.customer_warranty_voided_at', 'product_imeis.customer_warranty_void_reason',
                 ]);
 
@@ -1194,11 +1373,17 @@ class RepairController extends Controller
                 throw ValidationException::withMessages(['warranty_source_id' => 'Hạn bảo hành đã bị vô hiệu: ' . ($source->customer_warranty_void_reason ?: 'không còn hiệu lực')]);
             }
 
-            $expiresAt = $source->customer_warranty_expires_at
-                ? Carbon::parse($source->customer_warranty_expires_at)
-                : ((int) $source->warranty_days > 0
-                    ? Carbon::parse($source->purchased_at)->addDays((int) $source->warranty_days)
-                    : null);
+            $expiresAt = $source->customer_warranty_days !== null
+                ? ($source->customer_warranty_expires_at
+                    ? Carbon::parse($source->customer_warranty_expires_at)
+                    : ((int) $source->customer_warranty_days > 0
+                        ? Carbon::parse($source->purchased_at)->addDays((int) $source->customer_warranty_days)
+                        : null))
+                : ($source->customer_warranty_expires_at
+                    ? Carbon::parse($source->customer_warranty_expires_at)
+                    : ((int) $source->warranty_days > 0
+                        ? Carbon::parse($source->purchased_at)->addDays((int) $source->warranty_days)
+                        : null));
             if (! $expiresAt || $expiresAt->endOfDay()->lt(now())) {
                 throw ValidationException::withMessages(['warranty_source_id' => 'Máy không còn thời hạn bảo hành theo hóa đơn đã chọn.']);
             }

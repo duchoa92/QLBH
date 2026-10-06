@@ -309,6 +309,12 @@ const cancelReason = computed(() =>
                                                 </span>
                                             </div>
 
+                                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-1 text-xs font-semibold" :class="Number(item.product_imei.customer_warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                                                {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
+                                                    ? `Bảo hành khách đến ${new Date(item.product_imei.customer_warranty_expires_at).toLocaleDateString('vi-VN')}`
+                                                    : 'Không áp dụng bảo hành khách' }}
+                                            </div>
+
                                             <div
                                                 v-if="Number(item.discount_value || 0) > 0"
                                                 class="mt-1 text-xs font-bold text-rose-600"

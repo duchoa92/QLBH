@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps({ status: { type: String, required: true } })
+const props = defineProps({ status: { type: String, required: true }, waitingForParts: { type: Boolean, default: false } })
 
 const steps = [
     { value: 'pending', label: 'Tiếp nhận' },
@@ -28,7 +28,7 @@ const progressWidth = computed(() => `${(activeIndex.value / (steps.length - 1))
                     <span v-else class="h-1.5 w-1.5 rounded-full bg-current" />
                 </span>
                 <span class="mt-1 whitespace-nowrap text-[10px] font-semibold leading-tight"
-                    :class="index === activeIndex ? 'text-emerald-700' : index < activeIndex ? 'text-slate-600' : 'text-slate-400'">{{ step.label }}</span>
+                    :class="index === activeIndex ? 'text-emerald-700' : index < activeIndex ? 'text-slate-600' : 'text-slate-400'">{{ index === 1 && waitingForParts ? 'Chờ linh kiện' : step.label }}</span>
             </div>
         </div>
     </div>

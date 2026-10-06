@@ -212,7 +212,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/sales/{sale}/receipt', [SaleReceiptController::class, 'show'])->name('sales.receipt');
 
     // Repairs (Đã đưa các Route tĩnh lên TRƯỚC Resource)
-    Route::get('/repairs/customer-search', [RepairController::class, 'customerSearch'])->name('repairs.customer-search');
     Route::get('/repairs/suggestions', [RepairController::class, 'suggestions'])->name('repairs.suggestions');
     Route::get('/repairs/customers/{customer}/devices', [RepairController::class, 'customerDevices'])->name('repairs.customer-devices');
     Route::patch('/repairs/{repair}/status', [RepairController::class, 'updateStatus'])->name('repairs.update-status');

@@ -47,6 +47,7 @@ class ProductImei extends Model
         'warranty_expired_at',
 
         'customer_warranty_expires_at',
+        'customer_warranty_days',
         'customer_warranty_voided_at',
         'customer_warranty_void_reason',
         'customer_warranty_voided_by',
@@ -65,6 +66,7 @@ class ProductImei extends Model
         'extra_info' => 'array',
         'warranty_expired_at' => 'datetime',
         'customer_warranty_expires_at' => 'datetime',
+        'customer_warranty_days' => 'integer',
         'customer_warranty_voided_at' => 'datetime',
     ];
 

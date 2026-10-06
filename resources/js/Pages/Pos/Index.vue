@@ -117,6 +117,7 @@ const handleConfirmSelect = ({ variant, imei }) => {
         storage: imei?.storage ?? null,
         cost_price: imei?.cost_price ?? null,
         imei_sell_price: imei?.sell_price ?? null,
+        warranty_days: selectedProduct.value?.warranty_days ?? 0,
         price_source: imei?.price_source ?? null,
 
         sell_price: price,

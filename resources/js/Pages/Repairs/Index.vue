@@ -332,6 +332,9 @@ const confirmPayment = async (payment) => {
                                 <span :class="['inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold', statusClasses[repair.status]]">
                                     {{ statusLabels[repair.status] || repair.status }}
                                 </span>
+                                <div v-if="repair.waiting_for_parts" class="mt-1 text-[11px] font-medium text-amber-700">
+                                    Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span>
+                                </div>
                             </td>
                             <td class="py-2.5 px-3 text-xs text-slate-600 font-medium">
                                 {{ repair.created_at }}

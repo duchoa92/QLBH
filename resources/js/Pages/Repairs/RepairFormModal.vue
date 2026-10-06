@@ -1,10 +1,9 @@
 <script setup>
-import { ref, watch, onMounted, nextTick } from 'vue';
+import { ref, watch, computed, onMounted, nextTick } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 
-import CustomerAutocomplete from '@/Components/CustomerAutocomplete.vue';
 import PatternLock from '@/Components/PatternLock.vue';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
@@ -20,7 +19,6 @@ const form = useForm({
     customer_phone: '',
     contact_phone: '',
     identity_card: '',
-    intake_type: 'repair',
     warranty_source_type: '',
     warranty_source_id: null,
     device_name: '',
@@ -56,8 +54,61 @@ const displayWarrantyDate = (value) => value
     ? new Date(value).toLocaleDateString('vi-VN')
     : 'Không có hạn';
 
-watch(searchQuery, (value) => {
-    if (!selectedCustomer.value) form.customer_name = value.trim();
+const warrantyForDeviceSuggestion = (item) => {
+    const customerId = Number(form.customer_id || selectedCustomer.value?.id || 0);
+    if (!customerId) return null;
+    const identifier = String(item.imei || '').trim().toLocaleLowerCase();
+    if (!identifier) return null;
+    const matches = customerDeviceSuggestions.value.filter((device) =>
+        [device.imei, device.serial]
+            .filter(Boolean)
+            .some((value) => String(value).trim().toLocaleLowerCase() === identifier)
+    );
+    const customerWarranty = matches.find((device) =>
+        device.warranty?.active && !device.warranty?.voided_at && device.warranty?.expires_at
+    )?.warranty;
+    if (customerWarranty) return { status: 'active', warranty: customerWarranty };
+
+    const catalogWarranty = item.warranty;
+    const warrantyOwnerId = catalogWarranty?.sale_customer_id ?? catalogWarranty?.source_customer_id;
+    if (
+        warrantyOwnerId
+        && Number(warrantyOwnerId) === customerId
+        && catalogWarranty?.active
+        && !catalogWarranty?.voided_at
+        && catalogWarranty?.expires_at
+    ) {
+        return { status: 'active', warranty: catalogWarranty };
+    }
+    return null;
+};
+
+const typedImeiWarranty = computed(() => {
+    if (!form.customer_id) return null;
+    const identifier = deviceSearchQuery.value.trim();
+    if (!identifier || /\s/.test(identifier)) return null;
+    const matchingCatalogDevices = deviceSuggestions.value.filter((device) =>
+        String(device.imei || '').trim().toLocaleLowerCase() === identifier.toLocaleLowerCase()
+    );
+    const catalogMatch = matchingCatalogDevices.find((device) => device.warranty) || matchingCatalogDevices[0];
+    if (catalogMatch?.warranty) return warrantyForDeviceSuggestion(catalogMatch);
+    if (identifier.length < 8) return null;
+    return warrantyForDeviceSuggestion({ imei: identifier });
+});
+
+const isSelectedCustomerActiveWarranty = (purchaser) =>
+    Number(form.customer_id || 0) === Number(purchaser?.id || 0)
+    && Boolean(purchaser?.warranty_active)
+    && Boolean(purchaser?.warranty_expires_at)
+    && !purchaser?.warranty_voided_at;
+
+const selectedDeviceWarranty = computed(() => {
+    if (!selectedDevice.value?.imei) return null;
+    const catalogMatch = deviceSuggestions.value.find((device) =>
+        String(device.imei || '').trim().toLocaleLowerCase() === String(selectedDevice.value.imei).trim().toLocaleLowerCase()
+        && device.warranty
+    );
+    return warrantyForDeviceSuggestion(catalogMatch || selectedDevice.value);
 });
 
 const loadCustomerDeviceSuggestions = async (customerId) => {
@@ -65,14 +116,17 @@ const loadCustomerDeviceSuggestions = async (customerId) => {
     customerDeviceSuggestions.value = [];
     if (!customerId) {
         customerDeviceLoading.value = false;
-        return;
+        return [];
     }
     customerDeviceLoading.value = true;
     try {
         const { data } = await axios.get(route('repairs.customer-devices', customerId));
-        if (requestId === customerDeviceRequest) customerDeviceSuggestions.value = data.devices || [];
+        const devices = data.devices || [];
+        if (requestId === customerDeviceRequest) customerDeviceSuggestions.value = devices;
+        return devices;
     } catch {
         if (requestId === customerDeviceRequest) customerDeviceSuggestions.value = [];
+        return [];
     } finally {
         if (requestId === customerDeviceRequest) customerDeviceLoading.value = false;
     }
@@ -82,23 +136,59 @@ const onSelectCustomer = (customer) => {
     if (!customer) {
         selectedCustomer.value = null;
         form.customer_id = null;
-        clearSelectedDevice();
-        loadCustomerDeviceSuggestions(null);
-        return;
+        return loadCustomerDeviceSuggestions(null);
     }
+    const existingDevice = selectedDevice.value;
     selectedCustomer.value = customer;
     form.customer_id = customer.id || null;
     form.customer_name = customer.full_name || customer.customer_name || customer.name || '';
     form.customer_phone = customer.phone || customer.customer_phone || '';
     form.identity_card = customer.cccd || customer.identity_card || '';
     form.contact_phone = customer.contact_phone || form.customer_phone || '';
-    clearSelectedDevice();
     searchQuery.value = '';
-    loadCustomerDeviceSuggestions(customer.id);
+    deviceFocused.value = false;
+    const historyPromise = loadCustomerDeviceSuggestions(customer.id);
+    if (!existingDevice) {
+        return historyPromise;
+    }
+
+    return historyPromise.then(async (history) => {
+        const identifier = String(existingDevice.imei || existingDevice.serial || '').trim().toLocaleLowerCase();
+        const matchingHistory = history.find((candidate) =>
+            [candidate.imei, candidate.serial]
+                .filter(Boolean)
+                .some((value) => String(value).trim().toLocaleLowerCase() === identifier)
+        );
+        if (matchingHistory) {
+            await applyDeviceSelection({
+                ...existingDevice,
+                name: existingDevice.name || matchingHistory.device_name,
+                imei: existingDevice.imei || existingDevice.serial,
+                customer,
+                device_data: matchingHistory,
+                warranty: matchingHistory.warranty || null,
+            });
+        } else {
+            // A different customer may bring this device in; never carry another customer's saved credentials over.
+            form.screen_password = '';
+            form.screen_pattern = '';
+            form.account_type = '';
+            form.account_email = '';
+            form.account_password = '';
+            lockType.value = '';
+            existingDevice.customer = customer;
+            existingDevice.device_data = {};
+            existingDevice.warranty = null;
+            selectedDevice.value = { ...existingDevice };
+            selectedWarranty.value = null;
+            form.warranty_source_type = '';
+            form.warranty_source_id = null;
+        }
+        return history;
+    });
 };
 
 const clearCustomer = () => {
-    clearSelectedDevice();
     selectedCustomer.value = null;
     searchQuery.value = '';
     form.customer_id = null;
@@ -107,6 +197,20 @@ const clearCustomer = () => {
     form.contact_phone = '';
     form.identity_card = '';
     loadCustomerDeviceSuggestions(null);
+};
+
+const useNewCustomer = () => {
+    const name = searchQuery.value.trim();
+    if (!name) return;
+    selectedCustomer.value = { id: null, full_name: name, phone: '', cccd: '', debt_balance: 0, is_new: true };
+    form.customer_id = null;
+    form.customer_name = name;
+    form.customer_phone = '';
+    form.contact_phone = '';
+    form.identity_card = '';
+    searchQuery.value = '';
+    customerDeviceSuggestions.value = [];
+    deviceFocused.value = false;
 };
 
 /*
@@ -135,34 +239,44 @@ watch(() => form.account_type, (value) => {
 });
 
 const applyingHistoryDevice = ref(false);
-const selectCustomerDevice = async (device) => {
+const applyDeviceSelection = async (device) => {
     applyingHistoryDevice.value = true;
-    selectedDevice.value = { name: device.device_name || '', imei: device.imei || device.serial || '', source: device.source };
+    if (device.customer?.id && Number(device.customer.id) !== Number(form.customer_id)) {
+        onSelectCustomer(device.customer);
+    }
+    const name = device.name || device.device_name || '';
+    const imei = device.imei || device.serial || '';
+    const details = device.device_data || device;
+    selectedDevice.value = { ...device, name, imei, source: device.source };
     isNewDevice.value = false;
     deviceSearchQuery.value = '';
-    form.device_name = device.device_name || '';
-    form.imei = device.imei || device.serial || '';
-    form.screen_password = device.screen_password || '';
-    form.screen_pattern = device.screen_pattern || '';
-    form.account_type = device.account_type || '';
-    form.account_email = device.account_email || '';
-    form.account_password = device.account_password || '';
-    form.issue = Array.isArray(device.issue) ? [...device.issue] : (device.issue ? [device.issue] : []);
-    form.repair_request = device.repair_request || '';
-    form.accessories = Array.isArray(device.accessories) ? [...device.accessories] : [];
-    form.estimated_cost = device.estimated_cost || '';
-    form.note = device.note || '';
-    const eligibleWarranty = device.warranty?.active ? device.warranty : null;
+    form.device_name = name;
+    form.imei = imei;
+    form.screen_password = details.screen_password || '';
+    form.screen_pattern = details.screen_pattern || '';
+    form.account_type = details.account_type || ((details.account_email || details.account_password) ? 'other' : '');
+    form.account_email = details.account_email || '';
+    form.account_password = details.account_password || '';
+    form.issue = Array.isArray(details.issue) ? [...details.issue] : (details.issue ? [details.issue] : []);
+    form.repair_request = details.repair_request || '';
+    form.accessories = Array.isArray(details.accessories) ? [...details.accessories] : [];
+    form.estimated_cost = details.estimated_cost || '';
+    form.note = details.note || '';
+    const warrantyOwnerId = device.warranty?.sale_customer_id ?? device.warranty?.source_customer_id ?? null;
+    const warrantyBelongsToCustomer = !warrantyOwnerId || Number(warrantyOwnerId) === Number(form.customer_id);
+    const eligibleWarranty = device.warranty?.active && warrantyBelongsToCustomer ? device.warranty : null;
     selectedWarranty.value = eligibleWarranty;
     form.warranty_source_type = eligibleWarranty?.source_type || '';
     form.warranty_source_id = eligibleWarranty?.source_id || null;
 
-    lockType.value = device.screen_pattern ? 'pattern' : (device.screen_password ? 'password' : '');
+    lockType.value = details.screen_pattern ? 'pattern' : (details.screen_password ? 'password' : '');
     deviceFocused.value = false;
     newImeiConfirmed.value = false;
     await nextTick();
     applyingHistoryDevice.value = false;
 };
+
+const selectCustomerDevice = (device) => applyDeviceSelection(device);
 
 /*
 |--------------------------------------------------------------------------
@@ -242,7 +356,15 @@ const stopScan = () => {
 const issueInput = ref('');
 const issueSuggestions = ref([]);
 const deviceSuggestions = ref([]);
-const deviceSearchQuery = ref('');
+const customerSuggestions = ref([]);
+const deviceSearchQuery = searchQuery;
+const normalizedDeviceSearch = computed(() => deviceSearchQuery.value.trim().toLocaleLowerCase());
+const matchingDeviceNames = computed(() => deviceSuggestions.value.filter((device) =>
+    device.name && String(device.name).toLocaleLowerCase().includes(normalizedDeviceSearch.value)
+));
+const matchingImeis = computed(() => deviceSuggestions.value.filter((device) =>
+    device.imei && String(device.imei).toLocaleLowerCase().includes(normalizedDeviceSearch.value)
+));
 const deviceFocused = ref(false);
 const deviceSearching = ref(false);
 const newImeiConfirmed = ref(false);
@@ -253,10 +375,23 @@ let deviceSearchSequence = 0;
 const combineDeviceSuggestions = (data) => {
     const fromDevices = (data.devices || []).map((item) => ({ ...item, name: item.name || '' }));
     const fromImeis = (data.imeis || []).map((item) => ({ ...item, name: item.name || '' }));
-    return [...fromDevices, ...fromImeis]
+    const namesWithImei = new Set(fromImeis.filter((item) => item.imei).map((item) => String(item.name).trim().toLocaleLowerCase()));
+    const suggestions = new Map();
+    [...fromDevices.filter((item) => item.imei || !namesWithImei.has(String(item.name).trim().toLocaleLowerCase())), ...fromImeis]
         .filter((item) => item.name || item.imei)
-        .filter((item, index, items) => items.findIndex((candidate) => candidate.name === item.name && candidate.imei === item.imei) === index)
-        .slice(0, 12);
+        .forEach((item) => {
+            const key = `${String(item.name).trim().toLocaleLowerCase()}|${String(item.imei || '').trim().toLocaleLowerCase()}`;
+            const previous = suggestions.get(key);
+            const purchasers = [...(previous?.purchasers || []), ...(item.purchasers || [])]
+                .filter((purchaser, index, all) => {
+                    const identity = purchaser?.sale_item_id ?? purchaser?.id;
+                    return identity && all.findIndex((candidate) => (candidate?.sale_item_id ?? candidate?.id) === identity) === index;
+                });
+            suggestions.set(key, previous
+                ? { ...previous, ...item, customer: item.customer || previous.customer, purchasers, warranty: item.warranty || previous.warranty }
+                : { ...item, purchasers: item.purchasers || [] });
+        });
+    return [...suggestions.values()].slice(0, 12);
 };
 
 const searchDeviceCatalog = (value) => {
@@ -264,6 +399,7 @@ const searchDeviceCatalog = (value) => {
     const keyword = value.trim();
     const sequence = ++deviceSearchSequence;
     deviceSuggestions.value = [];
+    customerSuggestions.value = [];
     if (keyword.length < 2) {
         deviceSearching.value = false;
         return;
@@ -274,6 +410,7 @@ const searchDeviceCatalog = (value) => {
             const { data } = await axios.get(route('repairs.suggestions'), { params: { keyword } });
             if (sequence !== deviceSearchSequence) return;
             deviceSuggestions.value = combineDeviceSuggestions(data);
+            customerSuggestions.value = data.customers || [];
             if (lookupAfterScan) {
                 lookupAfterScan = false;
                 const match = deviceSuggestions.value.find((item) => item.imei?.toLocaleLowerCase() === keyword.toLocaleLowerCase());
@@ -288,6 +425,7 @@ const searchDeviceCatalog = (value) => {
         } catch {
             if (sequence === deviceSearchSequence) {
                 deviceSuggestions.value = [];
+                customerSuggestions.value = [];
                 if (lookupAfterScan) {
                     lookupAfterScan = false;
                     newImeiConfirmed.value = true;
@@ -306,32 +444,138 @@ watch(deviceSearchQuery, (value) => {
 });
 
 const selectDevice = (item) => {
-    form.device_name = item.name || '';
-    form.imei = item.imei || '';
-    selectedDevice.value = { ...item, name: form.device_name, imei: form.imei };
-    isNewDevice.value = false;
+    const matchingWarrantyDevice = deviceSuggestions.value.find((device) =>
+        String(device.imei || '').trim().toLocaleLowerCase() === String(item.imei || '').trim().toLocaleLowerCase()
+        && device.warranty
+    );
+    let selectedItem = !item.warranty && matchingWarrantyDevice
+        ? {
+            ...item,
+            warranty: matchingWarrantyDevice.warranty,
+            customer: item.customer || matchingWarrantyDevice.customer,
+            device_data: item.device_data || matchingWarrantyDevice.device_data,
+            source_date: item.source_date || matchingWarrantyDevice.source_date,
+            purchase_info: item.purchase_info || matchingWarrantyDevice.purchase_info,
+        }
+        : item;
+
+    // The person bringing the device in can differ from its previous buyer.
+    // Keep the customer already chosen for this repair and only reuse that customer's device history.
+    const currentCustomer = selectedCustomer.value || (form.customer_name.trim() ? {
+        id: form.customer_id,
+        full_name: form.customer_name,
+        phone: form.customer_phone,
+        cccd: form.identity_card,
+    } : null);
+    if (!currentCustomer) {
+        // If a single customer is associated with this result, load them into the form.
+        // Keep credentials out of the form when the IMEI has no unambiguous customer.
+        if (!selectedItem.customer?.id) selectedItem = { ...selectedItem, device_data: {} };
+    } else if (Number(currentCustomer.id || 0) !== Number(item.customer?.id || 0)) {
+        const identifier = String(item.imei || item.serial || '').trim().toLocaleLowerCase();
+        const customerHistory = currentCustomer.id && customerDeviceSuggestions.value.find((candidate) =>
+            [candidate.imei, candidate.serial]
+                .filter(Boolean)
+                .some((value) => String(value).trim().toLocaleLowerCase() === identifier)
+        );
+        selectedItem = {
+            ...selectedItem,
+            ...(customerHistory || {}),
+            name: item.name || customerHistory?.device_name || '',
+            imei: item.imei || item.serial,
+            customer: currentCustomer,
+            device_data: customerHistory || {},
+            warranty: customerHistory?.warranty || selectedItem.warranty,
+        };
+    }
+    return applyDeviceSelection(selectedItem);
+};
+
+const selectDeviceForPurchaser = async (device, purchaser) => {
+    const history = await onSelectCustomer(purchaser);
+    const identifier = String(device.imei || '').trim().toLocaleLowerCase();
+    const customerDevice = history.find((candidate) =>
+        [candidate.imei, candidate.serial]
+            .filter(Boolean)
+            .some((value) => String(value).trim().toLocaleLowerCase() === identifier)
+    );
+    const selected = {
+        ...device,
+        ...(customerDevice || {}),
+        name: device.name || customerDevice?.device_name || '',
+        imei: device.imei || device.serial,
+        customer: purchaser,
+        source: device.source,
+        device_data: customerDevice || {},
+        warranty: isSelectedCustomerActiveWarranty(purchaser) ? {
+            source_type: 'sale_item',
+            source_id: purchaser.sale_item_id,
+            sale_customer_id: purchaser.id,
+            invoice_code: purchaser.invoice_code,
+            expires_at: purchaser.warranty_expires_at,
+            active: true,
+        } : (customerDevice?.warranty?.active ? customerDevice.warranty : null),
+    };
+    selectDevice(selected);
+};
+
+const selectDeviceForCurrentCustomer = async (device) => {
+    const customer = selectedCustomer.value;
+    const history = customer?.id ? await loadCustomerDeviceSuggestions(customer.id) : [];
+    const identifier = String(device.imei || device.serial || '').trim().toLocaleLowerCase();
+    const customerDevice = history.find((candidate) =>
+        [candidate.imei, candidate.serial]
+            .filter(Boolean)
+            .some((value) => String(value).trim().toLocaleLowerCase() === identifier)
+    );
+    selectDevice({
+        ...device,
+        ...(customerDevice || {}),
+        name: device.name || customerDevice?.device_name || '',
+        imei: device.imei || device.serial,
+        customer: customer || null,
+        device_data: customerDevice || {},
+        warranty: customerDevice?.warranty || device.warranty,
+    });
+};
+
+const prepareNewDevice = (name, imei) => {
+    form.device_name = name;
+    form.imei = imei;
+    selectedDevice.value = { name: name || 'Máy mới', imei, source: 'Thiết bị mới' };
+    isNewDevice.value = true;
     selectedWarranty.value = null;
     form.warranty_source_type = '';
     form.warranty_source_id = null;
-    deviceSearchQuery.value = '';
+    form.screen_password = '';
+    form.screen_pattern = '';
+    form.account_type = '';
+    form.account_email = '';
+    form.account_password = '';
+    lockType.value = '';
     newImeiConfirmed.value = false;
+    deviceSearchQuery.value = '';
     deviceFocused.value = false;
+};
+
+const addDeviceByName = () => {
+    const name = deviceSearchQuery.value.trim();
+    if (name) prepareNewDevice(name, '');
+};
+
+const addDeviceByImei = () => {
+    const imei = deviceSearchQuery.value.trim();
+    if (imei) prepareNewDevice('', imei);
 };
 
 const useNewDevice = () => {
     const value = deviceSearchQuery.value.trim();
     if (!value) return;
-    const scannedImei = newImeiConfirmed.value && form.imei === value;
-    form.device_name = scannedImei ? '' : value;
-    form.imei = scannedImei ? value : '';
-    selectedDevice.value = { name: form.device_name || 'Máy mới', imei: form.imei, source: 'Máy mới' };
-    isNewDevice.value = true;
-    selectedWarranty.value = null;
-    form.warranty_source_type = '';
-    form.warranty_source_id = null;
-    newImeiConfirmed.value = false;
-    deviceSearchQuery.value = '';
-    deviceFocused.value = false;
+    if ((newImeiConfirmed.value && form.imei === value) || /^\d{6,20}$/.test(value)) {
+        addDeviceByImei();
+    } else {
+        addDeviceByName();
+    }
 };
 
 const clearSelectedDevice = () => {
@@ -356,7 +600,21 @@ const clearSelectedDevice = () => {
     newImeiConfirmed.value = false;
 };
 
-const handleDeviceSearchEnter = () => useNewDevice();
+const handleDeviceSearchEnter = () => {
+    if (deviceSearching.value) return;
+    const value = deviceSearchQuery.value.trim();
+    const exactImei = deviceSuggestions.value.find((item) => String(item.imei || '').trim().toLocaleLowerCase() === value.toLocaleLowerCase());
+    if (exactImei) {
+        selectDevice(exactImei);
+        return;
+    }
+    if (customerSuggestions.value.length === 1 && !deviceSuggestions.value.length) {
+        onSelectCustomer(customerSuggestions.value[0]);
+        return;
+    }
+    if (customerSuggestions.value.length || deviceSuggestions.value.length) return;
+    if (/^\d{6,20}$/.test(value)) useNewDevice();
+};
 
 const filteredIssues = ref([]);
 
@@ -443,56 +701,76 @@ const submit = () => {
             <!-- 1. TÌM KIẾM KHÁCH HÀNG -->
             <section class="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
                 <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
-                    <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">♙ Khách hàng</h2>
-                    <span class="text-[10px] text-slate-500">Tìm khách hàng hiện hữu hoặc nhập mới</span>
+                    <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">⌕ Tra cứu nhanh</h2>
+                    <span class="text-[10px] text-slate-500">Tìm khách hàng, tên máy hoặc IMEI</span>
                 </header>
                 <div class="space-y-2 p-3">
-                <div 
-                    v-if="selectedCustomer" 
-                    class="flex items-center justify-between gap-2 px-3.5 py-2 bg-blue-50/70 border border-blue-200/90 rounded-xl transition"
-                >
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                        </svg>
-                        <div class="truncate leading-tight flex items-center gap-1.5 flex-wrap">
-                            <span class="font-bold text-slate-800 text-xs">{{ form.customer_name }}</span>
-                            <span v-if="form.customer_phone" class="text-blue-600 text-xs font-medium">
-                                - {{ form.customer_phone }}
-                            </span>
-                            <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="text-rose-600 text-[11px] font-semibold">
-                                · Nợ {{ Number(selectedCustomer.debt_balance).toLocaleString('vi-VN') }} đ
-                            </span>
+                    <div class="relative flex items-center gap-1.5">
+                        <div class="relative min-w-0 flex-1">
+                            <FloatingInput v-model="deviceSearchQuery" label="Tìm khách hàng, tên máy, IMEI / Serial" id="repair_unified_search" autocomplete="off" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" @blur="deviceFocused = false" />
+                            <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1.5 shadow-2xl ring-1 ring-slate-900/5">
+                                <p v-if="customerSuggestions.length" class="sticky top-0 z-10 flex items-center gap-2 border-b border-blue-100 bg-blue-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-blue-800"><span class="h-1.5 w-1.5 rounded-full bg-blue-600"></span>Khách hàng<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-blue-700">{{ customerSuggestions.length }}</span></p>
+                                <button v-for="customer in customerSuggestions" :key="`customer-${customer.id}`" type="button" class="block w-full border-b border-slate-100 px-3.5 py-2.5 text-left transition hover:bg-blue-50" @mousedown.prevent="onSelectCustomer(customer)">
+                                    <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-bold text-slate-900">{{ customer.full_name }} <span class="text-[11px] font-medium text-slate-500">· {{ customer.phone || 'Chưa có SĐT' }}</span></span><span v-if="Number(customer.debt_balance || 0) > 0" class="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">Nợ {{ Number(customer.debt_balance).toLocaleString('vi-VN') }} đ</span></span>
+                                    <span class="mt-0.5 block text-[10px] text-slate-500">{{ customer.code || customer.cccd || 'Chọn làm khách tiếp nhận' }}</span>
+                                </button>
+                                <p v-if="matchingDeviceNames.length" class="sticky top-0 z-10 flex items-center gap-2 border-y border-indigo-100 bg-indigo-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-indigo-800"><span class="h-1.5 w-1.5 rounded-full bg-indigo-600"></span>Tên máy<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-indigo-700">{{ matchingDeviceNames.length }}</span></p>
+                                <div v-for="device in matchingDeviceNames" :key="`model-${device.name}-${device.imei || ''}-${device.source}`" class="border-b border-slate-200 last:border-0">
+                                    <button v-for="purchaser in (device.purchasers || [])" :key="`model-buyer-${device.imei}-${purchaser.sale_item_id}`" type="button" class="group block w-full border-l-2 border-transparent px-3.5 py-2.5 text-left transition hover:border-indigo-500 hover:bg-indigo-50" @mousedown.prevent="selectDeviceForPurchaser(device, purchaser)">
+                                        <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-extrabold text-slate-900">{{ device.name }} <span v-if="device.imei" class="ml-1 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-indigo-700">{{ device.imei }}</span></span><span class="shrink-0 text-[9px] font-semibold text-slate-400">{{ device.source }}</span></span>
+                                        <span class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-3 text-[11px]"><span class="font-bold text-blue-800">{{ purchaser.full_name }}</span><span class="text-slate-500">đã mua ngày</span><span class="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{{ displayWarrantyDate(purchaser.purchased_at) }}</span><span v-if="purchaser.warranty_expires_at" class="rounded border px-1.5 py-0.5 font-bold" :class="purchaser.warranty_active ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-700'">{{ purchaser.warranty_active ? 'BH đến' : 'Hết BH' }} {{ displayWarrantyDate(purchaser.warranty_expires_at) }}</span><span v-if="purchaser.warranty_voided_at" class="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 font-bold text-rose-700">BH đã vô hiệu</span></span>
+                                        <span v-if="device.in_stock" class="ml-3 mt-1.5 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900">⚠ IMEI hiện còn trong kho · chưa bán</span>
+                                    </button>
+                                    <button v-if="!(device.purchasers || []).length" type="button" class="block w-full border-l-2 border-transparent px-3.5 py-2.5 text-left transition hover:border-indigo-500 hover:bg-indigo-50" @mousedown.prevent="selectDevice(device)">
+                                        <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-extrabold text-slate-900">{{ device.name }} <span v-if="device.imei" class="ml-1 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-indigo-700">{{ device.imei }}</span></span><span v-if="device.in_stock" class="rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900">⚠ Còn trong kho</span></span>
+                                        <span class="mt-1 block pl-3 text-[11px] text-slate-600"><template v-if="device.customer?.full_name"><strong class="text-blue-800">{{ device.customer.full_name }}</strong> · </template>{{ device.source }}<template v-if="device.source_date"> · {{ displayWarrantyDate(device.source_date) }}</template></span>
+                                    </button>
+                                </div>
+                                <p v-if="matchingImeis.length" class="sticky top-0 z-10 flex items-center gap-2 border-y border-violet-100 bg-violet-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-violet-800"><span class="h-1.5 w-1.5 rounded-full bg-violet-600"></span>IMEI / Serial<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-violet-700">{{ matchingImeis.length }}</span></p>
+                                <div v-for="device in matchingImeis" :key="`imei-${device.name}-${device.imei}-${device.source}`" class="border-b border-slate-200 px-1.5 py-1 last:border-0">
+                                    <button v-for="purchaser in (device.purchasers || [])" :key="`${device.imei}-${purchaser.sale_item_id}`" type="button" class="block w-full rounded-lg border-l-2 border-transparent px-2.5 py-2 text-left transition hover:border-violet-500 hover:bg-violet-50" @mousedown.prevent="selectDeviceForPurchaser(device, purchaser)">
+                                        <span class="block text-sm font-extrabold text-slate-900">{{ device.name || 'Chưa có tên máy' }} <span class="ml-1 rounded-md bg-violet-100 px-1.5 py-0.5 font-mono text-[11px] text-violet-800">{{ device.imei }}</span></span>
+                                        <span class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-3 text-[11px]"><span class="font-bold text-blue-800">{{ purchaser.full_name }}</span><span class="text-slate-500">đã mua ngày</span><span class="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{{ displayWarrantyDate(purchaser.purchased_at) }}</span><span v-if="purchaser.warranty_expires_at" class="rounded border px-1.5 py-0.5 font-bold" :class="purchaser.warranty_active ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-700'">{{ purchaser.warranty_active ? 'BH đến' : 'Hết BH' }} {{ displayWarrantyDate(purchaser.warranty_expires_at) }}</span><span v-if="purchaser.warranty_voided_at" class="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 font-bold text-rose-700">BH đã vô hiệu</span></span>
+                                    </button>
+                                    <button type="button" class="flex w-full items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left text-[11px] font-bold text-blue-800 transition hover:border-blue-400 hover:bg-blue-100" @mousedown.prevent="selectDevice(device)"><span>{{ device.in_stock ? 'Chọn thiết bị · hiện còn trong kho' : 'Chọn thiết bị này' }}</span><span class="font-mono">{{ device.imei }}</span></button>
+                                </div>
+                                <p v-if="deviceSearching" class="px-3 py-2 text-[10px] text-slate-400">Đang tìm khách hàng và thiết bị...</p>
+                                <p v-else-if="!customerSuggestions.length && !matchingDeviceNames.length && !matchingImeis.length" class="px-3 py-2 text-[10px] text-slate-500">Chưa có kết quả phù hợp. Chọn mục muốn tạo mới ở bên dưới.</p>
+                                <div v-if="!deviceSearching" class="grid grid-cols-1 gap-2 border-t border-slate-200 bg-slate-50 p-2.5 sm:grid-cols-3">
+                                    <button type="button" class="rounded-xl border border-blue-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-blue-800 shadow-sm transition hover:border-blue-400 hover:bg-blue-50" @mousedown.prevent="useNewCustomer"><span class="block text-[9px] font-semibold uppercase tracking-wide text-blue-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Khách “{{ deviceSearchQuery }}”</span></button>
+                                    <button type="button" class="rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-indigo-800 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50" @mousedown.prevent="addDeviceByName"><span class="block text-[9px] font-semibold uppercase tracking-wide text-indigo-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Thiết bị “{{ deviceSearchQuery }}”</span></button>
+                                    <button type="button" class="rounded-xl border border-violet-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-violet-800 shadow-sm transition hover:border-violet-400 hover:bg-violet-50" @mousedown.prevent="addDeviceByImei"><span class="block text-[9px] font-semibold uppercase tracking-wide text-violet-500">Tạo mới</span><span class="mt-0.5 block truncate">+ IMEI “{{ deviceSearchQuery }}”</span></button>
+                                </div>
+                            </div>
                         </div>
+                        <button type="button" @click="startScan" title="Quét IMEI từ Camera" class="flex shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-indigo-600 transition hover:bg-indigo-100 active:bg-indigo-200">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89L18 7h1a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        </button>
                     </div>
-
-                    <button 
-                        type="button" 
-                        @click="clearCustomer" 
-                        class="text-blue-400 hover:text-rose-600 p-1 transition shrink-0"
-                        title="Bỏ chọn khách hàng"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div v-else class="relative">
-                    <CustomerAutocomplete
-                        v-model="searchQuery"
-                        @selected="onSelectCustomer"
-                        placeholder="Tìm khách hàng theo tên, SĐT, mã hoặc CCCD"
-                    />
-                </div>
-
-                <p v-if="form.errors.customer_name" class="text-rose-500 text-[11px] mt-1 font-medium">
-                    {{ form.errors.customer_name }}
-                </p>
+                    <div v-if="scanning" class="relative overflow-hidden rounded-xl border bg-slate-900"><video ref="videoRef" class="h-32 w-full object-cover"/><button type="button" @click="stopScan" class="absolute right-2 top-2 rounded-lg bg-rose-600 px-2 py-0.5 text-[10px] text-white">Tắt camera</button></div>
+                    <div v-if="typedImeiWarranty" class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-800">
+                        Khách đang chọn còn bảo hành đến {{ displayWarrantyDate(typedImeiWarranty.warranty.expires_at) }}
+                    </div>
                 </div>
             </section>
 
-            <!-- 2. THÔNG TIN THIẾT BỊ & BẢO MẬT -->
+            <section class="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+                <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
+                    <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">♙ Thông tin khách hàng</h2>
+                    <div v-if="selectedCustomer" class="flex items-center gap-2 text-[10px]">
+                        <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="font-semibold text-rose-600">Nợ {{ Number(selectedCustomer.debt_balance).toLocaleString('vi-VN') }} đ</span>
+                        <button type="button" class="text-slate-400 hover:text-rose-600" @click="clearCustomer">Bỏ chọn</button>
+                    </div>
+                </header>
+                <div class="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
+                    <FloatingInput v-model="form.customer_name" label="Tên khách hàng *" id="repair_customer_name" :error="form.errors.customer_name" required />
+                    <FloatingInput v-model="form.customer_phone" label="Số điện thoại" id="repair_customer_phone" :error="form.errors.customer_phone" />
+                    <FloatingInput v-model="form.contact_phone" label="SĐT liên hệ khác" id="repair_contact_phone" :error="form.errors.contact_phone" />
+                    <FloatingInput v-model="form.identity_card" label="CCCD / CMND" id="repair_identity_card" :error="form.errors.identity_card" />
+                </div>
+            </section>
+
+            <!-- 3. THÔNG TIN THIẾT BỊ & BẢO MẬT -->
             <div class="relative z-20 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-visible" :class="{ 'z-40': deviceFocused }">
                 <div class="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70">
                     <h2 class="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -527,80 +805,23 @@ const submit = () => {
                             >
                                 <span class="block truncate text-[11px] font-semibold text-slate-800">{{ device.device_name }}</span>
                                 <span class="mt-0.5 block truncate text-[10px] text-slate-500">{{ device.source }}<template v-if="device.imei || device.serial"> · {{ device.imei || device.serial }}</template></span>
-                                <span v-if="device.warranty" class="mt-1 block text-[10px] font-semibold" :class="device.warranty.active ? 'text-emerald-700' : 'text-rose-600'">
-                                    {{ device.warranty.voided_at ? 'BH đã vô hiệu' : device.warranty.active ? `Còn BH đến ${displayWarrantyDate(device.warranty.expires_at)}` : `Hết BH ${displayWarrantyDate(device.warranty.expires_at)}` }}
+                                <span v-if="device.warranty?.active && !device.warranty?.voided_at" class="mt-1 block text-[10px] font-bold text-emerald-700">
+                                    Còn bảo hành đến {{ displayWarrantyDate(device.warranty.expires_at) }}
                                 </span>
-                                <span v-else class="mt-1 block text-[10px] text-slate-400">Không có hạn BH khách hàng</span>
                             </button>
                         </div>
                         <p v-else-if="!customerDeviceLoading" class="text-[10px] text-slate-500">Chưa có thiết bị trong lịch sử. Có thể tìm hoặc nhập máy mới bên dưới.</p>
                     </div>
 
-                    <div v-if="selectedDevice" class="rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-2.5 transition">
-                        <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
-                            <div v-if="form.device_name" class="flex min-w-0 items-center gap-2.5">
-                                <svg class="h-4 w-4 shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
-                                <div class="min-w-0 truncate text-xs leading-tight">
-                                    <span class="font-bold text-slate-800">{{ form.device_name }}</span>
-                                    <span v-if="!isNewDevice && selectedDevice.source" class="ml-1.5 text-slate-500">· {{ selectedDevice.source }}</span>
-                                </div>
-                            </div>
-                            <FloatingInput v-else v-model="form.device_name" label="Tên máy / Model *" id="device_name" :error="form.errors.device_name" required />
-                            <FloatingInput v-model="form.imei" label="Số IMEI / Serial" id="imei" :error="form.errors.imei" />
-                            <button type="button" @click="clearSelectedDevice" class="shrink-0 p-1 text-blue-400 transition hover:text-rose-600" title="Bỏ chọn máy" aria-label="Bỏ chọn máy">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <p v-if="newImeiConfirmed" class="mt-1 text-[10px] text-emerald-700">IMEI mới sẽ được lưu cùng phiếu tiếp nhận.</p>
+                    <div v-if="selectedDevice" class="flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-2 text-[10px]">
+                        <span class="truncate font-semibold text-blue-800">{{ selectedDevice.source || (isNewDevice ? 'Thiết bị mới' : 'Đã chọn thiết bị') }}</span>
+                        <button type="button" @click="clearSelectedDevice" class="shrink-0 text-blue-500 hover:text-rose-600" title="Bỏ chọn thiết bị">Bỏ chọn</button>
                     </div>
-
-                    <div v-else class="relative">
-                        <div class="flex items-center gap-1.5">
-                            <div class="relative min-w-0 flex-1">
-                                <FloatingInput
-                                    v-model="deviceSearchQuery"
-                                    label="Tìm máy theo tên hoặc IMEI / Serial"
-                                    id="device_search"
-                                    autocomplete="off"
-                                    @keydown.enter.prevent="handleDeviceSearchEnter"
-                                    @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)"
-                                    @blur="deviceFocused = false"
-                                />
-                                <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                                    <button v-for="device in deviceSuggestions" :key="`${device.name}-${device.imei || ''}-${device.source}`" type="button" class="block w-full border-b border-slate-50 px-3 py-2 text-left text-xs last:border-0 hover:bg-blue-50" @mousedown.prevent="selectDevice(device)">
-                                        <span class="flex items-center justify-between gap-2">
-                                            <span class="truncate font-semibold text-slate-800">{{ device.name || 'Chưa có tên máy' }}</span>
-                                            <span v-if="device.imei" class="shrink-0 font-mono text-[10px] text-indigo-700">{{ device.imei }}</span>
-                                        </span>
-                                        <span class="text-[10px] text-slate-500">{{ device.source }}</span>
-                                    </button>
-                                    <p v-if="deviceSearching" class="px-3 py-2 text-[10px] text-slate-400">Đang tìm theo tên máy và IMEI...</p>
-                                    <button v-if="!deviceSearching" type="button" class="block w-full border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-blue-700 hover:bg-blue-50" @mousedown.prevent="useNewDevice">
-                                        + Dùng tên máy này, nhập IMEI riêng
-                                    </button>
-                                    <p v-if="!deviceSearching && !deviceSuggestions.length" class="px-3 py-1 text-[10px] text-slate-400">Chưa tìm thấy máy phù hợp. Có thể dùng thông tin mới bên trên.</p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                @click="startScan"
-                                title="Quét IMEI từ Camera"
-                                class="flex shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-indigo-600 transition hover:bg-indigo-100 active:bg-indigo-200"
-                            >
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                </svg>
-                            </button>
-                        </div>
-                        <div v-if="scanning" class="relative mt-2 overflow-hidden rounded-xl border bg-slate-900">
-                            <video ref="videoRef" class="h-32 w-full object-cover" />
-                            <button type="button" @click="stopScan" class="absolute right-2 top-2 rounded-lg bg-rose-600 px-2 py-0.5 text-[10px] text-white shadow transition hover:bg-rose-700">Tắt camera</button>
-                        </div>
+                    <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        <FloatingInput v-model="form.device_name" label="Tên máy / Model *" id="device_name" :error="form.errors.device_name" required />
+                        <FloatingInput v-model="form.imei" label="Số IMEI / Serial" id="imei" :error="form.errors.imei" />
                     </div>
-
+                    <p v-if="newImeiConfirmed" class="text-[10px] text-emerald-700">IMEI chưa có trong hệ thống; bạn có thể nhập tên và các thông tin hiện tại của máy.</p>
                     <p v-if="form.errors.device_name && !selectedDevice" class="text-[11px] font-medium text-rose-500">{{ form.errors.device_name }}</p>
                     <div class="grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-2.5 sm:grid-cols-2">
                         <FloatingSelect v-model="lockType" label="Kiểu khóa màn hình" id="repair_lock_type" :options="lockTypeOptions" />

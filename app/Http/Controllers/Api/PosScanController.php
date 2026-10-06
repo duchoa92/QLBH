@@ -63,6 +63,7 @@ class PosScanController extends Controller
                 'data' => [
                     'id' => $imei->product->id,
                     'name' => $imei->product->name,
+                    'warranty_days' => (int) $imei->product->warranty_days,
                     'sell_price' => $effectiveSellPrice,
                     'price' => $effectiveSellPrice,
                     'image_url' => $imei->product->image_url,
@@ -120,6 +121,7 @@ class PosScanController extends Controller
                 'data' => [
                     'id' => $product->id,
                     'name' => $product->name,
+                    'warranty_days' => (int) $product->warranty_days,
                     'sell_price' => $product->sell_price,
                     'price' => $product->sell_price,
                     'unit_id' => $product->unit_id,

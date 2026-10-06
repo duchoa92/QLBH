@@ -320,10 +320,11 @@ class PosCheckoutService
 
                     // IMEI -> đã bán
                     $soldAt = now();
-                    $warrantyDays = max(0, (int) $product->warranty_days);
+                    $warrantyDays = max(0, min(3650, (int) ($item['warranty_days'] ?? $product->warranty_days)));
                     $imei->update([
                         'status' => ProductImei::STATUS_SOLD,
                         'sold_at' => $soldAt,
+                        'customer_warranty_days' => $warrantyDays,
                         'customer_warranty_expires_at' => $warrantyDays > 0 ? $soldAt->copy()->addDays($warrantyDays) : null,
                         'customer_warranty_voided_at' => null,
                         'customer_warranty_void_reason' => null,

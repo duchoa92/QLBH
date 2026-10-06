@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import CartTable from '@/Modules/POS/Cart/Components/CartTable.vue'
@@ -23,6 +23,10 @@ const props = defineProps({
 })
 
 const showSaleHistory = ref(false)
+const needsCustomerForWarranty = computed(() => !props.selectedCustomer && props.cart.some((item) =>
+    (item.imei_id || item.imei || item.serial)
+    && Number(item.customer_warranty_days ?? item.warranty_days ?? 0) > 0
+))
 
 const emit = defineEmits([
     'customer-selected',
@@ -50,6 +54,9 @@ const emit = defineEmits([
                 :customer="selectedCustomer"
                 @selected="$emit('customer-selected', $event)"
             />
+            <p v-if="needsCustomerForWarranty" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+                Chọn khách hàng để gắn hạn bảo hành vào hồ sơ và tra cứu được khi khách quay lại.
+            </p>
         </div>
 
         <!-- Khối giữa: Bảng Giỏ Hàng -->

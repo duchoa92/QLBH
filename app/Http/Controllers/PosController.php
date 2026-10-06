@@ -90,6 +90,8 @@ class PosController extends Controller
             
             'items.*.imei_id' => 'nullable|integer|exists:product_imeis,id',
 
+            'items.*.warranty_days' => 'nullable|integer|min:0|max:3650',
+
             'items.*.gift_product_id' => 'nullable|integer',
 
             'items.*.unit_id' => 'nullable|integer|exists:units,id',
@@ -150,6 +152,8 @@ class PosController extends Controller
                             'unit_price' => $item->unit_price,
                             'subtotal' => $item->subtotal,
                             'imei' => $item->productImei?->imei,
+                            'warranty_days' => $item->productImei?->customer_warranty_days,
+                            'warranty_expires_at' => $item->productImei?->customer_warranty_expires_at,
                             'variant' => $item->variant
                                 ? [
                                     'id' => $item->variant->id,

@@ -58,6 +58,7 @@ class ProductController extends Controller
                         'cost_price' => $product->cost_price, // 👈 ĐÃ BỔ SUNG GIÁ NHẬP
                         'price' => $product->sell_price,      // Giữ giá bán cho frontend cũ
                         'sell_price' => $product->sell_price, // 👈 BỔ SUNG RÕ RÀNG GIÁ BÁN
+                        'warranty_days' => (int) $product->warranty_days,
                         'price_min' => $prices['min'],
                         'price_max' => $prices['max'],
                         'price_label' => $prices['label'],
@@ -152,6 +153,7 @@ class ProductController extends Controller
                     'cost_price' => $product->cost_price, // 👈 ĐÃ BỔ SUNG GIÁ NHẬP
                     'price' => $product->sell_price,      // Giữ giá bán cho frontend cũ
                     'sell_price' => $product->sell_price, // 👈 BỔ SUNG RÕ RÀNG GIÁ BÁN
+                    'warranty_days' => (int) $product->warranty_days,
                     'price_min' => $prices['min'],
                     'price_max' => $prices['max'],
                     'price_label' => $prices['label'],

@@ -12,14 +12,14 @@ const props = defineProps({ repair: { type: Object, required: true } })
 const emit = defineEmits(['close', 'updated', 'completed', 'pay'])
 
 // Quản lý Tab: 'log' (Cập nhật nhật ký) | 'complete' (Hoàn tất & Tính tiền)
-const activeTab = ref(props.repair.status === 'repairing' ? 'log' : 'log')
+const activeTab = ref('log')
 
 const form = useForm({
     description: '',
     issue: [],
-    parts_needed: '',
-    expected_days: '',
-    waiting_for_parts: false,
+    parts_needed: props.repair.parts_needed || '',
+    expected_days: props.repair.expected_days ?? '',
+    waiting_for_parts: Boolean(props.repair.waiting_for_parts),
     images: [],
 })
 
@@ -65,7 +65,7 @@ const startPayment = () => {
     >
         <!-- TIẾN TRÌNH THỜI GIAN (PROGRESS BAR) -->
         <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-            <RepairStatusProgress :status="repair.status === 'pending' ? 'repairing' : repair.status" />
+            <RepairStatusProgress :status="repair.status" :waiting-for-parts="repair.waiting_for_parts" />
         </div>
 
         <!-- Các tab nhật ký, hoàn tất và lịch sử -->
@@ -81,8 +81,10 @@ const startPayment = () => {
             <button v-if="['pending', 'repairing'].includes(repair.status)"
                 type="button"
                 @click="activeTab = 'complete'"
+                :disabled="repair.waiting_for_parts"
+                :title="repair.waiting_for_parts ? 'Xác nhận đã nhận linh kiện để tiếp tục' : ''"
                 class="pb-2 px-4 text-xs font-bold border-b-2 transition"
-                :class="activeTab === 'complete' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'"
+                :class="[activeTab === 'complete' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600', repair.waiting_for_parts ? 'cursor-not-allowed opacity-50' : '']"
             >
                 ✅ Hoàn tất sửa & Tính phí
             </button>
@@ -96,6 +98,10 @@ const startPayment = () => {
         <form v-if="activeTab === 'log' && ['pending', 'repairing'].includes(repair.status)" id="repair-progress-form" class="space-y-3" @submit.prevent="submit()">
             <div v-if="repair.status === 'pending'" class="rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-blue-800">
                 💡 Phiếu sẽ tự động chuyển sang <strong>Đang sửa</strong> khi lưu tiến trình.
+            </div>
+            <div v-if="repair.waiting_for_parts" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <span>Phiếu đang chờ <strong>{{ repair.parts_needed || 'linh kiện' }}</strong><span v-if="repair.expected_days !== null"> · dự kiến {{ repair.expected_days }} ngày</span>.</span>
+                <button type="button" class="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 font-semibold text-amber-800 hover:bg-amber-100" @click="form.waiting_for_parts = false">Đã nhận linh kiện</button>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -125,7 +131,7 @@ const startPayment = () => {
 
         <!-- TAB 2: FORM HOÀN TẤT VÀ TÍNH TIỀN LINH KIỆN -->
         <div v-else-if="activeTab === 'complete' && ['pending', 'repairing'].includes(repair.status)">
-            <RepairCompletionModal :repair="repair" inline @updated="onCompleted" />
+            <RepairCompletionModal :repair="repair" @updated="onCompleted" />
         </div>
 
         <!-- Tab thanh toán cho phiếu đã hoàn tất -->
@@ -185,7 +191,7 @@ const startPayment = () => {
                         form="repair-progress-form" 
                         :disabled="form.processing"
                     >
-                        {{ form.processing ? 'Đang lưu...' : 'Lưu nhật ký' }}
+                        {{ form.processing ? 'Đang lưu...' : (repair.waiting_for_parts && !form.waiting_for_parts ? 'Xác nhận đã có linh kiện' : form.waiting_for_parts ? 'Lưu trạng thái chờ linh kiện' : 'Lưu nhật ký') }}
                     </ActionButton>
                 </div>
             </div>

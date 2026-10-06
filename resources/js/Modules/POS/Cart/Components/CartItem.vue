@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import CartItemHeader from './CartItemHeader.vue'
 import CartItemQuantity from './CartItemQuantity.vue'
 import CartItemGiftList from './CartItemGiftList.vue'
@@ -15,6 +16,17 @@ const props = defineProps({
     item: {
         type: Object,
         required: true,
+    },
+})
+
+const warrantyDays = computed({
+    get: () => {
+        if (props.item.customer_warranty_days === undefined && props.item.warranty_days === undefined) return ''
+        const value = props.item.customer_warranty_days ?? props.item.warranty_days
+        return value === null ? '' : Number(value)
+    },
+    set: (value) => {
+        props.item.customer_warranty_days = value === '' ? null : Math.max(0, Math.min(3650, Number(value || 0)))
     },
 })
 
@@ -76,6 +88,22 @@ const {
                 )
             "
         />
+
+        <div v-if="item.imei_id || item.imei || item.serial" class="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-2 py-1.5">
+            <label :for="`pos-warranty-${item.imei_id || item.imei || item.serial}`" class="text-[11px] font-semibold text-emerald-800">Bảo hành khách</label>
+            <input
+                :id="`pos-warranty-${item.imei_id || item.imei || item.serial}`"
+                v-model.number="warrantyDays"
+                type="number"
+                min="0"
+                max="3650"
+                step="1"
+                class="h-7 w-20 rounded-md border-emerald-200 bg-white px-2 text-right text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:ring-emerald-500"
+                aria-label="Thời hạn bảo hành cho khách tính theo ngày"
+            />
+            <span class="text-[11px] text-emerald-800">ngày</span>
+            <span class="text-[10px] text-slate-500">0 = không BH · để trống = theo cấu hình SP<span v-if="item.warranty_days"> ({{ item.warranty_days }} ngày)</span></span>
+        </div>
 
         <!--Số lượng, hiện quà và tiền-->
         <div class="flex justify-between items-start mt-2">

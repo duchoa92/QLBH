@@ -123,6 +123,11 @@ const saleQuantityText = (item) => {
                             >
                                 IMEI: {{ item.product_imei.imei }}
                             </div>
+                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-0.5 text-xs font-semibold" :class="Number(item.product_imei.customer_warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                                {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
+                                    ? `Bảo hành khách đến ${new Date(item.product_imei.customer_warranty_expires_at).toLocaleDateString('vi-VN')}`
+                                    : 'Không áp dụng bảo hành khách' }}
+                            </div>
                         </td>
 
                         <td class="text-center py-3 text-slate-600 font-medium">

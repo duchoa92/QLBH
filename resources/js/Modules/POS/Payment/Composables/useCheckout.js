@@ -92,6 +92,9 @@ export function useCheckout(
                         imei_id:
                             item.imei_id ?? null,
 
+                        warranty_days:
+                            item.customer_warranty_days ?? item.warranty_days ?? null,
+
                         note:
                             item.note,
 

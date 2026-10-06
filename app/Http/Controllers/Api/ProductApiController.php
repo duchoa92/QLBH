@@ -86,6 +86,8 @@ class ProductApiController extends Controller
 
             'name' => $product->name,
 
+            'warranty_days' => (int) $product->warranty_days,
+
             'sku' => $product->sku,
 
             'barcode' => $product->barcode,

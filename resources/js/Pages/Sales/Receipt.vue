@@ -94,6 +94,11 @@ onMounted(() => {
                     <div v-if="item.product_imei?.imei" class="item-imei">
                         IMEI: {{ item.product_imei.imei }}
                     </div>
+                    <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="item-imei">
+                        {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
+                            ? `Bảo hành khách đến ${new Date(item.product_imei.customer_warranty_expires_at).toLocaleDateString('vi-VN')}`
+                            : 'Không áp dụng bảo hành khách' }}
+                    </div>
 
                     <div class="item-calc">
                         <span>{{ saleQuantityText(item) }}{{ baseQuantityText(item) }} x {{ formatMoney(item.unit_price) }}</span>

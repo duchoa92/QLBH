@@ -1,13 +1,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import axios from 'axios'
-import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { toast } from 'vue-sonner'
 
-const props = defineProps({ repair: { type: Object, required: true }, inline: Boolean })
-const emit = defineEmits(['close', 'updated'])
+const props = defineProps({ repair: { type: Object, required: true } })
+const emit = defineEmits(['updated'])
 
 const keyword = ref('')
 const products = ref([])
@@ -110,7 +109,6 @@ const submit = async () => {
         })
         toast.success('Đã hoàn tất sửa chữa')
         emit('updated', { ...props.repair, intake_type: isWarrantyBilling.value ? 'warranty' : 'repair', warranty_status: declineWarranty.value ? 'declined' : (isWarrantyBilling.value ? 'accepted' : (hasWarrantyCandidate.value ? 'service' : null)), warranty_covered_amount: coveredAmount.value, final_cost: payableTotal.value, parts_total: totalParts.value, labor_cost: Number(laborCost.value || 0), surcharge: Number(surcharge.value || 0), status: 'done' })
-        emit('close')
     } catch (error) {
         errors.value = error.response?.data?.errors || {}
         toast.error(Object.values(errors.value).flat()[0] || 'Không thể hoàn tất sửa chữa')
@@ -121,8 +119,8 @@ const submit = async () => {
 </script>
 
 <template>
-    <component :is="inline ? 'section' : BaseModal" :title="inline ? undefined : `Hoàn tất sửa · ${repair.code}`" :size="inline ? undefined : 'lg'" :class="inline ? 'rounded-xl border border-emerald-200 bg-white p-3' : ''" @close="emit('close')">
-        <h3 v-if="inline" class="mb-3 text-sm font-bold text-emerald-800">Hoàn tất sửa · tính chi phí</h3>
+    <section class="rounded-xl border border-emerald-200 bg-white p-3">
+        <h3 class="mb-3 text-sm font-bold text-emerald-800">Hoàn tất sửa · chọn loại xử lý và tính chi phí</h3>
         <div class="space-y-4">
             <div class="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{{ repair.device_name }} <span v-if="repair.customer?.name">· {{ repair.customer.name }}</span></div>
             <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -208,11 +206,8 @@ const submit = async () => {
                 <div class="flex justify-between border-t border-emerald-200 pt-2 text-base font-bold text-emerald-800"><span>{{ isWarrantyBilling ? 'Khách cần thanh toán' : 'Thành tiền' }}</span><span>{{ money(payableTotal) }}</span></div>
             </div>
         </div>
-        <div v-if="inline" class="mt-4 flex justify-end">
+        <div class="mt-4 flex justify-end">
             <ActionButton :disabled="saving || (declineWarranty && declineReason.trim().length < 5)" @click="submit">{{ saving ? 'Đang lưu...' : 'Hoàn tất sửa' }}</ActionButton>
         </div>
-        <template v-if="!inline" #footer>
-            <div class="flex justify-end gap-2"><ActionButton variant="secondary" @click="emit('close')">Hủy</ActionButton><ActionButton :disabled="saving || (declineWarranty && declineReason.trim().length < 5)" @click="submit">{{ saving ? 'Đang lưu...' : 'Hoàn tất sửa' }}</ActionButton></div>
-        </template>
-    </component>
+    </section>
 </template>

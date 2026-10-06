@@ -67,6 +67,7 @@ const scanImei = async () => {
             name: result.data.name,
             sell_price: result.data.sell_price ?? result.data.price,
             image_url: result.data.image_url,
+            warranty_days: result.data.warranty_days ?? 0,
             product_type: 'imei',
             variant_id: result.data.variant_id || result.data.variant?.id,
             variant: result.data.variant ?? null,

@@ -124,7 +124,7 @@ class Repair extends Model
     {
         return $this->hasMany(
             RepairTimeline::class
-        )->latest();
+        )->latest('created_at')->latest('id');
     }
 
     public function parts(): HasMany
