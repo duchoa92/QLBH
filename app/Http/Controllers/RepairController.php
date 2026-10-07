@@ -53,6 +53,12 @@ class RepairController extends Controller
         $sortBy = in_array($request->input('sort_by'), ['code', 'device_name', 'status', 'created_at'], true)
             ? $request->input('sort_by') : 'created_at';
         $sortOrder = $request->input('sort_order') === 'asc' ? 'asc' : 'desc';
+        $createdRepairId = (int) $request->query('created_repair_id', 0);
+        $statusCounts = Repair::query()
+            ->selectRaw('status, COUNT(*) as total')
+            ->whereIn('status', ['pending', 'repairing', 'done'])
+            ->groupBy('status')
+            ->pluck('total', 'status');
 
         $repairs = Repair::query()
 
@@ -233,6 +239,7 @@ class RepairController extends Controller
                     'issue' => $timeline->issue,
                     'parts_needed' => $timeline->parts_needed,
                     'waiting_for_parts' => (bool) $timeline->waiting_for_parts,
+                    'waiting_mode' => $timeline->waiting_mode ?? ($timeline->waiting_for_parts ? 'parts' : 'repair_now'),
                     'expected_days' => $timeline->expected_days,
                     'images' => $timeline->images->map(fn ($image) => [
                         'id' => $image->id,
@@ -242,6 +249,7 @@ class RepairController extends Controller
                     'user' => $timeline->user?->name,
                 ]),
                 'waiting_for_parts' => (bool) ($repair->timelines->first()?->waiting_for_parts ?? false),
+                'waiting_mode' => $repair->timelines->first()?->waiting_mode ?? ($repair->timelines->first()?->waiting_for_parts ? 'parts' : 'repair_now'),
                 'parts_needed' => $repair->timelines->first()?->parts_needed,
                 'expected_days' => $repair->timelines->first()?->expected_days,
 
@@ -266,6 +274,12 @@ class RepairController extends Controller
             [
 
                 'repairs' => $repairs,
+                'createdRepairId' => $createdRepairId,
+                'stats' => [
+                    'pending_count' => (int) ($statusCounts['pending'] ?? 0),
+                    'repairing_count' => (int) ($statusCounts['repairing'] ?? 0),
+                    'done_count' => (int) ($statusCounts['done'] ?? 0),
+                ],
 
                 'filters' => [
 
@@ -573,6 +587,39 @@ class RepairController extends Controller
                 })
                 ->take(10)
                 ->values();
+
+            $excludedRepairId = (int) $request->query('exclude_repair_id', 0);
+            $activeRepairsByImei = Repair::query()
+                ->whereIn('status', ['pending', 'repairing'])
+                ->where(fn ($query) => $query
+                    ->where('device_name', 'like', $like)
+                    ->orWhere('imei', 'like', $like)
+                    ->orWhere('serial', 'like', $like))
+                ->when($excludedRepairId > 0, fn ($query) => $query->where('id', '!=', $excludedRepairId))
+                ->get(['id', 'code', 'status', 'imei', 'serial'])
+                ->flatMap(function (Repair $repair): array {
+                    $activeRepair = [
+                        'id' => $repair->id,
+                        'code' => $repair->code,
+                        'status' => $repair->status,
+                    ];
+                    return collect([$repair->imei, $repair->serial])
+                        ->filter(fn ($identifier) => filled($identifier))
+                        ->mapWithKeys(fn ($identifier) => [mb_strtolower(trim((string) $identifier)) => $activeRepair])
+                        ->all();
+                })
+                ->all();
+            $activeRepairsByImei = collect($activeRepairsByImei);
+
+            $attachActiveRepair = function (array $item) use ($activeRepairsByImei): array {
+                $identifier = mb_strtolower(trim((string) ($item['imei'] ?? '')));
+                if ($identifier !== '' && $activeRepairsByImei->has($identifier)) {
+                    $item['active_repair'] = $activeRepairsByImei->get($identifier);
+                }
+                return $item;
+            };
+            $devices = $devices->map($attachActiveRepair);
+            $imeis = $imeis->map($attachActiveRepair);
         }
 
         return response()->json([
@@ -738,6 +785,8 @@ class RepairController extends Controller
         DB::beginTransaction();
 
         try {
+
+            $this->ensureImeiHasNoOpenRepair($request->input('imei'));
 
             /*
             |--------------------------------------------------------------------------
@@ -924,7 +973,8 @@ class RepairController extends Controller
             );
 
             return redirect()
-                ->route('repairs.index');
+                ->route('repairs.index', ['created_repair_id' => $repair->id])
+                ->with('createdRepairId', $repair->id);
 
         } catch (\Throwable $e) {
 
@@ -948,8 +998,9 @@ class RepairController extends Controller
             'issue' => ['nullable', 'array'],
             'issue.*' => ['string', 'max:255'],
             'waiting_for_parts' => ['nullable', 'boolean'],
-            'parts_needed' => ['required_if:waiting_for_parts,1', 'nullable', 'string', 'max:1000'],
-            'expected_days' => ['required_if:waiting_for_parts,1', 'nullable', 'integer', 'min:0', 'max:365'],
+            'waiting_mode' => ['nullable', 'in:repair_now,parts,wait_repair'],
+            'parts_needed' => ['required_if:waiting_mode,parts', 'nullable', 'string', 'max:1000'],
+            'expected_days' => ['required_if:waiting_mode,parts', 'nullable', 'integer', 'min:0', 'max:365'],
             'images' => ['nullable', 'array'],
             'images.*' => ['image', 'max:5120'],
         ]);
@@ -957,6 +1008,10 @@ class RepairController extends Controller
         // A receipt accepted into the workshop advances to repairing by default.
         // The default also keeps older clients from failing when they omit status.
         $status = (string) $request->input('status', 'repairing');
+        $waitingMode = $status === 'cancelled'
+            ? 'repair_now'
+            : (string) $request->input('waiting_mode', $request->boolean('waiting_for_parts') ? 'parts' : 'repair_now');
+        $isWaiting = in_array($waitingMode, ['parts', 'wait_repair'], true);
         if (! in_array($repair->status, ['pending', 'repairing'], true)) {
             throw ValidationException::withMessages(['status' => 'Phiếu này không còn trong giai đoạn tiếp nhận hoặc đang sửa.']);
         }
@@ -965,7 +1020,7 @@ class RepairController extends Controller
             ->where('repair_id', $repair->id)
             ->latest('id')
             ->value('waiting_for_parts');
-        $waitingForParts = $status !== 'cancelled' && $request->boolean('waiting_for_parts');
+        $waitingForParts = $status !== 'cancelled' && $isWaiting;
 
         $progressIssues = $request->input('issue', []);
         $repairChanges = ['status' => $status];
@@ -985,7 +1040,11 @@ class RepairController extends Controller
         ];
         $title = $status === 'cancelled'
             ? $titles['cancelled']
-            : ($waitingForParts ? 'Chờ linh kiện' : ($wasWaitingForParts ? 'Đã có linh kiện · tiếp tục sửa' : 'Đang sửa'));
+            : ($waitingMode === 'parts'
+                ? 'Chờ linh kiện'
+                : ($waitingMode === 'wait_repair'
+                    ? 'Tạm chờ sửa'
+                    : ($wasWaitingForParts ? 'Tiếp tục sửa sau khi chờ' : 'Đang sửa')));
 
         $timeline = RepairTimeline::create([
 
@@ -1002,9 +1061,10 @@ class RepairController extends Controller
             'description' =>
                 $request->input('description'),
             'issue' => $request->input('issue', []),
-            'parts_needed' => $request->input('parts_needed'),
-            'expected_days' => $request->input('expected_days'),
+            'parts_needed' => $waitingMode === 'parts' ? $request->input('parts_needed') : null,
+            'expected_days' => $waitingMode === 'parts' ? $request->input('expected_days') : null,
             'waiting_for_parts' => $waitingForParts,
+            'waiting_mode' => $waitingMode,
         ]);
 
         if ($request->hasFile('images')) {
@@ -1018,7 +1078,9 @@ class RepairController extends Controller
             }
         }
 
-        $statusLabel = $status === 'cancelled' ? 'đã hủy phiếu' : ($waitingForParts ? 'đang chờ linh kiện' : 'đang sửa');
+        $statusLabel = $status === 'cancelled'
+            ? 'đã hủy phiếu'
+            : ($waitingMode === 'parts' ? 'đang chờ linh kiện' : ($waitingMode === 'wait_repair' ? 'tạm chờ sửa' : 'đang sửa'));
         $this->notifyRepairEvent($repair, 'Cập nhật phiếu sửa ' . $repair->code, 'Phiếu ' . $repair->code . ' chuyển sang trạng thái ' . $statusLabel . '.', $status === 'cancelled' ? 'warning' : 'repair');
 
         return back();
@@ -1045,8 +1107,10 @@ class RepairController extends Controller
         if (! in_array($repair->status, ['pending', 'repairing'], true)) {
             throw ValidationException::withMessages(['status' => 'Chỉ phiếu mới tiếp nhận hoặc đang sửa mới có thể hoàn tất.']);
         }
-        if (RepairTimeline::query()->where('repair_id', $repair->id)->latest('id')->value('waiting_for_parts')) {
-            throw ValidationException::withMessages(['status' => 'Phiếu đang chờ linh kiện. Hãy xác nhận đã nhận đủ linh kiện trước khi hoàn tất sửa.']);
+        $latestProgress = RepairTimeline::query()->where('repair_id', $repair->id)->latest('id');
+        $waitingMode = $latestProgress->value('waiting_mode');
+        if ($waitingMode ? in_array($waitingMode, ['parts', 'wait_repair'], true) : (bool) $latestProgress->value('waiting_for_parts')) {
+            throw ValidationException::withMessages(['status' => 'Phiếu đang tạm chờ. Hãy mở lại tiến trình và xác nhận tiếp tục sửa trước khi hoàn tất.']);
         }
 
         $completed = DB::transaction(function () use ($repair, $data): Repair {
@@ -1054,8 +1118,10 @@ class RepairController extends Controller
             if (! in_array($repair->status, ['pending', 'repairing'], true)) {
                 throw ValidationException::withMessages(['status' => 'Phiếu sửa đã được cập nhật ở nơi khác.']);
             }
-            if (RepairTimeline::query()->where('repair_id', $repair->id)->latest('id')->value('waiting_for_parts')) {
-                throw ValidationException::withMessages(['status' => 'Phiếu đang chờ linh kiện. Hãy xác nhận đã nhận đủ linh kiện trước khi hoàn tất sửa.']);
+            $latestProgress = RepairTimeline::query()->where('repair_id', $repair->id)->latest('id');
+            $waitingMode = $latestProgress->value('waiting_mode');
+            if ($waitingMode ? in_array($waitingMode, ['parts', 'wait_repair'], true) : (bool) $latestProgress->value('waiting_for_parts')) {
+                throw ValidationException::withMessages(['status' => 'Phiếu đang tạm chờ. Hãy mở lại tiến trình và xác nhận tiếp tục sửa trước khi hoàn tất.']);
             }
 
             $hasWarrantySource = filled($repair->warranty_source_type) && filled($repair->warranty_source_id);
@@ -1301,6 +1367,28 @@ class RepairController extends Controller
     }
 
     /** Lưu lý do từ chối và vô hiệu hóa hạn bảo hành trên giao dịch gốc. */
+    private function ensureImeiHasNoOpenRepair(?string $imei, ?int $exceptRepairId = null): void
+    {
+        $identifier = mb_strtolower(trim((string) $imei));
+        if ($identifier === '') {
+            return;
+        }
+
+        $openRepair = Repair::query()
+            ->whereIn('status', ['pending', 'repairing'])
+            ->where(fn ($query) => $query
+                ->whereRaw('LOWER(imei) = ?', [$identifier])
+                ->orWhereRaw('LOWER(serial) = ?', [$identifier]))
+            ->when($exceptRepairId, fn ($query) => $query->where('id', '!=', $exceptRepairId))
+            ->first(['id', 'code']);
+
+        if ($openRepair) {
+            throw ValidationException::withMessages([
+                'imei' => "IMEI/Serial này đã có phiếu {$openRepair->code} chưa hoàn tất. Hãy tiếp tục cập nhật phiếu hiện tại.",
+            ]);
+        }
+    }
+
     private function voidWarrantySource(Repair $claim, string $reason): void
     {
         if ($claim->warranty_source_type === 'sale_item') {
@@ -1521,6 +1609,8 @@ class RepairController extends Controller
         DB::beginTransaction();
 
         try {
+
+            $this->ensureImeiHasNoOpenRepair($validated['imei'] ?? null, $repair->id);
 
             $customer = !empty($validated['customer_id'])
                 ? Customer::query()->findOrFail($validated['customer_id'])

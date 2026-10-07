@@ -1,40 +1,46 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
-import RepairStatusProgress from './RepairStatusProgress.vue'
 import RepairCompletionModal from './RepairCompletionModal.vue'
 import { toast } from 'vue-sonner'
 
-const props = defineProps({ repair: { type: Object, required: true } })
+const props = defineProps({ repair: { type: Object, required: true }, embedded: { type: Boolean, default: false } })
 const emit = defineEmits(['close', 'updated', 'completed', 'pay'])
 
 // Quản lý Tab: 'log' (Cập nhật nhật ký) | 'complete' (Hoàn tất & Tính tiền)
-const activeTab = ref('log')
+const activeTab = ref(['returned', 'cancelled'].includes(props.repair.status) ? 'history' : 'log')
+const waitingMode = ref(props.repair.waiting_mode || (props.repair.waiting_for_parts ? 'parts' : 'repair_now'))
+const isWaiting = computed(() => waitingMode.value !== 'repair_now')
 
 const form = useForm({
     description: '',
     issue: [],
     parts_needed: props.repair.parts_needed || '',
     expected_days: props.repair.expected_days ?? '',
-    waiting_for_parts: Boolean(props.repair.waiting_for_parts),
+    waiting_for_parts: isWaiting.value,
     images: [],
 })
 
 const issueText = ref('')
+watch(waitingMode, (value) => {
+    form.waiting_for_parts = value !== 'repair_now'
+})
+
 const submit = (targetStatus = 'repairing') => {
     form.issue = issueText.value.split(',').map((item) => item.trim()).filter(Boolean)
     // Keep multipart uploads compatible with PHP request parsing.
-    form.transform((data) => ({ ...data, status: targetStatus, _method: 'patch' }))
+    form.transform((data) => ({ ...data, waiting_mode: targetStatus === 'cancelled' ? 'repair_now' : waitingMode.value, waiting_for_parts: targetStatus !== 'cancelled' && isWaiting.value, status: targetStatus, _method: 'patch' }))
     form.post(route('repairs.update-status', props.repair.id), {
         forceFormData: true,
         preserveScroll: true,
-        onSuccess: () => {
+        onSuccess: (page) => {
             toast.success(targetStatus === 'cancelled' ? 'Đã hủy phiếu sửa chữa' : 'Đã cập nhật tiến trình sửa chữa')
-            emit('updated')
-            emit('close')
+            const refreshedRepair = page.props.repairs?.data?.find((item) => Number(item.id) === Number(props.repair.id))
+            emit('updated', refreshedRepair || null)
+            if (!embedded || targetStatus === 'cancelled') emit('close')
         },
     })
 }
@@ -55,82 +61,82 @@ const startPayment = () => {
     emit('pay', props.repair)
     emit('close')
 }
+
+const footerActionLabel = computed(() => form.processing
+    ? 'Đang lưu...'
+    : (isWaiting.value
+        ? (waitingMode.value === 'parts' ? 'Lưu chờ linh kiện' : 'Lưu tạm chờ sửa')
+        : (props.repair.waiting_for_parts ? 'Xác nhận tiếp tục sửa' : 'Lưu tiến trình sửa')))
+const footerShowCancel = computed(() => ['pending', 'repairing'].includes(props.repair.status))
+const footerShowSave = computed(() => activeTab.value === 'log' && ['pending', 'repairing'].includes(props.repair.status))
+const saveProgress = () => submit()
+const closeProgress = () => emit('close')
+
+defineExpose({ footerActionLabel, footerBusy: computed(() => form.processing), footerShowCancel, footerShowSave, hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || form.images.length > 0), cancelRepair, saveProgress, closeProgress })
 </script>
 
 <template>
-    <BaseModal 
+    <BaseModal
+        :embedded="embedded"
+        :body-class="embedded ? 'p-0' : undefined"
         :title="`Phiếu sửa · ${repair.code}`" 
         :size="activeTab === 'complete' ? 'lg' : 'md'" 
         @close="emit('close')"
     >
-        <!-- TIẾN TRÌNH THỜI GIAN (PROGRESS BAR) -->
-        <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-            <RepairStatusProgress :status="repair.status" :waiting-for-parts="repair.waiting_for_parts" />
-        </div>
-
-        <!-- Các tab nhật ký, hoàn tất và lịch sử -->
+        <!-- Chỉ giữ hai mục chính: quy trình hiện tại và lịch sử -->
         <div v-if="['pending', 'repairing', 'done'].includes(repair.status)" class="mb-4 flex flex-wrap border-b border-slate-200">
             <button 
                 type="button"
                 @click="activeTab = 'log'"
                 class="pb-2 px-4 text-xs font-bold border-b-2 transition"
-                :class="activeTab === 'log' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'"
+                :class="activeTab !== 'history' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'"
             >
-                {{ repair.status === 'done' ? '💳 Thanh toán / Trả khách' : '📝 Cập nhật tiến trình' }}
-            </button>
-            <button v-if="['pending', 'repairing'].includes(repair.status)"
-                type="button"
-                @click="activeTab = 'complete'"
-                :disabled="repair.waiting_for_parts"
-                :title="repair.waiting_for_parts ? 'Xác nhận đã nhận linh kiện để tiếp tục' : ''"
-                class="pb-2 px-4 text-xs font-bold border-b-2 transition"
-                :class="[activeTab === 'complete' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600', repair.waiting_for_parts ? 'cursor-not-allowed opacity-50' : '']"
-            >
-                ✅ Hoàn tất sửa & Tính phí
+                {{ repair.status === 'done' ? '💳 Thanh toán / Trả khách' : '📝 Quy trình sửa chữa' }}
             </button>
             <button type="button" @click="activeTab = 'history'" class="pb-2 px-4 text-xs font-bold border-b-2 transition"
                 :class="activeTab === 'history' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'">
-                🕘 Lịch sử cập nhật
+                🕘 Xem lịch sử
             </button>
         </div>
 
         <!-- TAB 1: CẬP NHẬT TIẾN TRÌNH & BÁO LINH KIỆN -->
         <form v-if="activeTab === 'log' && ['pending', 'repairing'].includes(repair.status)" id="repair-progress-form" class="space-y-3" @submit.prevent="submit()">
             <div v-if="repair.status === 'pending'" class="rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-blue-800">
-                💡 Phiếu sẽ tự động chuyển sang <strong>Đang sửa</strong> khi lưu tiến trình.
+                💡 Phiếu sẽ chuyển sang <strong>{{ waitingMode === 'repair_now' ? 'Đang sửa' : (waitingMode === 'parts' ? 'Chờ linh kiện' : 'Tạm chờ sửa') }}</strong> khi lưu.
             </div>
-            <div v-if="repair.waiting_for_parts" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
-                <span>Phiếu đang chờ <strong>{{ repair.parts_needed || 'linh kiện' }}</strong><span v-if="repair.expected_days !== null"> · dự kiến {{ repair.expected_days }} ngày</span>.</span>
-                <button type="button" class="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 font-semibold text-amber-800 hover:bg-amber-100" @click="form.waiting_for_parts = false">Đã nhận linh kiện</button>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div class="flex items-center">
-                    <label class="flex w-full items-center gap-2 rounded-xl border border-slate-200 p-2.5 text-xs text-slate-700 hover:bg-slate-50 cursor-pointer">
-                        <input v-model="form.waiting_for_parts" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
-                        <span class="font-semibold text-amber-700">Đang chờ linh kiện</span>
-                    </label>
-                </div>
+            <div v-if="isWaiting" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <span v-if="waitingMode === 'parts'">Phiếu đang chờ <strong>{{ repair.parts_needed || 'linh kiện' }}</strong><span v-if="repair.expected_days !== null"> · dự kiến {{ repair.expected_days }} ngày</span>.</span>
+                <span v-else>Phiếu đang tạm chờ sửa. Chọn tiếp tục sửa khi có thể làm tiếp.</span>
+                <button type="button" class="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 font-semibold text-amber-800 hover:bg-amber-100" @click="waitingMode = 'repair_now'">{{ waitingMode === 'parts' ? 'Đã nhận linh kiện' : 'Tiếp tục sửa' }}</button>
             </div>
 
-            <div v-if="form.waiting_for_parts" class="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button v-for="option in [{ value: 'repair_now', label: 'Sửa ngay', hint: 'Có thể tiếp tục xử lý' }, { value: 'parts', label: 'Chờ linh kiện', hint: 'Cần đặt linh kiện' }, { value: 'wait_repair', label: 'Tạm chờ sửa', hint: 'Chưa thể làm tiếp' }]" :key="option.value" type="button" class="rounded-xl border p-2.5 text-left transition" :class="waitingMode === option.value ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200' : 'border-slate-200 hover:bg-slate-50'" @click="waitingMode = option.value"><span class="block text-xs font-bold text-slate-800">{{ option.label }}</span><span class="mt-0.5 block text-[10px] text-slate-500">{{ option.hint }}</span></button>
+            </div>
+
+            <div v-if="waitingMode === 'parts'" class="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
                 <FloatingInput v-model="form.parts_needed" label="Tên linh kiện cần chờ *" id="repair_progress_parts" :error="form.errors.parts_needed" required />
                 <FloatingInput v-model="form.expected_days" type="number" min="0" max="365" step="1" label="Dự kiến chờ (ngày) *" id="repair_progress_days" :error="form.expected_days" required />
             </div>
 
             <FloatingInput v-model="issueText" label="Lỗi phát sinh (nếu có, phân cách dấu phẩy)" id="repair_progress_issue" :error="form.errors.issue" />
             
-            <FloatingInput v-model="form.description" label="Ghi chú công việc đã làm..." id="repair_progress_note" :error="form.errors.description" />
+            <FloatingInput v-model="form.description" :label="waitingMode === 'wait_repair' ? 'Lý do chờ / ghi chú (không bắt buộc)' : 'Ghi chú công việc đã làm... '" id="repair_progress_note" :error="form.errors.description" />
 
             <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1">Ảnh chụp tiến trình</label>
                 <input class="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200" type="file" accept="image/*" multiple @change="form.images = Array.from($event.target.files || [])" />
                 <span v-if="form.images.length" class="mt-1 block text-[11px] text-emerald-600">Đã chọn {{ form.images.length }} ảnh</span>
             </div>
+            <button v-if="!isWaiting" type="button" class="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 transition hover:bg-emerald-100" @click="activeTab = 'complete'">
+                ✅ Hoàn tất sửa & tính phí
+                <span class="ml-1 font-normal text-emerald-700">· nhập linh kiện, công sửa và phụ phí</span>
+            </button>
         </form>
 
         <!-- TAB 2: FORM HOÀN TẤT VÀ TÍNH TIỀN LINH KIỆN -->
         <div v-else-if="activeTab === 'complete' && ['pending', 'repairing'].includes(repair.status)">
+            <button type="button" class="mb-3 text-xs font-semibold text-blue-700 hover:text-blue-900" @click="activeTab = 'log'">← Quay lại quy trình sửa</button>
             <RepairCompletionModal :repair="repair" @updated="onCompleted" />
         </div>
 
@@ -153,8 +159,8 @@ const startPayment = () => {
                     </div>
                     <p v-if="timeline.description" class="mt-1 whitespace-pre-line text-xs text-slate-600">{{ timeline.description }}</p>
                     <p v-if="timeline.issue?.length" class="mt-2 rounded-lg bg-rose-50 px-2.5 py-2 text-xs text-rose-700"><strong>Lỗi phát sinh:</strong> {{ timeline.issue.join(', ') }}</p>
-                    <p v-if="timeline.waiting_for_parts && timeline.parts_needed" class="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-                        <strong>Chờ linh kiện:</strong> {{ timeline.parts_needed }}<span v-if="timeline.expected_days !== null"> · Dự kiến {{ timeline.expected_days }} ngày</span>
+                    <p v-if="timeline.waiting_for_parts" class="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                        <strong>{{ timeline.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : 'Chờ linh kiện' }}:</strong><template v-if="timeline.parts_needed"> {{ timeline.parts_needed }}</template><span v-if="timeline.expected_days !== null"> · Dự kiến {{ timeline.expected_days }} ngày</span>
                     </p>
                     <div v-if="timeline.images?.length" class="mt-2 flex flex-wrap gap-2">
                         <a v-for="image in timeline.images" :key="image.id" :href="image.url" target="_blank" rel="noopener" class="h-16 w-16 overflow-hidden rounded-lg border border-slate-200">
@@ -167,7 +173,7 @@ const startPayment = () => {
         </div>
 
         <!-- FOOTER ĐIỀU HƯỚNG -->
-        <template #footer>
+        <template v-if="!embedded" #footer>
             <div class="flex items-center justify-between w-full">
                 <!-- Nút Hủy phiếu đặt góc trái biệt lập để tránh bấm nhầm -->
                 <div>
@@ -191,7 +197,7 @@ const startPayment = () => {
                         form="repair-progress-form" 
                         :disabled="form.processing"
                     >
-                        {{ form.processing ? 'Đang lưu...' : (repair.waiting_for_parts && !form.waiting_for_parts ? 'Xác nhận đã có linh kiện' : form.waiting_for_parts ? 'Lưu trạng thái chờ linh kiện' : 'Lưu nhật ký') }}
+                        {{ form.processing ? 'Đang lưu...' : (isWaiting ? (waitingMode === 'parts' ? 'Lưu chờ linh kiện' : 'Lưu tạm chờ sửa') : (repair.waiting_for_parts ? 'Xác nhận tiếp tục sửa' : 'Lưu tiến trình sửa')) }}
                     </ActionButton>
                 </div>
             </div>

@@ -27,6 +27,7 @@ class RepairTimeline extends Model
         'issue',
         'parts_needed',
         'waiting_for_parts',
+        'waiting_mode',
         'expected_days',
     ];
 

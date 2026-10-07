@@ -12,6 +12,10 @@ const props = defineProps({
         type: String,
         default: 'px-4 pb-4 pt-2',
     },
+    embedded: {
+        type: Boolean,
+        default: false,
+    },
 })
 
 const emit = defineEmits(['close', 'updated'])
@@ -23,16 +27,20 @@ const handleEsc = (e) => {
 }
 
 onMounted(() => {
-    window.addEventListener('keydown', handleEsc)
+    if (!props.embedded) window.addEventListener('keydown', handleEsc)
 })
 
 onBeforeUnmount(() => {
-    window.removeEventListener('keydown', handleEsc)
+    if (!props.embedded) window.removeEventListener('keydown', handleEsc)
 })
 
 </script>
 
 <template>
+    <template v-if="embedded">
+        <div :class="bodyClass"><slot /></div>
+    </template>
+    <template v-else>
     <div class="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
         
         <!-- overlay -->
@@ -75,4 +83,5 @@ onBeforeUnmount(() => {
 
         </div>
     </div>
+    </template>
 </template>

@@ -6,8 +6,6 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
 import DetailModal from '@/Components/UI/DetailModal.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
-import RepairEditModal from './RepairEditModal.vue';
-import RepairProgressModal from './RepairProgressModal.vue';
 import PatternLock from '@/Components/PatternLock.vue';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
@@ -29,8 +27,6 @@ const sortBy = ref(props.filters?.sort_by ?? 'created_at');
 const sortOrder = ref(props.filters?.sort_order ?? 'desc');
 
 const detailRepair = ref(null);
-const editingRepair = ref(null);
-const progressingRepair = ref(null);
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
 
@@ -39,7 +35,19 @@ const reload = () => {
 };
 
 const openCreate = () => {
-    openModal(RepairFormModal, { onUpdated: reload });
+    openRepairWorkflow();
+};
+
+const openRepairWorkflow = (repair = null, startAt = 'repair') => {
+    openModal(RepairFormModal, {
+        props: {
+            initialRepair: repair,
+            startAt,
+            onCompleted: onRepairCompleted,
+            onPay: onProgressPayment,
+        },
+        onUpdated: reload,
+    });
 };
 
 const openCreateFromQuery = () => {
@@ -55,13 +63,11 @@ onMounted(openCreateFromQuery);
 watch(() => page.url, openCreateFromQuery);
 
 const onRepairCompleted = (repair) => {
-    progressingRepair.value = null;
     paymentRepair.value = repair;
     reload();
 };
 
 const onProgressPayment = async (repair) => {
-    progressingRepair.value = null;
     if (Number(repair.final_cost || 0) <= 0) {
         try {
             await axios.post(route('repairs.return', repair.id), {
@@ -333,7 +339,7 @@ const confirmPayment = async (payment) => {
                                     {{ statusLabels[repair.status] || repair.status }}
                                 </span>
                                 <div v-if="repair.waiting_for_parts" class="mt-1 text-[11px] font-medium text-amber-700">
-                                    Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span>
+                                    <template v-if="repair.waiting_mode === 'wait_repair'">Tạm chờ sửa</template><template v-else>Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span></template>
                                 </div>
                             </td>
                             <td class="py-2.5 px-3 text-xs text-slate-600 font-medium">
@@ -350,18 +356,18 @@ const confirmPayment = async (payment) => {
                                     </button>
                                     <button
                                         type="button"
-                                        @click="editingRepair = repair"
+                                        @click="openRepairWorkflow(repair, 'intake')"
                                         class="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition"
                                     >
                                         Sửa
                                     </button>
                                     <button
                                         type="button"
-                                        @click="progressingRepair = repair"
+                                        @click="openRepairWorkflow(repair)"
                                         v-if="['pending', 'repairing', 'done'].includes(repair.status)"
                                         class="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition"
                                     >
-                                        {{ repair.status === 'done' ? 'Tiến trình / trả khách' : 'Cập nhật tiến trình' }}
+                                        {{ repair.status === 'done' ? 'Thanh toán / trả khách' : repair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật tiến trình' }}
                                     </button>
                                 </div>
                             </td>
@@ -398,7 +404,7 @@ const confirmPayment = async (payment) => {
                         <div class="flex flex-wrap justify-between gap-x-3 text-sm font-semibold text-slate-800"><span>{{ timeline.title }}</span><span class="text-xs font-normal text-slate-400">{{ timeline.created_at }} · {{ timeline.user || 'Hệ thống' }}</span></div>
                         <p v-if="timeline.description" class="mt-1 text-sm text-slate-600">{{ timeline.description }}</p>
                         <p v-if="timeline.issue?.length" class="mt-1 text-sm text-rose-700"><strong>Lỗi phát sinh:</strong> {{ timeline.issue.join(', ') }}</p>
-                        <p v-if="timeline.waiting_for_parts && timeline.parts_needed" class="mt-1 text-sm text-amber-700"><strong>Đang chờ linh kiện:</strong> {{ timeline.parts_needed }}<span v-if="timeline.expected_days !== null"> · Dự kiến {{ timeline.expected_days }} ngày</span></p>
+                        <p v-if="timeline.waiting_for_parts" class="mt-1 text-sm text-amber-700"><strong>{{ timeline.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : 'Đang chờ linh kiện' }}:</strong><template v-if="timeline.parts_needed"> {{ timeline.parts_needed }}</template><span v-if="timeline.expected_days !== null"> · Dự kiến {{ timeline.expected_days }} ngày</span></p>
                         <div v-if="timeline.images?.length" class="mt-2 flex flex-wrap gap-2">
                             <a v-for="image in timeline.images" :key="image.id" :href="image.url" target="_blank" class="block h-16 w-16 overflow-hidden rounded border border-slate-200"><img :src="image.url" alt="Ảnh tiến trình" class="h-full w-full object-cover" /></a>
                         </div>
@@ -411,12 +417,10 @@ const confirmPayment = async (payment) => {
             </div>
             <div class="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3">
                 <a :href="route('repairs.print', detailRepair.id)" target="_blank" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">In phiếu</a>
-                <button type="button" class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100" @click="editingRepair = detailRepair; detailRepair = null">Sửa phiếu</button>
-                <button v-if="['pending', 'repairing', 'done'].includes(detailRepair.status)" type="button" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100" @click="progressingRepair = detailRepair; detailRepair = null">{{ detailRepair.status === 'done' ? 'Tiến trình / trả khách' : 'Cập nhật tiến trình' }}</button>
+                <button type="button" class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100" @click="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null">Sửa phiếu</button>
+                <button v-if="['pending', 'repairing', 'done'].includes(detailRepair.status)" type="button" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100" @click="openRepairWorkflow(detailRepair); detailRepair = null">{{ detailRepair.status === 'done' ? 'Thanh toán / trả máy' : detailRepair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa' }}</button>
             </div>
         </DetailModal>
-        <RepairEditModal v-if="editingRepair" :repair="editingRepair" @close="editingRepair = null" @updated="reload" />
-        <RepairProgressModal v-if="progressingRepair" :repair="progressingRepair" @close="progressingRepair = null" @updated="reload" @completed="onRepairCompleted" @pay="onProgressPayment" />
         <CheckoutModal
             v-if="paymentRepair"
             :key="paymentRepair.id"

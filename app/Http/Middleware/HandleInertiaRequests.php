@@ -58,6 +58,7 @@ class HandleInertiaRequests extends Middleware
                     'success' => fn () => session()->pull('success'),
                     'error' => fn () => session()->pull('error'),
                     'newSupplier' => fn () => session()->pull('newSupplier'),
+                    'createdRepairId' => fn () => session()->pull('createdRepairId'),
                 ],
 
             ]
