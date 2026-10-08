@@ -1330,17 +1330,28 @@ class RepairController extends Controller
         ]);
 
         $declined = DB::transaction(function () use ($repair, $data): Repair {
-            $claim = Repair::query()->lockForUpdate()->findOrFail($repair->id);
+            $claim = Repair::query()->with('customer')->lockForUpdate()->findOrFail($repair->id);
             if (! in_array($claim->status, ['pending', 'repairing'], true) || ! filled($claim->warranty_source_type) || ! filled($claim->warranty_source_id)) {
                 throw ValidationException::withMessages(['reason' => 'Chỉ phiếu bảo hành đang tiếp nhận hoặc sửa mới được từ chối.']);
             }
             if ($claim->warranty_status === 'declined') {
                 throw ValidationException::withMessages(['reason' => 'Yêu cầu bảo hành này đã được từ chối.']);
             }
+            if (! $claim->customer) {
+                throw ValidationException::withMessages(['reason' => 'Phiếu chưa có khách hàng để xác minh căn cứ bảo hành.']);
+            }
+
+            $this->resolveWarrantySource(
+                $claim->customer,
+                $claim->warranty_source_type,
+                (int) $claim->warranty_source_id,
+                (string) ($claim->imei ?: $claim->serial ?: ''),
+            );
 
             $this->voidWarrantySource($claim, $data['reason']);
 
             $claim->update([
+                'status' => 'cancelled',
                 'warranty_status' => 'declined',
                 'warranty_declined_at' => now(),
                 'warranty_decline_reason' => $data['reason'],
@@ -1348,8 +1359,8 @@ class RepairController extends Controller
             RepairTimeline::query()->create([
                 'repair_id' => $claim->id,
                 'user_id' => auth()->id(),
-                'status' => $claim->status,
-                'title' => 'Từ chối bảo hành · đã vô hiệu hạn bảo hành',
+                'status' => 'cancelled',
+                'title' => 'Từ chối bảo hành · kết thúc phiếu',
                 'description' => $data['reason'],
             ]);
 
@@ -1558,6 +1569,8 @@ class RepairController extends Controller
             'customer_phone' => ['nullable', 'string', 'max:20', Rule::unique('customers', 'phone')->ignore($request->input('customer_id'))],
             'identity_card' => ['nullable', 'string', 'max:20'],
             'contact_phone' => ['nullable', 'string', 'max:20'],
+            'warranty_source_type' => ['nullable', 'in:sale_item,repair'],
+            'warranty_source_id' => ['nullable', 'integer', 'min:1'],
 
             'device_name' => [
                 'required',
@@ -1632,6 +1645,16 @@ class RepairController extends Controller
                 ]);
             }
 
+            $hasWarrantySource = ! empty($validated['warranty_source_type']) && ! empty($validated['warranty_source_id']);
+            $warranty = $hasWarrantySource
+                ? $this->resolveWarrantySource(
+                    $customer,
+                    $validated['warranty_source_type'],
+                    (int) $validated['warranty_source_id'],
+                    (string) ($validated['imei'] ?? ''),
+                )
+                : null;
+
             $repair->update([
 
                 'customer_id' => $customer->id,
@@ -1671,6 +1694,13 @@ class RepairController extends Controller
                 'estimated_cost' =>
                     $validated['estimated_cost']
                     ?? null,
+
+                'warranty_source_type' => $warranty['source_type'] ?? null,
+                'warranty_source_id' => $warranty['source_id'] ?? null,
+                'warranty_expires_at' => $warranty['expires_at'] ?? null,
+                'warranty_status' => $warranty ? 'eligible' : null,
+                'warranty_declined_at' => null,
+                'warranty_decline_reason' => null,
 
             ]);
 

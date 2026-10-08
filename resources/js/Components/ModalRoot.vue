@@ -1,26 +1,28 @@
 <script setup>
+import { computed } from 'vue'
 import { useModal, closeModal } from '@/Stores/modal'
 
 const state = useModal()
+const activeModal = computed(() => state.modals.at(-1) || null)
 
-const handleClose = (id) => {
-    closeModal(id)
+const handleClose = () => {
+    if (activeModal.value) closeModal(activeModal.value.id)
+}
+
+const handleUpdated = (payload) => {
+    activeModal.value?.onUpdated?.(payload)
 }
 </script>
 
 <template>
-<div v-if="state.modals.length" class="fixed inset-0 z-[9999]">
-
-    
-    <!-- stack modal -->
+<div v-if="activeModal" class="fixed inset-0 z-[9999]">
     <component
-        :is="state.modals[state.modals.length - 1].component"
-        :key="state.modals[state.modals.length - 1].id"
-        v-bind="state.modals[state.modals.length - 1].props"
-        :modalId="state.modals[state.modals.length - 1].id"
-        @close="handleClose(state.modals[state.modals.length - 1].id)"
-        @updated="state.modals[state.modals.length - 1].onUpdated?.($event)"
+        :is="activeModal.component"
+        :key="activeModal.id"
+        v-bind="activeModal.props"
+        :modalId="activeModal.id"
+        @close="handleClose"
+        @updated="handleUpdated"
     />
-
 </div>
 </template>

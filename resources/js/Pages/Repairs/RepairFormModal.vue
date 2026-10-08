@@ -1,7 +1,8 @@
 <script setup>
-import { ref, watch, computed, onMounted, nextTick } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import axios from 'axios';
+import debounce from 'lodash/debounce';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 
 import PatternLock from '@/Components/PatternLock.vue';
@@ -18,7 +19,14 @@ const props = defineProps({ initialRepair: { type: Object, default: null }, star
 const step = ref(props.initialRepair ? props.startAt : 'intake');
 const createdRepair = ref(props.initialRepair || null);
 const progressModalRef = ref(null);
+const workflowStage = ref('progress');
+const canOpenComplete = computed(() => createdRepair.value?.status === 'repairing'
+    && (workflowStage.value === 'complete' || createdRepair.value?.waiting_mode === 'repair_now'));
 const initial = props.initialRepair;
+const searchLookupRef = ref(null);
+const issueLookupRef = ref(null);
+const securityExpanded = ref(Boolean(initial?.screen_password || initial?.screen_pattern || initial?.account_type || initial?.account_email || initial?.account_password));
+const lightboxImage = ref(null);
 
 const form = useForm({
     customer_id: initial?.customer?.id || null,
@@ -269,6 +277,9 @@ const applyDeviceSelection = async (device) => {
     }
     const name = device.name || device.device_name || '';
     const imei = device.imei || device.serial || '';
+    if (selectedDevice.value && (String(selectedDevice.value.imei || '').toLowerCase() !== String(imei || '').toLowerCase() || String(selectedDevice.value.name || selectedDevice.value.device_name || '').toLowerCase() !== String(name || '').toLowerCase())) {
+        clearImagePreviews();
+    }
     const details = device.device_data || device;
     selectedDevice.value = { ...device, name, imei, source: device.source };
     isNewDevice.value = false;
@@ -285,6 +296,7 @@ const applyDeviceSelection = async (device) => {
     form.accessories = Array.isArray(details.accessories) ? [...details.accessories] : [];
     form.estimated_cost = details.estimated_cost || '';
     form.note = details.note || '';
+    securityExpanded.value = Boolean(details.screen_password || details.screen_pattern || details.account_type || details.account_email || details.account_password);
     const warrantyOwnerId = device.warranty?.sale_customer_id ?? device.warranty?.source_customer_id ?? null;
     const warrantyBelongsToCustomer = !warrantyOwnerId || Number(warrantyOwnerId) === Number(form.customer_id);
     const eligibleWarranty = device.warranty?.active && warrantyBelongsToCustomer ? device.warranty : null;
@@ -307,9 +319,19 @@ const selectCustomerDevice = (device) => applyDeviceSelection(device);
 |--------------------------------------------------------------------------
 */
 const imagePreviews = ref([]);
+const revokeImagePreviews = () => {
+    imagePreviews.value.forEach((url) => URL.revokeObjectURL(url));
+    imagePreviews.value = [];
+    lightboxImage.value = null;
+};
+const clearImagePreviews = () => {
+    revokeImagePreviews();
+    form.images = [];
+};
 
 const handleImages = (event) => {
     const files = Array.from(event.target.files);
+    event.target.value = '';
     if (!files.length) return;
 
     form.images = [...form.images, ...files];
@@ -392,7 +414,6 @@ const deviceFocused = ref(false);
 const deviceSearching = ref(false);
 const newImeiConfirmed = ref(false);
 let lookupAfterScan = false;
-let deviceSearchTimer;
 let deviceSearchSequence = 0;
 
 const combineDeviceSuggestions = (data) => {
@@ -417,50 +438,52 @@ const combineDeviceSuggestions = (data) => {
     return [...suggestions.values()].slice(0, 12);
 };
 
+const runDeviceSearch = debounce(async (keyword, sequence) => {
+    try {
+        const { data } = await axios.get(route('repairs.suggestions'), {
+            params: { keyword, exclude_repair_id: props.initialRepair?.id || undefined },
+        });
+        if (sequence !== deviceSearchSequence) return;
+        deviceSuggestions.value = combineDeviceSuggestions(data);
+        customerSuggestions.value = data.customers || [];
+        if (lookupAfterScan) {
+            lookupAfterScan = false;
+            const match = deviceSuggestions.value.find((item) => item.imei?.toLocaleLowerCase() === keyword.toLocaleLowerCase());
+            if (match) {
+                selectDevice(match);
+                newImeiConfirmed.value = false;
+            } else {
+                newImeiConfirmed.value = true;
+                toast.info('IMEI chưa có trong hệ thống, sẽ được ghi nhận cho máy mới.');
+            }
+        }
+    } catch {
+        if (sequence === deviceSearchSequence) {
+            deviceSuggestions.value = [];
+            customerSuggestions.value = [];
+            if (lookupAfterScan) {
+                lookupAfterScan = false;
+                newImeiConfirmed.value = true;
+                toast.info('Không tìm thấy IMEI trong hệ thống, sẽ ghi nhận cho máy mới.');
+            }
+        }
+    } finally {
+        if (sequence === deviceSearchSequence) deviceSearching.value = false;
+    }
+}, 220);
+
 const searchDeviceCatalog = (value) => {
-    clearTimeout(deviceSearchTimer);
     const keyword = value.trim();
     const sequence = ++deviceSearchSequence;
     deviceSuggestions.value = [];
     customerSuggestions.value = [];
     if (keyword.length < 2) {
+        runDeviceSearch.cancel();
         deviceSearching.value = false;
         return;
     }
     deviceSearching.value = true;
-    deviceSearchTimer = setTimeout(async () => {
-        try {
-            const { data } = await axios.get(route('repairs.suggestions'), {
-                params: { keyword, exclude_repair_id: props.initialRepair?.id || undefined },
-            });
-            if (sequence !== deviceSearchSequence) return;
-            deviceSuggestions.value = combineDeviceSuggestions(data);
-            customerSuggestions.value = data.customers || [];
-            if (lookupAfterScan) {
-                lookupAfterScan = false;
-                const match = deviceSuggestions.value.find((item) => item.imei?.toLocaleLowerCase() === keyword.toLocaleLowerCase());
-                if (match) {
-                    selectDevice(match);
-                    newImeiConfirmed.value = false;
-                } else {
-                    newImeiConfirmed.value = true;
-                    toast.info('IMEI chưa có trong hệ thống, sẽ được ghi nhận cho máy mới.');
-                }
-            }
-        } catch {
-            if (sequence === deviceSearchSequence) {
-                deviceSuggestions.value = [];
-                customerSuggestions.value = [];
-                if (lookupAfterScan) {
-                    lookupAfterScan = false;
-                    newImeiConfirmed.value = true;
-                    toast.info('Không tìm thấy IMEI trong hệ thống, sẽ ghi nhận cho máy mới.');
-                }
-            }
-        } finally {
-            if (sequence === deviceSearchSequence) deviceSearching.value = false;
-        }
-    }, 220);
+    runDeviceSearch(keyword, sequence);
 };
 
 watch(deviceSearchQuery, (value) => {
@@ -593,6 +616,7 @@ const selectDeviceForCurrentCustomer = async (device) => {
 };
 
 const prepareNewDevice = (name, imei) => {
+    clearImagePreviews();
     form.device_name = name;
     form.imei = imei;
     selectedDevice.value = { name: name || 'Máy mới', imei, source: 'Thiết bị mới' };
@@ -638,6 +662,7 @@ const useNewDevice = () => {
 };
 
 const clearSelectedDevice = () => {
+    clearImagePreviews();
     selectedDevice.value = null;
     isNewDevice.value = false;
     form.device_name = '';
@@ -686,12 +711,32 @@ const accountTypeOptions = [
     { value: 'other', label: 'Khác' },
 ];
 
+const handleDocumentPointerDown = (event) => {
+    if (!searchLookupRef.value?.contains(event.target)) deviceFocused.value = false;
+    if (!issueLookupRef.value?.contains(event.target)) filteredIssues.value = [];
+};
+
 onMounted(async () => {
+    document.addEventListener('pointerdown', handleDocumentPointerDown);
     try {
         const response = await axios.get(route('repairs.suggestions'));
         issueSuggestions.value = response.data.issues ?? [];
     } catch (error) {
         console.error(error);
+    }
+});
+
+onUnmounted(() => {
+    document.removeEventListener('pointerdown', handleDocumentPointerDown);
+    deviceSearchSequence += 1;
+    runDeviceSearch.cancel();
+    revokeImagePreviews();
+    if (scanning.value) {
+        try {
+            stopScan();
+        } catch (error) {
+            console.warn('Không thể dừng camera khi đóng phiếu sửa chữa', error);
+        }
     }
 });
 
@@ -803,6 +848,10 @@ const onProgressUpdated = (repair) => {
     emit('updated');
 };
 
+const onWorkflowStageChange = (stage) => {
+    workflowStage.value = stage;
+};
+
 const selectWorkflowStep = (status) => {
     if (status === 'pending') {
         if (step.value === 'repair' && progressModalRef.value?.hasUnsavedChanges
@@ -816,6 +865,18 @@ const selectWorkflowStep = (status) => {
         return;
     }
     step.value = 'repair';
+    if (status === 'done') {
+        if (createdRepair.value.status === 'done') {
+            progressModalRef.value?.openProgressStep();
+            return;
+        }
+        if (progressModalRef.value?.hasUnsavedChanges
+            && !window.confirm('Bạn có thay đổi tiến trình chưa lưu. Tiếp tục sang bước hoàn tất và bỏ các thay đổi này?')) return;
+        progressModalRef.value?.openCompletionStep();
+    } else if (status === 'repairing' || status === 'returned') {
+        if (status === 'returned') progressModalRef.value?.openHistory();
+        else progressModalRef.value?.openProgressStep();
+    }
 };
 </script>
 
@@ -823,17 +884,33 @@ const selectWorkflowStep = (status) => {
     <BaseModal
         :title="step === 'intake' ? (createdRepair ? `Sửa thông tin phiếu · ${createdRepair.code}` : 'Tiếp nhận và sửa chữa') : `Quy trình sửa chữa · ${createdRepair?.code || ''}`"
         size="xl"
-        body-class="px-4 pb-4 pt-2"
+        body-class="px-4 pb-4"
         @close="emit('close')"
     >
-        <div class="mb-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+        <div class="sticky top-0 z-40 -mx-4 mb-2 border-b border-slate-200 bg-slate-50/95 px-3 py-1.5 shadow-sm backdrop-blur">
+            <div class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
             <RepairStatusProgress
+                class="min-w-0"
                 :status="createdRepair?.status || 'pending'"
                 :waiting-for-parts="createdRepair?.waiting_for_parts || false"
                 :waiting-mode="createdRepair?.waiting_mode || 'repair_now'"
                 :can-open-repair="Boolean(createdRepair)"
+                :can-open-complete="canOpenComplete"
+                :workflow-stage="workflowStage"
                 @select="selectWorkflowStep"
             />
+            <div class="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-1">
+                <div v-if="step === 'repair' && createdRepair" class="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] sm:grid-cols-4">
+                    <div class="min-w-0 truncate"><span class="text-slate-500">Khách</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.name || createdRepair.customer_name || 'Khách lẻ' }}</strong></div>
+                    <div class="min-w-0 truncate"><span class="text-slate-500">SĐT</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.phone || createdRepair.contact_phone || '—' }}</strong></div>
+                    <div class="min-w-0 truncate"><span class="text-slate-500">Máy</span><strong class="ml-1 text-slate-800">{{ createdRepair.device_name || '—' }}</strong></div>
+                    <div class="min-w-0 truncate"><span class="text-slate-500">IMEI</span><strong class="ml-1 font-mono text-indigo-700">{{ createdRepair.imei || createdRepair.serial || '—' }}</strong></div>
+                </div>
+            <button v-if="step === 'repair' && createdRepair" type="button" class="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" @click="progressModalRef?.openHistory()">
+                🕘 Lịch sử sửa
+            </button>
+            </div>
+            </div>
         </div>
         <RepairProgressModal
             v-if="step === 'repair' && createdRepair"
@@ -843,6 +920,7 @@ const selectWorkflowStep = (status) => {
             embedded
             @close="emit('close')"
             @updated="onProgressUpdated"
+            @stage-change="onWorkflowStageChange"
             @completed="props.onCompleted?.($event)"
             @pay="props.onPay?.($event)"
         />
@@ -851,39 +929,39 @@ const selectWorkflowStep = (status) => {
         <div class="space-y-3 lg:col-span-8">
             
             <!-- Tra cứu nhanh gọn, dùng lại được sau khi đã chọn kết quả -->
-            <div class="relative z-50 px-1">
+            <div ref="searchLookupRef" class="relative z-50 px-1">
                 <div class="space-y-2">
                     <div class="relative flex items-center gap-1.5">
                         <div class="relative min-w-0 flex-1">
-                            <FloatingInput v-model="deviceSearchQuery" label="Tra cứu khách hàng, tên máy, IMEI / Serial" id="repair_unified_search" autocomplete="off" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" @blur="deviceFocused = false" />
+                            <FloatingInput v-model="deviceSearchQuery" label="Tra cứu khách hàng, tên máy, IMEI / Serial" id="repair_unified_search" autocomplete="off" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" />
                             <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 flex max-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-slate-900/5">
                                 <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
                                 <p v-if="customerSuggestions.length" class="sticky top-0 z-10 flex items-center gap-2 border-b border-blue-100 bg-blue-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-blue-800"><span class="h-1.5 w-1.5 rounded-full bg-blue-600"></span>Khách hàng<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-blue-700">{{ customerSuggestions.length }}</span></p>
-                                <button v-for="customer in customerSuggestions" :key="`customer-${customer.id}`" type="button" class="block w-full border-b border-slate-100 px-3.5 py-2.5 text-left transition hover:bg-blue-50" @mousedown.prevent="onSelectCustomer(customer)">
+                                <button v-for="customer in customerSuggestions" :key="`customer-${customer.id}`" type="button" class="block w-full border-b border-slate-100 px-3.5 py-2.5 text-left transition hover:bg-blue-50" @pointerdown.prevent="onSelectCustomer(customer)">
                                     <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-bold text-slate-900">{{ customer.full_name }} <span class="text-[11px] font-medium text-slate-500">· {{ customer.phone || 'Chưa có SĐT' }}</span></span><span v-if="Number(customer.debt_balance || 0) > 0" class="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">Nợ {{ Number(customer.debt_balance).toLocaleString('vi-VN') }} đ</span></span>
                                     <span class="mt-0.5 block text-[10px] text-slate-500">{{ customer.code || customer.cccd || 'Chọn làm khách tiếp nhận' }}</span>
                                 </button>
                                 <p v-if="matchingDeviceNames.length" class="sticky top-0 z-10 flex items-center gap-2 border-y border-indigo-100 bg-indigo-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-indigo-800"><span class="h-1.5 w-1.5 rounded-full bg-indigo-600"></span>Tên máy<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-indigo-700">{{ matchingDeviceNames.length }}</span></p>
                                 <div v-for="device in matchingDeviceNames" :key="`model-${device.name}-${device.imei || ''}-${device.source}`" class="border-b border-slate-200 last:border-0">
-                                    <button v-for="purchaser in (device.purchasers || [])" :key="`model-buyer-${device.imei}-${purchaser.sale_item_id}`" type="button" class="group block w-full border-l-2 border-transparent px-3.5 py-2.5 text-left transition hover:border-indigo-500 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @mousedown.prevent="selectDeviceForPurchaser(device, purchaser)">
+                                    <button v-for="purchaser in (device.purchasers || [])" :key="`model-buyer-${device.imei}-${purchaser.sale_item_id}`" type="button" class="group block w-full border-l-2 border-transparent px-3.5 py-2.5 text-left transition hover:border-indigo-500 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @pointerdown.prevent="selectDeviceForPurchaser(device, purchaser)">
                                         <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-extrabold text-slate-900">{{ device.name }} <span v-if="device.imei" class="ml-1 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-indigo-700">{{ device.imei }}</span></span><span class="shrink-0 text-[9px] font-semibold text-slate-400">{{ device.source }}</span></span>
                                         <span class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-3 text-[11px]"><span class="font-bold text-blue-800">{{ purchaser.full_name }}</span><span class="text-slate-500">đã mua ngày</span><span class="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{{ displayWarrantyDate(purchaser.purchased_at) }}</span><span v-if="purchaser.warranty_expires_at" class="rounded border px-1.5 py-0.5 font-bold" :class="purchaser.warranty_active ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-700'">{{ purchaser.warranty_active ? 'BH đến' : 'Hết BH' }} {{ displayWarrantyDate(purchaser.warranty_expires_at) }}</span><span v-if="purchaser.warranty_voided_at" class="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 font-bold text-rose-700">BH đã vô hiệu</span></span>
                                         <span v-if="isImeiBlocked(device.imei)" class="ml-3 mt-1 inline-flex rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-800">Đang xử lý · {{ activeRepairForImei(device.imei)?.code }}</span>
                                         <span v-if="device.in_stock" class="ml-3 mt-1.5 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900">⚠ IMEI hiện còn trong kho · chưa bán</span>
                                     </button>
-                                    <button v-if="!(device.purchasers || []).length" type="button" class="block w-full border-l-2 border-transparent px-3.5 py-2.5 text-left transition hover:border-indigo-500 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @mousedown.prevent="selectDevice(device)">
+                                    <button v-if="!(device.purchasers || []).length" type="button" class="block w-full border-l-2 border-transparent px-3.5 py-2.5 text-left transition hover:border-indigo-500 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @pointerdown.prevent="selectDevice(device)">
                                         <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-extrabold text-slate-900">{{ device.name }} <span v-if="device.imei" class="ml-1 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-indigo-700">{{ device.imei }}</span></span><span v-if="device.in_stock" class="rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900">⚠ Còn trong kho</span></span>
                                         <span class="mt-1 block pl-3 text-[11px] text-slate-600"><template v-if="device.customer?.full_name"><strong class="text-blue-800">{{ device.customer.full_name }}</strong> · </template>{{ device.source }}<template v-if="device.source_date"> · {{ displayWarrantyDate(device.source_date) }}</template><strong v-if="isImeiBlocked(device.imei)" class="ml-2 text-rose-700">· Đang xử lý {{ activeRepairForImei(device.imei)?.code }}</strong></span>
                                     </button>
                                 </div>
                                 <p v-if="matchingImeis.length" class="sticky top-0 z-10 flex items-center gap-2 border-y border-violet-100 bg-violet-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-violet-800"><span class="h-1.5 w-1.5 rounded-full bg-violet-600"></span>IMEI / Serial<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-violet-700">{{ matchingImeis.length }}</span></p>
                                 <div v-for="device in matchingImeis" :key="`imei-${device.name}-${device.imei}-${device.source}`" class="border-b border-slate-200 px-1.5 py-1 last:border-0">
-                                    <button v-for="purchaser in (device.purchasers || [])" :key="`${device.imei}-${purchaser.sale_item_id}`" type="button" class="block w-full rounded-lg border-l-2 border-transparent px-2.5 py-2 text-left transition hover:border-violet-500 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @mousedown.prevent="selectDeviceForPurchaser(device, purchaser)">
+                                    <button v-for="purchaser in (device.purchasers || [])" :key="`${device.imei}-${purchaser.sale_item_id}`" type="button" class="block w-full rounded-lg border-l-2 border-transparent px-2.5 py-2 text-left transition hover:border-violet-500 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @pointerdown.prevent="selectDeviceForPurchaser(device, purchaser)">
                                         <span class="block text-sm font-extrabold text-slate-900">{{ device.name || 'Chưa có tên máy' }} <span class="ml-1 rounded-md bg-violet-100 px-1.5 py-0.5 font-mono text-[11px] text-violet-800">{{ device.imei }}</span></span>
                                         <span class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-3 text-[11px]"><span class="font-bold text-blue-800">{{ purchaser.full_name }}</span><span class="text-slate-500">đã mua ngày</span><span class="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{{ displayWarrantyDate(purchaser.purchased_at) }}</span><span v-if="purchaser.warranty_expires_at" class="rounded border px-1.5 py-0.5 font-bold" :class="purchaser.warranty_active ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-700'">{{ purchaser.warranty_active ? 'BH đến' : 'Hết BH' }} {{ displayWarrantyDate(purchaser.warranty_expires_at) }}</span><span v-if="purchaser.warranty_voided_at" class="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 font-bold text-rose-700">BH đã vô hiệu</span></span>
                                         <span v-if="isImeiBlocked(device.imei)" class="ml-3 mt-1 inline-flex rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-800">Đang xử lý · {{ activeRepairForImei(device.imei)?.code }}</span>
                                     </button>
-                                    <button v-if="!(device.purchasers || []).length" type="button" class="flex w-full items-center justify-between gap-2 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-left transition hover:border-violet-500 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @mousedown.prevent="selectDevice(device)">
+                                    <button v-if="!(device.purchasers || []).length" type="button" class="flex w-full items-center justify-between gap-2 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-left transition hover:border-violet-500 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(device.imei)" @pointerdown.prevent="selectDevice(device)">
                                         <span class="min-w-0"><span class="block truncate text-sm font-extrabold text-slate-900">{{ device.name || 'Thiết bị chưa có tên' }}</span><span class="mt-0.5 block font-mono text-[11px] font-bold text-violet-800">{{ device.imei }}</span></span>
                                         <span v-if="device.in_stock" class="shrink-0 rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900">⚠ Còn trong kho</span>
                                         <span v-else class="shrink-0 text-[10px] font-medium text-slate-500">{{ device.source }}</span>
@@ -893,9 +971,9 @@ const selectWorkflowStep = (status) => {
                                 <p v-else-if="!customerSuggestions.length && !matchingDeviceNames.length && !matchingImeis.length" class="px-3 py-2 text-[10px] text-slate-500">Chưa có kết quả phù hợp. Chọn mục muốn tạo mới ở bên dưới.</p>
                                 </div>
                                 <div v-if="!deviceSearching" class="grid shrink-0 grid-cols-1 gap-1.5 border-t border-slate-200 bg-slate-50 p-2 sm:grid-cols-3">
-                                    <button type="button" class="rounded-xl border border-blue-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-blue-800 shadow-sm transition hover:border-blue-400 hover:bg-blue-50" @mousedown.prevent="useNewCustomer"><span class="block text-[9px] font-semibold uppercase tracking-wide text-blue-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Khách “{{ deviceSearchQuery }}”</span></button>
-                                    <button type="button" class="rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-indigo-800 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50" @mousedown.prevent="addDeviceByName"><span class="block text-[9px] font-semibold uppercase tracking-wide text-indigo-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Thiết bị “{{ deviceSearchQuery }}”</span></button>
-                                    <button type="button" class="rounded-xl border border-violet-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-violet-800 shadow-sm transition hover:border-violet-400 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(deviceSearchQuery)" @mousedown.prevent="addDeviceByImei"><span class="block text-[9px] font-semibold uppercase tracking-wide text-violet-500">{{ isImeiBlocked(deviceSearchQuery) ? 'Đang có phiếu' : 'Tạo mới' }}</span><span class="mt-0.5 block truncate">+ IMEI “{{ deviceSearchQuery }}”</span></button>
+                                    <button type="button" class="rounded-xl border border-blue-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-blue-800 shadow-sm transition hover:border-blue-400 hover:bg-blue-50" @pointerdown.prevent="useNewCustomer"><span class="block text-[9px] font-semibold uppercase tracking-wide text-blue-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Khách “{{ deviceSearchQuery }}”</span></button>
+                                    <button type="button" class="rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-indigo-800 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50" @pointerdown.prevent="addDeviceByName"><span class="block text-[9px] font-semibold uppercase tracking-wide text-indigo-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Thiết bị “{{ deviceSearchQuery }}”</span></button>
+                                    <button type="button" class="rounded-xl border border-violet-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-violet-800 shadow-sm transition hover:border-violet-400 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(deviceSearchQuery)" @pointerdown.prevent="addDeviceByImei"><span class="block text-[9px] font-semibold uppercase tracking-wide text-violet-500">{{ isImeiBlocked(deviceSearchQuery) ? 'Đang có phiếu' : 'Tạo mới' }}</span><span class="mt-0.5 block truncate">+ IMEI “{{ deviceSearchQuery }}”</span></button>
                                 </div>
                             </div>
                         </div>
@@ -982,15 +1060,23 @@ const selectWorkflowStep = (status) => {
                     </div>
                     <p v-if="newImeiConfirmed" class="text-[10px] text-emerald-700">IMEI chưa có trong hệ thống; bạn có thể nhập tên và các thông tin hiện tại của máy.</p>
                     <p v-if="form.errors.device_name && !selectedDevice" class="text-[11px] font-medium text-rose-500">{{ form.errors.device_name }}</p>
-                    <div class="grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-2.5 sm:grid-cols-2">
-                        <FloatingSelect v-model="lockType" label="Kiểu khóa màn hình" id="repair_lock_type" :options="lockTypeOptions" />
-                        <FloatingInput v-if="['pin', 'password'].includes(lockType)" v-model="form.screen_password" :type="lockType === 'password' ? 'password' : 'text'" :inputmode="lockType === 'pin' ? 'numeric' : 'text'" :label="lockType === 'pin' ? 'Mã PIN màn hình' : 'Mật khẩu màn hình'" id="repair_screen_password" />
-                        <FloatingSelect v-model="form.account_type" label="Loại tài khoản máy" id="repair_account_type" :options="accountTypeOptions" />
-                        <FloatingInput v-if="form.account_type" v-model="form.account_email" label="Email / SĐT tài khoản" id="repair_account_email" />
-                        <FloatingInput v-if="form.account_type" v-model="form.account_password" type="password" label="Mật khẩu tài khoản" id="repair_account_password" />
-                        <div v-if="lockType === 'pattern'" class="sm:col-span-2">
-                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">Vẽ mẫu hình khóa màn hình</label>
-                            <div class="inline-flex rounded-xl border border-slate-200 bg-white p-2"><PatternLock v-model="form.screen_pattern" /></div>
+                    <div class="border-t border-slate-100 pt-2.5">
+                        <button type="button" class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition hover:bg-slate-50" :aria-expanded="securityExpanded" @click="securityExpanded = !securityExpanded">
+                            <span><strong class="block text-[11px] font-bold text-slate-700">Mật khẩu & tài khoản máy</strong><small class="text-[10px] text-slate-500">{{ securityExpanded ? 'Thu gọn thông tin bảo mật' : 'Mở rộng khi cần nhập hoặc xem thông tin' }}</small></span>
+                            <span class="text-slate-400">{{ securityExpanded ? '−' : '+' }}</span>
+                        </button>
+                    </div>
+                    <div v-if="securityExpanded" class="space-y-3">
+                        <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-2.5">
+                            <FloatingSelect v-model="lockType" label="Kiểu khóa màn hình" id="repair_lock_type" :options="lockTypeOptions" />
+                            <FloatingInput v-if="['pin', 'password'].includes(lockType)" v-model="form.screen_password" :type="lockType === 'password' ? 'password' : 'text'" :inputmode="lockType === 'pin' ? 'numeric' : 'text'" :label="lockType === 'pin' ? 'Mã PIN màn hình' : 'Mật khẩu màn hình'" id="repair_screen_password" />
+                            <FloatingSelect v-model="form.account_type" label="Loại tài khoản máy" id="repair_account_type" :options="accountTypeOptions" />
+                            <FloatingInput v-if="form.account_type" v-model="form.account_email" label="Email / SĐT tài khoản" id="repair_account_email" />
+                            <FloatingInput v-if="form.account_type" v-model="form.account_password" type="password" label="Mật khẩu tài khoản" id="repair_account_password" />
+                        </div>
+                        <div v-if="lockType === 'pattern'" class="flex flex-col items-center border-t border-slate-100 pt-3 text-center">
+                            <label class="mb-2 block text-[11px] font-semibold text-slate-600">Vẽ mẫu hình khóa màn hình</label>
+                            <div class="inline-flex justify-center rounded-xl border border-slate-200 bg-slate-50/70 p-2"><PatternLock v-model="form.screen_pattern" /></div>
                         </div>
                     </div>
 
@@ -1027,7 +1113,7 @@ const selectWorkflowStep = (status) => {
                             </span>
                         </div>
 
-                        <div class="relative">
+                        <div ref="issueLookupRef" class="relative">
                             <FloatingInput
                                 v-model="issueInput"
                                 label="Nhập lỗi máy (ấn Enter hoặc dấu ,)"
@@ -1041,7 +1127,7 @@ const selectWorkflowStep = (status) => {
                                     :key="item"
                                     type="button"
                                     class="block w-full px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition"
-                                    @mousedown.prevent="selectIssue(item)"
+                                    @pointerdown.prevent="selectIssue(item)"
                                 >
                                     {{ item }}
                                 </button>
@@ -1101,19 +1187,24 @@ const selectWorkflowStep = (status) => {
                     <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">▧ Ảnh ngoại quan</h2>
                 </header>
                 <div class="p-3">
-                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
+                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 p-2.5">
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold text-slate-700">Ghi nhận ngoại quan</p>
+                        <p class="mt-0.5 text-[10px] text-slate-500">Chọn nhiều ảnh hoặc thêm ảnh vào danh sách hiện tại.</p>
+                    </div>
+                    <label class="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700">
                         <input type="file" multiple accept="image/*" class="hidden" @change="handleImages" />
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7a2 2 0 012-2h2l1.2 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
                             <circle cx="12" cy="13" r="3" stroke-width="1.8" />
                         </svg>
-                        <span>Chọn ảnh</span>
+                        <span>{{ imagePreviews.length ? 'Thêm ảnh' : 'Chọn ảnh' }}</span>
                     </label>
-                    <span class="ml-2 text-[10px] text-slate-400">{{ imagePreviews.length ? `${imagePreviews.length} ảnh đã chọn` : 'Có thể chọn nhiều ảnh' }}</span>
-                    <div v-if="imagePreviews.length" class="mt-2 grid grid-cols-4 gap-1.5">
+                    </div>
+                    <div v-if="imagePreviews.length" class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
                         <div v-for="(image, index) in imagePreviews" :key="index" class="group relative aspect-square overflow-hidden rounded-lg border border-slate-200">
-                            <img :src="image" alt="Ảnh ngoại quan máy" class="h-full w-full object-cover" />
-                            <button type="button" @click="removeImage(index)" class="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow group-hover:opacity-100" aria-label="Xóa ảnh">×</button>
+                            <img :src="image" alt="Ảnh ngoại quan máy" class="h-full w-full cursor-zoom-in object-cover" @click="lightboxImage = image" />
+                            <button type="button" @click.stop="removeImage(index)" class="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow group-hover:opacity-100" aria-label="Xóa ảnh">×</button>
                         </div>
                     </div>
                 </div>
@@ -1159,6 +1250,11 @@ const selectWorkflowStep = (status) => {
         </aside>
         </div>
 
+        <div v-if="lightboxImage" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-6" @click.self="lightboxImage = null">
+            <button type="button" class="absolute right-5 top-5 rounded-full bg-white/15 px-3 py-2 text-xl text-white hover:bg-white/25" aria-label="Đóng ảnh xem trước" @click="lightboxImage = null">×</button>
+            <img :src="lightboxImage" alt="Ảnh ngoại quan phóng to" class="max-h-full max-w-full rounded-lg object-contain shadow-2xl" @click.stop />
+        </div>
+
         <!-- FOOTER ACTIONS -->
         </template>
         <template #footer>
@@ -1175,9 +1271,10 @@ const selectWorkflowStep = (status) => {
                 <button v-if="progressModalRef?.footerShowCancel" type="button" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.cancelRepair()">Hủy phiếu</button>
                 <span v-else />
                 <div class="flex items-center gap-2">
-                    <ActionButton v-if="['pending', 'repairing', 'done'].includes(createdRepair?.status)" variant="secondary" @click="step = 'intake'">Quay lại để sửa</ActionButton>
+                    <ActionButton v-if="progressModalRef?.footerShowBack" variant="secondary" @click="progressModalRef.returnToProgress()">Quay lại tiến trình</ActionButton>
+                    <ActionButton v-if="!progressModalRef?.footerShowBack && ['pending', 'repairing', 'done'].includes(createdRepair?.status)" variant="secondary" @click="step = 'intake'">Quay lại để sửa</ActionButton>
                     <ActionButton variant="secondary" @click="progressModalRef?.closeProgress()">Đóng</ActionButton>
-                    <ActionButton v-if="progressModalRef?.footerShowSave" type="submit" form="repair-progress-form" :disabled="progressModalRef?.footerBusy">{{ progressModalRef?.footerActionLabel }}</ActionButton>
+                    <ActionButton v-if="progressModalRef?.footerShowSave" type="button" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.saveProgress()">{{ progressModalRef?.footerActionLabel }}</ActionButton>
                 </div>
             </div>
         </template>

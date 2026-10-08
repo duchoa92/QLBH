@@ -13,7 +13,6 @@ export function useModal() {
 export function openModal(component, options = {}) {
     state.modals.push({
         id: ++uid,
-        component,
         component: markRaw(component),
         props: options.props || {},
         onUpdated: options.onUpdated || null
