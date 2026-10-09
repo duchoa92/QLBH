@@ -165,7 +165,7 @@ const deleteRole = (role) => {
 </script>
 
 <template>
-    <div class="flex h-[min(calc(100dvh-8rem),700px)] min-h-[280px] flex-col gap-3">
+    <div class="flex h-[min(calc(100dvh-8rem),700px)] min-h-[220px] flex-col gap-3">
       <div class="grid min-h-0 flex-1 grid-rows-[minmax(110px,0.35fr)_minmax(0,1fr)] gap-3 lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-1">
         <!-- Danh sách vai trò bên trái -->
         <section class="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">

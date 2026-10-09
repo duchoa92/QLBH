@@ -213,8 +213,9 @@ onBeforeUnmount(() => {
                                 @click="userDropdownOpen = !userDropdownOpen"
                                 class="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-50 active:bg-slate-100 transition"
                             >
-                                <div class="h-8 w-8 rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
-                                    {{ (user.name || 'A').charAt(0).toUpperCase() }}
+                                <div class="h-8 w-8 overflow-hidden rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                                    <img v-if="user.avatar" :src="`/storage/${user.avatar}`" alt="Ảnh đại diện" class="h-full w-full object-cover">
+                                    <span v-else>{{ (user.name || 'A').charAt(0).toUpperCase() }}</span>
                                 </div>
                                 <div class="hidden xl:block text-left">
                                     <div class="text-xs font-bold text-slate-800 leading-tight truncate max-w-[100px]">

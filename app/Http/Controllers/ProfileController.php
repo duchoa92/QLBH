@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -29,15 +30,29 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $oldAvatar = $user->avatar;
+        $data = $request->safe()->except(['avatar', 'remove_avatar']);
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        if ($request->hasFile('avatar')) {
+            $data['avatar'] = $request->file('avatar')->store('avatars', 'public');
+        } elseif ($request->boolean('remove_avatar')) {
+            $data['avatar'] = null;
         }
 
-        $request->user()->save();
+        $user->fill($data);
 
-        return Redirect::route('profile.edit');
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+        }
+
+        $user->save();
+
+        if ($oldAvatar && $oldAvatar !== $user->avatar) {
+            Storage::disk('public')->delete($oldAvatar);
+        }
+
+        return Redirect::route('profile.edit')->with('success', 'Đã cập nhật thông tin cá nhân.');
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Services\User\UserService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Permission;
@@ -18,12 +19,16 @@ class UserController extends Controller
         protected UserService $service
     ) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $search = trim((string) $request->query('search', ''));
+        $request->merge(['search' => $search]);
+
         return Inertia::render(
             'Users/Index',
             [
                 'users' => $this->service->paginate(),
+                'filters' => ['search' => $search],
                 'roles' => $this->roleData(),
                 'permissions' => Permission::query()->where('guard_name', 'web')->orderBy('name')->pluck('name'),
                 'can_assign_super_admin' => auth()->user()?->username === 'admin' && auth()->user()?->hasRole('Super Admin'),

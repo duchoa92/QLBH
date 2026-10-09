@@ -49,6 +49,7 @@ class User extends Authenticatable
         'username',
         'phone',
         'email',
+        'avatar',
         'password',
     ];
 

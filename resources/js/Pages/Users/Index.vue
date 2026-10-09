@@ -2,16 +2,15 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router } from '@inertiajs/vue3'
 import { Eye, Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import DetailModal from '@/Components/UI/DetailModal.vue'
-import BaseModal from '@/Components/UI/BaseModal.vue'
 import UserFormModal from './FormModal.vue'
-import RoleManagementModal from './RoleManagementModal.vue'
+import RoleManagementDialog from './RoleManagementDialog.vue'
 
 const props = defineProps({
     users: Object,
@@ -25,27 +24,33 @@ const props = defineProps({
     can_create_users: { type: Boolean, default: false },
     can_edit_users: { type: Boolean, default: false },
     can_delete_users: { type: Boolean, default: false },
+    filters: { type: Object, default: () => ({ search: '' }) },
 })
 
 const confirmBox = useConfirm()
 const detailUser = ref(null)
 const showRoleManager = ref(false)
 let searchTimeout = null
+const searchValue = ref(props.filters?.search ?? '')
 
-const search = (event) => {
+const search = (value) => {
     clearTimeout(searchTimeout)
 
     searchTimeout = setTimeout(() => {
         router.get(
             route('users.index'),
-            { search: event.target.value },
+            { search: value || undefined },
             {
                 preserveState: true,
+                preserveScroll: true,
                 replace: true,
             }
         )
     }, 250)
 }
+
+watch(searchValue, search)
+onBeforeUnmount(() => clearTimeout(searchTimeout))
 
 const reload = () => {
     router.reload({
@@ -120,29 +125,30 @@ const userRows = (user) => [
             <PageHeader
                 title="Quản lý người dùng"
                 description="Tài khoản, vai trò và thông tin liên hệ"
-            >
-                <template #actions>
-                    <ActionButton v-if="can_manage_roles" variant="secondary" @click="showRoleManager = true">
-                        <ShieldCheck class="h-4 w-4" />
-                        Vai trò & quyền
-                    </ActionButton>
-                    <ActionButton v-if="can_create_users" @click="openCreate">
-                        <Plus class="h-4 w-4" />
-                        Thêm người dùng
-                    </ActionButton>
-                </template>
-            </PageHeader>
+            />
 
             <DataPanel>
                 <template #header>
-                    <div class="relative max-w-md">
-                        <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="Tìm kiếm..."
-                            class="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                            @input="search"
-                        >
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="relative w-full sm:max-w-md">
+                            <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                v-model="searchValue"
+                                type="search"
+                                placeholder="Tìm tên, tên đăng nhập hoặc điện thoại..."
+                                class="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                            >
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                            <ActionButton v-if="can_manage_roles" variant="secondary" @click="showRoleManager = true">
+                                <ShieldCheck class="h-4 w-4" />
+                                Vai trò & quyền
+                            </ActionButton>
+                            <ActionButton v-if="can_create_users" @click="openCreate">
+                                <Plus class="h-4 w-4" />
+                                Thêm người dùng
+                            </ActionButton>
+                        </div>
                     </div>
                 </template>
 
@@ -229,20 +235,13 @@ const userRows = (user) => [
                 @close="detailUser = null"
             />
 
-            <BaseModal
+            <RoleManagementDialog
                 v-if="showRoleManager"
-                title="Quản lý vai trò và quyền"
-                size="xl"
-                body-class="bg-slate-50 p-4 sm:p-5"
+                :roles="roles"
+                :permissions="permissions"
                 @close="showRoleManager = false"
-            >
-                <RoleManagementModal
-                    :roles="roles"
-                    :permissions="permissions"
-                    @close="showRoleManager = false"
-                    @updated="reload"
-                />
-            </BaseModal>
+                @updated="reload"
+            />
         </div>
     </AdminLayout>
 </template>
