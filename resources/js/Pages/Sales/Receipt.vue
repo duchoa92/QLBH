@@ -1,5 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
+import { usePage } from '@inertiajs/vue3'
+import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 
 defineOptions({
     // BẮT BUỘC: Báo cho Inertia biết trang này KHÔNG sử dụng bất kỳ Layout nào (Kể cả AdminLayout mặc định)
@@ -9,15 +11,14 @@ defineOptions({
 const props = defineProps({
     sale: Object,
 })
+const page = usePage()
 
-const formatMoney = (val) => {
-    return Number(val || 0).toLocaleString('vi-VN')
-}
+const formatMoney = formatCurrency
 
 const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
     const unit = item.unit_name || 'Cái'
-    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+    return `${Number.isInteger(qty) ? qty : formatNumber(qty)} ${unit}`
 }
 
 const baseQuantityText = (item) => {
@@ -52,7 +53,7 @@ onMounted(() => {
 
             <!-- Nút bấm thủ công (Tự động ẩn khi in) -->
             <div class="no-print print-bar">
-                <span>Xem trước hóa đơn (K80)</span>
+                <span>Xem trước hóa đơn</span>
                 <button type="button" onclick="window.print()" class="btn-print">
                     🖨️ In Hóa Đơn
                 </button>
@@ -60,7 +61,7 @@ onMounted(() => {
 
             <!-- Header Cửa hàng -->
             <div class="header">
-                <h2>ĐỨC HÒA</h2>
+                <h2>{{ page.props.settings?.shop_name || 'Cửa hàng' }}</h2>
                 <div class="sub">Điện Thoại - Máy Tính - Camera</div>
                 <div>Đ/c: Cầu Giớ - Vạn Xuân - Hưng Yên</div>
                 <div class="phone">Hotline: 0906.064.789</div>
@@ -96,7 +97,7 @@ onMounted(() => {
                     </div>
                     <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="item-imei">
                         {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
-                            ? `Bảo hành khách đến ${new Date(item.product_imei.customer_warranty_expires_at).toLocaleDateString('vi-VN')}`
+                            ? `Bảo hành khách đến ${formatDate(item.product_imei.customer_warranty_expires_at)}`
                             : 'Không áp dụng bảo hành khách' }}
                     </div>
 
@@ -113,19 +114,19 @@ onMounted(() => {
             <div class="totals">
                 <div class="row" v-if="sale.subtotal">
                     <span>Tạm tính:</span>
-                    <span>{{ formatMoney(sale.subtotal) }} đ</span>
+                    <span>{{ formatMoney(sale.subtotal) }}</span>
                 </div>
                 <div class="row total-grand">
                     <span>TỔNG CỘNG:</span>
-                    <span>{{ formatMoney(sale.grand_total || sale.total_amount || sale.subtotal) }} đ</span>
+                    <span>{{ formatMoney(sale.grand_total || sale.total_amount || sale.subtotal) }}</span>
                 </div>
                 <div class="row" v-if="sale.paid_amount">
                     <span>Khách đưa:</span>
-                    <span>{{ formatMoney(sale.paid_amount) }} đ</span>
+                    <span>{{ formatMoney(sale.paid_amount) }}</span>
                 </div>
                 <div class="row" v-if="sale.change_amount">
                     <span>Tiền thừa:</span>
-                    <span>{{ formatMoney(sale.change_amount) }} đ</span>
+                    <span>{{ formatMoney(sale.change_amount) }}</span>
                 </div>
             </div>
 
@@ -252,9 +253,5 @@ onMounted(() => {
         display: none !important;
     }
 
-    @page {
-        size: 80mm auto;
-        margin: 0;
-    }
 }
 </style>

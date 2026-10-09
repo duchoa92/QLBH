@@ -9,6 +9,7 @@ import {
 import { useForm } from '@inertiajs/vue3'
 
 import api from '@/Services/api'
+import { formatNumber } from '@/utils/format'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -347,10 +348,7 @@ const removeItem = (index) => {
 |--------------------------------------------------------------------------
 */
 
-const formatPrice = (value) =>
-    Number(
-        value || 0
-    ).toLocaleString('vi-VN')
+const formatPrice = formatNumber
 
 const itemUnit = (item) =>
     item.unit_name ||
@@ -869,7 +867,7 @@ const confirm = () => {
                                     0
                                 )
                             }}
-                            đ
+                            {{ $currency() }}
                         </div>
                     </button>
 

@@ -1,5 +1,6 @@
 <!-- resources/js/Components/InvoiceDetailModal.vue -->
 <script setup>
+import { formatCurrency, formatDateTime, formatDate as formatConfiguredDate, formatNumber } from '@/utils/format'
 import { computed } from 'vue'
 import {
     CheckCircle2,
@@ -40,12 +41,12 @@ const props = defineProps({
 const emit = defineEmits(['close', 'cancel', 'print'])
 
 // Format tiền tệ
-const money = (value) => Number(value || 0).toLocaleString('vi-VN')
+const money = formatCurrency
 
 // Format ngày tháng
 const formatDate = (date) => {
     if (!date) return '-'
-    return new Date(date).toLocaleString('vi-VN')
+    return formatDateTime(date)
 }
 
 // Lấy thuộc tính biến thể
@@ -74,7 +75,7 @@ const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
     const unit = item.unit_name || 'Chiếc'
 
-    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+    return `${Number.isInteger(qty) ? qty : formatNumber(qty)} ${unit}`
 }
 
 // Quy đổi đơn vị gốc
@@ -263,7 +264,7 @@ const cancelReason = computed(() =>
                             <CreditCard :size="12" /> Tổng thanh toán
                         </div>
                         <div class="mt-0.5 font-black text-indigo-700 text-base">
-                            {{ money(saleTotal) }} đ
+                            {{ money(saleTotal) }}
                         </div>
                     </div>
                 </div>
@@ -311,7 +312,7 @@ const cancelReason = computed(() =>
 
                                             <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-1 text-xs font-semibold" :class="Number(item.product_imei.customer_warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
                                                 {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
-                                                    ? `Bảo hành khách đến ${new Date(item.product_imei.customer_warranty_expires_at).toLocaleDateString('vi-VN')}`
+                                                    ? `Bảo hành khách đến ${formatConfiguredDate(item.product_imei.customer_warranty_expires_at)}`
                                                     : 'Không áp dụng bảo hành khách' }}
                                             </div>
 
@@ -323,7 +324,7 @@ const cancelReason = computed(() =>
                                                     (Giảm {{ item.discount_value }}%)
                                                 </template>
                                                 <template v-else>
-                                                    (Giảm {{ money(item.discount_value) }} đ)
+                                                    (Giảm {{ money(item.discount_value) }})
                                                 </template>
                                             </div>
 
@@ -349,11 +350,11 @@ const cancelReason = computed(() =>
                                         </td>
 
                                         <td class="px-3 py-2.5 text-right font-medium text-slate-700 text-xs whitespace-nowrap">
-                                            {{ money(item.unit_price) }} đ
+                                            {{ money(item.unit_price) }}
                                         </td>
 
                                         <td class="px-3 py-2.5 text-right font-extrabold text-slate-900 text-sm whitespace-nowrap">
-                                            {{ money(item.subtotal) }} đ
+                                            {{ money(item.subtotal) }}
                                         </td>
                                     </tr>
 
@@ -379,9 +380,9 @@ const cancelReason = computed(() =>
                                             {{ gift.quantity || 1 }}
                                         </td>
                                         <td class="px-3 py-2 text-right text-xs text-slate-400 line-through whitespace-nowrap">
-                                            {{ money(gift.product?.retail_price || gift.product?.sell_price || gift.product?.price) }} đ
+                                            {{ money(gift.product?.retail_price || gift.product?.sell_price || gift.product?.price) }}
                                         </td>
-                                        <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">0 đ</td>
+                                        <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">{{ money(0) }}</td>
                                     </tr>
 
                                     <tr v-if="item.gift_product" class="bg-emerald-50/40 text-xs">
@@ -399,9 +400,9 @@ const cancelReason = computed(() =>
                                         </td>
                                         <td class="px-3 py-2 text-center font-bold text-slate-700">1</td>
                                         <td class="px-3 py-2 text-right text-xs text-slate-400 line-through whitespace-nowrap">
-                                            {{ money(item.gift_product.retail_price || item.gift_product.sell_price || item.gift_product.price) }} đ
+                                            {{ money(item.gift_product.retail_price || item.gift_product.sell_price || item.gift_product.price) }}
                                         </td>
-                                        <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">0 đ</td>
+                                        <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">{{ money(0) }}</td>
                                     </tr>
                                 </template>
                             </tbody>
@@ -423,7 +424,7 @@ const cancelReason = computed(() =>
                     <div class="rounded-xl border border-slate-200/80 p-3 text-xs space-y-1.5 bg-white">
                         <div class="flex justify-between text-slate-500">
                             <span>Tiền hàng:</span>
-                            <span class="font-semibold text-slate-800 text-xs">{{ money(invoice.subtotal) }} đ</span>
+                            <span class="font-semibold text-slate-800 text-xs">{{ money(invoice.subtotal) }}</span>
                         </div>
 
                         <div
@@ -431,17 +432,17 @@ const cancelReason = computed(() =>
                             class="flex justify-between text-rose-600 font-medium"
                         >
                             <span>Giảm giá hóa đơn:</span>
-                            <span>-{{ money(invoice.discount) }} đ</span>
+                            <span>-{{ money(invoice.discount) }}</span>
                         </div>
 
                         <div class="flex justify-between items-center border-t border-slate-200/80 pt-1.5 text-sm">
                             <span class="font-bold text-slate-900">Tổng thanh toán:</span>
-                            <span class="font-black text-indigo-600 text-base">{{ money(saleTotal) }} đ</span>
+                            <span class="font-black text-indigo-600 text-base">{{ money(saleTotal) }}</span>
                         </div>
 
                         <div class="flex justify-between text-slate-600 border-t border-dashed border-slate-100 pt-1">
                             <span>Khách đã trả:</span>
-                            <span class="font-bold text-slate-800">{{ money(invoice.paid_amount) }} đ</span>
+                            <span class="font-bold text-slate-800">{{ money(invoice.paid_amount) }}</span>
                         </div>
 
                         <div
@@ -450,7 +451,7 @@ const cancelReason = computed(() =>
                             :class="balanceText.class"
                         >
                             <span>{{ balanceText.label }}:</span>
-                            <span>{{ money(balanceText.value) }} đ</span>
+                            <span>{{ money(balanceText.value) }}</span>
                         </div>
 
                         <div class="flex justify-between text-[11px] uppercase text-slate-400 pt-1 border-t border-slate-100">

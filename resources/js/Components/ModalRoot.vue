@@ -15,7 +15,7 @@ const handleUpdated = (payload) => {
 </script>
 
 <template>
-<div v-if="activeModal" class="fixed inset-0 z-[9999]">
+<div v-if="activeModal" class="contents">
     <component
         :is="activeModal.component"
         :key="activeModal.id"

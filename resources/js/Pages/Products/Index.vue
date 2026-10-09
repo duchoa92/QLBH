@@ -14,6 +14,7 @@ import Tooltip from '@/Components/UI/Tooltip.vue'
 import ImportExportModal from './ImportExportModal.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
+import { formatCurrency } from '@/utils/format'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({
@@ -319,8 +320,7 @@ const openImportExport = () => {
     })
 }
 
-const formatMoney = (value) =>
-    Number(value || 0).toLocaleString('vi-VN')
+const formatMoney = formatCurrency
 
 const productUnitName = (row) =>
     row.unit?.short_name || row.unit?.name || 'Cái'

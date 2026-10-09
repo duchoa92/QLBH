@@ -1,56 +1,54 @@
 <script setup>
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import DeleteUserForm from './Partials/DeleteUserForm.vue';
-import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
-import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
-import { Head } from '@inertiajs/vue3';
+import { computed } from 'vue'
+import { Head, usePage } from '@inertiajs/vue3'
+import { KeyRound, UserRound } from 'lucide-vue-next'
+import AdminLayout from '@/Layouts/AdminLayout.vue'
+import PageHeader from '@/Components/UI/PageHeader.vue'
+import DataPanel from '@/Components/UI/DataPanel.vue'
+import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue'
+import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue'
 
-defineProps({
-    mustVerifyEmail: {
-        type: Boolean,
-    },
-    status: {
-        type: String,
-    },
-});
+defineOptions({ layout: AdminLayout })
+
+const props = defineProps({
+    mustVerifyEmail: { type: Boolean, default: false },
+    status: { type: String, default: '' },
+})
+
+const page = usePage()
+const user = computed(() => page.props.auth?.user || {})
+const roles = computed(() => page.props.auth?.roles || [])
 </script>
 
 <template>
-    <Head title="Profile" />
+    <Head title="Thiết lập cá nhân" />
 
-    <AuthenticatedLayout>
-        <template #header>
-            <h2
-                class="text-xl font-semibold leading-tight text-gray-800"
-            >
-                Profile
-            </h2>
-        </template>
+    <main class="mx-auto w-full max-w-6xl space-y-4 p-3 sm:p-5 lg:p-6">
+        <PageHeader title="Thiết lập cá nhân" description="Quản lý thông tin hiển thị và bảo mật tài khoản của bạn." />
 
-        <div class="py-12">
-            <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
-                    <UpdateProfileInformationForm
-                        :must-verify-email="mustVerifyEmail"
-                        :status="status"
-                        class="max-w-xl"
-                    />
-                </div>
-
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
-                    <UpdatePasswordForm class="max-w-xl" />
-                </div>
-
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
-                    <DeleteUserForm class="max-w-xl" />
-                </div>
+        <section class="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white">{{ (user.name || 'N').charAt(0).toUpperCase() }}</div>
+            <div class="min-w-0 flex-1">
+                <h2 class="truncate text-base font-bold text-slate-900">{{ user.name || 'Nhân viên' }}</h2>
+                <p class="mt-0.5 text-sm text-slate-500">Tên đăng nhập: <span class="font-semibold text-slate-700">{{ user.username || '—' }}</span></p>
             </div>
+            <div class="flex flex-wrap gap-2">
+                <span v-for="role in roles" :key="role" class="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700"><UserRound class="h-3.5 w-3.5" />{{ role }}</span>
+            </div>
+        </section>
+
+        <div class="grid items-start gap-4 lg:grid-cols-2">
+            <DataPanel>
+                <UpdateProfileInformationForm :must-verify-email="props.mustVerifyEmail" :status="props.status" />
+            </DataPanel>
+            <DataPanel>
+                <UpdatePasswordForm />
+            </DataPanel>
         </div>
-    </AuthenticatedLayout>
+
+        <p class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+            <KeyRound class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            Tên đăng nhập được dùng để đăng nhập hệ thống. Riêng tài khoản Super Admin chính luôn giữ tên đăng nhập <strong>admin</strong>.
+        </p>
+    </main>
 </template>

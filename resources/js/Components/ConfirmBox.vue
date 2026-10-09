@@ -20,13 +20,17 @@ const { state, confirm, cancel } = useConfirm()
             {{ state.message }}
         </p>
 
+        <p v-if="state.error" class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            {{ state.error }}
+        </p>
+
         <div class="flex justify-end gap-2">
-            <button @click="cancel" class="px-4 py-2 bg-gray-200 rounded">
+            <button :disabled="state.confirming" @click="cancel" class="px-4 py-2 bg-gray-200 rounded disabled:cursor-not-allowed disabled:opacity-50">
                 {{ state.cancelText }}
             </button>
 
-            <button @click="confirm" class="px-4 py-2 bg-red-600 text-white rounded">
-                {{ state.confirmText }}
+            <button :disabled="state.confirming" @click="confirm" class="px-4 py-2 bg-red-600 text-white rounded disabled:cursor-wait disabled:opacity-60">
+                {{ state.confirming ? 'Đang xử lý...' : state.confirmText }}
             </button>
         </div>
 

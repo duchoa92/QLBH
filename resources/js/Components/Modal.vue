@@ -1,65 +1,29 @@
 <script setup>
-import { useModal } from '@/Stores/modal'
-import { onMounted, onBeforeUnmount } from 'vue'
+import { computed } from 'vue'
+import BaseModal from '@/Components/UI/BaseModal.vue'
 
+const props = defineProps({
+    show: { type: Boolean, default: false },
+    title: { type: String, default: '' },
+    maxWidth: { type: String, default: '2xl' },
+})
 
-const { modals } = useModal()
+const emit = defineEmits(['close'])
 
-const handleKey = (e) => {
-    if (e.key === 'Escape') closeModal()
-}
-
-
-onMounted(() => window.addEventListener('keydown', handleKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKey))
+const size = computed(() => ({
+    sm: 'sm',
+    md: 'md',
+    lg: 'lg',
+    xl: 'xl',
+    '2xl': 'xl',
+}[props.maxWidth] || 'xl'))
 </script>
 
 <template>
-<div v-if="modalState.show">
-
-    <!-- OVERLAY -->
-    <div 
-        class="fixed inset-0 bg-black/50 z-[999]"
-        @click="closeModal"
-    ></div>
-
-    <!-- MODAL -->
-    <div class="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-none">
-
-        <div 
-            class="bg-white w-[600px] rounded shadow-lg pointer-events-auto"
-            @click.stop
-        >
-            
-            <!-- HEADER -->
-            <div class="flex justify-between items-center p-4 border-b">
-                <h2 class="font-bold">{{ modalState.title }}</h2>
-                <button @click="closeModal" class="">✕</button>
-            </div>
-
-            <!-- BODY -->
-            <div class="p-4">
-                <component 
-                    :is="modalState.component"
-                    v-bind="modalState.props"
-                    @close="closeModal"
-                    @updated="modalState.onUpdated && modalState.onUpdated()"
-                />
-            </div>
-
-        </div>
-
-    </div>
-</div>
+    <BaseModal v-if="show" :title="title" :size="size" @close="emit('close')">
+        <slot />
+        <template v-if="$slots.footer" #footer>
+            <slot name="footer" />
+        </template>
+    </BaseModal>
 </template>
-
-<style>
-@keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0 }
-  to { transform: scale(1); opacity: 1 }
-}
-
-.animate-scale {
-  animation: scaleIn 0.15s ease;
-}
-</style>

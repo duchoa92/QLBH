@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { X, Check, Search, Cpu, Barcode, AlertCircle } from 'lucide-vue-next'
 import { productService } from '@/Modules/POS/Product/Services/productService'
+import { formatCurrency } from '@/utils/format'
 
 /*
 |--------------------------------------------------------------------------
@@ -45,8 +46,7 @@ const canConfirm = computed(() => {
     return true
 })
 
-const formatMoney = (value) =>
-    Number(value || 0).toLocaleString('vi-VN')
+const formatMoney = formatCurrency
 
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') return ''
@@ -264,7 +264,7 @@ const confirm = () => {
                                         (variant.sell_price > 0 ? variant.sell_price : null)
                                         ?? (variant.price > 0 ? variant.price : null)
                                         ?? product.price
-                                    ) }}đ
+                                    ) }}
                                 </span>
 
                                 <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
@@ -325,7 +325,7 @@ const confirm = () => {
 
                                 <div class="mt-1.5 flex flex-wrap items-center gap-2">
                                     <span class="text-xs font-extrabold text-rose-600">
-                                        {{ formatMoney(imeiSellPrice(item)) }}đ
+                                        {{ formatMoney(imeiSellPrice(item)) }}
                                     </span>
 
                                     <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
@@ -337,7 +337,7 @@ const confirm = () => {
                                         class="text-[10px] font-semibold"
                                         :class="expectedProfit(item) >= 0 ? 'text-emerald-600' : 'text-rose-600'"
                                     >
-                                        Lãi: {{ formatMoney(expectedProfit(item)) }}đ
+                                        Lãi: {{ formatMoney(expectedProfit(item)) }}
                                     </span>
                                 </div>
                             </div>

@@ -9,6 +9,7 @@ import {
 } from 'vue'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import { formatNumber } from '@/utils/format'
 import { filterByKeywords, highlightText } from '@/utils/searchHelper'
 import StockImportProductModal from './StockImportProductModal.vue'
 
@@ -110,8 +111,7 @@ const entryModal = ref({
 |--------------------------------------------------------------------------
 */
 
-const formatPrice = (value) =>
-    Number(value || 0).toLocaleString('vi-VN')
+const formatPrice = formatNumber
 
 /*
 |--------------------------------------------------------------------------
@@ -897,6 +897,7 @@ init()
                                                 entryModal.item.cost_price
                                             )
                                         }}
+                                        {{ $currency() }}
                                     </span>
                                 </td>
 
@@ -924,6 +925,7 @@ init()
                                                 entryModal.item.sell_price
                                             )
                                         }}
+                                        {{ $currency() }}
                                     </span>
                                 </td>
 

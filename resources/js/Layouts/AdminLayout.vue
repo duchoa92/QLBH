@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, usePage, router } from '@inertiajs/vue3'
 import {
     Menu,
@@ -36,6 +36,11 @@ const effectiveSidebarCollapsed = computed(() =>
 
 const page = usePage()
 const user = computed(() => page.props.auth?.user || { name: 'Administrator', email: 'admin@gmail.com' })
+const shopName = computed(() => page.props.settings?.shop_name || 'QLBH POS')
+const userRoles = computed(() => page.props.auth?.roles || [])
+const roleTitle = computed(() => userRoles.value[0] || 'Nhân viên')
+const permissions = computed(() => page.props.auth?.permissions || [])
+const can = (permission) => permissions.value.includes(permission)
 
 const currentTitle = computed(() => {
     const path = page.url.split('?')[0]
@@ -47,12 +52,21 @@ const currentTitle = computed(() => {
     if (path.startsWith('/brands')) return 'Thương hiệu'
     if (path.startsWith('/customers')) return 'Khách hàng'
     if (path.startsWith('/sales')) return 'Hóa đơn'
+    if (path.startsWith('/debts/customers')) return 'Thu công nợ khách hàng'
+    if (path.startsWith('/debts/suppliers')) return 'Thanh toán công nợ nhà cung cấp'
     if (path.startsWith('/repairs')) return 'Sửa chữa thiết bị'
     if (path.startsWith('/users')) return 'Nhân viên'
+    if (path.startsWith('/backups')) return 'Sao lưu dữ liệu'
     if (path.startsWith('/profile')) return 'Tài khoản'
 
     return 'Dashboard'
 })
+
+watch([shopName, currentTitle], ([name, title]) => {
+    document.documentElement.lang = page.props.settings?.app_locale || 'vi'
+    document.documentElement.dataset.shopName = name
+    document.title = `${title} - ${name}`
+}, { immediate: true })
 
 const toggleSidebar = () => {
     sidebarCollapsed.value = !sidebarCollapsed.value
@@ -166,6 +180,7 @@ onBeforeUnmount(() => {
 
                         <!-- NÚT 1: TIẾP NHẬN MÁY SỬA -->
                         <button
+                            v-if="can('repairs.create')"
                             type="button"
                             @click="openRepairReceipt"
                             class="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all shrink-0"
@@ -177,6 +192,7 @@ onBeforeUnmount(() => {
 
                         <!-- NÚT 2: MỞ POS BÁN HÀNG -->
                         <Link
+                            v-if="can('pos.access')"
                             href="/pos"
                             class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0"
                             title="Mở POS bán hàng"
@@ -205,7 +221,7 @@ onBeforeUnmount(() => {
                                         {{ user.name }}
                                     </div>
                                     <div class="text-[10px] font-medium text-slate-400">
-                                        Quản trị viên
+                                        {{ roleTitle }}
                                     </div>
                                 </div>
                                 <ChevronDown :size="14" class="text-slate-400 hidden sm:block transition-transform duration-200" :class="userDropdownOpen && 'rotate-180'" />
@@ -231,6 +247,7 @@ onBeforeUnmount(() => {
                                 </Link>
 
                                 <Link
+                                    v-if="can('settings.view')"
                                     href="/settings"
                                     class="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
                                 >

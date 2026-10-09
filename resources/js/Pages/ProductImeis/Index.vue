@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency } from '@/utils/format'
 import { useForm, Link, router } from '@inertiajs/vue3';
 import { Pencil } from 'lucide-vue-next';
 import { openModal } from '@/Stores/modal';
@@ -50,7 +51,7 @@ const extraInfoImageUrl = (imei) =>
         ? `/storage/${imei.extra_info.image_path}`
         : null;
 
-const money = (value) => Number(value || 0).toLocaleString('vi-VN');
+const money = formatCurrency;
 
 const openPriceEditor = (imei) => {
     openModal(PriceFormModal, {
@@ -195,7 +196,7 @@ const openPriceEditor = (imei) => {
 
                         <td class="p-3 text-right">
                             <div class="flex items-center justify-end gap-2">
-                                <span class="font-semibold text-slate-800">{{ money(imei.sell_price) }} đ</span>
+                                <span class="font-semibold text-slate-800">{{ money(imei.sell_price) }}</span>
                                 <button
                                     v-if="imei.status === 'in_stock' || imei.status === 0"
                                     type="button"

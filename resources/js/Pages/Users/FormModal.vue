@@ -1,11 +1,15 @@
 <script setup>
-import { computed } from 'vue'
-import { useForm } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
+import { router, useForm } from '@inertiajs/vue3'
+import { ShieldCheck } from 'lucide-vue-next'
+import axios from 'axios'
+import { toast } from 'vue-sonner'
+import { openModal } from '@/Stores/modal'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
-import { useReferenceData } from '@/Stores/referenceData'
+import RoleManagementDialog from './RoleManagementDialog.vue'
 
 const props = defineProps({
     user: {
@@ -16,17 +20,18 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    permissions: { type: Array, default: () => [] },
+    canManageRoles: { type: Boolean, default: false },
+    canAssignSuperAdmin: { type: Boolean, default: false },
     title: {
         type: String,
         default: 'Người dùng',
     },
 })
 
-const { roles } = useReferenceData({
-    roles: props.roles,
-})
-
 const emit = defineEmits(['close', 'updated'])
+const roles = ref([...props.roles])
+const permissions = ref([...props.permissions])
 
 const form = useForm({
     name: props.user?.name ?? '',
@@ -45,6 +50,34 @@ const roleOptions = computed(() => [
         value: role.name,
     })),
 ])
+
+const openRoleManager = () => {
+    const currentRole = roles.value.find(role => role.name === form.role)
+    openModal(RoleManagementDialog, {
+        props: {
+            roles: roles.value,
+            permissions: permissions.value,
+            initialRoleId: currentRole?.id ?? null,
+        },
+        onUpdated: refreshRoles,
+    })
+}
+
+const refreshRoles = async (change = {}) => {
+    try {
+        const { data } = await axios.get(route('roles.options'))
+        permissions.value = data.permissions || []
+        const freshRoles = data.roles || []
+        roles.value = props.canAssignSuperAdmin ? freshRoles : freshRoles.filter(role => !role.system)
+
+        if (change.deleted && form.role === change.name) form.role = ''
+        else if (change.name && roles.value.some(role => role.name === change.name)) form.role = change.name
+    } catch {
+        toast.error('Không tải được danh sách vai trò mới. Hãy đóng và mở lại biểu mẫu.')
+    }
+
+    router.reload({ only: ['users', 'roles', 'permissions'], preserveScroll: true })
+}
 
 const submit = () => {
     const options = {
@@ -110,15 +143,22 @@ const submit = () => {
                 :error="form.errors.password_confirmation"
             />
 
-            <FloatingSelect
-                v-model="form.role"
-                class="md:col-span-2"
-                :options="roleOptions"
-                option-label="name"
-                option-value="value"
-                label="Vai trò"
-                :error="form.errors.role"
-            />
+            <div class="md:col-span-2">
+                <FloatingSelect
+                    v-model="form.role"
+                    :options="roleOptions"
+                    option-label="name"
+                    option-value="value"
+                    label="Vai trò"
+                    :error="form.errors.role"
+                />
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <ActionButton v-if="canManageRoles" variant="secondary" class="!px-2.5 !py-1.5 text-xs" @click="openRoleManager">
+                        <ShieldCheck class="h-3.5 w-3.5" /> Quản lý vai trò
+                    </ActionButton>
+                    <p class="text-xs text-slate-500">Tạo hoặc chỉnh sửa vai trò trong cửa sổ quản lý riêng.</p>
+                </div>
+            </div>
         </div>
 
         <template #footer>

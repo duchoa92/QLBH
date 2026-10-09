@@ -2,6 +2,7 @@
 
 import FloatingInput
 from '@/Components/UI/FloatingInput.vue'
+import { formatNumber } from '@/utils/format'
 
 defineProps({
 
@@ -15,7 +16,7 @@ const formatMoneyInput = (value) => {
     const number = Number(value || 0)
 
     return number > 0
-        ? number.toLocaleString('vi-VN')
+        ? formatNumber(number)
         : ''
 }
 
@@ -110,7 +111,7 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
 
                 ? '%'
 
-                : 'đ'
+                : $currency()
             }}
 
         </button>

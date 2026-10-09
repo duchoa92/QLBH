@@ -5,6 +5,7 @@ import PaymentMethodSelect from './PaymentMethodSelect.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import QrPayment from './QrPayment.vue'
 import { X, CreditCard, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
+import { formatCurrency, formatNumber } from '@/utils/format'
 
 const props = defineProps({
     loading: Boolean,
@@ -51,13 +52,11 @@ const balanceAmount = computed(() => {
     return effectivePaidAmount.value - totalNeedToPay.value
 })
 
-const formatMoney = (value) => {
-    return Number(value || 0).toLocaleString('vi-VN')
-}
+const formatMoney = formatCurrency
 
 const formatMoneyInput = (value) => {
     const number = Number(value || 0)
-    return number > 0 ? number.toLocaleString('vi-VN') : ''
+    return number > 0 ? formatNumber(number) : ''
 }
 
 const parseMoneyInput = (value) =>
@@ -194,7 +193,7 @@ const submit = () => {
                             type="checkbox"
                             class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                         />
-                        <span>Cộng gộp nợ cũ ({{ formatMoney(selectedCustomer.debt_balance) }}đ)</span>
+                        <span>Cộng gộp nợ cũ ({{ formatMoney(selectedCustomer.debt_balance) }})</span>
                     </label>
                 </div>
 
@@ -210,18 +209,18 @@ const submit = () => {
                 <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-2">
                     <div class="flex justify-between text-xs font-medium text-slate-600">
                         <span>Tiền hàng</span>
-                        <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}đ</span>
+                        <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
                     </div>
 
                     <div class="flex justify-between text-sm font-extrabold text-indigo-900 pt-2 border-t border-slate-200/60">
                         <span>Tổng thu</span>
-                        <span class="text-base text-indigo-600">{{ formatMoney(totalNeedToPay) }}đ</span>
+                        <span class="text-base text-indigo-600">{{ formatMoney(totalNeedToPay) }}</span>
                     </div>
 
                     <div class="flex justify-between text-xs font-bold pt-1">
                         <span class="text-slate-500">{{ balanceStatus.label }}</span>
                         <span :class="balanceStatus.className">
-                            {{ formatMoney(balanceStatus.amount) }}đ
+                            {{ formatMoney(balanceStatus.amount) }}
                         </span>
                     </div>
                 </div>

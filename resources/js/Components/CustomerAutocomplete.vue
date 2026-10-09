@@ -101,7 +101,7 @@ onBeforeUnmount(() => document.removeEventListener('click', hideSuggestionsOnOut
                 <div class="truncate text-xs text-blue-700">
                     {{ selectedCustomer.phone || 'Chưa có số điện thoại' }}
                     <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="ml-2 font-semibold text-rose-600">
-                        Nợ: {{ Number(selectedCustomer.debt_balance).toLocaleString('vi-VN') }} đ
+                        Nợ: {{ $money(selectedCustomer.debt_balance) }}
                     </span>
                 </div>
             </div>
@@ -136,7 +136,7 @@ onBeforeUnmount(() => document.removeEventListener('click', hideSuggestionsOnOut
                     <div class="text-sm font-semibold text-slate-900">{{ customer.full_name }}</div>
                     <div class="mt-0.5 flex justify-between gap-3 text-xs text-slate-500">
                         <span>{{ customer.phone || 'Chưa có SĐT' }}</span>
-                        <span v-if="Number(customer.debt_balance || 0) > 0" class="font-semibold text-rose-600">Nợ {{ Number(customer.debt_balance).toLocaleString('vi-VN') }} đ</span>
+                        <span v-if="Number(customer.debt_balance || 0) > 0" class="font-semibold text-rose-600">Nợ {{ $money(customer.debt_balance) }}</span>
                     </div>
                 </button>
             </div>

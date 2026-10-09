@@ -45,6 +45,8 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        abort_if($request->user()?->username === 'admin' || $request->user()?->hasRole('Super Admin'), 403, 'Không thể xóa tài khoản Super Admin chính.');
+
         $request->validate([
             'password' => ['required', 'current_password'],
         ]);

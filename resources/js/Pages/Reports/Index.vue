@@ -424,7 +424,7 @@ onMounted(() => {
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Tổng doanh thu</div>
                         <div class="mt-2 text-2xl font-black text-blue-600">
-                            {{ formatMoney(revenue.summary?.total_revenue) }} đ
+                            {{ formatMoney(revenue.summary?.total_revenue) }}
                         </div>
                     </div>
 
@@ -438,14 +438,14 @@ onMounted(() => {
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Giá trị TB / đơn</div>
                         <div class="mt-2 text-2xl font-black text-slate-950">
-                            {{ formatMoney(revenue.summary?.avg_order_value) }} đ
+                            {{ formatMoney(revenue.summary?.avg_order_value) }}
                         </div>
                     </div>
 
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Tổng chiết khấu</div>
                         <div class="mt-2 text-2xl font-black text-rose-600">
-                            {{ formatMoney(revenue.summary?.total_discount) }} đ
+                            {{ formatMoney(revenue.summary?.total_discount) }}
                         </div>
                     </div>
                 </section>
@@ -479,7 +479,7 @@ onMounted(() => {
                                 </div>
 
                                 <div class="text-sm font-black text-blue-600">
-                                    {{ formatMoney(row.revenue) }} đ
+                                    {{ formatMoney(row.revenue) }}
                                 </div>
                             </div>
 
@@ -504,14 +504,14 @@ onMounted(() => {
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Doanh thu</div>
                         <div class="mt-2 text-2xl font-black text-slate-950">
-                            {{ formatMoney(profit.summary?.revenue) }} đ
+                            {{ formatMoney(profit.summary?.revenue) }}
                         </div>
                     </div>
 
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Giá vốn hàng bán</div>
                         <div class="mt-2 text-2xl font-black text-rose-600">
-                            {{ formatMoney(profit.summary?.cost) }} đ
+                            {{ formatMoney(profit.summary?.cost) }}
                         </div>
                     </div>
 
@@ -521,7 +521,7 @@ onMounted(() => {
                             class="mt-2 text-2xl font-black"
                             :class="(profit.summary?.profit ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'"
                         >
-                            {{ formatMoney(profit.summary?.profit) }} đ
+                            {{ formatMoney(profit.summary?.profit) }}
                         </div>
                     </div>
 
@@ -559,13 +559,13 @@ onMounted(() => {
                             <tr v-for="row in profit.by_product" :key="row.id">
                                 <td class="px-4 py-3 font-semibold text-slate-800">{{ row.name }}</td>
                                 <td class="px-4 py-3 text-right">{{ row.qty_sold }}</td>
-                                <td class="px-4 py-3 text-right">{{ formatMoney(row.revenue) }} đ</td>
-                                <td class="px-4 py-3 text-right text-slate-500">{{ formatMoney(row.cost) }} đ</td>
+                                <td class="px-4 py-3 text-right">{{ formatMoney(row.revenue) }}</td>
+                                <td class="px-4 py-3 text-right text-slate-500">{{ formatMoney(row.cost) }}</td>
                                 <td
                                     class="px-4 py-3 text-right font-bold"
                                     :class="row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'"
                                 >
-                                    {{ formatMoney(row.profit) }} đ
+                                    {{ formatMoney(row.profit) }}
                                 </td>
                             </tr>
 
@@ -633,7 +633,7 @@ onMounted(() => {
                                 <td class="px-4 py-3 font-semibold text-slate-800">{{ row.name }}</td>
                                 <td class="px-4 py-3 text-slate-500">{{ row.sku }}</td>
                                 <td class="px-4 py-3 text-right font-bold text-blue-600">{{ row.qty_sold }}</td>
-                                <td class="px-4 py-3 text-right">{{ formatMoney(row.revenue) }} đ</td>
+                                <td class="px-4 py-3 text-right">{{ formatMoney(row.revenue) }}</td>
                                 <td class="px-4 py-3 text-right text-slate-500">{{ row.stock }}</td>
                             </tr>
 
@@ -671,7 +671,7 @@ onMounted(() => {
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Giá trị tồn kho</div>
                         <div class="mt-2 text-2xl font-black text-blue-600">
-                            {{ formatMoney(inventory.summary?.total_stock_value) }} đ
+                            {{ formatMoney(inventory.summary?.total_stock_value) }}
                         </div>
                     </div>
 
@@ -728,9 +728,9 @@ onMounted(() => {
                                     {{ row.stock }}
                                 </td>
                                 <td class="px-4 py-3 text-right text-slate-500">{{ row.alert_stock }}</td>
-                                <td class="px-4 py-3 text-right">{{ formatMoney(row.cost_price) }} đ</td>
+                                <td class="px-4 py-3 text-right">{{ formatMoney(row.cost_price) }}</td>
                                 <td class="px-4 py-3 text-right font-bold text-blue-600">
-                                    {{ formatMoney(row.stock_value) }} đ
+                                    {{ formatMoney(row.stock_value) }}
                                 </td>
                             </tr>
 
@@ -784,7 +784,7 @@ onMounted(() => {
                             Tổng công nợ {{ debtFilters.type === 'customer' ? 'khách hàng' : 'nhà cung cấp' }}
                         </div>
                         <div class="mt-2 text-2xl font-black text-rose-600">
-                            {{ formatMoney(debts.summary?.total_debt) }} đ
+                            {{ formatMoney(debts.summary?.total_debt) }}
                         </div>
                     </div>
 
@@ -844,7 +844,7 @@ onMounted(() => {
                                 </td>
                                 <td class="px-4 py-3 text-slate-500">{{ row.phone ?? '—' }}</td>
                                 <td class="px-4 py-3 text-right font-bold text-rose-600">
-                                    {{ formatMoney(row.debt_balance) }} đ
+                                    {{ formatMoney(row.debt_balance) }}
                                 </td>
                             </tr>
 

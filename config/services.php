@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'google_drive' => [
+        'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_DRIVE_CLIENT_SECRET'),
+    ],
+
+    'microsoft_onedrive' => [
+        'client_id' => env('MICROSOFT_ONEDRIVE_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT_ONEDRIVE_CLIENT_SECRET'),
+        'tenant' => env('MICROSOFT_ONEDRIVE_TENANT', 'common'),
+    ],
+
 ];

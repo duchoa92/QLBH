@@ -30,6 +30,7 @@ import {
     Filler
 } from 'chart.js'
 import { Line, Doughnut } from 'vue-chartjs'
+import { formatCurrency } from '@/utils/format'
 
 ChartJS.register(
     CategoryScale,
@@ -86,7 +87,7 @@ const props = defineProps({
 })
 
 // Formatting helper
-const formatMoney = (val) => Number(val || 0).toLocaleString('vi-VN') + ' đ'
+const formatMoney = formatCurrency
 
 // Data cấu hình Biểu đồ Doanh thu (Line Chart)
 const filterPeriod = ref('7days')
@@ -133,7 +134,7 @@ const lineChartOptions = {
         legend: { position: 'top', align: 'end' },
         tooltip: {
             callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toLocaleString('vi-VN')} đ`
+                label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`
             }
         }
     },
@@ -167,7 +168,7 @@ const doughnutChartOptions = {
         legend: { position: 'bottom' },
         tooltip: {
             callbacks: {
-                label: (ctx) => `${ctx.label}: ${Number(ctx.raw || 0).toLocaleString('vi-VN')} đ`
+                label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.raw)}`
             }
         }
     },

@@ -36,7 +36,7 @@ onMounted(() => {
         <svg :id="'barcode-' + i"></svg>
 
         <div class="price">
-            {{ Number(p.sell_price).toLocaleString('vi-VN') }} đ
+            {{ $money(p.sell_price) }}
         </div>
     </div>
 

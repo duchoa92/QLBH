@@ -15,6 +15,30 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
+    public function landingPath(): string
+    {
+        $destinations = [
+            'dashboard.view' => '/dashboard',
+            'repairs.view' => '/repairs',
+            'pos.access' => '/pos',
+            'stock_imports.view' => '/stock-import',
+            'products.view' => '/products',
+            'customers.view' => '/customers',
+            'sales.view' => '/sales',
+            'suppliers.view' => '/suppliers',
+            'users.view' => '/users',
+            'settings.view' => '/settings',
+        ];
+
+        foreach ($destinations as $permission => $path) {
+            if ($this->can($permission)) {
+                return $path;
+            }
+        }
+
+        return route('profile.edit', [], false);
+    }
+
     /**
      * The attributes that are mass assignable.
      *

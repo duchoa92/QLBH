@@ -9,6 +9,7 @@ use App\Services\User\UserService;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
@@ -23,9 +24,13 @@ class UserController extends Controller
             'Users/Index',
             [
                 'users' => $this->service->paginate(),
-                'roles' => Role::query()
-                    ->select('id', 'name')
-                    ->get(),
+                'roles' => $this->roleData(),
+                'permissions' => Permission::query()->where('guard_name', 'web')->orderBy('name')->pluck('name'),
+                'can_assign_super_admin' => auth()->user()?->username === 'admin' && auth()->user()?->hasRole('Super Admin'),
+                'can_manage_roles' => auth()->user()?->can('roles.manage') ?? false,
+                'can_create_users' => auth()->user()?->can('users.create') ?? false,
+                'can_edit_users' => auth()->user()?->can('users.edit') ?? false,
+                'can_delete_users' => auth()->user()?->can('users.delete') ?? false,
             ]
         );
     }
@@ -35,9 +40,7 @@ class UserController extends Controller
         return Inertia::render(
             'Users/Create',
             [
-                'roles' => Role::query()
-                    ->select('id', 'name')
-                    ->get(),
+                'roles' => $this->roleData()->filter(fn (array $role) => ! $role['system'] || $this->canAssignProtectedRole())->values(),
             ]
         );
     }
@@ -61,17 +64,46 @@ class UserController extends Controller
     public function edit(User $user): Response
     {
         $user->load('roles');
+        $existingRoleIds = $user->roles->pluck('id')->all();
 
         return Inertia::render(
             'Users/Edit',
             [
                 'user' => $user,
 
-                'roles' => Role::query()
-                    ->select('id', 'name')
-                    ->get(),
+                'roles' => $this->roleData()->filter(fn (array $role) => ! $role['system'] || $this->canAssignProtectedRole() || in_array($role['id'], $existingRoleIds, true))->values(),
             ]
         );
+    }
+
+    private function roleData()
+    {
+        return Role::query()
+            ->where('guard_name', 'web')
+            ->with('permissions:id,name')
+            ->withCount('users')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Role $role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'permissions' => $role->permissions->pluck('name')->values(),
+                'users_count' => $role->users_count,
+                'system' => in_array($role->name, ['Super Admin', 'Admin'], true),
+                'read_only' => $role->name === 'Super Admin',
+                'can_edit' => $role->name === 'Super Admin'
+                    ? false
+                    : ($role->name === 'Admin'
+                        ? (auth()->user()?->username === 'admin' && auth()->user()?->hasRole('Super Admin'))
+                        : (auth()->user()?->can('roles.manage') ?? false)),
+            ]);
+    }
+
+    private function canAssignProtectedRole(): bool
+    {
+        $actor = auth()->user();
+
+        return $actor?->username === 'admin' && $actor->hasRole('Super Admin');
     }
 
     public function update(
@@ -95,6 +127,8 @@ class UserController extends Controller
     public function destroy(
         User $user
     ): RedirectResponse {
+
+        abort_if($user->username === 'admin' || $user->hasRole('Super Admin'), 403, 'Không thể xóa tài khoản Super Admin chính.');
 
         $this->service->delete($user);
 

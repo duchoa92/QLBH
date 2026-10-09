@@ -79,7 +79,7 @@ const hasDiscount = computed(() =>
         >
             -
             <span v-if="item.discount_type === 'percent'">{{ item.discount_value }}%</span>
-            <span v-else>{{ $money(item.discount_value) }}đ</span>
+            <span v-else>{{ $money(item.discount_value) }}</span>
             <button
                 @click="item.discount_value = 0"
                 title="Hủy giảm giá"

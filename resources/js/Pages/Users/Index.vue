@@ -1,7 +1,7 @@
 <script setup>
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
+import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router } from '@inertiajs/vue3'
-import { Eye, Plus, Search, SquarePen, Trash2 } from 'lucide-vue-next'
+import { Eye, Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
@@ -9,7 +9,9 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import DetailModal from '@/Components/UI/DetailModal.vue'
+import BaseModal from '@/Components/UI/BaseModal.vue'
 import UserFormModal from './FormModal.vue'
+import RoleManagementModal from './RoleManagementModal.vue'
 
 const props = defineProps({
     users: Object,
@@ -17,10 +19,17 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    permissions: { type: Array, default: () => [] },
+    can_assign_super_admin: { type: Boolean, default: false },
+    can_manage_roles: { type: Boolean, default: false },
+    can_create_users: { type: Boolean, default: false },
+    can_edit_users: { type: Boolean, default: false },
+    can_delete_users: { type: Boolean, default: false },
 })
 
 const confirmBox = useConfirm()
 const detailUser = ref(null)
+const showRoleManager = ref(false)
 let searchTimeout = null
 
 const search = (event) => {
@@ -40,16 +49,25 @@ const search = (event) => {
 
 const reload = () => {
     router.reload({
-        only: ['users'],
+        only: ['users', 'roles', 'permissions', 'can_assign_super_admin', 'can_manage_roles', 'can_create_users', 'can_edit_users', 'can_delete_users'],
         preserveScroll: true,
     })
+}
+
+const assignableRoles = (user = null) => {
+    if (props.can_assign_super_admin) return props.roles
+    const existingRoleNames = (user?.roles || []).map(role => role.name || role)
+    return props.roles.filter(role => !role.system || existingRoleNames.includes(role.name))
 }
 
 const openCreate = () => {
     openModal(UserFormModal, {
         props: {
             title: 'Thêm người dùng',
-            roles: props.roles,
+            roles: assignableRoles(),
+            permissions: props.permissions,
+            canManageRoles: props.can_manage_roles,
+            canAssignSuperAdmin: props.can_assign_super_admin,
         },
         onUpdated: reload,
     })
@@ -60,7 +78,10 @@ const openEdit = (user) => {
         props: {
             title: 'Sửa người dùng',
             user,
-            roles: props.roles,
+            roles: assignableRoles(user),
+            permissions: props.permissions,
+            canManageRoles: props.can_manage_roles,
+            canAssignSuperAdmin: props.can_assign_super_admin,
         },
         onUpdated: reload,
     })
@@ -94,14 +115,18 @@ const userRows = (user) => [
 <template>
     <Head title="Quản lý người dùng" />
 
-    <AuthenticatedLayout>
+    <AdminLayout>
         <div class="space-y-4 p-6">
             <PageHeader
                 title="Quản lý người dùng"
                 description="Tài khoản, vai trò và thông tin liên hệ"
             >
                 <template #actions>
-                    <ActionButton @click="openCreate">
+                    <ActionButton v-if="can_manage_roles" variant="secondary" @click="showRoleManager = true">
+                        <ShieldCheck class="h-4 w-4" />
+                        Vai trò & quyền
+                    </ActionButton>
+                    <ActionButton v-if="can_create_users" @click="openCreate">
                         <Plus class="h-4 w-4" />
                         Thêm người dùng
                     </ActionButton>
@@ -156,6 +181,7 @@ const userRows = (user) => [
                                 <td class="px-4 py-3">
                                     <div class="flex justify-center gap-1">
                                         <ActionButton
+                                            v-if="can_edit_users && user.username !== 'admin'"
                                             variant="ghost"
                                             title="Xem chi tiết"
                                             @click="detailUser = user"
@@ -164,6 +190,7 @@ const userRows = (user) => [
                                         </ActionButton>
 
                                         <ActionButton
+                                            v-if="can_delete_users && user.username !== 'admin'"
                                             variant="ghost"
                                             title="Sửa"
                                             @click="openEdit(user)"
@@ -201,6 +228,21 @@ const userRows = (user) => [
                 :rows="userRows(detailUser)"
                 @close="detailUser = null"
             />
+
+            <BaseModal
+                v-if="showRoleManager"
+                title="Quản lý vai trò và quyền"
+                size="xl"
+                body-class="bg-slate-50 p-4 sm:p-5"
+                @close="showRoleManager = false"
+            >
+                <RoleManagementModal
+                    :roles="roles"
+                    :permissions="permissions"
+                    @close="showRoleManager = false"
+                    @updated="reload"
+                />
+            </BaseModal>
         </div>
-    </AuthenticatedLayout>
+    </AdminLayout>
 </template>

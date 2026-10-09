@@ -14,6 +14,12 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Some installations already have this column and foreign key from
+        // an earlier manual schema update. Keep deploy migrations rerunnable.
+        if (Schema::hasColumn('sale_items', 'variant_id')) {
+            return;
+        }
+
         Schema::table('sale_items', function (Blueprint $table) {
 
             $table->foreignId('variant_id')

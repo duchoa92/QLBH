@@ -17,6 +17,7 @@ class CustomerDebt extends Model
         'source_type',
         'source_id',
         'note',
+        'payment_method',
     ];
 
     protected $casts = [

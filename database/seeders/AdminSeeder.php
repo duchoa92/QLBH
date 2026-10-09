@@ -32,16 +32,16 @@ class AdminSeeder extends Seeder
             ]);
         }
 
-        // Tạo role admin
+        // Vai trò Admin dùng cho quản trị vận hành, không có quyền thay đổi vai trò.
         $adminRole = Role::firstOrCreate([
-            'name' => 'admin',
+            'name' => 'Admin',
             'guard_name' => 'web',
         ]);
 
-        // Gán toàn bộ quyền cho admin
-        $adminRole->syncPermissions(
-            Permission::all()
-        );
+        $adminRole->syncPermissions(Permission::query()
+            ->where('guard_name', 'web')
+            ->where('name', '!=', 'roles.manage')
+            ->get());
 
         // Tạo user admin
         $user = User::firstOrCreate(
@@ -56,7 +56,7 @@ class AdminSeeder extends Seeder
             ]
         );
 
-        // Gán role admin
-        $user->assignRole('Super Admin');
+        // Tài khoản duy nhất được giữ vai trò Super Admin là username admin.
+        $user->syncRoles('Super Admin');
     }
 }

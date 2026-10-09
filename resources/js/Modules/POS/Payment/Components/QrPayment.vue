@@ -33,7 +33,7 @@ defineProps({
         </div>
 
         <div class="text-sm font-black text-emerald-600 my-1">
-            {{ Number(amount || 0).toLocaleString('vi-VN') }}đ
+            {{ $money(amount) }}
         </div>
 
         <div class="mt-2 rounded-xl bg-white p-2 shadow-sm border border-slate-100">

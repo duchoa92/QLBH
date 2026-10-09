@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency, formatDateTime } from '@/utils/format'
 import { imageUrl } from '@/utils/imageUrl'
 
 const props = defineProps({
@@ -20,14 +21,14 @@ const hasExtraInfo = Boolean(
 
 const extraInfoImageUrl = imageUrl(extraInfo.image_path)
 
-const money = (value) => Number(value || 0).toLocaleString('vi-VN')
+const money = formatCurrency
 
 const formatDate = (value) => {
     if (!value) {
         return '-'
     }
 
-    return new Date(value).toLocaleString('vi-VN')
+    return formatDateTime(value)
 }
 
 const saleCustomerName = (saleItem) =>
@@ -157,11 +158,11 @@ const saleCustomerName = (saleItem) =>
                             </td>
 
                             <td class="py-2 text-right">
-                                {{ money(history.cost_price) }} đ
+                                {{ money(history.cost_price) }}
                             </td>
 
                             <td class="py-2 text-right">
-                                {{ money(history.sell_price) }} đ
+                                {{ money(history.sell_price) }}
                             </td>
 
                             <td class="py-2">
@@ -301,7 +302,7 @@ const saleCustomerName = (saleItem) =>
                             </td>
 
                             <td class="py-2 text-right">
-                                {{ money(repair.final_cost || repair.estimated_cost) }} đ
+                                {{ money(repair.final_cost || repair.estimated_cost) }}
                             </td>
 
                             <td class="py-2">

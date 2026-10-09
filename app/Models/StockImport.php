@@ -25,6 +25,7 @@ class StockImport extends Model
         'extra_fee',
         'total_amount',
         'grand_total',
+        'paid_amount',
         'note',
         'status',
     ];
@@ -38,6 +39,7 @@ class StockImport extends Model
         'extra_fee'    => 'decimal:2',
         'total_amount' => 'decimal:2',
         'grand_total'  => 'decimal:2',
+        'paid_amount'  => 'decimal:2',
     ];
 
     /*

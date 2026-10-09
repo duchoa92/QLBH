@@ -43,7 +43,7 @@ onMounted(() => {
             </div>
 
             <div class="price">
-                {{ Number(product.sell_price).toLocaleString('vi-VN') }}₫
+                {{ $money(product.sell_price) }}
             </div>
 
             <!-- Barcode -->

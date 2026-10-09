@@ -21,7 +21,7 @@ defineProps({
         <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng tiền</span>
             <span class="text-xl font-black text-indigo-600">
-                {{ formatMoney(grand_total) }}đ
+                {{ formatMoney(grand_total) }}
             </span>
         </div>
 
@@ -32,7 +32,7 @@ defineProps({
                 class="text-lg font-extrabold"
                 :class="changeAmount < 0 ? 'text-rose-600' : 'text-emerald-600'"
             >
-                {{ formatMoney(changeAmount) }}đ
+                {{ formatMoney(changeAmount) }}
             </span>
         </div>
     </div>

@@ -83,7 +83,7 @@ const supplierRows = (supplier) => [
     { label: 'Tên', value: supplier.name },
     { label: 'Điện thoại', value: supplier.phone },
     { label: 'Email', value: supplier.email },
-    { label: 'Công nợ', value: `${formatMoney(supplier.debt_balance)} đ` },
+    { label: 'Công nợ', value: formatMoney(supplier.debt_balance) },
     { label: 'Địa chỉ', value: supplier.address, full: true },
 ]
 </script>
@@ -141,7 +141,7 @@ const supplierRows = (supplier) => [
                                 class="px-4 py-3 text-right font-semibold"
                                 :class="supplier.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500'"
                             >
-                                {{ formatMoney(supplier.debt_balance) }} đ
+                                {{ formatMoney(supplier.debt_balance) }}
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex justify-center gap-1">

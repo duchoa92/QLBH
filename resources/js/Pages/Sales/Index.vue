@@ -45,9 +45,9 @@ const props = defineProps({
 })
 
 
-// Kiểm tra quyền Admin
+// Kiểm tra quyền theo hành động thay vì suy ra từ tên vai trò.
 const page = usePage()
-const isAdmin = page.props.auth?.user?.role === 'admin' || page.props.auth?.roles?.includes('Super Admin')
+const canCancelSales = computed(() => page.props.auth?.permissions?.includes('sales.cancel') ?? false)
 
 // Cập nhật lại các ref khi props.filters thay đổi từ Server gửi về
 watch(
@@ -220,7 +220,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Doanh thu kỳ này</div>
                     <div class="text-xl font-black text-slate-900 mt-0.5">
-                        {{ formatMoney(stats.totalRevenue || sales.data.reduce((acc, s) => s.status !== 'cancelled' ? acc + saleTotal(s) : acc, 0)) }} đ
+                        {{ formatMoney(stats.totalRevenue || sales.data.reduce((acc, s) => s.status !== 'cancelled' ? acc + saleTotal(s) : acc, 0)) }}
                     </div>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
@@ -244,7 +244,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng công nợ gối đầu</div>
                     <div class="text-xl font-black text-rose-600 mt-0.5">
-                        {{ formatMoney(stats.totalDebt || 0) }} đ
+                        {{ formatMoney(stats.totalDebt || 0) }}
                     </div>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
@@ -422,7 +422,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
                             <!-- Tổng tiền (CỠ CHỮ TO ĐẬM) -->
                             <td class="px-3.5 py-2.5 text-right font-black text-slate-900 text-sm">
-                                {{ formatMoney(saleTotal(sale)) }} đ
+                                {{ formatMoney(saleTotal(sale)) }}
                             </td>
 
                             <!-- 4. Trạng thái (CLICK ĐỂ LỌC TRẠNG THÁI) -->
@@ -470,7 +470,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     </ActionButton>
 
                                     <ActionButton
-                                        v-if="isAdmin && sale.status !== 'cancelled'"
+                                        v-if="canCancelSales && sale.status !== 'cancelled'"
                                         variant="ghost"
                                         title="Hủy hóa đơn & Hoàn kho"
                                         @click="confirmCancel(sale)"
@@ -509,7 +509,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
         <InvoiceDetailModal
             :show="Boolean(detailSale)"
             :invoice="detailSale"
-            :can-cancel="isAdmin && detailSale?.status !== 'cancelled'"
+            :can-cancel="canCancelSales && detailSale?.status !== 'cancelled'"
             can-print
             @close="detailSale = null"
             @cancel="confirmCancel"

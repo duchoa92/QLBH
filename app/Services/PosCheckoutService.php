@@ -194,14 +194,15 @@ class PosCheckoutService
                 |--------------------------------------------------------------------------
                 */
                 if (! $requiresImei) {
+                    $allowNegativeStock = filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN);
 
                     if ($variant) {
 
-                        if ($variant->stock < $baseQuantity) {
+                        if (! $allowNegativeStock && $variant->stock < $baseQuantity) {
                             throw new \Exception("Phiên bản {$product->name} không đủ tồn kho");
                         }
 
-                    } elseif ($product->stock < $baseQuantity) {
+                    } elseif (! $allowNegativeStock && $product->stock < $baseQuantity) {
 
                         throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho");
                     }
@@ -415,7 +416,8 @@ class PosCheckoutService
                         }
                         $qty = max(1, (int) ($gift['quantity'] ?? 1));
                         $giftBaseQuantity = $qty;
-                        if ($giftProduct->stock < $giftBaseQuantity) {
+                        if (! filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)
+                            && $giftProduct->stock < $giftBaseQuantity) {
                             throw new \Exception(
                                 'Quà tặng '
                                 . $giftProduct->name
@@ -530,15 +532,18 @@ class PosCheckoutService
     | Trừ tồn kho an toàn (không cho về số âm)
     |--------------------------------------------------------------------------
     |
-    | Dùng CASE WHEN ngay trong câu UPDATE để: (1) vẫn atomic như
-    | decrement() bình thường (không cần lock thêm), (2) không bao giờ
-    | cho kết quả âm - tránh lỗi khi cột "stock" của bảng products là
-    | unsignedInteger (ví dụ sản phẩm IMEI được thêm IMEI trực tiếp từ
-    | form sửa sản phẩm mà chưa từng "Nhập kho" nên stock đang là 0).
+    | Khi cho phép tồn âm, giảm trực tiếp trong transaction đang khóa bản
+    | ghi. Nếu không cho phép tồn âm, dùng CASE để tránh race-condition và
+    | không đưa số tồn xuống dưới 0.
     |
     */
     private function decrementStockSafely(Product|ProductVariant $model, int $quantity): void
     {
+        if (filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)) {
+            $model->decrement('stock', $quantity);
+            return;
+        }
+
         $model->newQuery()
             ->whereKey($model->getKey())
             ->update([

@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency } from '@/utils/format'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './StockImportProductModal.vue'
@@ -208,10 +209,7 @@ const grandTotal = computed(() => {
 |--------------------------------------------------------------------------
 */
 
-const money = (value) => {
-    return Number(value || 0)
-        .toLocaleString('vi-VN')
-}
+const money = formatCurrency
 
 
 /*
@@ -1031,7 +1029,7 @@ const submit = () => {
                                 class="w-full rounded-lg border py-2 pl-3 pr-10 text-right text-sm outline-none transition"
                                 :class="form.errors.discount ? 'border-red-500 bg-red-50/30' : 'border-slate-200 focus:border-emerald-500'"
                             />
-                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">đ</span>
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{{ $currency() }}</span>
                         </div>
                         <!-- DÒNG BÁO LỖI ĐỎ -->
                         <p v-if="form.errors.discount" class="mt-1 text-xs text-red-600 font-medium">
@@ -1052,7 +1050,7 @@ const submit = () => {
                                 class="w-full rounded-lg border py-2 pl-3 pr-10 text-right text-sm outline-none transition"
                                 :class="form.errors.extra_fee ? 'border-red-500 bg-red-50/30' : 'border-slate-200 focus:border-emerald-500'"
                             />
-                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">đ</span>
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{{ $currency() }}</span>
                         </div>
                         <!-- DÒNG BÁO LỖI ĐỎ -->
                         <p v-if="form.errors.extra_fee" class="mt-1 text-xs text-red-600 font-medium">
@@ -1106,7 +1104,7 @@ const submit = () => {
                                         font-medium
                                     "
                                 >
-                                    đ
+                                    {{ $currency() }}
                                 </span>
                             </div>
 

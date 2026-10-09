@@ -11,7 +11,7 @@ import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
 import ModalRoot from '@/Components/ModalRoot.vue'
 import { Ziggy } from './ziggy'
-import { formatMoney, formatDate, formatDateTime } from '@/utils/format'
+import { formatMoney, formatCurrency, formatDate, formatDateTime, getCurrencySymbol, setFormatSettings } from '@/utils/format'
 import { notifyReferenceDataChanged } from '@/Stores/referenceData'
 
 
@@ -172,7 +172,39 @@ createInertiaApp({
         app.use(plugin)
 
         
-        app.config.globalProperties.$money = formatMoney
+        const applyPageSettings = (page) => {
+            const settings = page.props.settings || {}
+            setFormatSettings(settings)
+            document.documentElement.lang = settings.app_locale || 'vi'
+
+            let printStyle = document.getElementById('configured-print-page')
+            if (!printStyle) {
+                printStyle = document.createElement('style')
+                printStyle.id = 'configured-print-page'
+                document.head.appendChild(printStyle)
+            }
+
+            const component = page.component || ''
+            const printComponents = ['Sales/Receipt', 'Sales/Show', 'Pos/SaleInvoice']
+            if (!printComponents.some((name) => component.endsWith(name))) {
+                printStyle.textContent = ''
+                return
+            }
+
+            const paper = settings.print_paper_size || 'a4'
+            const sizes = { a4: 'A4', a5: 'A5', '80mm': '80mm auto', '58mm': '58mm auto' }
+            const thermal = paper === '80mm' || paper === '58mm'
+            const orientation = thermal ? '' : ` ${settings.print_orientation === 'landscape' ? 'landscape' : 'portrait'}`
+            const pageSize = `${sizes[paper] || sizes.a4}${orientation}`
+            const pageMargin = thermal ? '0' : '10mm'
+            const receiptWidth = paper === '58mm' ? '54mm' : paper === '80mm' ? '76mm' : '100%'
+            printStyle.textContent = `@media print { @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: ${receiptWidth} !important; } }`
+        }
+        applyPageSettings(props.initialPage)
+        router.on('navigate', (event) => applyPageSettings(event.detail.page))
+
+        app.config.globalProperties.$money = formatCurrency
+        app.config.globalProperties.$currency = getCurrencySymbol
         app.config.globalProperties.$date = formatDate
         app.config.globalProperties.$dateTime = formatDateTime
 

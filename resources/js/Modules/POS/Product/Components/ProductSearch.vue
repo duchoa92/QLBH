@@ -1,11 +1,13 @@
 <script setup>
 import { computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
 import { toast } from 'vue-sonner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { RotateCw, Search, PackageX, Loader2 } from 'lucide-vue-next'
+import { formatCurrency } from '@/utils/format'
 
 
 
@@ -21,6 +23,8 @@ const emit = defineEmits([
     'selected',
     'product-scanned',
 ])
+const page = usePage()
+const allowsNegativeStock = computed(() => Boolean(page.props.settings?.allow_negative_stock))
 
 const {
     keyword,
@@ -34,7 +38,7 @@ const {
 const selectProduct = (product) => {
     // Kiểm tra tồn kho khả dụng trước khi chọn
     const currentStock = getDisplayStock(product)
-    if (currentStock <= 0) {
+    if (currentStock <= 0 && !canSellWithoutStock(product)) {
         toast.error('Sản phẩm/Biến thể này đã hết hàng hoặc đã được chọn hết vào giỏ!')
         return
     }
@@ -88,15 +92,14 @@ const scanImei = async () => {
     }
 }
 
-const formatPrice = (value) => {
-    return Number(value || 0).toLocaleString('vi-VN')
-}
+const formatPrice = formatCurrency
+
+const canSellWithoutStock = (product) => allowsNegativeStock.value
+    && product.product_type !== 'imei'
+    && !product.manage_stock_by_serial
+    && !product.has_imei
 
 const priceLabel = (product) => {
-    if (product.price_label) {
-        return product.price_label
-    }
-
     if (
         Number(product.price_min || 0) > 0
         && Number(product.price_max || 0) > 0
@@ -304,10 +307,10 @@ const categoryOptions = computed(() => [
                     v-for="product in products"
                     :key="product.id"
                     type="button"
-                    :disabled="getDisplayStock(product) <= 0"
+                    :disabled="getDisplayStock(product) <= 0 && !canSellWithoutStock(product)"
                     class="group relative text-left overflow-hidden rounded-2xl border transition-all duration-200 flex flex-col justify-between"
                     :class="[
-                        getDisplayStock(product) <= 0
+                        getDisplayStock(product) <= 0 && !canSellWithoutStock(product)
                             ? 'opacity-60 border-slate-200 bg-slate-100/50 cursor-not-allowed'
                             : 'border-slate-200/80 bg-white shadow-sm hover:border-indigo-400 hover:shadow-md active:scale-[0.98]'
                     ]"
@@ -332,7 +335,7 @@ const categoryOptions = computed(() => [
 
                         <!-- BADGE HẾT HÀNG NẾU TỒN KHO = 0 -->
                         <div
-                            v-if="getDisplayStock(product) <= 0"
+                            v-if="getDisplayStock(product) <= 0 && !canSellWithoutStock(product)"
                             class="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center"
                         >
                             <span class="bg-rose-600 text-white font-extrabold text-[11px] uppercase tracking-wider px-2.5 py-1 rounded-lg shadow">
@@ -345,7 +348,7 @@ const categoryOptions = computed(() => [
                             v-else
                             class="absolute bottom-2 left-2 rounded-lg bg-rose-600/90 backdrop-blur-sm px-2.5 py-1 text-xs font-bold text-white shadow-sm"
                         >
-                            {{ priceLabel(product) }}<span v-if="!product.price_label">đ</span>
+                            {{ priceLabel(product) }}
                         </div>
 
                         <!-- BADGE LOẠI SẢN PHẨM -->

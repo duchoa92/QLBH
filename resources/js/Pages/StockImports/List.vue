@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency, formatDate as formatConfiguredDate } from '@/utils/format'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import StockImportFormModal from './StockImportFormModal.vue'
@@ -122,24 +123,10 @@ const submitSearch = () => {
 |--------------------------------------------------------------------------
 */
 
-const money = (value) => {
-
-    return Number(value || 0)
-        .toLocaleString('vi-VN')
-
-}
+const money = formatCurrency
 
 
-const formatDate = (value) => {
-
-    if (!value) {
-        return '-'
-    }
-
-    return new Date(value)
-        .toLocaleString('vi-VN')
-
-}
+const formatDate = (value) => value ? formatConfiguredDate(value) : '-'
 
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') {
@@ -431,7 +418,6 @@ const showImport = (id) => {
                                 "
                             >
                                 {{ money(item.grand_total) }}
-                                đ
                             </td>
 
 
@@ -565,22 +551,22 @@ const showImport = (id) => {
             <div class="grid gap-3 md:grid-cols-4">
                 <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
                     <div class="text-xs font-semibold uppercase text-slate-400">Tiền hàng</div>
-                    <div class="mt-1 font-semibold text-slate-900">{{ money(detailImport.total_amount) }} đ</div>
+                    <div class="mt-1 font-semibold text-slate-900">{{ money(detailImport.total_amount) }}</div>
                 </div>
 
                 <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
                     <div class="text-xs font-semibold uppercase text-slate-400">Giảm giá</div>
-                    <div class="mt-1 font-semibold text-rose-600">-{{ money(detailImport.discount) }} đ</div>
+                    <div class="mt-1 font-semibold text-rose-600">-{{ money(detailImport.discount) }}</div>
                 </div>
 
                 <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
                     <div class="text-xs font-semibold uppercase text-slate-400">Phí khác</div>
-                    <div class="mt-1 font-semibold text-slate-900">{{ money(detailImport.extra_fee) }} đ</div>
+                    <div class="mt-1 font-semibold text-slate-900">{{ money(detailImport.extra_fee) }}</div>
                 </div>
 
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
                     <div class="text-xs font-semibold uppercase text-slate-400">Tổng tiền</div>
-                    <div class="mt-1 font-semibold text-emerald-600">{{ money(detailImport.grand_total) }} đ</div>
+                    <div class="mt-1 font-semibold text-emerald-600">{{ money(detailImport.grand_total) }}</div>
                 </div>
             </div>
 
@@ -624,9 +610,9 @@ const showImport = (id) => {
                                         = {{ item.base_quantity }} {{ item.product?.unit?.short_name || item.product?.unit?.name || 'đơn vị bán' }}
                                     </div>
                                 </td>
-                                <td class="px-3 py-3 text-right">{{ money(item.cost_price) }} đ</td>
+                                <td class="px-3 py-3 text-right">{{ money(item.cost_price) }}</td>
                                 <td class="px-3 py-3 text-right font-bold text-slate-900">
-                                    {{ money(Number(item.quantity || 0) * Number(item.cost_price || 0)) }} đ
+                                    {{ money(Number(item.quantity || 0) * Number(item.cost_price || 0)) }}
                                 </td>
                             </tr>
 
@@ -662,11 +648,11 @@ const showImport = (id) => {
                                             <div class="mt-2 grid gap-2 sm:grid-cols-3">
                                                 <div>
                                                     <div class="font-bold uppercase text-slate-400">Giá nhập</div>
-                                                    <div class="font-semibold text-slate-800">{{ money(history.cost_price) }} đ</div>
+                                                    <div class="font-semibold text-slate-800">{{ money(history.cost_price) }}</div>
                                                 </div>
                                                 <div>
                                                     <div class="font-bold uppercase text-slate-400">Giá bán</div>
-                                                    <div class="font-semibold text-slate-800">{{ money(history.sell_price) }} đ</div>
+                                                    <div class="font-semibold text-slate-800">{{ money(history.sell_price) }}</div>
                                                 </div>
                                                 <div>
                                                     <div class="font-bold uppercase text-slate-400">BH NCC</div>

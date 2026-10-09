@@ -68,7 +68,7 @@ const customerRows = (customer) => [
     { label: 'Ngày sinh', value: customer.birthday },
     { label: 'Giới tính', value: customer.gender },
     { label: 'Điểm', value: customer.point_balance },
-    { label: 'Công nợ', value: `${formatMoney(customer.debt_balance)} đ` },
+    { label: 'Công nợ', value: formatMoney(customer.debt_balance) },
     { label: 'Địa chỉ', value: customer.address, full: true },
     { label: 'Ghi chú', value: customer.note, full: true },
 ]
@@ -129,7 +129,7 @@ const customerRows = (customer) => [
                                 class="px-4 py-3 text-right font-semibold"
                                 :class="item.debt_balance > 0 ? 'text-red-600' : 'text-green-600'"
                             >
-                                {{ formatMoney(item.debt_balance) }} đ
+                                {{ formatMoney(item.debt_balance) }}
                             </td>
                             <td class="px-4 py-3 text-center text-slate-600">{{ item.customer_type }}</td>
                             <td class="px-4 py-3">

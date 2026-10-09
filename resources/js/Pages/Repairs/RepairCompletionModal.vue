@@ -5,6 +5,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { ShieldCheck, Wrench } from 'lucide-vue-next'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { toast } from 'vue-sonner'
+import { formatCurrency, formatDate } from '@/utils/format'
 
 const props = defineProps({ repair: { type: Object, required: true }, showSubmit: { type: Boolean, default: true }, modelValue: { type: Array, default: () => [] }, declineWarranty: { type: Boolean, default: false }, declineReason: { type: String, default: '' } })
 const emit = defineEmits(['updated', 'update:modelValue'])
@@ -33,7 +34,7 @@ const hasWarrantyCandidate = computed(() => {
 const isWarrantyBilling = computed(() => billingType.value === 'warranty')
 const coveredAmount = computed(() => isWarrantyBilling.value ? Math.min(total.value, Number(warrantyCoveredAmount.value || 0)) : 0)
 const payableTotal = computed(() => Math.max(0, total.value - coveredAmount.value))
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`
+const money = formatCurrency
 
 watch([total, billingType], ([value, type]) => {
     if (type === 'warranty' && !coverageTouched.value) warrantyCoveredAmount.value = value
@@ -91,7 +92,7 @@ defineExpose({ submit, saving: computed(() => saving.value) })
             </div>
             <div v-if="isWarrantyBilling" class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
                 <strong>Phiếu xử lý bảo hành</strong>
-                <span v-if="repair.warranty_expires_at"> · Căn cứ còn hạn đến {{ new Date(repair.warranty_expires_at).toLocaleDateString('vi-VN') }}</span>
+                <span v-if="repair.warranty_expires_at"> · Căn cứ còn hạn đến {{ formatDate(repair.warranty_expires_at) }}</span>
                 <p class="mt-1">Phần chi phí được duyệt bảo hành sẽ trừ khỏi số tiền khách cần thanh toán; phần ngoài phạm vi vẫn tính phí.</p>
             </div>
             <div class="rounded-xl border border-slate-200 bg-white p-3">

@@ -1,5 +1,6 @@
 <script setup>
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, formatCurrency, formatDate, formatNumber } from '@/utils/format'
+import { usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
     sale: {
@@ -7,6 +8,7 @@ const props = defineProps({
         required: true
     }
 });
+const page = usePage()
 
 const printInvoice = () => {
     window.print();
@@ -43,7 +45,7 @@ const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
     const unit = item.unit_name || 'Cái'
 
-    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+    return `${Number.isInteger(qty) ? qty : formatNumber(qty)} ${unit}`
 }
 </script>
 
@@ -73,7 +75,7 @@ const saleQuantityText = (item) => {
             <!-- Header Cửa hàng -->
             <div class="text-center pb-6 mb-6 border-b border-slate-100">
                 <h2 class="text-2xl font-black text-slate-900 tracking-tight mb-1">
-                    ĐỨC HÒA COMPUTER
+                    {{ page.props.settings?.shop_name || 'Cửa hàng' }}
                 </h2>
                 <p class="text-xs uppercase tracking-widest font-semibold text-slate-400">
                     Hóa đơn bán hàng
@@ -125,7 +127,7 @@ const saleQuantityText = (item) => {
                             </div>
                             <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-0.5 text-xs font-semibold" :class="Number(item.product_imei.customer_warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
                                 {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
-                                    ? `Bảo hành khách đến ${new Date(item.product_imei.customer_warranty_expires_at).toLocaleDateString('vi-VN')}`
+                                    ? `Bảo hành khách đến ${formatDate(item.product_imei.customer_warranty_expires_at)}`
                                     : 'Không áp dụng bảo hành khách' }}
                             </div>
                         </td>
@@ -135,7 +137,7 @@ const saleQuantityText = (item) => {
                         </td>
 
                         <td class="text-right py-3 font-semibold text-slate-800">
-                            {{ Number(item.subtotal ?? (item.unit_price * item.quantity)).toLocaleString('vi-VN') }}đ
+                            {{ formatCurrency(item.subtotal ?? (item.unit_price * item.quantity)) }}
                         </td>
                     </tr>
                 </tbody>
@@ -146,21 +148,21 @@ const saleQuantityText = (item) => {
                 <div class="flex justify-between text-slate-600">
                     <span>Tổng tiền hàng</span>
                     <span class="font-semibold text-slate-800">
-                        {{ Number(sale.grand_total).toLocaleString('vi-VN') }}đ
+                        {{ formatCurrency(sale.grand_total) }}
                     </span>
                 </div>
 
                 <div class="flex justify-between text-slate-600">
                     <span>Khách thanh toán</span>
                     <span class="font-semibold text-slate-800">
-                        {{ Number(sale.paid_amount).toLocaleString('vi-VN') }}đ
+                        {{ formatCurrency(sale.paid_amount) }}
                     </span>
                 </div>
 
                 <div class="flex justify-between items-center pt-2 border-t border-dashed border-slate-200 text-base font-bold text-slate-900">
                     <span>Tiền thừa trả khách</span>
                     <span class="text-indigo-600 text-lg">
-                        {{ Number(sale.change_amount).toLocaleString('vi-VN') }}đ
+                        {{ formatCurrency(sale.change_amount) }}
                     </span>
                 </div>
             </div>

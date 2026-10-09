@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency, formatDateTime } from '@/utils/format'
 import { computed, ref } from 'vue'
 import {
     AlertTriangle,
@@ -26,12 +27,12 @@ const loading = ref(false)
 const result = ref(null)
 const errorMessage = ref('')
 
-const money = (value) => Number(value || 0).toLocaleString('vi-VN')
+const money = formatCurrency
 
 const formatDate = (value) => {
     if (!value) return '-'
 
-    return new Date(value).toLocaleString('vi-VN')
+    return formatDateTime(value)
 }
 
 const variantText = computed(() => {
@@ -274,11 +275,11 @@ const lookup = async () => {
                             </div>
                             <div class="flex justify-between gap-4">
                                 <span>Giá nhập hiện tại</span>
-                                <span class="font-semibold text-slate-900">{{ money(result.imei?.cost_price) }} đ</span>
+                                <span class="font-semibold text-slate-900">{{ money(result.imei?.cost_price) }}</span>
                             </div>
                             <div class="flex justify-between gap-4">
                                 <span>Giá bán hiện tại</span>
-                                <span class="font-semibold text-slate-900">{{ money(result.imei?.sell_price) }} đ</span>
+                                <span class="font-semibold text-slate-900">{{ money(result.imei?.sell_price) }}</span>
                             </div>
                         </div>
                     </div>
@@ -341,8 +342,8 @@ const lookup = async () => {
                                 class="rounded-xl bg-slate-50 p-3 text-sm"
                             >
                                 <div class="font-bold text-slate-900">{{ item.code || 'Phiếu nhập' }}</div>
-                                <div class="mt-1 text-slate-600">Giá nhập: {{ money(item.cost_price) }} đ</div>
-                                <div class="text-slate-600">Giá bán: {{ money(item.sell_price) }} đ</div>
+                                <div class="mt-1 text-slate-600">Giá nhập: {{ money(item.cost_price) }}</div>
+                                <div class="text-slate-600">Giá bán: {{ money(item.sell_price) }}</div>
                                 <div class="mt-1 text-xs text-slate-400">{{ formatDate(item.happened_at || item.created_at) }}</div>
                             </div>
                         </div>
@@ -362,8 +363,8 @@ const lookup = async () => {
                             >
                                 <div class="font-bold text-slate-900">{{ sale.code || 'Hóa đơn' }}</div>
                                 <div class="mt-1 text-slate-600">Khách: {{ sale.customer_name || '-' }}</div>
-                                <div class="text-slate-600">Giá bán: {{ money(sale.unit_price) }} đ</div>
-                                <div class="text-slate-600">Thành tiền: {{ money(sale.subtotal) }} đ</div>
+                                <div class="text-slate-600">Giá bán: {{ money(sale.unit_price) }}</div>
+                                <div class="text-slate-600">Thành tiền: {{ money(sale.subtotal) }}</div>
                                 <div class="mt-1 text-xs text-slate-400">{{ formatDate(sale.sold_at) }}</div>
                             </div>
                         </div>
@@ -386,7 +387,7 @@ const lookup = async () => {
                             >
                                 <div class="font-bold text-slate-900">{{ repair.code || 'Phiếu sửa' }}</div>
                                 <div class="mt-1 text-slate-600">{{ repair.repair_request || repair.note || '-' }}</div>
-                                <div class="text-slate-600">Chi phí: {{ money(repair.final_cost || repair.estimated_cost) }} đ</div>
+                                <div class="text-slate-600">Chi phí: {{ money(repair.final_cost || repair.estimated_cost) }}</div>
                                 <div class="text-slate-600">Trạng thái: {{ repair.status || '-' }}</div>
                                 <div class="mt-1 text-xs text-slate-400">{{ formatDate(repair.received_at) }}</div>
                             </div>

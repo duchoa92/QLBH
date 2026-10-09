@@ -42,7 +42,7 @@ const emit = defineEmits([
             <div class="text-right">
                 <span class="text-xs text-slate-500 font-medium mr-1.5">Tiền hàng:</span>
                 <span class="text-base font-extrabold text-indigo-600">
-                    {{ $money(grandTotal) }}đ
+                    {{ $money(grandTotal) }}
                 </span>
             </div>
         </div>

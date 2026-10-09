@@ -295,7 +295,7 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
         <!-- Thanh toán cho phiếu đã hoàn tất -->
         <div v-if="activeTab === 'log' && !completionStep && repair.status === 'done'" class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center">
             <h3 class="text-base font-bold text-emerald-900">Máy đã hoàn tất sửa chữa!</h3>
-            <p class="mt-1 text-xs text-emerald-700">Tổng chi phí: <strong class="text-sm text-emerald-900">{{ Number(repair.final_cost || 0).toLocaleString('vi-VN') }} đ</strong></p>
+            <p class="mt-1 text-xs text-emerald-700">Tổng chi phí: <strong class="text-sm text-emerald-900">{{ $money(repair.final_cost) }}</strong></p>
             <ActionButton class="mt-3 w-full justify-center" @click="startPayment">Thanh toán & Trả máy cho khách</ActionButton>
         </div>
 

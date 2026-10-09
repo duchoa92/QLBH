@@ -1,4 +1,5 @@
 <script setup>
+import { formatNumber } from '@/utils/format'
 
 defineProps({
 
@@ -24,8 +25,7 @@ const handleInput = (event) => {
             .replace(/\D/g, '')
 
     const formatted =
-        Number(rawValue || 0)
-            .toLocaleString('vi-VN')
+        formatNumber(rawValue)
 
     event.target.value =
         formatted

@@ -1,4 +1,5 @@
 <script setup>
+import { formatCurrency } from '@/utils/format'
 
 import {
     ref,
@@ -221,10 +222,7 @@ onBeforeUnmount(() => {
 |--------------------------------------------------------------------------
 */
 
-const money = value => {
-    return Number(value || 0)
-        .toLocaleString('vi-VN')
-}
+const money = formatCurrency
 
 </script>
 
@@ -316,7 +314,6 @@ const money = value => {
                                                 .debt_balance
                                         )
                                     }}
-                                    đ
                                     )
                                 </span>
 

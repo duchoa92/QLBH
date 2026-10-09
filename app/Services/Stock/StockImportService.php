@@ -3,6 +3,8 @@
 namespace App\Services\Stock;
 
 use App\Models\StockImport;
+use App\Models\Supplier;
+use App\Models\SupplierDebt;
 use App\Models\StockImportItem;
 use App\Models\ProductVariant;
 use App\Models\Product;
@@ -68,6 +70,19 @@ class StockImportService
 
                 'status' => 'completed',
             ]);
+
+            if ($grandTotal > 0 && !empty($data['supplier_id'])) {
+                SupplierDebt::query()->create([
+                    'supplier_id' => $data['supplier_id'],
+                    'type' => 'increase',
+                    'amount' => $grandTotal,
+                    'source_type' => StockImport::class,
+                    'source_id' => $import->id,
+                    'note' => 'Công nợ phát sinh từ phiếu nhập ' . $import->code,
+                    'user_id' => auth()->id(),
+                ]);
+                Supplier::query()->whereKey($data['supplier_id'])->increment('debt_balance', $grandTotal);
+            }
 
 
             /*

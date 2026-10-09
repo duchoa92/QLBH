@@ -1,3 +1,5 @@
+import { formatCurrency } from '@/utils/format'
+
 export const useMoney = () => {
 
     /*
@@ -6,11 +8,7 @@ export const useMoney = () => {
     |--------------------------------------------------------------------------
     */
 
-    const formatMoney = (value) => {
-
-        return Number(value || 0)
-            .toLocaleString('vi-VN')
-    }
+    const formatMoney = formatCurrency
 
     /*
     |--------------------------------------------------------------------------

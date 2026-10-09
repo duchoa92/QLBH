@@ -1,5 +1,21 @@
 <!DOCTYPE html>
-<html lang="vi">
+@php
+    $dateFormat = setting('date_format', 'd/m/Y');
+    $currencyFormat = setting('currency_format', 'vi-VN');
+    $thousandsSeparator = $currencyFormat === 'en-US' ? ',' : '.';
+    $appLocale = setting('app_locale', 'vi');
+    $paperSize = setting('print_paper_size', 'a4');
+    $orientation = setting('print_orientation', 'portrait');
+    $printPageSize = match ($paperSize) {
+        'a5' => 'A5 '.($orientation === 'landscape' ? 'landscape' : 'portrait'),
+        '80mm' => '80mm auto',
+        '58mm' => '58mm auto',
+        default => 'A4 '.($orientation === 'landscape' ? 'landscape' : 'portrait'),
+    };
+    $printMargin = in_array($paperSize, ['80mm', '58mm'], true) ? '2mm' : '10mm';
+    $isThermalPaper = in_array($paperSize, ['80mm', '58mm'], true);
+@endphp
+<html lang="{{ $appLocale }}">
 
 <head>
 
@@ -16,6 +32,17 @@
             box-sizing: border-box;
 
             font-family: Arial, sans-serif;
+        }
+
+        @media print {
+            @page { size: {{ $printPageSize }}; margin: {{ $printMargin }}; }
+            body { padding: 0; }
+            .container { width: 100%; max-width: 100%; }
+            @if ($isThermalPaper)
+                .grid { grid-template-columns: 1fr; gap: 6px; }
+                .section { margin-bottom: 14px; }
+                .section-title { font-size: 14px; margin-bottom: 8px; }
+            @endif
         }
 
         body {
@@ -245,13 +272,17 @@
 
         <div>
 
+            <div style="margin-bottom: 8px; color: #2563eb; font-weight: bold;">
+                {{ setting('shop_name', config('app.name', 'QLBH POS')) }}
+            </div>
+
             <div class="title">
                 PHIẾU NHẬN SỬA CHỮA
             </div>
 
             <div style="margin-top: 8px; color: #6b7280;">
                 Ngày nhận:
-                {{ $repair->created_at }}
+                {{ $repair->created_at->timezone(config('app.timezone'))->format($dateFormat) }}
             </div>
 
         </div>
@@ -353,8 +384,8 @@
                 </div>
 
                 <div class="value">
-                    {{ number_format((float) $repair->estimated_cost) }}
-                    đ
+                    {{ number_format((float) $repair->estimated_cost, 0, '.', $thousandsSeparator) }}
+                    {{ setting('currency_symbol', '₫') }}
                 </div>
 
             </div>

@@ -12,6 +12,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import api from '@/Services/api'
 import { filterByKeywords, highlightText } from '@/utils/searchHelper'
+import { formatNumber, formatDateTime } from '@/utils/format'
 
 import {
     Plus,
@@ -61,8 +62,8 @@ const entryModal = ref({
 })
 
 /* HELPERS */
-const formatPrice = (value) => Number(value || 0).toLocaleString('vi-VN')
-const formatDate = (value) => value ? new Date(value).toLocaleString('vi-VN') : '-'
+const formatPrice = formatNumber
+const formatDate = (value) => value ? formatDateTime(value) : '-'
 
 const removeVietnameseTones = (value = '') =>
     String(value)
@@ -651,7 +652,7 @@ onBeforeUnmount(() => {
                                         type="number"
                                         class="h-7 w-24 rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                     />
-                                    <span v-else class="text-slate-700">{{ formatPrice(entryModal.item.cost_price) }}</span>
+                                    <span v-else class="text-slate-700">{{ formatPrice(entryModal.item.cost_price) }} {{ $currency() }}</span>
                                 </td>
                                 <td class="px-3 py-2 text-right">
                                     <input
@@ -660,7 +661,7 @@ onBeforeUnmount(() => {
                                         type="number"
                                         class="h-7 w-24 rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                     />
-                                    <span v-else class="text-slate-700">{{ formatPrice(entryModal.item.sell_price) }}</span>
+                                    <span v-else class="text-slate-700">{{ formatPrice(entryModal.item.sell_price) }} {{ $currency() }}</span>
                                 </td>
                                 <td class="px-3 py-2 text-slate-600">
                                     {{

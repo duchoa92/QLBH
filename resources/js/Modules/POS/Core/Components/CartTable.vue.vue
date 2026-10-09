@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { Trash2, Gift, Percent, Tag, MessageSquare } from 'lucide-vue-next'
+import { formatCurrency } from '@/utils/format'
 
 const props = defineProps({
     items: {
@@ -14,7 +15,7 @@ const emit = defineEmits(['remove', 'update-quantity', 'update-discount'])
 // Toggle hiển thị ô nhập ghi chú/giảm giá cho từng dòng
 const activeDiscountItem = ref(null)
 
-const formatMoney = (val) => Number(val || 0).toLocaleString('vi-VN')
+const formatMoney = formatCurrency
 
 // Tính thành tiền từng dòng
 const calculateLineTotal = (item) => {
@@ -141,7 +142,7 @@ const toggleDiscountInput = (itemId) => {
                                 v-if="item.discount_value > 0"
                                 class="text-[10px] text-slate-400 line-through"
                             >
-                                {{ formatMoney((item.price || item.sell_price) * item.quantity) }}đ
+                                {{ formatMoney((item.price || item.sell_price) * item.quantity) }}
                             </div>
 
                             <div class="flex items-center justify-end gap-1.5">
@@ -170,7 +171,7 @@ const toggleDiscountInput = (itemId) => {
 
                                 <!-- Thành tiền -->
                                 <span class="text-xs font-black text-emerald-600">
-                                    {{ formatMoney(calculateLineTotal(item)) }}đ
+                                    {{ formatMoney(calculateLineTotal(item)) }}
                                 </span>
                             </div>
                         </div>

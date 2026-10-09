@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
+import { formatCurrency } from '@/utils/format'
 import axios from 'axios'
 import debounce from 'lodash/debounce'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -15,7 +16,7 @@ const parts = computed({
     get: () => props.modelValue,
     set: (value) => emit('update:modelValue', value),
 })
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`
+const money = formatCurrency
 let searchSequence = 0
 
 const runSearch = debounce(async (term, sequence) => {

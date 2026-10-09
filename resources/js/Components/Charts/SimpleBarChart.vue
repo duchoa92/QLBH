@@ -27,7 +27,7 @@ const props = defineProps({
     },
     valueSuffix: {
         type: String,
-        default: 'đ',
+        default: '',
     },
 })
 
@@ -129,7 +129,7 @@ const bars = computed(() => {
             class="mt-1 text-center text-xs font-semibold text-slate-700"
         >
             {{ bars[hovered].label }} —
-            {{ formatMoney(bars[hovered].value) }} {{ valueSuffix }}
+            {{ formatMoney(bars[hovered].value) }}{{ valueSuffix ? ` ${valueSuffix}` : '' }}
         </div>
 
         <div

@@ -23,6 +23,7 @@ import {
     Monitor,
     UserCog,
     SearchCheck,
+    HandCoins,
 } from 'lucide-vue-next'
 
 const emit = defineEmits(['toggle', 'navigate'])
@@ -34,19 +35,29 @@ const props = defineProps({
 const page = usePage()
 const isMobileOpen = ref(false)
 const currentPath = computed(() => page.url.split('?')[0])
+const shopName = computed(() => page.props.settings?.shop_name || 'QLBH POS')
 
 /* AUTH & PERMISSIONS */
 const permissions = computed(() => page.props.auth?.permissions || [])
-const roles = computed(() => page.props.auth?.roles || [])
-
-const isSuperAdmin = computed(() =>
-    roles.value.includes('Super Admin') || roles.value.includes('admin')
-)
 
 const can = (permission) => {
-    if (!permission || isSuperAdmin.value) return true
-    return permissions.value.includes(permission)
+    return !permission || permissions.value.includes(permission)
 }
+
+const homeUrl = computed(() => {
+    const destinations = [
+        ['dashboard.view', '/dashboard'],
+        ['repairs.view', '/repairs'],
+        ['pos.access', '/pos'],
+        ['stock_imports.view', '/stock-import'],
+        ['products.view', '/products'],
+        ['customers.view', '/customers'],
+        ['sales.view', '/sales'],
+        ['users.view', '/users'],
+        ['settings.view', '/settings'],
+    ]
+    return destinations.find(([permission]) => can(permission))?.[1] || '/profile'
+})
 
 /* ACTIVE ROUTE CHECKERS */
 const isActive = (paths = []) => {
@@ -71,18 +82,28 @@ const menuGroups = [
                 href: '/pos',
                 paths: ['/pos'],
                 badge: 'Nhanh',
+                permission: 'pos.access',
             },
             {
                 label: 'Đơn hàng & Hóa đơn',
                 icon: FileText,
                 href: '/sales',
                 paths: ['/sales', '/sales/*'],
+                permission: 'sales.view',
+            },
+            {
+                label: 'Thu công nợ khách hàng',
+                icon: HandCoins,
+                href: '/debts/customers',
+                paths: ['/debts/customers'],
+                permission: 'customer_debts.view',
             },
             {
                 label: 'Dịch vụ sửa chữa',
                 icon: Wrench,
                 href: '/repairs',
                 paths: ['/repairs', '/repairs/*'],
+                permission: 'repairs.view',
             },
         ],
     },
@@ -96,6 +117,14 @@ const menuGroups = [
                 icon: Package,
                 href: '/stock-import',
                 paths: ['/stock-import', '/stock-import/*'],
+                permission: 'stock_imports.view',
+            },
+            {
+                label: 'Thanh toán NCC',
+                icon: HandCoins,
+                href: '/debts/suppliers',
+                paths: ['/debts/suppliers'],
+                permission: 'supplier_debts.view',
             },
             {
                 label: 'Sản phẩm & IMEI',
@@ -123,12 +152,14 @@ const menuGroups = [
                 icon: Tags,
                 href: '/brands',
                 paths: ['/brands', '/brands-trash'],
+                permission: 'brands.view',
             },
             {
                 label: 'Nhà cung cấp',
                 icon: Truck,
                 href: '/suppliers',
                 paths: ['/suppliers'],
+                permission: 'suppliers.view',
             },
         ],
     },
@@ -142,6 +173,7 @@ const menuGroups = [
                 icon: UserRound,
                 href: '/customers',
                 paths: ['/customers', '/customers/*'],
+                permission: 'customers.view',
             },
         ],
     },
@@ -252,14 +284,14 @@ watch(() => props.collapsed, (val) => {
                 v-if="!props.collapsed"
                 type="button"
                 class="flex min-w-0 items-center gap-3 active:scale-95 transition"
-                @click="visitMenu('/dashboard', ['/dashboard'])"
+                @click="visitMenu(homeUrl, [homeUrl])"
             >
                 <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/30">
                     <ShoppingBag :size="19" />
                 </div>
                 <div class="min-w-0 text-left">
                     <div class="truncate text-[15px] font-black tracking-wide leading-tight">
-                        QLBH POS
+                        {{ shopName }}
                     </div>
                     <div class="truncate text-[10px] text-cyan-300/70 font-medium">
                         Hệ thống quản lý
@@ -271,7 +303,7 @@ watch(() => props.collapsed, (val) => {
                 v-else
                 type="button"
                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md active:scale-95 transition"
-                @click="visitMenu('/dashboard', ['/dashboard'])"
+                @click="visitMenu(homeUrl, [homeUrl])"
             >
                 <ShoppingBag :size="19" />
             </button>
@@ -291,7 +323,7 @@ watch(() => props.collapsed, (val) => {
             <!-- TRANG CHỦ -->
             <button
                 type="button"
-                @click="visitMenu('/dashboard', ['/dashboard'])"
+                @click="visitMenu(homeUrl, [homeUrl])"
                 class="flex h-10 w-full items-center rounded-xl transition-all duration-200"
                 :class="[
                     props.collapsed ? 'justify-center px-0' : 'gap-3 px-3.5',
@@ -315,8 +347,9 @@ watch(() => props.collapsed, (val) => {
             >
                 <template v-if="visibleItems(group.items).length">
                     <!-- NÚT NHÓM CHA -->
-                    <button
-                        type="button"
+            <button
+                v-if="can('dashboard.view')"
+                type="button"
                         class="flex w-full items-center rounded-xl transition-all duration-200"
                         :class="[
                             props.collapsed ? 'h-10 justify-center px-0' : 'h-10 justify-between px-3.5',

@@ -13,6 +13,7 @@ import ActionButton from '@/Components/UI/ActionButton.vue';
 import RepairProgressModal from './RepairProgressModal.vue';
 import RepairStatusProgress from './RepairStatusProgress.vue';
 import { toast } from 'vue-sonner';
+import { formatCurrency, formatDate } from '@/utils/format';
 
 const emit = defineEmits(['close', 'updated']);
 const props = defineProps({ initialRepair: { type: Object, default: null }, startAt: { type: String, default: 'repair' }, onCompleted: Function, onPay: Function });
@@ -77,9 +78,7 @@ const selectedWarranty = ref(initial?.warranty_source_type ? {
 } : null);
 let customerDeviceRequest = 0;
 
-const displayWarrantyDate = (value) => value
-    ? new Date(value).toLocaleDateString('vi-VN')
-    : 'Không có hạn';
+const displayWarrantyDate = (value) => value ? formatDate(value) : 'Không có hạn';
 
 const warrantyForDeviceSuggestion = (item) => {
     const customerId = Number(form.customer_id || selectedCustomer.value?.id || 0);
@@ -938,7 +937,7 @@ const selectWorkflowStep = (status) => {
                                 <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
                                 <p v-if="customerSuggestions.length" class="sticky top-0 z-10 flex items-center gap-2 border-b border-blue-100 bg-blue-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-blue-800"><span class="h-1.5 w-1.5 rounded-full bg-blue-600"></span>Khách hàng<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-blue-700">{{ customerSuggestions.length }}</span></p>
                                 <button v-for="customer in customerSuggestions" :key="`customer-${customer.id}`" type="button" class="block w-full border-b border-slate-100 px-3.5 py-2.5 text-left transition hover:bg-blue-50" @pointerdown.prevent="onSelectCustomer(customer)">
-                                    <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-bold text-slate-900">{{ customer.full_name }} <span class="text-[11px] font-medium text-slate-500">· {{ customer.phone || 'Chưa có SĐT' }}</span></span><span v-if="Number(customer.debt_balance || 0) > 0" class="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">Nợ {{ Number(customer.debt_balance).toLocaleString('vi-VN') }} đ</span></span>
+                                    <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-bold text-slate-900">{{ customer.full_name }} <span class="text-[11px] font-medium text-slate-500">· {{ customer.phone || 'Chưa có SĐT' }}</span></span><span v-if="Number(customer.debt_balance || 0) > 0" class="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">Nợ {{ $money(customer.debt_balance) }}</span></span>
                                     <span class="mt-0.5 block text-[10px] text-slate-500">{{ customer.code || customer.cccd || 'Chọn làm khách tiếp nhận' }}</span>
                                 </button>
                                 <p v-if="matchingDeviceNames.length" class="sticky top-0 z-10 flex items-center gap-2 border-y border-indigo-100 bg-indigo-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-indigo-800"><span class="h-1.5 w-1.5 rounded-full bg-indigo-600"></span>Tên máy<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-indigo-700">{{ matchingDeviceNames.length }}</span></p>
@@ -995,7 +994,7 @@ const selectWorkflowStep = (status) => {
                 <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
                     <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">♙ Thông tin khách hàng</h2>
                     <div v-if="selectedCustomer" class="flex items-center gap-2 text-[10px]">
-                        <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="font-semibold text-rose-600">Nợ {{ Number(selectedCustomer.debt_balance).toLocaleString('vi-VN') }} đ</span>
+                        <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="font-semibold text-rose-600">Nợ {{ $money(selectedCustomer.debt_balance) }}</span>
                         <button type="button" class="text-slate-400 hover:text-rose-600" @click="clearCustomer">Bỏ chọn</button>
                     </div>
                 </header>

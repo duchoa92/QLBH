@@ -54,14 +54,8 @@ const closeModal = () => {
 
         <DangerButton @click="confirmUserDeletion">Delete Account</DangerButton>
 
-        <Modal :show="confirmingUserDeletion" @close="closeModal">
+        <Modal title="Delete Account" :show="confirmingUserDeletion" @close="closeModal">
             <div class="p-6">
-                <h2
-                    class="text-lg font-medium text-gray-900"
-                >
-                    Are you sure you want to delete your account?
-                </h2>
-
                 <p class="mt-1 text-sm text-gray-600">
                     Once your account is deleted, all of its resources and data
                     will be permanently deleted. Please enter your password to
@@ -88,7 +82,10 @@ const closeModal = () => {
                     <InputError :message="form.errors.password" class="mt-2" />
                 </div>
 
-                <div class="mt-6 flex justify-end">
+            </div>
+
+            <template #footer>
+                <div class="flex justify-end">
                     <SecondaryButton @click="closeModal">
                         Cancel
                     </SecondaryButton>
@@ -102,7 +99,7 @@ const closeModal = () => {
                         Delete Account
                     </DangerButton>
                 </div>
-            </div>
+            </template>
         </Modal>
     </section>
 </template>

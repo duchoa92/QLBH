@@ -1,7 +1,7 @@
 <script setup>
-import { formatDateTime, formatMoney } from '@/utils/format'
+import { formatDateTime, formatMoney, formatNumber } from '@/utils/format'
 import { Printer, ArrowLeft, Tag, Calendar, User, DollarSign } from 'lucide-vue-next'
-import { Link } from '@inertiajs/vue3'
+import { Link, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
     sale: {
@@ -9,11 +9,12 @@ const props = defineProps({
         required: true
     }
 })
+const page = usePage()
 
 const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
     const unit = item.unit_name || 'Cái'
-    return `${Number.isInteger(qty) ? qty : qty.toLocaleString('vi-VN')} ${unit}`
+    return `${Number.isInteger(qty) ? qty : formatNumber(qty)} ${unit}`
 }
 
 const baseQuantityText = (item) => {
@@ -57,7 +58,7 @@ const printInvoice = () => {
             <!-- Header Cửa hàng -->
             <div class="text-center pb-6 mb-6 border-b border-slate-100">
                 <h2 class="text-2xl font-black text-slate-900 tracking-tight mb-1">
-                    ĐỨC HÒA COMPUTER
+                    {{ page.props.settings?.shop_name || 'Cửa hàng' }}
                 </h2>
                 <p class="text-xs uppercase tracking-widest font-bold text-indigo-600">
                     Chi tiết hóa đơn bán hàng
@@ -136,11 +137,11 @@ const printInvoice = () => {
                             </td>
 
                             <td class="py-3 px-4 text-right text-slate-700 font-medium">
-                                {{ formatMoney(item.unit_price) }} đ
+                                {{ formatMoney(item.unit_price) }}
                             </td>
 
                             <td class="py-3 px-4 text-right font-bold text-slate-900">
-                                {{ formatMoney(item.subtotal) }} đ
+                                {{ formatMoney(item.subtotal) }}
                             </td>
                         </tr>
                     </tbody>
@@ -151,7 +152,7 @@ const printInvoice = () => {
                                 Tổng cộng
                             </td>
                             <td class="py-3 px-4 text-right text-indigo-600 text-base">
-                                {{ formatMoney(sale.subtotal || sale.grand_total) }} đ
+                                {{ formatMoney(sale.subtotal || sale.grand_total) }}
                             </td>
                         </tr>
                     </tfoot>

@@ -1,4 +1,7 @@
 <script setup>
+import BaseModal from '@/Components/UI/BaseModal.vue'
+import { formatCurrency } from '@/utils/format'
+
 defineProps({
 
     show: Boolean,
@@ -12,36 +15,13 @@ const emit = defineEmits([
     'close',
 ])
 
-const formatMoney = (value) => {
-
-    return Number(value || 0)
-        .toLocaleString('vi-VN')
-}
+const formatMoney = formatCurrency
 </script>
 
 <template>
 
-    <div
-        v-if="show"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 "
-    >
-
-        <div class="bg-white w-[700px] max-h-[80vh] rounded-lg shadow-lg p-5 flex flex-col">
-
-            <div class="mb-4 flex justify-between">
-
-                <h3 class="font-bold text-lg">
-                    Chi tiết nợ
-                </h3>
-
-                <button
-                    @click="$emit('close')"
-                >
-                    X
-                </button>
-            </div>
-
-            <div class="overflow-y-auto flex-1 border rounded">
+    <BaseModal v-if="show" title="Chi tiết nợ" size="lg" body-class="flex min-h-0 flex-1 flex-col p-4" @close="emit('close')">
+            <div class="min-h-0 flex-1 overflow-auto rounded border">
                 <table
                     class="w-full text-sm"
                 >
@@ -130,18 +110,12 @@ const formatMoney = (value) => {
                 </table>
             </div>
 
-            <div
-                class="mt-4 border-t pt-4 text-right font-bold"
-            >
-
-                Tổng nợ:
-
-                {{ formatMoney(total) }}
-
+        <template #footer>
+            <div class="flex justify-between text-sm font-bold">
+                <span>Tổng nợ</span>
+                <span>{{ formatMoney(total) }}</span>
             </div>
-
-        </div>
-
-    </div>
+        </template>
+    </BaseModal>
 
 </template>
