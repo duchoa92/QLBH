@@ -16,6 +16,7 @@ import {
     FileArchive,
     Cloud,
     Link2,
+    ChevronDown,
 } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -38,7 +39,6 @@ const props = defineProps({
             enabled: false,
             frequency: 'daily',
             time: '02:00',
-            timezone: 'Asia/Ho_Chi_Minh',
             weekday: 1,
             monthday: 1,
         }),
@@ -50,7 +50,6 @@ const scheduleForm = useForm({
     enabled: Boolean(props.schedule.enabled),
     frequency: props.schedule.frequency || 'daily',
     time: props.schedule.time || '02:00',
-    timezone: props.schedule.timezone || 'Asia/Ho_Chi_Minh',
     weekday: Number(props.schedule.weekday ?? 1),
     monthday: Number(props.schedule.monthday ?? 1),
 })
@@ -60,14 +59,40 @@ const uploadForm = useForm({ backup_file: null, operation_id: null })
 const cloudForm = useForm({ provider: 's3', name: '', key: '', secret: '', region: 'us-east-1', bucket: '', endpoint: '', base_path: 'backups', path_style: false, url: '', username: '', token: '' })
 const confirmBox = useConfirm()
 const selectedFileName = ref('')
-const showRestorePreview = ref(Boolean(props.restore_preview))
+const restorePreview = ref(props.restore_preview)
+const showRestorePreview = ref(Boolean(restorePreview.value))
+const showCloudStorage = ref(false)
 const operationProgress = ref({ active: false, percent: 0, message: '', state: 'running' })
 let progressTimer = null
-let progressHideTimer = null
 let activeOperation = null
 
 const progressPercent = computed(() => uploadForm.progress?.percentage ?? operationProgress.value.percent)
 const progressVisible = computed(() => operationProgress.value.active || operationProgress.value.state !== 'running' || Boolean(uploadForm.progress))
+const backupMonth = ref('')
+const backupPage = ref(1)
+const selectedBackupNames = ref([])
+const backupMonths = computed(() => [...new Set(props.backups
+    .map((backup) => String(backup.created_at || '').slice(0, 7))
+    .filter((month) => /^\d{4}-\d{2}$/.test(month)))].sort().reverse())
+const filteredBackups = computed(() => props.backups.filter((backup) => !backupMonth.value || String(backup.created_at || '').startsWith(backupMonth.value)))
+const backupPageSize = 10
+const backupPageCount = computed(() => Math.max(1, Math.ceil(filteredBackups.value.length / backupPageSize)))
+const paginatedBackups = computed(() => filteredBackups.value.slice((backupPage.value - 1) * backupPageSize, backupPage.value * backupPageSize))
+const currentPageSelected = computed(() => paginatedBackups.value.length > 0 && paginatedBackups.value.every((backup) => selectedBackupNames.value.includes(backup.name)))
+const scheduleDirty = computed(() =>
+    scheduleForm.enabled !== Boolean(props.schedule.enabled)
+    || scheduleForm.frequency !== (props.schedule.frequency || 'daily')
+    || scheduleForm.time !== (props.schedule.time || '02:00')
+    || Number(scheduleForm.weekday) !== Number(props.schedule.weekday ?? 1)
+    || Number(scheduleForm.monthday) !== Number(props.schedule.monthday ?? 1)
+)
+
+watch(backupMonth, () => { backupPage.value = 1 })
+watch(() => props.backups, (backups) => {
+    const existingNames = new Set(backups.map((backup) => backup.name))
+    selectedBackupNames.value = selectedBackupNames.value.filter((name) => existingNames.has(name))
+    backupPage.value = Math.min(backupPage.value, backupPageCount.value)
+})
 
 // randomUUID() is unavailable on non-secure origins in some browsers (for
 // example, when the app is opened by a LAN IP over HTTP). Keep the server's
@@ -94,7 +119,6 @@ const createOperationId = () => {
 
 const startProgress = () => {
     activeOperation = createOperationId()
-    clearTimeout(progressHideTimer)
     operationProgress.value = { active: true, percent: 1, message: 'Đang khởi chạy thao tác…', state: 'running' }
     clearInterval(progressTimer)
     progressTimer = setInterval(async () => {
@@ -106,9 +130,6 @@ const startProgress = () => {
                 operationProgress.value = { ...operationProgress.value, ...result, active: result.state === 'running' }
                 if (result.state !== 'running') {
                     clearInterval(progressTimer)
-                    progressHideTimer = setTimeout(() => {
-                        operationProgress.value = { ...operationProgress.value, state: 'running', message: '' }
-                    }, 5000)
                 }
             }
         } catch (_) { /* Polling retries on the next interval. */ }
@@ -116,16 +137,14 @@ const startProgress = () => {
     return activeOperation
 }
 
-onUnmounted(() => { clearInterval(progressTimer); clearTimeout(progressHideTimer) })
+onUnmounted(() => clearInterval(progressTimer))
+
+const dismissProgress = () => {
+    if (operationProgress.value.active) return
+    operationProgress.value = { active: false, percent: 0, message: '', state: 'running' }
+}
 
 const backupPath = (name) => `/backups/${encodeURIComponent(name)}`
-
-watch(() => props.restore_preview, (preview) => {
-    if (preview) {
-        showRestorePreview.value = true
-        restoreForm.mode = preview.summary.schema_compatible && preview.summary.new_tables === 0 ? 'merge' : 'replace'
-    }
-}, { immediate: true })
 
 const runBackup = () => {
     confirmBox.show({
@@ -149,10 +168,56 @@ const removeBackup = (backup) => {
     })
 }
 
+const toggleBackupSelection = (name) => {
+    selectedBackupNames.value = selectedBackupNames.value.includes(name)
+        ? selectedBackupNames.value.filter((selected) => selected !== name)
+        : [...selectedBackupNames.value, name]
+}
+
+const toggleCurrentPageSelection = () => {
+    const pageNames = paginatedBackups.value.map((backup) => backup.name)
+    selectedBackupNames.value = currentPageSelected.value
+        ? selectedBackupNames.value.filter((name) => !pageNames.includes(name))
+        : [...new Set([...selectedBackupNames.value, ...pageNames])]
+}
+
+const removeSelectedBackups = () => {
+    const names = [...selectedBackupNames.value]
+    if (!names.length) return
+    confirmBox.show({
+        title: 'Xóa nhiều bản sao lưu',
+        message: `Xóa ${names.length} tệp sao lưu đã chọn? Thao tác này không thể hoàn tác.`,
+        confirmText: `Xóa ${names.length} tệp`,
+        onConfirm: () => {
+            router.delete('/backups/bulk', {
+                data: { names, operation_id: startProgress() },
+                preserveScroll: true,
+                onSuccess: () => { selectedBackupNames.value = [] },
+            })
+        },
+    })
+}
+
 const saveSchedule = () => scheduleForm.put('/backups/schedule', { preserveScroll: true })
-const toggleAutoBackup = () => scheduleForm.put('/backups/schedule', { preserveScroll: true })
-const inspectBackup = (backup) => router.post(`${backupPath(backup.name)}/inspect`, { operation_id: startProgress() }, { preserveScroll: true })
-const inspectCloudBackup = (connection, backup) => router.post(`/backups/cloud/${connection.id}/inspect`, { name: backup.name, operation_id: startProgress() }, { preserveScroll: true })
+const openRestorePreview = (preview) => {
+    if (!preview?.summary || !preview?.tables) return
+    restorePreview.value = preview
+    showRestorePreview.value = true
+    restoreForm.mode = preview.summary.schema_compatible && preview.summary.new_tables === 0 ? 'merge' : 'replace'
+}
+
+const applyPreviewFromPage = (page) => openRestorePreview(page?.props?.restore_preview)
+
+watch(() => props.restore_preview, openRestorePreview, { immediate: true })
+
+const inspectBackup = (backup) => router.post(`${backupPath(backup.name)}/inspect`, { operation_id: startProgress() }, {
+    preserveScroll: true,
+    onSuccess: applyPreviewFromPage,
+})
+const inspectCloudBackup = (connection, backup) => router.post(`/backups/cloud/${connection.id}/inspect`, { name: backup.name, operation_id: startProgress() }, {
+    preserveScroll: true,
+    onSuccess: applyPreviewFromPage,
+})
 const saveCloudConnection = () => {
     if (['google_drive', 'onedrive'].includes(cloudForm.provider)) {
         router.get(`/backups/cloud/oauth/${cloudForm.provider}/start`, { name: cloudForm.name }, { preserveScroll: true })
@@ -182,7 +247,8 @@ const inspectUploadedFile = () => {
     uploadForm.post('/backups/import', {
         forceFormData: true,
         preserveScroll: true,
-        onSuccess: () => {
+        onSuccess: (page) => {
+            applyPreviewFromPage(page)
             uploadForm.reset()
             selectedFileName.value = ''
         },
@@ -191,7 +257,7 @@ const inspectUploadedFile = () => {
 }
 
 const restoreBackup = () => {
-    const preview = props.restore_preview
+    const preview = restorePreview.value
     if (!preview) return
     const warning = restoreForm.mode === 'replace'
         ? 'Thay toàn bộ cơ sở dữ liệu hiện tại bằng bản sao lưu? Hệ thống sẽ tự tạo một bản cứu hộ trước khi thực hiện.'
@@ -224,12 +290,6 @@ const frequencyOptions = [
     { value: 'monthly', label: 'Mỗi tháng' },
 ]
 
-const timezoneOptions = [
-    { value: 'Asia/Ho_Chi_Minh', label: 'Việt Nam (UTC+7)' },
-    { value: 'Asia/Bangkok', label: 'Bangkok (UTC+7)' },
-    { value: 'UTC', label: 'UTC' },
-]
-
 const weekdayOptions = [
     { value: 1, label: 'Thứ Hai' },
     { value: 2, label: 'Thứ Ba' },
@@ -258,15 +318,25 @@ const conflictPolicyOptions = [
 
 <template>
     <div class="space-y-3">
-        <DataPanel v-if="progressVisible" class="p-3.5 sm:p-4" aria-live="polite">
-            <div class="mb-2 flex items-center justify-between gap-3 text-xs">
-                <span class="font-semibold text-slate-700">{{ operationProgress.message }}</span>
-                <span class="shrink-0 font-bold tabular-nums text-emerald-700">{{ Math.round(progressPercent) }}%</span>
+        <Teleport to="body">
+            <div v-if="progressVisible" class="fixed inset-0 z-[10020] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-live="polite" aria-label="Tiến trình xử lý sao lưu">
+                <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+                    <div class="mb-3 flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-bold text-slate-800">{{ operationProgress.active ? 'Đang xử lý' : operationProgress.state === 'failed' ? 'Thao tác thất bại' : 'Đã hoàn tất' }}</p>
+                            <p class="mt-1 text-sm text-slate-600">{{ operationProgress.message || 'Đang xử lý bản sao lưu…' }}</p>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-sm font-bold tabular-nums text-emerald-700">{{ Math.round(progressPercent) }}%</span>
+                    </div>
+                    <div class="h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100" aria-label="Tiến trình xử lý">
+                        <div class="h-full rounded-full bg-emerald-500 transition-[width] duration-300" :style="{ width: `${Math.max(3, progressPercent)}%` }"></div>
+                    </div>
+                    <div v-if="!operationProgress.active" class="mt-5 flex justify-end">
+                        <button type="button" class="h-10 min-w-24 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700" @click="dismissProgress">OK</button>
+                    </div>
+                </div>
             </div>
-            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div class="h-full rounded-full bg-emerald-500 transition-[width] duration-300" :style="{ width: `${Math.max(3, progressPercent)}%` }"></div>
-            </div>
-        </DataPanel>
+        </Teleport>
 
         <!-- KHỐI QUẢN LÝ SAO LƯU TỔNG HỢP (GOM CHUNG THIẾT LẬP LỊCH VÀ SAO LƯU NGAY) -->
         <DataPanel class="p-3.5 sm:p-4">
@@ -290,29 +360,18 @@ const conflictPolicyOptions = [
             </div>
 
             <!-- Form Lịch sao lưu tự động -->
-            <form class="mt-4 space-y-4" @submit.prevent="saveSchedule">
-
-                <div class="flex flex-wrap items-center gap-3 self-start sm:self-auto">
-                    <label class="inline-flex h-10 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 cursor-pointer select-none">
-                        <input v-model="scheduleForm.enabled" type="checkbox" class="sr-only peer" :disabled="scheduleForm.processing" @change="toggleAutoBackup">
-                        <span class="relative h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-emerald-600 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4"></span>
-                        <span class="text-xs font-semibold text-slate-700">Sao lưu tự động</span>
-                    </label>
+            <form class="mt-4" @submit.prevent="saveSchedule">
+                <div class="flex flex-wrap items-center gap-3">
                     <ActionButton :disabled="scheduleForm.processing || operationProgress.active" class="!bg-emerald-600 hover:!bg-emerald-700 !text-white h-10 px-4 font-semibold shadow-sm transition-all shrink-0" @click="runBackup">
                         <DatabaseBackup :size="17" /> Sao lưu ngay
                     </ActionButton>
-                </div>
-                <!-- CÁC Ô THIẾT LẬP CHỈ HIỂN THỊ KHIN TÍCH CHỌN BẬT SAO LƯU TỰ ĐỘNG -->
-                <transition
-                    enter-active-class="transition duration-200 ease-out"
-                    enter-from-class="transform opacity-0 -translate-y-2"
-                    enter-to-class="transform opacity-100 translate-y-0"
-                    leave-active-class="transition duration-150 ease-in"
-                    leave-from-class="transform opacity-100 translate-y-0"
-                    leave-to-class="transform opacity-0 -translate-y-2"
-                >
-                    <div v-if="scheduleForm.enabled" class="space-y-4 pt-1">
-                        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <label class="inline-flex h-10 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 cursor-pointer select-none">
+                        <input v-model="scheduleForm.enabled" type="checkbox" class="sr-only peer" :disabled="scheduleForm.processing">
+                        <span class="relative h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-emerald-600 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4"></span>
+                        <span class="text-xs font-semibold text-slate-700">Sao lưu tự động</span>
+                    </label>
+                    <template v-if="scheduleForm.enabled">
+                        <div class="w-40">
                             <!-- Tần suất -->
                             <FloatingSelect
                                 name="frequency"
@@ -321,8 +380,8 @@ const conflictPolicyOptions = [
                                 :options="frequencyOptions"
                                 :disabled="scheduleForm.processing"
                             />
-
-                            <!-- Giờ chạy -->
+                        </div>
+                        <div class="w-40">
                             <FloatingInput
                                 name="time"
                                 type="time"
@@ -331,29 +390,18 @@ const conflictPolicyOptions = [
                                 required
                                 :disabled="scheduleForm.processing"
                             />
-
-                            <!-- Múi giờ -->
+                        </div>
+                        <div v-if="scheduleForm.frequency === 'weekly'" class="w-40">
                             <FloatingSelect
-                                name="timezone"
-                                v-model="scheduleForm.timezone"
-                                label="Múi giờ"
-                                :options="timezoneOptions"
-                                :disabled="scheduleForm.processing"
-                            />
-
-                            <!-- Ngày trong tuần -->
-                            <FloatingSelect
-                                v-if="scheduleForm.frequency === 'weekly'"
                                 name="weekday"
                                 v-model.number="scheduleForm.weekday"
                                 label="Ngày trong tuần"
                                 :options="weekdayOptions"
                                 :disabled="scheduleForm.processing"
                             />
-
-                            <!-- Ngày trong tháng -->
+                        </div>
+                        <div v-if="scheduleForm.frequency === 'monthly'" class="w-40">
                             <FloatingSelect
-                                v-if="scheduleForm.frequency === 'monthly'"
                                 name="monthday"
                                 v-model.number="scheduleForm.monthday"
                                 label="Ngày trong tháng"
@@ -361,14 +409,11 @@ const conflictPolicyOptions = [
                                 :disabled="scheduleForm.processing"
                             />
                         </div>
-
-                        <div class="flex items-center justify-between">
-                            <ActionButton type="submit" :disabled="scheduleForm.processing" class="!bg-slate-900 hover:!bg-slate-800 !text-white h-10 px-5 font-semibold shadow-sm">
+                        <ActionButton type="submit" :disabled="scheduleForm.processing || !scheduleDirty" class="!bg-slate-900 hover:!bg-slate-800 !text-white h-10 px-5 font-semibold shadow-sm">
                                 <Play :size="15" /> Lưu cấu hình lịch
-                            </ActionButton>
-                        </div>
-                    </div>
-                </transition>
+                        </ActionButton>
+                    </template>
+                </div>
             </form>
 
             <div v-if="schedule.last_error" class="mt-3 flex items-start gap-2.5 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700 ring-1 ring-red-200/80">
@@ -378,14 +423,23 @@ const conflictPolicyOptions = [
         </DataPanel>
 
         <DataPanel class="p-3.5 sm:p-4">
-            <div class="mb-4 flex items-start gap-3 border-b border-slate-100 pb-3">
-                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-600/15"><Cloud :size="20" /></div>
-                <div>
-                    <h2 class="text-base font-bold text-slate-800">Kho sao lưu đám mây</h2>
-                    <p class="text-xs text-slate-500">Kết nối S3/R2/Wasabi, WebDAV/Nextcloud, Google Drive hoặc OneDrive. Bản sao lưu mới sẽ được tải lên mọi kết nối đang bật.</p>
-                </div>
-            </div>
+            <button
+                type="button"
+                class="flex w-full items-center gap-3 text-left"
+                :aria-expanded="showCloudStorage"
+                aria-controls="cloud-backup-storage"
+                @click="showCloudStorage = !showCloudStorage"
+            >
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-600/15"><Cloud :size="20" /></span>
+                <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-2 text-base font-bold text-slate-800">Kho sao lưu đám mây <span v-if="cloud_connections.length" class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{{ cloud_connections.length }} kết nối</span></span>
+                    <span class="mt-0.5 block text-xs text-slate-500">Nhấn để {{ showCloudStorage ? 'thu gọn' : 'quản lý kết nối và bản sao lưu' }}.</span>
+                </span>
+                <ChevronDown :size="18" class="shrink-0 text-slate-500 transition-transform duration-200" :class="showCloudStorage && 'rotate-180'" />
+            </button>
 
+            <div v-if="showCloudStorage" id="cloud-backup-storage" class="mt-4 space-y-4 border-t border-slate-100 pt-4">
+            <div class="text-xs text-slate-500">Kết nối S3/R2/Wasabi, WebDAV/Nextcloud, Google Drive hoặc OneDrive. Bản sao lưu mới sẽ được tải lên mọi kết nối đang bật.</div>
             <form class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3" @submit.prevent="saveCloudConnection">
                 <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <label class="text-xs font-semibold text-slate-600">Loại kho
@@ -475,6 +529,7 @@ const conflictPolicyOptions = [
                     <p v-else-if="!connection.error" class="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">Chưa có bản sao lưu trên kho này.</p>
                 </div>
             </div>
+            </div>
         </DataPanel>
 
         <!-- Danh sách các bản sao lưu -->
@@ -482,6 +537,24 @@ const conflictPolicyOptions = [
             <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
                 <h2 class="text-base font-bold text-slate-800">Danh sách các bản sao lưu</h2>
                 <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">Tổng số: {{ backups.length }} tệp</span>
+            </div>
+
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="text-xs font-semibold text-slate-600">Lọc theo tháng
+                        <select v-model="backupMonth" class="ml-2 h-9 min-w-40 rounded-lg border-slate-300 py-1 pl-3 pr-8 text-xs focus:border-blue-500 focus:ring-blue-500">
+                            <option value="">Tất cả các tháng</option>
+                            <option v-for="month in backupMonths" :key="month" :value="month">Tháng {{ month.slice(5, 7) }}/{{ month.slice(0, 4) }}</option>
+                        </select>
+                    </label>
+                    <label v-if="paginatedBackups.length" class="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600">
+                        <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="currentPageSelected" @change="toggleCurrentPageSelection">
+                        Chọn trang này
+                    </label>
+                </div>
+                <button v-if="selectedBackupNames.length" type="button" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-red-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50" :disabled="operationProgress.active" @click="removeSelectedBackups">
+                    <Trash2 :size="14" /> Xóa {{ selectedBackupNames.length }} tệp đã chọn
+                </button>
             </div>
 
             <!-- Upload file ngoài -->
@@ -499,9 +572,10 @@ const conflictPolicyOptions = [
             </form>
 
             <!-- Table bản sao lưu -->
-            <div v-if="backups.length" class="divide-y divide-slate-100 rounded-xl border border-slate-200/80 overflow-hidden bg-white">
-                <div v-for="backup in backups" :key="backup.name" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 transition-colors hover:bg-slate-50/80">
+            <div v-if="paginatedBackups.length" class="divide-y divide-slate-100 rounded-xl border border-slate-200/80 overflow-hidden bg-white">
+                <div v-for="backup in paginatedBackups" :key="backup.name" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 transition-colors hover:bg-slate-50/80">
                     <div class="flex items-start gap-3">
+                        <input type="checkbox" class="mt-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="selectedBackupNames.includes(backup.name)" :aria-label="`Chọn ${backup.name}`" @change="toggleBackupSelection(backup.name)">
                         <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                             <FileArchive :size="18" />
                         </div>
@@ -529,8 +603,16 @@ const conflictPolicyOptions = [
             </div>
             <div v-else class="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center">
                 <DatabaseBackup class="mx-auto text-slate-300 mb-2" :size="32" />
-                <p class="text-sm font-semibold text-slate-600">Chưa có bản sao lưu nào</p>
-                <p class="text-xs text-slate-400 mt-1">Bấm nút "Sao lưu ngay" ở trên để khởi tạo bản sao lưu đầu tiên.</p>
+                <p class="text-sm font-semibold text-slate-600">{{ backups.length ? 'Không có bản sao lưu trong tháng này' : 'Chưa có bản sao lưu nào' }}</p>
+                <p v-if="!backups.length" class="text-xs text-slate-400 mt-1">Bấm nút "Sao lưu ngay" ở trên để khởi tạo bản sao lưu đầu tiên.</p>
+            </div>
+
+            <div v-if="filteredBackups.length > backupPageSize" class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs text-slate-500">Trang {{ backupPage }} / {{ backupPageCount }} · {{ filteredBackups.length }} tệp</p>
+                <div class="flex items-center gap-2">
+                    <button type="button" class="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40" :disabled="backupPage <= 1" @click="backupPage -= 1">Trước</button>
+                    <button type="button" class="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40" :disabled="backupPage >= backupPageCount" @click="backupPage += 1">Tiếp</button>
+                </div>
             </div>
 
             <p class="mt-3 text-[11px] text-slate-400">Tệp sao lưu gốc được lưu trữ an toàn tại thư mục <code class="rounded bg-slate-100 px-1 py-0.5 text-slate-600 font-mono">storage/app/backups</code>.</p>
@@ -538,7 +620,7 @@ const conflictPolicyOptions = [
 
         <!-- Modal Đối chiếu & Khôi phục -->
         <Teleport to="body">
-        <div v-if="showRestorePreview && restore_preview" class="fixed inset-0 z-[9990] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6" @click.self="showRestorePreview = false">
+        <div v-if="showRestorePreview && restorePreview" class="fixed inset-0 z-[9990] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6" @click.self="showRestorePreview = false">
             <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
                 <!-- Modal Header -->
                 <header class="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50 px-4 py-3 sm:px-6">
@@ -548,7 +630,7 @@ const conflictPolicyOptions = [
                         </div>
                         <div>
                             <h2 class="text-base font-bold text-slate-800">Đối chiếu dữ liệu trước khi khôi phục</h2>
-                            <p class="text-xs font-medium text-slate-500 break-all">{{ restore_preview.backup }} · {{ restore_preview.created_at || 'Không xác định ngày tạo' }}</p>
+                            <p class="text-xs font-medium text-slate-500 break-all">{{ restorePreview.backup }} · {{ restorePreview.created_at || 'Không xác định ngày tạo' }}</p>
                         </div>
                     </div>
                     <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors" aria-label="Đóng" @click="showRestorePreview = false">
@@ -562,26 +644,26 @@ const conflictPolicyOptions = [
                     <div class="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
                         <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
                             <span class="block text-[11px] font-semibold text-slate-500 uppercase">Tổng số bảng</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restore_preview.summary.backup_tables }} sao lưu / {{ restore_preview.summary.current_tables }} hiện tại</span>
+                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.backup_tables }} sao lưu / {{ restorePreview.summary.current_tables }} hiện tại</span>
                         </div>
-                        <div class="rounded-xl p-2.5 border" :class="restore_preview.summary.row_count_difference ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200/70 text-slate-800'">
+                        <div class="rounded-xl p-2.5 border" :class="restorePreview.summary.row_count_difference ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200/70 text-slate-800'">
                             <span class="block text-[11px] font-semibold uppercase opacity-75">Số bản ghi (Dòng)</span>
                             <span class="text-sm font-bold mt-0.5 block">
-                                {{ restore_preview.summary.backup_rows }} / {{ restore_preview.summary.current_rows }}
-                                <span v-if="restore_preview.summary.row_count_difference" class="text-xs font-semibold">({{ restore_preview.summary.row_count_difference > 0 ? '+' : '' }}{{ restore_preview.summary.row_count_difference }})</span>
+                                {{ restorePreview.summary.backup_rows }} / {{ restorePreview.summary.current_rows }}
+                                <span v-if="restorePreview.summary.row_count_difference" class="text-xs font-semibold">({{ restorePreview.summary.row_count_difference > 0 ? '+' : '' }}{{ restorePreview.summary.row_count_difference }})</span>
                             </span>
                         </div>
                         <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
                             <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng đã mất</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restore_preview.summary.missing_tables }}</span>
+                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.missing_tables }}</span>
                         </div>
                         <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
                             <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng mới</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restore_preview.summary.new_tables }}</span>
+                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.new_tables }}</span>
                         </div>
                         <div class="rounded-xl bg-amber-50 p-2.5 border border-amber-200 col-span-2 sm:col-span-1">
                             <span class="block text-[11px] font-semibold text-amber-700 uppercase">Dữ liệu bị lệch</span>
-                            <span class="text-sm font-bold text-amber-800 mt-0.5 block">{{ restore_preview.summary.mismatched_data_tables }} bảng</span>
+                            <span class="text-sm font-bold text-amber-800 mt-0.5 block">{{ restorePreview.summary.mismatched_data_tables }} bảng</span>
                         </div>
                     </div>
 
@@ -599,7 +681,7 @@ const conflictPolicyOptions = [
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 font-medium">
-                                <tr v-for="(table, name) in restore_preview.tables" :key="name" class="hover:bg-slate-50/50">
+                                <tr v-for="(table, name) in restorePreview.tables" :key="name" class="hover:bg-slate-50/50">
                                     <td class="py-2 px-3 font-semibold text-slate-800">{{ name }}</td>
                                     <td class="py-2 px-3 text-slate-600">{{ table.backup_rows }}</td>
                                     <td class="py-2 px-3 text-slate-600">{{ table.current_rows }}</td>
@@ -642,13 +724,13 @@ const conflictPolicyOptions = [
                         <p v-if="restoreForm.mode === 'merge'" class="text-slate-500">
                             * Chế độ Gộp sẽ thêm các dòng chưa tồn tại; các dòng trùng khóa chính/duy nhất sẽ được xử lý theo lựa chọn cài đặt ở trên.
                         </p>
-                        <p v-if="restore_preview.summary.mismatched_data_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            ⚠️ Dữ liệu hiện tại lệch ở {{ restore_preview.summary.mismatched_data_tables }} bảng. Vui lòng kiểm tra kỹ trước khi bấm xác nhận.
+                        <p v-if="restorePreview.summary.mismatched_data_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
+                            ⚠️ Dữ liệu hiện tại lệch ở {{ restorePreview.summary.mismatched_data_tables }} bảng. Vui lòng kiểm tra kỹ trước khi bấm xác nhận.
                         </p>
-                        <p v-if="!restore_preview.summary.schema_compatible || restore_preview.summary.new_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
+                        <p v-if="!restorePreview.summary.schema_compatible || restorePreview.summary.new_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
                             ⚠️ Cấu trúc bảng khác nhau hoặc có bảng mới. Chế độ Gộp bị vô hiệu hóa để đảm bảo an toàn dữ liệu; vui lòng chọn "Thay toàn bộ" hoặc Hủy.
                         </p>
-                        <p v-if="restore_preview.has_files" class="text-slate-500">
+                        <p v-if="restorePreview.has_files" class="text-slate-500">
                             * Bản sao lưu bao gồm tệp đính kèm. Khôi phục sẽ áp dụng quy tắc tương ứng đối với thư mục tệp tin public/private.
                         </p>
                     </div>

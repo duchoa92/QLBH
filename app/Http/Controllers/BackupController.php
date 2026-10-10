@@ -61,7 +61,6 @@ class BackupController extends Controller
                 'time' => setting('backup_time', '02:00'),
                 'weekday' => (int) setting('backup_weekday', 1),
                 'monthday' => (int) setting('backup_monthday', 1),
-                'timezone' => setting('backup_timezone', 'Asia/Ho_Chi_Minh'),
                 'last_run' => setting('backup_last_run'),
                 'last_error' => setting('backup_last_error'),
             ],
@@ -99,7 +98,6 @@ class BackupController extends Controller
             'time' => ['required', 'date_format:H:i'],
             'weekday' => ['required', 'integer', 'between:0,6'],
             'monthday' => ['required', 'integer', 'between:1,31'],
-            'timezone' => ['required', 'in:Asia/Ho_Chi_Minh,Asia/Bangkok,UTC'],
         ]);
 
         foreach ($data as $key => $value) {
@@ -284,5 +282,28 @@ class BackupController extends Controller
         $progress->update((int) $request->user()->id, $operation, 100, 'Đã xóa tệp sao lưu.', 'completed');
 
         return $this->backupSettingsRedirect()->with('success', 'Đã xóa bản sao lưu.');
+    }
+
+    public function destroyMany(Request $request, BackupOperationProgress $progress)
+    {
+        $data = $request->validate([
+            'names' => ['required', 'array', 'min:1', 'max:100'],
+            'names.*' => ['required', 'string', 'distinct', 'regex:/^backup_\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}(?:-\\d{6})?\\.zip$/'],
+            'operation_id' => ['required', 'uuid'],
+        ]);
+
+        $directory = storage_path('app/backups');
+        $paths = array_map(fn ($name) => $directory.DIRECTORY_SEPARATOR.$name, $data['names']);
+        abort_unless(collect($paths)->every(fn ($path) => is_file($path)), 404, 'Một hoặc nhiều tệp sao lưu không còn tồn tại.');
+
+        $userId = (int) $request->user()->id;
+        $total = count($paths);
+        foreach ($paths as $index => $path) {
+            File::delete($path);
+            $percent = (int) floor((($index + 1) / $total) * 100);
+            $progress->update($userId, $data['operation_id'], $percent, 'Đang xóa bản sao lưu '.($index + 1).' / '.$total.'.', $index + 1 === $total ? 'completed' : 'running');
+        }
+
+        return $this->backupSettingsRedirect()->with('success', 'Đã xóa '.$total.' tệp sao lưu.');
     }
 }

@@ -52,7 +52,7 @@ class SettingController extends Controller
         ], $canManageBackups ? $backupController->pageData($cloudStorage) : [
             'backups' => [], 'cloud_connections' => [], 'cloud_oauth' => [],
             'restore_preview' => null,
-            'schedule' => ['enabled' => false, 'frequency' => 'daily', 'time' => '02:00', 'weekday' => 1, 'monthday' => 1, 'timezone' => 'Asia/Ho_Chi_Minh'],
+            'schedule' => ['enabled' => false, 'frequency' => 'daily', 'time' => '02:00', 'weekday' => 1, 'monthday' => 1],
         ]));
     }
 

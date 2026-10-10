@@ -19,8 +19,8 @@ class RunScheduledBackup extends Command
     {
         if (! filter_var(setting('backup_enabled', false), FILTER_VALIDATE_BOOLEAN)) return self::SUCCESS;
 
-        $timezone = (string) setting('backup_timezone', 'Asia/Ho_Chi_Minh');
-        $now = now($timezone);
+        $timezone = (string) config('app.timezone');
+        $now = now();
         $time = (string) setting('backup_time', '02:00');
         if ($now->format('H:i') < $time) return self::SUCCESS;
 

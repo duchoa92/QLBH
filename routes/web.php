@@ -72,6 +72,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/backups/{backup}/inspect', [BackupController::class, 'inspect'])->middleware('permission:backups.manage')->name('backups.inspect');
     Route::post('/backups/{backup}/restore', [BackupController::class, 'restore'])->middleware('permission:backups.manage')->name('backups.restore');
     Route::get('/backups/{backup}/download', [BackupController::class, 'download'])->middleware('permission:backups.manage')->name('backups.download');
+    Route::delete('/backups/bulk', [BackupController::class, 'destroyMany'])->middleware('permission:backups.manage')->name('backups.bulk-destroy');
     Route::delete('/backups/{backup}', [BackupController::class, 'destroy'])->middleware('permission:backups.manage')->name('backups.destroy');
     Route::put('/backups/schedule', [BackupController::class, 'updateSchedule'])->middleware('permission:backups.manage')->name('backups.schedule');
     Route::post('/units', [UnitController::class, 'store'])->middleware('permission:units.manage')->name('units.store');
