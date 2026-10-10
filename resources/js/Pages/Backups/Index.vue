@@ -258,9 +258,6 @@ const conflictPolicyOptions = [
 
 <template>
     <div class="space-y-3">
-        <!-- Header -->
-        <PageHeader v-if="!hide_header" title="Sao lưu & Khôi phục dữ liệu" description="Tạo bản sao lưu an toàn cho cơ sở dữ liệu và tệp tin đã tải lên hệ thống." />
-
         <DataPanel v-if="progressVisible" class="p-3.5 sm:p-4" aria-live="polite">
             <div class="mb-2 flex items-center justify-between gap-3 text-xs">
                 <span class="font-semibold text-slate-700">{{ operationProgress.message }}</span>
@@ -283,6 +280,17 @@ const conflictPolicyOptions = [
                         <p class="text-xs text-slate-500">Tạo bản sao lưu thủ công hoặc thiết lập lịch tự động chạy qua Laravel Scheduler.</p>
                     </div>
                 </div>
+                <div class="flex justify-end">
+                    <div v-if="schedule.last_run" class="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                        <Clock :size="14" class="text-slate-400" />
+                        <span>Lần chạy gần nhất: <strong class="text-slate-700">{{ schedule.last_run }}</strong></span>
+                    </div>
+                </div>
+                
+            </div>
+
+            <!-- Form Lịch sao lưu tự động -->
+            <form class="mt-4 space-y-4" @submit.prevent="saveSchedule">
 
                 <div class="flex flex-wrap items-center gap-3 self-start sm:self-auto">
                     <label class="inline-flex h-10 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 cursor-pointer select-none">
@@ -294,17 +302,6 @@ const conflictPolicyOptions = [
                         <DatabaseBackup :size="17" /> Sao lưu ngay
                     </ActionButton>
                 </div>
-            </div>
-
-            <!-- Form Lịch sao lưu tự động -->
-            <form class="mt-4 space-y-4" @submit.prevent="saveSchedule">
-                <div class="flex justify-end">
-                    <div v-if="schedule.last_run" class="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200/80 shadow-2xs">
-                        <Clock :size="14" class="text-slate-400" />
-                        <span>Lần chạy gần nhất: <strong class="text-slate-700">{{ schedule.last_run }}</strong></span>
-                    </div>
-                </div>
-
                 <!-- CÁC Ô THIẾT LẬP CHỈ HIỂN THỊ KHIN TÍCH CHỌN BẬT SAO LƯU TỰ ĐỘNG -->
                 <transition
                     enter-active-class="transition duration-200 ease-out"

@@ -214,8 +214,7 @@ const unitDisplayName = (unit) =>
             body-class="p-4 sm:p-5"
             @close="closeModal"
         >
-        <p class="mb-4 text-sm text-slate-500">{{ activeModal === 'system' ? 'Cấu hình tên cửa hàng, ngôn ngữ, tiền tệ và ngày giờ.' : activeModal === 'payments' ? 'Cập nhật tài khoản nhận chuyển khoản và thông tin VietQR.' : activeModal === 'printing' ? 'Chọn khổ giấy và hướng in áp dụng cho hóa đơn, phiếu.' : 'Cấu hình quy tắc tồn kho và đơn vị tính.' }}</p>
-
+       
         <div class="grid gap-5">
             <div class="space-y-5">
                 <DataPanel v-if="activeModal === 'printing'">
@@ -277,19 +276,9 @@ const unitDisplayName = (unit) =>
                 </DataPanel>
 
                 <DataPanel v-if="activeModal === 'inventory'">
-                    <template #header>
-                        <div>
-                            <h2 class="text-sm font-bold text-slate-900">
-                                Kho hàng
-                            </h2>
-                            <p class="mt-0.5 text-xs font-medium text-slate-500">
-                                Các quy tắc ảnh hưởng đến xuất bán và tồn kho.
-                            </p>
-                        </div>
-                    </template>
-
-                    <div class="p-4">
-                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                
+                    <div class="p-4  bg-slate-50">
+                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg ">
                             <span>
                                 <span class="block text-sm font-bold text-slate-800">
                                     Cho phép tồn kho âm
