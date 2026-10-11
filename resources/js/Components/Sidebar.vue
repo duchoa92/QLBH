@@ -1,4 +1,5 @@
 <script setup>
+import { prepareOpenPos } from '@/utils/pos'
 import { computed, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 
@@ -253,6 +254,10 @@ const navigate = () => {
 
 const visitMenu = (href, paths = []) => {
     isMobileOpen.value = false
+
+    if (href === '/pos') {
+        prepareOpenPos()
+    }
     if (isCurrentMenu(paths, href)) {
         navigate()
         return

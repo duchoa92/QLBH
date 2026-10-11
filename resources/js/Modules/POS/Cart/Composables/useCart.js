@@ -1,4 +1,4 @@
-import { ref, watch, computed, } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLocalStorage } from '@/Composables/useLocalStorage'
 import { useCartTotals } from '@/Modules/POS/Cart/Composables/useCartTotals'
 
@@ -37,6 +37,33 @@ const unitPayload = (product) => ({
 })
 
 
+const makeDefaultTab = () => ({
+    id: 1,
+    default_name: 'Đơn 1',
+    name: 'Đơn 1',
+    cart: [],
+    customer: null,
+})
+
+// Dữ liệu cũ trong localStorage có thể hỏng/thiếu -> chuẩn hoá để POS luôn mở được
+const normalizeTabs = (raw) => {
+    if (!Array.isArray(raw) || raw.length === 0) {
+        return [makeDefaultTab()]
+    }
+
+    const tabs = raw
+        .filter(tab => tab && typeof tab === 'object' && tab.id !== undefined && tab.id !== null)
+        .map(tab => ({
+            ...tab,
+            default_name: tab.default_name || tab.name || 'Đơn',
+            name: tab.name || tab.default_name || 'Đơn',
+            cart: Array.isArray(tab.cart) ? tab.cart : [],
+            customer: tab.customer ?? null,
+        }))
+
+    return tabs.length ? tabs : [makeDefaultTab()]
+}
+
 
 export function useCart() {
 
@@ -62,37 +89,19 @@ export function useCart() {
     |--------------------------------------------------------------------------
     */
 
-    // Tạo Tab giỏ hàng
+    // Tạo Tab giỏ hàng (nạp lại từ lần làm việc trước nếu có)
     const tabs = ref(
-        load(
-            'pos_tabs',
-            [
-                {
-                    id: 1,
-                    default_name: 'Đơn 1',
-                    name: 'Đơn 1',
-                    cart: [],
-                    customer: null,
-                }
-            ]
+        normalizeTabs(
+            load('pos_tabs', null)
         )
     )
 
-    tabs.value.forEach(tab => {
-
-        if (!tab.default_name) {
-
-            tab.default_name =
-                tab.name
-        }
-    })
-
+    const savedActiveTabId = load('pos_active_tab', null)
 
     const activeTabId = ref(
-        load(
-            'pos_active_tab',
-            1
-        )
+        tabs.value.some(tab => tab.id === savedActiveTabId)
+            ? savedActiveTabId
+            : tabs.value[0].id
     )
 
     const currentTab = computed(() => {
@@ -211,42 +220,71 @@ export function useCart() {
     | AUTO SAVE
     |--------------------------------------------------------------------------
     */
+    // Lưu ngay lập tức (sync) để thay đổi cuối cùng không bị mất khi bấm X / đóng tab
+    const flushSave = () => {
+
+        save('pos_tabs', tabs.value)
+
+        save('pos_active_tab', activeTabId.value)
+
+        save('pos_selected_index', selectedCartIndex.value)
+    }
+
     watch(
         tabs,
-        value => {
-
-            save(
-                'pos_tabs',
-                value
-            )
-        },
+        flushSave,
         {
             deep: true,
+            flush: 'sync',
         }
     )
 
     watch(
         activeTabId,
-        value => {
-
-            save(
-                'pos_active_tab',
-                value
-            )
+        flushSave,
+        {
+            flush: 'sync',
         }
     )
 
-  
     watch(
         selectedCartIndex,
-        (value) => {
-
-            save(
-                'pos_selected_index',
-                value
-            )
+        flushSave,
+        {
+            flush: 'sync',
         }
     )
+
+    // Lưu thêm khi tải lại trang / ẩn tab / đóng trình duyệt / rời trang POS
+    const onPageHide = () => flushSave()
+
+    const onVisibilityChange = () => {
+
+        if (document.visibilityState === 'hidden') {
+
+            flushSave()
+        }
+    }
+
+    onMounted(() => {
+
+        window.addEventListener('pagehide', onPageHide)
+
+        window.addEventListener('beforeunload', onPageHide)
+
+        document.addEventListener('visibilitychange', onVisibilityChange)
+    })
+
+    onBeforeUnmount(() => {
+
+        flushSave()
+
+        window.removeEventListener('pagehide', onPageHide)
+
+        window.removeEventListener('beforeunload', onPageHide)
+
+        document.removeEventListener('visibilitychange', onVisibilityChange)
+    })
 
 
     // Hàm tạo tab
@@ -709,6 +747,8 @@ export function useCart() {
 
 
     return {
+
+        flushSave,
 
         tabs,
 

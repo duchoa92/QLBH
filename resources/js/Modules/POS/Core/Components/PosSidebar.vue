@@ -39,7 +39,7 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <aside class="flex flex-col h-[calc(100vh-2rem)] w-full lg:w-[430px] bg-white border border-slate-200/80 shadow-lg shrink-0 rounded-2xl overflow-hidden font-sans antialiased">
+    <aside class="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-full w-full lg:w-[430px] bg-white border border-slate-200/80 shadow-lg shrink-0 rounded-2xl overflow-hidden font-sans antialiased">
         <!-- Khối trên: Tab đơn hàng & Tìm/Chọn khách hàng -->
         <div class="shrink-0 border-b border-slate-100 bg-white p-3 space-y-2.5">
             <CartTabs

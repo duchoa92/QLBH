@@ -752,7 +752,7 @@ class RepairController extends Controller
                 'accessories' => [],
                 'estimated_cost' => null,
                 'note' => null,
-                'source' => 'Đã mua · ' . $item->invoice_code . ' · ' . Carbon::parse($item->purchased_at)->format('d/m/Y'),
+                'source' => 'Đã mua · ' . Carbon::parse($item->purchased_at)->format('d/m/Y'),
                 'source_date' => Carbon::parse($item->purchased_at)->toAtomString(),
                 'warranty' => $item->product_imei_id && $expiresAt ? [
                     'source_type' => 'sale_item',

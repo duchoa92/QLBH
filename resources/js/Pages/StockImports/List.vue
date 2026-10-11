@@ -207,17 +207,6 @@ const showImport = (id) => {
     <!-- CONTENT -->
 
     <div class="space-y-4 p-6">
-        <PageHeader
-            title="Đơn nhập hàng"
-            description="Quản lý các phiếu nhập kho"
-        >
-            <template #actions>
-                <ActionButton @click="openCreateModal">
-                    <Plus :size="18" />
-                    Tạo đơn nhập
-                </ActionButton>
-            </template>
-        </PageHeader>
 
         <DataPanel>
 
@@ -270,6 +259,11 @@ const showImport = (id) => {
                     />
 
                 </div>
+
+                <ActionButton @click="openCreateModal">
+                    <Plus :size="18" />
+                    Tạo đơn nhập
+                </ActionButton>
 
             </div>
 

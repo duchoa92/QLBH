@@ -16,7 +16,7 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <section class="min-h-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm lg:col-span-7 xl:col-span-8 overflow-hidden font-sans">
+    <section class="min-h-0 lg:flex-1 rounded-2xl border border-slate-200/80 bg-white shadow-sm lg:col-span-7 xl:col-span-8 overflow-hidden font-sans">
         <div class="flex flex-col h-full min-h-0">
 
             <!-- HEADER POS PANEL -->

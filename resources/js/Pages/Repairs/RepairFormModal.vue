@@ -1019,11 +1019,8 @@ const selectWorkflowStep = (status) => {
 
                 <div class="p-3 space-y-2.5">
                     <div v-if="selectedWarranty" class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-[11px] text-emerald-900">
-                        <strong>Thiết bị có căn cứ bảo hành.</strong> Hệ thống sẽ xác minh lại khi hoàn tất sửa; lúc đó chọn sửa dịch vụ hoặc bảo hành.
-                        <div class="mt-1 font-semibold">Căn cứ: {{ selectedWarranty.invoice_code || selectedDevice?.source }} · đến {{ displayWarrantyDate(selectedWarranty.expires_at) }}</div>
-                    </div>
-                    <div v-else class="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-[11px] text-slate-600">
-                        Có thể tiếp nhận máy trước; loại sửa dịch vụ hay bảo hành sẽ được chốt sau khi kiểm tra.
+                        <strong>Thiết bị còn bảo hành</strong> đến <strong>{{ displayWarrantyDate(selectedWarranty.expires_at) }}</strong> theo HĐ: {{ selectedWarranty.invoice_code || selectedDevice?.source }}
+                        
                     </div>
 
                     <div v-if="selectedCustomer && !selectedDevice" class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-2.5">

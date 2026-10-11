@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
                 v-model="query"
-                type="search"
+                type="input"
                 autocomplete="off"
                 placeholder="Tìm nhanh toàn hệ thống..."
                 class="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-8 text-xs font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"

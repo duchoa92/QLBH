@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { toast } from 'vue-sonner'
@@ -11,8 +12,10 @@ import PosMainPanel from '@/Modules/POS/Core/Components/PosMainPanel.vue'
 import PosLayout from '@/Modules/POS/Core/Layouts/PosLayout.vue'
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
 import SelectProductModal from '@/Modules/POS/Product/Components/SelectProductModal.vue'
+import { getPosReturnUrl, exitPosFullscreen } from '@/utils/pos'
 
 const {
+    flushSave,
     tabs,
     activeTabId,
     createTab,
@@ -49,6 +52,38 @@ const selectTab = (
 
     activeTabId.value =
         tabId
+}
+
+// ---------------------------------------------------------------
+// Đóng POS: lưu toàn bộ phiên làm việc rồi quay về trang trước
+// ---------------------------------------------------------------
+const page = usePage()
+
+const fallbackUrl = computed(() => {
+    const permissions = page.props.auth?.permissions || []
+
+    const candidates = [
+        ['dashboard.view', '/dashboard'],
+        ['sales.view', '/sales'],
+        ['products.view', '/products'],
+        ['repairs.view', '/repairs'],
+        ['customers.view', '/customers'],
+    ]
+
+    return candidates.find(([permission]) => permissions.includes(permission))?.[1] ?? '/'
+})
+
+const closePos = () => {
+
+    // Lưu ngay tất cả tab đơn hàng, khách hàng, giỏ hàng đang làm dở
+    flushSave()
+
+    // Thoát chế độ toàn màn hình của trình duyệt (nếu đang bật)
+    exitPosFullscreen()
+
+    router.visit(
+        getPosReturnUrl() || fallbackUrl.value
+    )
 }
 
 const invoiceData = ref(null)
@@ -225,7 +260,7 @@ useBarcodeScanner(
 
 <template>
 
-    <PosLayout>
+    <PosLayout @close="closePos">
         <template #main>
             <PosMainPanel
                 :cart="cart"

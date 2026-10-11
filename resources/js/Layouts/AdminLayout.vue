@@ -19,6 +19,7 @@ import GlobalSearch from '@/Components/GlobalSearch.vue'
 // Thông báo
 import NotificationBell from '@/Components/NotificationBell.vue'
 import { openModal } from '@/Stores/modal'
+import { prepareOpenPos } from '@/utils/pos'
 
 const sidebarOpen = ref(false)
 const isDesktop = ref(false)
@@ -194,6 +195,7 @@ onBeforeUnmount(() => {
                         <Link
                             v-if="can('pos.access')"
                             href="/pos"
+                            @click="prepareOpenPos"
                             class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0"
                             title="Mở POS bán hàng"
                         >

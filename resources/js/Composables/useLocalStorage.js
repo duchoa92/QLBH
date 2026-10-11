@@ -8,10 +8,17 @@ export const useLocalStorage = () => {
 
     const save = (key, value) => {
 
-        localStorage.setItem(
-            key,
-            JSON.stringify(value)
-        )
+        try {
+
+            localStorage.setItem(
+                key,
+                JSON.stringify(value)
+            )
+
+        } catch (error) {
+
+            console.error('Không lưu được localStorage', error)
+        }
     }
 
     /*
@@ -25,8 +32,16 @@ export const useLocalStorage = () => {
         defaultValue = null
     ) => {
 
-        const data =
-            localStorage.getItem(key)
+        let data = null
+
+        try {
+
+            data = localStorage.getItem(key)
+
+        } catch {
+
+            return defaultValue
+        }
 
         if (!data) {
 
