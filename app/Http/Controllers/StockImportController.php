@@ -12,6 +12,7 @@ use App\Models\Category;
 use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Facades\Excel;
 
 class StockImportController extends Controller
 {
@@ -132,6 +133,18 @@ class StockImportController extends Controller
                 'min:0',
             ],
 
+            'items.*.supplier_warranty_value' => [
+                'nullable',
+                'integer',
+                'min:0',
+            ],
+
+            'items.*.supplier_warranty_unit' => [
+                'nullable',
+                'string',
+                Rule::in(['days', 'months']),
+            ],
+
             'items.*.imeis' => [
                 'nullable',
                 'array',
@@ -196,6 +209,39 @@ class StockImportController extends Controller
             'success',
             'Nhập hàng thành công'
         );
+    }
+
+    /** Parse a spreadsheet for the stock-import modal without saving it yet. */
+    public function parseImportFile(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
+        ]);
+
+        $sheets = Excel::toArray([], $request->file('file'));
+        $sheet = $sheets[0] ?? [];
+
+        if (count($sheet) < 2) {
+            return response()->json([
+                'message' => 'File cần có dòng tiêu đề và ít nhất một dòng sản phẩm.',
+            ], 422);
+        }
+
+        $headers = array_map(fn ($value) => trim((string) $value), $sheet[0]);
+        $rows = collect(array_slice($sheet, 1))
+            ->filter(fn ($row) => collect($row)->contains(fn ($value) => trim((string) $value) !== ''))
+            ->map(function ($row) use ($headers): array {
+                $values = array_pad($row, count($headers), null);
+                return collect($headers)
+                    ->mapWithKeys(fn ($header, $index) => [$header => $values[$index] ?? null])
+                    ->all();
+            })
+            ->values();
+
+        return response()->json([
+            'headers' => $headers,
+            'rows' => $rows,
+        ]);
     }
 
     /**

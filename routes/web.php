@@ -161,6 +161,11 @@ Route::middleware(['auth'])->group(function () {
         [StockImportController::class, 'store']
     )->middleware('permission:stock_imports.create')->name('stock.import');
 
+    Route::post(
+        '/stock-import/parse-file',
+        [StockImportController::class, 'parseImportFile']
+    )->middleware('permission:stock_imports.create')->name('stock.import.parse-file');
+
     Route::get(
         '/stock-import/{stockImport}',
         [StockImportController::class, 'show']

@@ -25,6 +25,10 @@ import {
     Package,
     Pencil,
     Trash2,
+    LoaderCircle,
+    CheckCircle2,
+    AlertCircle,
+    FileSpreadsheet,
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -78,6 +82,11 @@ const keyword = ref('')
 const searchResults = ref([])
 const searching = ref(false)
 const showResults = ref(false)
+const importFileInput = ref(null)
+const parsingFile = ref(false)
+const importedFileName = ref('')
+const fileImportMessage = ref('')
+const fileImportErrors = ref([])
 
 let searchTimeout = null
 
@@ -167,7 +176,7 @@ const productModal = ref({
 |--------------------------------------------------------------------------
 */
 
-const selectProduct = (product) => {
+const selectProduct = (product, { configure = true } = {}) => {
     const item =
         JSON.parse(
             JSON.stringify(product)
@@ -289,10 +298,14 @@ const selectProduct = (product) => {
     searchResults.value = []
     showResults.value = false
 
-    productModal.value = {
-        open: true,
-        item: target,
+    if (configure) {
+        productModal.value = {
+            open: true,
+            item: target,
+        }
     }
+
+    return target
 }
 
 /*
@@ -589,10 +602,158 @@ const total = computed(() =>
 |--------------------------------------------------------------------------
 */
 
-const importFile = () => {
-    alert(
-        'Chức năng đang phát triển'
-    )
+const normalizeFileKey = (value) => String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+
+const fileValue = (row, keys) => {
+    const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeFileKey(key), value]))
+    for (const key of keys) {
+        const value = normalized[normalizeFileKey(key)]
+        if (value !== null && value !== undefined && String(value).trim() !== '') return value
+    }
+    return ''
+}
+
+const fileProductCache = new Map()
+
+const findProductForFileRow = async (row) => {
+    const code = String(fileValue(row, ['sku', 'ma_sku', 'ma_san_pham', 'barcode', 'ma_vach']) || '').trim()
+    const name = String(fileValue(row, ['product', 'product_name', 'ten_san_pham', 'ten_hang']) || '').trim()
+    const keyword = code || name
+    if (!keyword) return null
+
+    const cacheKey = keyword.toLowerCase()
+    if (!fileProductCache.has(cacheKey)) {
+        fileProductCache.set(cacheKey, api.get('/api/products', { params: { keyword } }).then(({ data }) => Array.isArray(data) ? data : []))
+    }
+    const products = await fileProductCache.get(cacheKey)
+    if (code) {
+        const exact = products.find(product => [product.sku, product.barcode].some(value => String(value || '').toLowerCase() === code.toLowerCase()))
+        if (exact) return exact
+    }
+    return products.find(product => product.name?.trim().toLowerCase() === name.toLowerCase()) || null
+}
+
+const importFile = () => importFileInput.value?.click()
+
+const processImportFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    parsingFile.value = true
+    importedFileName.value = file.name
+    fileImportMessage.value = ''
+    fileImportErrors.value = []
+    fileProductCache.clear()
+
+    try {
+        const payload = new FormData()
+        payload.append('file', file)
+        const { data } = await api.post('/stock-import/parse-file', payload)
+        let added = 0
+
+        for (const [index, row] of data.rows.entries()) {
+            try {
+                const product = await findProductForFileRow(row)
+                if (!product) {
+                    fileImportErrors.value.push(`Dòng ${index + 2}: Không khớp sản phẩm theo mã hoặc tên.`)
+                    continue
+                }
+
+                const type = product.manage_stock_by_serial || product.has_imei
+                    ? ((product.variants?.length || product.has_variants) ? 'imei_variant' : 'imei')
+                    : ((product.variants?.length || product.has_variants) ? 'variant' : 'simple')
+                const existed = selectedItems.value.some(item => Number(item.product_id) === Number(product.id) && item.type === type)
+                const target = selectProduct(product, { configure: false })
+                const quantity = Math.max(1, Math.round(Number(fileValue(row, ['quantity', 'qty', 'so_luong', 'sl']) || 1)))
+                const cost = Number(fileValue(row, ['cost_price', 'purchase_price', 'gia_nhap', 'don_gia_nhap']) || target.cost_price || 0)
+                const sell = Number(fileValue(row, ['sell_price', 'retail_price', 'gia_ban', 'don_gia_ban']) || target.sell_price || 0)
+                const supplierWarrantyValue = Number(fileValue(row, ['supplier_warranty_value', 'warranty_duration_value', 'warranty_months', 'bao_hanh_thang']) || 0) || null
+                const supplierWarrantyUnit = String(fileValue(row, ['supplier_warranty_unit', 'warranty_duration_unit', 'warranty_unit']) || 'months').toLowerCase().startsWith('ngay') ? 'days' : 'months'
+                const imei = String(fileValue(row, ['imei', 'serial', 'imei_serial']) || '').trim()
+                const variantText = String(fileValue(row, ['variant', 'variant_sku', 'bien_the', 'sku_bien_the', 'phan_loai']) || '').trim()
+
+                if (target.type === 'simple') {
+                    target.quantity = existed ? (Number(target.quantity) || 0) + quantity : quantity
+                    target.cost_price = cost
+                    target.sell_price = sell
+                    target.supplier_warranty_value = supplierWarrantyValue
+                    target.supplier_warranty_unit = supplierWarrantyUnit
+                } else if (target.type === 'variant' || target.type === 'imei_variant') {
+                    const variants = target.available_variants || target.variants || []
+                    const variant = variants.find(option => [option.sku, variantLabel(option), option.barcode].some(value => String(value || '').toLowerCase() === variantText.toLowerCase()))
+                    if (!variant) {
+                        fileImportErrors.value.push(`Dòng ${index + 2}: Không tìm thấy biến thể “${variantText || '(trống)'}” của ${product.name}.`)
+                        continue
+                    }
+                    if (target.type === 'variant') {
+                        target.supplier_warranty_value = supplierWarrantyValue
+                        target.supplier_warranty_unit = supplierWarrantyUnit
+                        const existing = target.rows.find(entry => Number(entry.variant_id) === Number(variant.id))
+                        if (existing) existing.quantity += quantity
+                        else target.rows.push({ variant_id: variant.id, variant, quantity, cost_price: cost, sell_price: sell })
+                    } else {
+                        const imeis = imei.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean)
+                        if (!imeis.length) {
+                            fileImportErrors.value.push(`Dòng ${index + 2}: Sản phẩm ${product.name} cần IMEI/Serial.`)
+                            continue
+                        }
+                        const warrantyValue = Number(fileValue(row, ['warranty_duration_value', 'warranty_months', 'bao_hanh_thang']) || 0) || null
+                        const warrantyUnit = String(fileValue(row, ['warranty_duration_unit', 'warranty_unit']) || 'months').toLowerCase().startsWith('ngay') ? 'days' : 'months'
+                        for (const value of imeis) {
+                            if (target.imeis.some(existing => String(typeof existing === 'string' ? existing : existing.imei).toLowerCase() === value.toLowerCase())) {
+                                fileImportErrors.value.push(`Dòng ${index + 2}: IMEI/Serial ${value} bị lặp.`)
+                                continue
+                            }
+                            target.imeis.push({
+                                imei: value, variant_id: variant.id, cost_price: cost, sell_price: sell,
+                                warranty_duration_value: warrantyValue,
+                                warranty_duration_unit: warrantyUnit,
+                            })
+                        }
+                    }
+                } else {
+                    const imeis = imei.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean)
+                    if (!imeis.length) {
+                        fileImportErrors.value.push(`Dòng ${index + 2}: Sản phẩm ${product.name} cần IMEI/Serial.`)
+                        continue
+                    }
+                    const months = Number(fileValue(row, ['warranty_duration_value', 'warranty_months', 'bao_hanh_thang']) || 0) || null
+                    const warrantyUnit = String(fileValue(row, ['warranty_duration_unit', 'warranty_unit']) || 'months').toLowerCase().startsWith('ngay') ? 'days' : 'months'
+                    for (const value of imeis) {
+                        if (!target.imeis.some(existing => String(typeof existing === 'string' ? existing : existing.imei).toLowerCase() === value.toLowerCase())) {
+                            target.imeis.push({ imei: value, cost_price: cost, sell_price: sell, warranty_duration_value: months, warranty_duration_unit: warrantyUnit })
+                        }
+                    }
+                }
+                added++
+            } catch (error) {
+                fileImportErrors.value.push(`Dòng ${index + 2}: ${error.response?.data?.message || 'Không thể đọc dữ liệu sản phẩm.'}`)
+            }
+        }
+
+        fileImportMessage.value = `Đã nạp ${added}/${data.rows.length} dòng vào phiếu nhập. Kiểm tra lại danh sách trước khi lưu.`
+    } catch (error) {
+        fileImportErrors.value = [error.response?.data?.message || 'Không đọc được file. Hãy dùng file Excel hoặc CSV có dòng tiêu đề.']
+    } finally {
+        parsingFile.value = false
+    }
+}
+
+const downloadImportTemplate = () => {
+    const content = '\uFEFFSKU,Tên sản phẩm,SKU biến thể,Số lượng,Giá nhập,Giá bán,IMEI/Serial,Số tháng bảo hành,Bảo hành đơn vị\r\nSP001,Sản phẩm thường,,10,100000,150000,,,\r\n'
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'mau-nhap-hang.csv'
+    link.click()
+    URL.revokeObjectURL(url)
 }
 
 /*
@@ -604,7 +765,7 @@ const importFile = () => {
 const canConfirm = computed(
     () =>
         selectedSupplier.value &&
-        selectedItems.value.length > 0
+        selectedItems.value.some(item => itemQuantity(item) > 0)
 )
 
 const confirm = () => {
@@ -612,7 +773,7 @@ const confirm = () => {
         return
     }
 
-    if (!selectedItems.value.length) {
+    if (!selectedItems.value.some(item => itemQuantity(item) > 0)) {
         return
     }
 
@@ -629,6 +790,8 @@ const confirm = () => {
                 quantity: Math.max(0, Math.round(Number(item.quantity || 0))),
                 cost_price: Number(item.cost_price || 0),
                 sell_price: Number(item.sell_price || 0),
+                supplier_warranty_value: item.supplier_warranty_value || null,
+                supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                 imeis: [],
             }]
         }
@@ -645,6 +808,8 @@ const confirm = () => {
                     quantity: Math.max(0, Math.round(Number(row.quantity || 0))),
                     cost_price: Number(row.cost_price || 0),
                     sell_price: Number(row.sell_price || 0),
+                    supplier_warranty_value: item.supplier_warranty_value || null,
+                    supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                     imeis: [],
                 }))
         }
@@ -701,13 +866,12 @@ const confirm = () => {
 
 <template>
     <BaseModal
-        title="Tạo đơn nhập"
+        title="Tạo phiếu nhập kho"
         size="xl"
+        body-class="p-4 sm:p-5"
         @close="emit('close')"
     >
-        <div
-            class="flex min-h-0 flex-col gap-4"
-        >
+        <div class="flex min-h-0 flex-col gap-4">
 
             <!-- NHÀ CUNG CẤP -->
             <SupplierSection
@@ -732,10 +896,10 @@ const confirm = () => {
             </div>
 
             <!-- TÌM SẢN PHẨM -->
-            <div class="relative">
+            <div class="relative rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
 
                 <div
-                    class="flex items-stretch gap-3"
+                    class="flex flex-col gap-2 sm:flex-row sm:items-stretch"
                 >
                     <div
                         class="relative flex-1"
@@ -771,16 +935,35 @@ const confirm = () => {
                     <button
                         type="button"
                         @click="importFile"
-                        class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 transition-colors"
+                        :disabled="parsingFile"
+                        class="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70"
                     >
-                        <FileUp
-                            class="h-4 w-4"
-                        />
-
-                        <span>
-                            Nhập file
-                        </span>
+                        <LoaderCircle v-if="parsingFile" class="h-4 w-4 animate-spin" />
+                        <FileUp v-else class="h-4 w-4" />
+                        {{ parsingFile ? 'Đang đọc...' : 'Nhập từ file' }}
                     </button>
+                    <input ref="importFileInput" type="file" accept=".xlsx,.xls,.csv,.txt" class="hidden" @change="processImportFile" />
+                </div>
+
+                <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                    <span class="inline-flex items-center gap-1.5"><Search class="h-3.5 w-3.5" /> Tìm theo tên, SKU, barcode để chọn sản phẩm có sẵn trong kho.</span>
+                    <button type="button" class="font-semibold text-blue-700 hover:text-blue-900" @click="downloadImportTemplate">Tải file mẫu CSV</button>
+                </div>
+
+                <div v-if="fileImportMessage || fileImportErrors.length" class="mt-3 rounded-xl border p-3 text-xs" :class="fileImportErrors.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'">
+                    <div class="flex items-start gap-2">
+                        <CheckCircle2 v-if="!fileImportErrors.length" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        <AlertCircle v-else class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                        <div class="min-w-0 flex-1">
+                            <div v-if="importedFileName" class="font-semibold text-slate-800"><FileSpreadsheet class="mr-1 inline h-3.5 w-3.5" />{{ importedFileName }}</div>
+                            <p v-if="fileImportMessage" class="mt-0.5 text-slate-700">{{ fileImportMessage }}</p>
+                            <ul v-if="fileImportErrors.length" class="mt-1 max-h-24 list-inside list-disc space-y-0.5 overflow-auto text-amber-800">
+                                <li v-for="(error, index) in fileImportErrors.slice(0, 20)" :key="index">{{ error }}</li>
+                                <li v-if="fileImportErrors.length > 20">Còn {{ fileImportErrors.length - 20 }} dòng lỗi khác.</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="rounded p-1 text-slate-400 hover:bg-white" aria-label="Đóng thông báo nhập file" @click="fileImportMessage = ''; fileImportErrors = []; importedFileName = ''"><X class="h-4 w-4" /></button>
+                    </div>
                 </div>
 
                 <!-- DROPDOWN PRODUCT -->
@@ -885,15 +1068,15 @@ const confirm = () => {
 
             <!-- DANH SÁCH -->
             <div
-                class="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
             >
                 <div
-                    class="flex items-center justify-between border-b border-slate-200 px-4 py-3"
+                    class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3"
                 >
                     <div
-                        class="font-semibold text-slate-900"
+                        class="flex items-center gap-2 font-semibold text-slate-900"
                     >
-                        Danh sách sản phẩm
+                        <Package class="h-4 w-4 text-blue-600" /> Danh sách hàng nhập
                     </div>
 
                     <div
@@ -910,9 +1093,11 @@ const confirm = () => {
                     v-if="
                         !selectedItems.length
                     "
-                    class="py-12 text-center text-sm text-slate-400"
+                    class="flex flex-col items-center py-12 text-center text-sm text-slate-400"
                 >
-                    Chưa có sản phẩm nào
+                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Package class="h-6 w-6" /></div>
+                    <span class="font-semibold text-slate-600">Chưa có sản phẩm trong phiếu</span>
+                    <span class="mt-1 text-xs">Tìm và chọn sản phẩm ở phía trên hoặc nạp danh sách từ file.</span>
                 </div>
 
                 <div

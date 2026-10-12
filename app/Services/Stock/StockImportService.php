@@ -191,6 +191,12 @@ class StockImportService
                     'conversion_factor' => $conversionFactor,
 
                     'cost_price' => $costPrice,
+
+                    'supplier_warranty_value' => $item['supplier_warranty_value'] ?? null,
+
+                    'supplier_warranty_unit' => ! empty($item['supplier_warranty_value'])
+                        ? ($item['supplier_warranty_unit'] ?? 'months')
+                        : null,
                 ]);
 
 
