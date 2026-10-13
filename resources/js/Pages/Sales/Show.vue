@@ -10,6 +10,7 @@ const props = defineProps({
     }
 })
 const page = usePage()
+const canEditSales = page.props.auth?.permissions?.includes('sales.edit') ?? false
 
 const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
@@ -44,6 +45,14 @@ const printInvoice = () => {
                  Quay lại danh sách
             </Link>
 
+            <div class="flex items-center gap-2">
+            <Link
+                v-if="canEditSales"
+                :href="route('sales.edit', sale.id)"
+                class="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-white hover:bg-amber-600"
+            >
+                Sửa hóa đơn
+            </Link>
             <button
                 @click="printInvoice"
                 class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-sm"
@@ -51,6 +60,7 @@ const printInvoice = () => {
                 <Printer :size="15" />
                 In hóa đơn
             </button>
+            </div>
         </div>
 
         <!-- Khung Hóa Đơn Chi Tiết -->

@@ -235,6 +235,10 @@ Route::middleware(['auth'])->group(function () {
     // Sales Management
     Route::prefix('sales')->name('sales.')->controller(SaleController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:sales.view')->name('index');
+        Route::get('/products/search', 'searchProducts')->middleware('permission:sales.edit')->name('products.search');
+        Route::get('/customers/search', 'searchCustomers')->middleware('permission:sales.edit')->name('customers.search');
+        Route::get('/{sale}/edit', 'edit')->middleware('permission:sales.edit')->name('edit');
+        Route::put('/{sale}', 'update')->middleware('permission:sales.edit')->name('update');
         Route::get('/{sale}', 'show')->middleware('permission:sales.view')->name('show');
         // Hủy hóa đơn
         Route::post('/{sale}/cancel', 'cancel')->middleware('permission:sales.cancel')->name('cancel');

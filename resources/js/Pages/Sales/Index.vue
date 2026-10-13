@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import {
     Search,
-    Eye,
     Printer,
     FileText,
     DollarSign,
@@ -15,14 +14,15 @@ import {
     RefreshCw,
     ArrowUpDown,
     ArrowUp,
-    ArrowDown
+    ArrowDown,
+    Pencil,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
+import SaleEditModal from '@/Components/SaleEditModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
@@ -48,6 +48,7 @@ const props = defineProps({
 // Kiểm tra quyền theo hành động thay vì suy ra từ tên vai trò.
 const page = usePage()
 const canCancelSales = computed(() => page.props.auth?.permissions?.includes('sales.cancel') ?? false)
+const canEditSales = computed(() => page.props.auth?.permissions?.includes('sales.edit') ?? false)
 
 // Cập nhật lại các ref khi props.filters thay đổi từ Server gửi về
 watch(
@@ -72,6 +73,7 @@ const dateFrom = ref(props.filters?.date_from ?? '')
 const dateTo = ref(props.filters?.date_to ?? '')
 
 const detailSale = ref(null)
+const editSale = ref(null)
 const cancelReason = ref('')
 const showCancelModal = ref(false)
 const selectedSaleForCancel = ref(null)
@@ -187,6 +189,11 @@ const handleCancelSale = () => {
             }
         }
     )
+}
+
+const onSaleEdited = () => {
+    editSale.value = null
+    router.reload({ only: ['sales'], preserveScroll: true })
 }
 
 // Lý do hủy mẫu
@@ -376,7 +383,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                 </div>
                             </th>
 
-                            <th class="w-28 px-3.5 py-2.5 text-center">Thao Tác</th>
+                            <th class="w-24 px-2 py-2.5 text-center">Thao Tác</th>
                         </tr>
                     </thead>
 
@@ -384,15 +391,16 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                         <tr
                             v-for="sale in sortedSalesData"
                             :key="sale.id"
-                            class="hover:bg-slate-50 transition-colors"
+                            class="cursor-pointer hover:bg-blue-50/60 transition-colors"
+                            title="Bấm vào dòng để xem thông tin hóa đơn"
+                            @click="detailSale = sale"
                         >
                             <!-- 1. Mã HD (CLICK XEM CHI TIẾT) -->
                             <td class="px-3.5 py-2.5">
                                 <button
                                     type="button"
                                     class="font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-xs"
-                                    title="Bấm để xem chi tiết hóa đơn"
-                                    @click="detailSale = sale"
+                                    title="Bấm vào dòng để xem hóa đơn"
                                 >
                                     #{{ sale.code }}
                                 </button>
@@ -403,7 +411,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                 <span
                                     class="font-bold text-slate-900 cursor-pointer hover:text-indigo-600 hover:underline"
                                     title="Bấm để lọc theo khách hàng này"
-                                    @click="filterByCustomer(getCustomerName(sale))"
+                                    @click.stop="filterByCustomer(getCustomerName(sale))"
                                 >
                                     {{ getCustomerName(sale) }}
                                 </span>
@@ -414,7 +422,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                 <span
                                     class="cursor-pointer hover:text-indigo-600 hover:underline"
                                     title="Bấm để lọc theo thu ngân này"
-                                    @click="filterByCashier(sale.user?.name)"
+                                    @click.stop="filterByCashier(sale.user?.name)"
                                 >
                                     {{ sale.user?.name || '-' }}
                                 </span>
@@ -431,7 +439,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     v-if="sale.status === 'cancelled'"
                                     class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 cursor-pointer hover:bg-rose-100"
                                     title="Bấm để lọc các đơn đã hủy"
-                                    @click="filterByStatus('cancelled')"
+                                    @click.stop="filterByStatus('cancelled')"
                                 >
                                     <XCircle :size="12" /> Đã hủy
                                 </span>
@@ -439,7 +447,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     v-else
                                     class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
                                     title="Bấm để lọc các đơn hoàn thành"
-                                    @click="filterByStatus('completed')"
+                                    @click.stop="filterByStatus('completed')"
                                 >
                                     <CheckCircle2 :size="12" /> Hoàn thành
                                 </span>
@@ -452,31 +460,34 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
                             <!-- Thao tác -->
                             <td class="px-3.5 py-2.5 text-center">
-                                <div class="flex items-center justify-center gap-1">
-                                    <ActionButton
-                                        variant="ghost"
-                                        title="Xem chi tiết"
-                                        @click="detailSale = sale"
+                                <div class="flex items-center justify-center gap-0.5">
+                                    <button
+                                        v-if="canEditSales"
+                                        type="button"
+                                        class="rounded-md p-1.5 hover:bg-amber-50"
+                                        title="Sửa hóa đơn"
+                                        @click.stop="editSale = sale"
                                     >
-                                        <Eye class="h-4 w-4 text-slate-600 hover:text-blue-600" />
-                                    </ActionButton>
-
-                                    <ActionButton
-                                        variant="ghost"
+                                        <Pencil class="h-3.5 w-3.5 text-amber-600" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="rounded-md p-1.5 text-indigo-600 hover:bg-indigo-50"
                                         title="In hóa đơn"
-                                        @click="openPrintWindow(sale.id)"
+                                        @click.stop="openPrintWindow(sale.id)"
                                     >
-                                        <Printer class="h-4 w-4 text-indigo-600" />
-                                    </ActionButton>
+                                        <Printer class="h-3.5 w-3.5" />
+                                    </button>
 
-                                    <ActionButton
+                                    <button
                                         v-if="canCancelSales && sale.status !== 'cancelled'"
-                                        variant="ghost"
+                                        type="button"
+                                        class="rounded-md p-1.5 text-rose-600 hover:bg-rose-50"
                                         title="Hủy hóa đơn & Hoàn kho"
-                                        @click="confirmCancel(sale)"
+                                        @click.stop="confirmCancel(sale)"
                                     >
-                                        <Undo2 class="h-4 w-4 text-rose-500 hover:text-rose-700" />
-                                    </ActionButton>
+                                        <Undo2 class="h-3.5 w-3.5" />
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -514,6 +525,13 @@ const sortedSalesData = computed(() => props.sales?.data || [])
             @close="detailSale = null"
             @cancel="confirmCancel"
             @print="openPrintWindow($event.id)"
+        />
+
+        <SaleEditModal
+            v-if="editSale"
+            :sale="editSale"
+            @close="editSale = null"
+            @saved="onSaleEdited"
         />
 
         <!-- MODAL XÁC NHẬN HỦY HÓA ĐƠN -->

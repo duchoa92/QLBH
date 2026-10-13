@@ -182,12 +182,7 @@ const cancelReason = computed(() =>
                     <div>
                         <div class="flex items-center gap-2">
                             <h3 class="text-base font-extrabold text-slate-900">Chi tiết hóa đơn</h3>
-                            <span
-                                v-if="invoice?.code"
-                                class="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
-                            >
-                                #{{ invoice.code }}
-                            </span>
+                           
                             <span
                                 v-if="invoice"
                                 class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold"
@@ -197,9 +192,6 @@ const cancelReason = computed(() =>
                                 {{ paymentStatusMeta.label }}
                             </span>
                         </div>
-                        <p v-if="invoice" class="mt-0.5 text-xs font-medium text-slate-500">
-                            {{ customerName }} • {{ formatDate(invoice.created_at) }}
-                        </p>
                     </div>
                 </div>
 
@@ -238,6 +230,9 @@ const cancelReason = computed(() =>
                             <Hash :size="12" /> Mã hóa đơn
                         </div>
                         <div class="mt-0.5 font-bold text-slate-900 text-sm">#{{ invoice.code }}</div>
+                        <p v-if="invoice" class="mt-0.5 text-xs font-medium text-slate-500">
+                            {{ formatDate(invoice.created_at) }}
+                        </p>
                     </div>
 
                     <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">

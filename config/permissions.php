@@ -9,6 +9,7 @@ return [
     ],
     'sales' => [
         'sales.view' => 'Xem đơn hàng và hóa đơn',
+        'sales.edit' => 'Sửa hóa đơn',
         'sales.cancel' => 'Hủy hóa đơn',
     ],
     'repairs' => [
