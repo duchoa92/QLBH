@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -50,6 +50,37 @@ const dropdown = ref({
     keyword: '',
     ref: null
 })
+const pendingValueDrafts = reactive({})
+const pendingAttributeDrafts = reactive({})
+const addingAttributeFor = reactive({})
+
+const variantDraftKey = (variantIndex) => String(form.variants[variantIndex]?.id ?? variantIndex)
+const valueDraftKey = (variantIndex, attr) => `${variantDraftKey(variantIndex)}:${attr.id ?? attr.name}`
+
+const closeDropdown = (type, variantIndex, attrIndex = null) => {
+    if (
+        dropdown.value.type !== type ||
+        dropdown.value.variantIndex !== variantIndex ||
+        dropdown.value.attrIndex !== attrIndex
+    ) return
+
+    dropdown.value.type = null
+    dropdown.value.variantIndex = null
+    dropdown.value.attrIndex = null
+    dropdown.value.keyword = ''
+    dropdown.value.ref = null
+    activeIndex.value = -1
+}
+
+const handleAttributeInputBlur = (variantIndex, event) => {
+    closeDropdown('attr', variantIndex)
+
+    const key = variantDraftKey(variantIndex)
+    if (!String(event.target.value || '').trim()) {
+        delete pendingAttributeDrafts[key]
+        addingAttributeFor[key] = false
+    }
+}
 
 const setDropdownRef = (el, type, vIndex, aIndex = null) => {
     if (
@@ -68,7 +99,7 @@ const handleClickOutside = (e) => {
     if (e.target.closest('.suggestion-item')) return
 
     if (dropdown.value.ref && !dropdown.value.ref.contains(e.target)) {
-        dropdown.value.type = null
+        closeDropdown(dropdown.value.type, dropdown.value.variantIndex, dropdown.value.attrIndex)
     }
 }
 
@@ -102,6 +133,14 @@ const form = useForm({
     manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
     product_type: props.product?.product_type ?? 'normal',
 })
+
+const clearVariantDrafts = () => {
+    ;[pendingValueDrafts, pendingAttributeDrafts, addingAttributeFor].forEach(drafts => {
+        Object.keys(drafts).forEach(key => delete drafts[key])
+    })
+    dropdown.value = { type: null, variantIndex: null, attrIndex: null, keyword: '', ref: null }
+    activeIndex.value = -1
+}
 
 
 /*
@@ -139,18 +178,12 @@ const selectedCategoryName = computed(() =>
     categories.value.find(item => Number(item.id) === Number(form.category_id))?.name || ''
 )
 
-const unitOptions = computed(() => [
-    {
-        id: null,
-        name: 'Không chọn',
-    },
-    ...units.value.map(unit => ({
+const unitOptions = computed(() => units.value.map(unit => ({
         ...unit,
         name: unit.short_name
             ? `${unit.name} (${unit.short_name})`
             : unit.name,
-    })),
-])
+    })))
 
 const conversionUnitOptions = computed(() =>
     units.value
@@ -216,6 +249,7 @@ const selectedImportUnitName = computed(() => {
 
 // reset form khi props.product thay đổi (chọn sửa sản phẩm khác)
 watch(() => props.product, (p) => {
+    clearVariantDrafts()
 
     if (!p) {
         form.reset()
@@ -354,6 +388,7 @@ watch(showVariants, (value) => {
 
         // Tắt checkbox → xóa biến thể
         form.variants = []
+        clearVariantDrafts()
     }
 })
 
@@ -391,7 +426,12 @@ const buildVariantAttributes = () => {
 }
 
 
-const addAttrValue = (attr, rawValue = dropdown.value.keyword) => {
+const addAttrValue = (
+    attr,
+    rawValue = dropdown.value.keyword,
+    variantIndex = dropdown.value.variantIndex,
+    attrIndex = dropdown.value.attrIndex,
+) => {
     const val = rawValue.trim()
     if (!val) return
 
@@ -401,6 +441,9 @@ const addAttrValue = (attr, rawValue = dropdown.value.keyword) => {
     }
 
     attr.value.push(val)
+    if (variantIndex !== null && variantIndex !== undefined) {
+        delete pendingValueDrafts[valueDraftKey(variantIndex, attr)]
+    }
     dropdown.value.keyword = ''   // reset input
     activeIndex.value = -1        // reset chọn
 }
@@ -524,11 +567,12 @@ watch(() => dropdown.value.keyword, () => {
 })
 
 // Thêm thuộc tính
-const createAttribute = (rawName = dropdown.value.keyword) => {
+const createAttribute = (rawName = dropdown.value.keyword, variantIndex = dropdown.value.variantIndex) => {
     const name = rawName.trim()
     if (!name) return
 
-    const v = form.variants[dropdown.value.variantIndex]
+    const v = form.variants[variantIndex]
+    if (!v) return
 
     const exists = v.attributes.some(a => normalize(a.name) === normalize(name))
     if (exists) return toast.error('Thuộc tính đã tồn tại')
@@ -539,18 +583,19 @@ const createAttribute = (rawName = dropdown.value.keyword) => {
         value: [],
     })
 
+    delete pendingAttributeDrafts[variantDraftKey(variantIndex)]
     dropdown.value.keyword = ''
     activeIndex.value = -1
     dropdown.value.type = null
 }
 
-
 // Dropdown thêm thuộc tính
 const openAttrDropdown = async (variantIndex) => {
+    addingAttributeFor[variantDraftKey(variantIndex)] = true
     dropdown.value.type = 'attr'
     dropdown.value.variantIndex = variantIndex
     dropdown.value.attrIndex = null
-    dropdown.value.keyword = ''
+    dropdown.value.keyword = pendingAttributeDrafts[variantDraftKey(variantIndex)] || ''
     activeIndex.value = -1
 
     await nextTick()
@@ -562,10 +607,11 @@ const openAttrDropdown = async (variantIndex) => {
 
 // Dropdown thêm giá trị
 const openValueDropdown = async (variantIndex, attrIndex) => {
+    const attr = form.variants[variantIndex]?.attributes[attrIndex]
     dropdown.value.type = 'value'
     dropdown.value.variantIndex = variantIndex
     dropdown.value.attrIndex = attrIndex
-    dropdown.value.keyword = ''
+    dropdown.value.keyword = attr ? (pendingValueDrafts[valueDraftKey(variantIndex, attr)] || '') : ''
     activeIndex.value = -1
 
     await nextTick()
@@ -630,9 +676,9 @@ const handleKeyDown = (e, attr = null, variantIndex = null, attrIndex = null) =>
 
         // hết suggestion → tạo mới
         if (dropdown.value.type === 'value') {
-            if (attr) addAttrValue(attr, e.target.value)
+            if (attr) addAttrValue(attr, e.target.value, variantIndex, attrIndex)
         } else if (dropdown.value.type === 'attr') {
-            createAttribute(e.target.value)
+            createAttribute(e.target.value, variantIndex)
         }
     }
 }
@@ -704,6 +750,7 @@ const selectSuggestion = async (item) => {
         }
 
         attr.value.push(item)
+        delete pendingValueDrafts[valueDraftKey(dropdown.value.variantIndex, attr)]
         dropdown.value.keyword = '' // Reset từ khóa
         activeIndex.value = -1
         return
@@ -722,6 +769,8 @@ const selectSuggestion = async (item) => {
             value: []
         })
 
+        delete pendingAttributeDrafts[variantDraftKey(dropdown.value.variantIndex)]
+        addingAttributeFor[variantDraftKey(dropdown.value.variantIndex)] = true
         // GIỮ NGUYÊN dropdown.type = 'attr' ĐỂ KHÔNG ĐÓNG DROPDOWN
         dropdown.value.keyword = '' // Clear từ khóa tìm kiếm để load toàn bộ gợi ý còn lại
         activeIndex.value = -1
@@ -748,6 +797,11 @@ watch(
 
 // Xóa thuộc tính
 const removeAttribute = (variant, attrIndex) => {
+    const variantIndex = form.variants.indexOf(variant)
+    const attr = variant.attributes[attrIndex]
+    if (attr && variantIndex !== -1) {
+        delete pendingValueDrafts[valueDraftKey(variantIndex, attr)]
+    }
     variant.attributes.splice(attrIndex, 1)
 }
 
@@ -759,7 +813,36 @@ const removeAttribute = (variant, attrIndex) => {
 */
 const emit = defineEmits(['close', 'updated'])
 
+const commitPendingDrafts = () => {
+    form.variants.forEach((variant, variantIndex) => {
+        variant.attributes.forEach(attr => {
+            const key = valueDraftKey(variantIndex, attr)
+            const value = String(pendingValueDrafts[key] || '').trim()
+
+            if (value && !attr.value.some(item => normalize(item) === normalize(value))) {
+                attr.value.push(value)
+            }
+
+            delete pendingValueDrafts[key]
+        })
+
+        const nameKey = variantDraftKey(variantIndex)
+        const pendingName = String(pendingAttributeDrafts[nameKey] || '').trim()
+
+        if (pendingName && !variant.attributes.some(attr => normalize(attr.name) === normalize(pendingName))) {
+            variant.attributes.push({
+                id: Date.now() + variantIndex,
+                name: pendingName,
+                value: [],
+            })
+        }
+
+        delete pendingAttributeDrafts[nameKey]
+    })
+}
+
 const submit = () => {
+    commitPendingDrafts()
 
     const normalizePayload = (data) => {
         const payload = { ...data }
@@ -777,6 +860,7 @@ const submit = () => {
         onSuccess: () => {
             form.reset()
             form.clearErrors()
+            clearVariantDrafts()
             emit('updated')
             closeModal()
         }
@@ -935,6 +1019,7 @@ const submit = () => {
                             </div>
 
                             <div
+                                v-if="form.has_unit_conversion"
                                 class="mt-3 grid items-end gap-3 border-t border-slate-200 pt-3 md:grid-cols-[minmax(180px,1fr)_minmax(110px,0.55fr)_auto]"
                                 :class="{ 'opacity-50': form.manage_stock_by_serial }"
                             >
@@ -976,11 +1061,20 @@ const submit = () => {
                         class="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2"
                     >
                         <div>
-                            <h3 class="text-sm font-bold text-slate-800">
-                                Thuộc tính biến thể
-                            </h3>
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-bold text-slate-800">
+                                    Thuộc tính biến thể
+                                </h3>
+                                <button
+                                    type="button"
+                                    @click="openAttrDropdown(0)"
+                                    class="h-[38px] rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
+                                >
+                                    + Thêm
+                                </button>
+                            </div>
                             <p class="mt-0.5 text-xs font-medium text-slate-500">
-                                Nhập giá trị rồi nhấn Enter hoặc dấu phẩy để thêm nhanh.
+                                Nhập giá trị rồi nhấn Lưu.
                             </p>
                         </div>
 
@@ -1003,16 +1097,11 @@ const submit = () => {
                                 >
                                     <!-- INPUT NHẬP GIÁ TRỊ THUỘC TÍNH -->
                                     <FloatingInput
-                                        :model-value="
-                                            dropdown.type === 'value' &&
-                                            dropdown.variantIndex === i &&
-                                            dropdown.attrIndex === i2
-                                                ? dropdown.keyword
-                                                : ''
-                                        "
+                                        :model-value="pendingValueDrafts[valueDraftKey(i, attr)] || ''"
                                         :label="attr.name"
                                         @focus="openValueDropdown(i, i2)"
                                         @update:model-value="val => {
+                                            pendingValueDrafts[valueDraftKey(i, attr)] = val
                                             if (dropdown.type === 'value' && dropdown.variantIndex === i && dropdown.attrIndex === i2) {
                                                 dropdown.keyword = val
                                             }
@@ -1020,11 +1109,12 @@ const submit = () => {
                                         @keydown="e => {
                                             if (e.key === ',') {
                                                 e.preventDefault()
-                                                addAttrValue(attr, e.target.value)
+                                                addAttrValue(attr, e.target.value, i, i2)
                                                 return
                                             }
                                             handleKeyDown(e, attr, i, i2)
                                         }"
+                                        @blur="closeDropdown('value', i, i2)"
                                     />
 
                                     <div
@@ -1074,30 +1164,29 @@ const submit = () => {
                             </div>
 
                             <!-- NÚT THÊM -->
-                            <div>
-                                <div class="w-full">
-
-                                   <div
-                                        v-if="dropdown.type === 'attr' && dropdown.variantIndex === i"
-                                        class="relative"
-                                        :ref="el => setDropdownRef(el, 'attr', i)"
-                                    >
+                            <div
+                                v-if="addingAttributeFor[variantDraftKey(i)]"
+                                class="relative"
+                                :ref="el => setDropdownRef(el, 'attr', i)"
+                            >
                                         <input
                                             :id="'attr-input-' + i"
-                                            :value="dropdown.type === 'attr' && dropdown.variantIndex === i ? dropdown.keyword : ''"
+                                            :value="pendingAttributeDrafts[variantDraftKey(i)] || ''"
                                             class="h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                                             placeholder="Nhập hoặc chọn thuộc tính..."
                                             @focus="openAttrDropdown(i)"
                                             @input="e => {
+                                                pendingAttributeDrafts[variantDraftKey(i)] = e.target.value
                                                 dropdown.type = 'attr'
                                                 dropdown.variantIndex = i
                                                 dropdown.keyword = e.target.value
                                             }"
                                             @keydown="e => handleKeyDown(e, null, i)"
+                                            @blur="e => handleAttributeInputBlur(i, e)"
                                         />
 
                                         <div
-                                            v-if="suggestions.length"
+                                            v-if="dropdown.type === 'attr' && dropdown.variantIndex === i && suggestions.length"
                                             class="absolute z-10 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
                                         >
                                             <div
@@ -1112,18 +1201,6 @@ const submit = () => {
                                                 {{ item }}
                                             </div>
                                         </div>
-                                    </div>
-
-                                    <button
-                                        v-else
-                                        @click="openAttrDropdown(i)"
-                                        type="button"
-                                        class="h-[42px] rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
-                                    >
-                                        + Thêm
-                                    </button>
-
-                                </div>
                             </div>
 
                         </div>

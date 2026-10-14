@@ -21,7 +21,9 @@ class UpdateBrandRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('brands', 'name')->ignore($brandId),
+                Rule::unique('brands', 'name')
+                    ->where(fn ($query) => $query->where('category_id', $this->input('category_id')))
+                    ->ignore($brandId),
             ],
             'category_id' => [
                 'required',
@@ -43,7 +45,7 @@ class UpdateBrandRequest extends FormRequest
     {
         return [
             'name.required'        => 'Vui lòng nhập tên thương hiệu',
-            'name.unique'          => 'Tên thương hiệu đã tồn tại',
+            'name.unique'          => 'Tên thương hiệu đã tồn tại trong danh mục này',
             'category_id.required' => 'Vui lòng chọn danh mục',
             'category_id.exists'   => 'Danh mục không hợp lệ',
         ];

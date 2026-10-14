@@ -3,6 +3,7 @@
 namespace App\Services\Brand;
 
 use App\Repositories\Brand\BrandRepository;
+use App\Models\Brand;
 use App\Services\Base\BaseService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
@@ -20,9 +21,7 @@ class BrandService extends BaseService
         array $data
     ): Model {
 
-        $data['slug'] = Str::slug(
-            $data['name']
-        );
+        $data['slug'] = $this->uniqueSlug($data['name'], $data['category_id']);
 
         return $this->repository
             ->create($data);
@@ -34,9 +33,7 @@ class BrandService extends BaseService
         array $data
     ): Model {
 
-        $data['slug'] = Str::slug(
-            $data['name']
-        );
+        $data['slug'] = $this->uniqueSlug($data['name'], $data['category_id'], $model->getKey());
 
         return $this->repository
             ->update(
@@ -51,5 +48,27 @@ class BrandService extends BaseService
     ) {
         return $this->repository
             ->trash($perPage);
+    }
+
+    private function uniqueSlug(string $name, int|string $categoryId, int|string|null $ignoreId = null): string
+    {
+        $base = Str::slug($name) ?: 'brand';
+        $slug = $base;
+        $suffix = 0;
+
+        do {
+            $query = Brand::withTrashed()->where('slug', $slug);
+
+            if ($ignoreId !== null) {
+                $query->whereKeyNot($ignoreId);
+            }
+
+            if (!$query->exists()) {
+                return $slug;
+            }
+
+            $suffix++;
+            $slug = $base . '-' . $categoryId . ($suffix > 1 ? '-' . $suffix : '');
+        } while (true);
     }
 }
