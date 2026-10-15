@@ -1062,9 +1062,15 @@ const submit = () => {
                     >
                         <div>
                             <div class="flex items-center justify-between gap-3">
-                                <h3 class="text-sm font-bold text-slate-800">
-                                    Thuộc tính biến thể
-                                </h3>
+                                <div>
+                                    <h3 class="text-sm font-bold text-slate-800">
+                                            Thuộc tính biến thể
+                                    </h3>
+                                    <p class="mt-0.5 text-xs font-medium text-slate-500">
+                                        Nhập giá trị rồi nhấn Enter, hoặc dấu ','
+                                    </p>
+                                </div>
+                                
                                 <button
                                     type="button"
                                     @click="openAttrDropdown(0)"
@@ -1073,9 +1079,6 @@ const submit = () => {
                                     + Thêm
                                 </button>
                             </div>
-                            <p class="mt-0.5 text-xs font-medium text-slate-500">
-                                Nhập giá trị rồi nhấn Lưu.
-                            </p>
                         </div>
 
                         <div

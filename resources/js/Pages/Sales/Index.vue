@@ -453,7 +453,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                 </span>
                             </td>
 
-                            <!-- Ngày tạo -->
+                            <!-- Ngày tạo -->9
                             <td class="px-3.5 py-2.5 text-slate-500 text-[11px]">
                                 {{ formatDateTime(sale.created_at) }}
                             </td>
