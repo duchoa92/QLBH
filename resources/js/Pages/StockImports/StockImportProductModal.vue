@@ -5,11 +5,13 @@ import {
     onBeforeUnmount,
     onMounted,
     ref,
+    shallowRef,
     watch,
 } from 'vue'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import api from '@/Services/api'
 import { filterByKeywords, highlightText } from '@/utils/searchHelper'
 import { formatNumber, formatDateTime } from '@/utils/format'
@@ -21,6 +23,8 @@ import {
     ChevronDown,
     ChevronUp,
     ShieldCheck,
+    Camera,
+    CameraOff,
 } from 'lucide-vue-next'
 
 /* PROPS / EMITS */
@@ -32,6 +36,14 @@ const emit = defineEmits(['close', 'completed'])
 /* REFS */
 const entryFormRef = ref(null)
 const dropdownVariantRef = ref(null)
+const videoRef = ref(null)
+const scanning = ref(false)
+const scanError = ref('')
+const codeReader = new BrowserMultiFormatReader()
+const scanBusy = ref(false)
+const lastScanned = shallowRef({ value: '', at: 0 })
+let scanSession = 0
+let scanControls = null
 
 const showVariantDropdown = ref(false)
 const variantSearch = ref('')
@@ -46,7 +58,7 @@ const editingEntryIndex = ref(null)
 const entryModal = ref({
     mode: null,
     item: null,
-    imei_entries: [],
+    imei_input: '',
     variant_input: null,
     info_text_input: '',
     warranty_duration_value_input: null,
@@ -56,6 +68,87 @@ const entryModal = ref({
     sell_price_input: 0,
 })
 const entryError = ref('')
+
+const stopCamera = () => {
+    scanSession += 1
+    scanning.value = false
+    scanBusy.value = false
+    const stream = videoRef.value?.srcObject
+    try {
+        scanControls?.stop()
+    } catch (error) {
+        console.warn('Không thể dừng vòng quét IMEI:', error)
+    }
+    scanControls = null
+    try {
+        codeReader.reset()
+    } catch (error) {
+        console.warn('Không thể giải phóng reader IMEI:', error)
+    }
+    try {
+        stream?.getTracks().forEach(track => track.stop())
+    } catch (error) {
+        console.warn('Không thể giải phóng video track:', error)
+    }
+    if (videoRef.value) {
+        try {
+            videoRef.value.pause()
+        } catch (error) {
+            console.warn('Không thể dừng phần xem trước camera:', error)
+        }
+        try {
+            videoRef.value.srcObject = null
+        } catch (error) {
+            console.warn('Không thể xóa luồng camera khỏi phần xem trước:', error)
+        }
+    }
+}
+
+const startCamera = async () => {
+    if (scanning.value) return
+    const session = ++scanSession
+    scanError.value = ''
+    scanning.value = true
+    await nextTick()
+
+    try {
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices()
+        const camera = devices.find(device => /back|rear|environment|sau/i.test(device.label)) || devices[0]
+        if (!camera?.deviceId) throw new Error('Không tìm thấy camera trên thiết bị này.')
+
+        const controls = await codeReader.decodeFromVideoDevice(camera.deviceId, videoRef.value, async (result) => {
+            if (session !== scanSession || !result || scanBusy.value) return
+            const value = result.getText().trim()
+            const now = Date.now()
+            if (!value || (value === lastScanned.value.value && now - lastScanned.value.at < 1600)) return
+
+            lastScanned.value = { value, at: now }
+            scanBusy.value = true
+            entryModal.value.imei_input = value
+            try {
+                if (entryModal.value.item?.type === 'imei_variant' && !entryModal.value.variant_input) {
+                    entryError.value = 'Đã quét được IMEI. Hãy chọn biến thể rồi bấm Thêm.'
+                    stopCamera()
+                    return
+                }
+                await addEntry()
+            } finally {
+                scanBusy.value = false
+            }
+        })
+        if (session !== scanSession) {
+            controls.stop()
+            codeReader.reset()
+        } else {
+            scanControls = controls
+        }
+    } catch (error) {
+        if (session !== scanSession) return
+        console.error('Không thể mở camera quét IMEI:', error)
+        scanError.value = error?.message || 'Không thể mở camera. Hãy kiểm tra quyền truy cập camera.'
+        stopCamera()
+    }
+}
 
 /* HELPERS */
 const formatPrice = formatNumber
@@ -85,6 +178,13 @@ const variantAttributes = (variant) => {
 const variantLabel = (variant) => {
     const attrs = variantAttributes(variant)
     return attrs.length ? attrs.map(a => a.value).join(' - ') : (variant?.sku || '')
+}
+
+const imeiVariantLabel = (row) => {
+    if (typeof row === 'string') return '-'
+    const variant = row?.variant || (entryModal.value.item?.available_variants || entryModal.value.item?.variants || [])
+        .find(option => Number(option.id) === Number(row?.variant_id))
+    return variant ? variantLabel(variant) : '-'
 }
 
 const buildExtraInfo = (modal) => {
@@ -181,7 +281,7 @@ const openEntryModal = (item) => {
     else if (item.type === 'variant') mode = 'variant'
 
     const variants = item.available_variants || item.variants || []
-    const defaultVariant = (mode === 'variant' || item.type === 'imei_variant') && variants.length ? variants[0] : null
+    const defaultVariant = mode === 'variant' && variants.length ? variants[0] : null
     const factor = item.has_unit_conversion ? Math.max(1, Number(item.conversion_factor || 1)) : 1
     const rawVariantCost = defaultVariant?.cost_price ?? defaultVariant?.import_price
     const rawVariantSell = defaultVariant?.sell_price ?? defaultVariant?.retail_price ?? defaultVariant?.price
@@ -195,12 +295,12 @@ const openEntryModal = (item) => {
     entryModal.value = {
         mode,
         item,
-        imei_entries: [],
+        imei_input: '',
         variant_input: defaultVariant?.id ?? null,
         info_text_input: '',
         warranty_duration_value_input: item.supplier_warranty_value ?? null,
         warranty_duration_unit_input: item.supplier_warranty_unit || 'months',
-        quantity_input: mode === 'imei' ? 0 : 1,
+        quantity_input: 1,
         cost_price_input: defaultCost,
         sell_price_input: defaultSell,
     }
@@ -216,7 +316,7 @@ const resetEntryModal = () => {
     entryModal.value = {
         mode: null,
         item: null,
-        imei_entries: [],
+        imei_input: '',
         variant_input: null,
         info_text_input: '',
         warranty_duration_value_input: null,
@@ -231,22 +331,29 @@ const resetEntryModal = () => {
     editingEntryIndex.value = null
 }
 
-const resetEntryInputs = () => {
+const resetEntryInputs = (keepPrices = false, keepVariant = false) => {
     const modal = entryModal.value
     const item = modal.item
     if (!item) return
 
-    modal.imei_entries = []
-    modal.quantity_input = modal.mode === 'imei' ? 0 : 1
-    modal.variant_input = null
+    const costPrice = modal.cost_price_input
+    const sellPrice = modal.sell_price_input
+    const variantId = keepVariant ? modal.variant_input : null
+    const selectedVariant = keepVariant ? variantSearch.value : ''
+    modal.imei_input = ''
+    modal.quantity_input = 1
+    modal.variant_input = variantId
     modal.info_text_input = ''
+    modal.warranty_duration_value_input = item.supplier_warranty_value ?? null
+    modal.warranty_duration_unit_input = item.supplier_warranty_unit || 'months'
     editingEntryIndex.value = null
     imeiLookup.value = null
-    variantSearch.value = ''
+    variantSearch.value = selectedVariant
     showVariantDropdown.value = false
+    showAdvancedInfo.value = false
 
-    modal.cost_price_input = Number(item.cost_price ?? item.import_price ?? 0)
-    modal.sell_price_input = Number(item.sell_price ?? item.price ?? 0)
+    modal.cost_price_input = keepPrices ? costPrice : Number(item.cost_price ?? item.import_price ?? 0)
+    modal.sell_price_input = keepPrices ? sellPrice : Number(item.sell_price ?? item.price ?? 0)
     entryError.value = ''
 
 }
@@ -255,15 +362,12 @@ const selectImeiEntry = (index) => {
     const row = entryModal.value.item?.imeis?.[index]
     if (!row) return
     editingEntryIndex.value = index
-    entryModal.value.quantity_input = 1
-    entryModal.value.imei_entries = [{
-        imei: typeof row === 'string' ? row : (row.imei || ''),
-        variant_id: typeof row === 'string' ? null : (row.variant_id || null),
-    }]
+    entryModal.value.imei_input = typeof row === 'string' ? row : (row.imei || '')
     entryModal.value.variant_input = typeof row === 'string' ? null : (row.variant_id || null)
     entryModal.value.info_text_input = row.extra_info?.note || ''
     entryModal.value.warranty_duration_value_input = row.warranty_duration_value || null
     entryModal.value.warranty_duration_unit_input = row.warranty_duration_unit || 'months'
+    showAdvancedInfo.value = Boolean(row.warranty_duration_value || row.extra_info?.note)
     imeiLookup.value = null
     const variant = (entryModal.value.item.available_variants || entryModal.value.item.variants || []).find((option) => Number(option.id) === Number(row.variant_id))
     variantSearch.value = variant ? variantLabel(variant) : ''
@@ -293,14 +397,14 @@ const selectVariantEntry = (index) => {
 const addEntry = async () => {
     const modal = entryModal.value
     const item = modal.item
-    if (!item) return
+    if (!item) return false
 
     if (modal.mode === 'variant') {
         const qty = Number(modal.quantity_input || 0)
-        if (!qty) return
+        if (!qty) return false
         const variants = item.available_variants || item.variants || []
         const variant = variants.find(v => Number(v.id) === Number(modal.variant_input))
-        if (!variant) return
+        if (!variant) return false
 
         if (!item.rows) item.rows = []
         if (editingEntryIndex.value !== null) {
@@ -313,7 +417,7 @@ const addEntry = async () => {
                 sell_price: Number(modal.sell_price_input),
             }
             resetEntryInputs()
-            return
+            return true
         }
 
         const exist = item.rows.find(row => Number(row.variant_id) === Number(variant.id))
@@ -332,70 +436,59 @@ const addEntry = async () => {
             })
         }
         resetEntryInputs()
-        return
+        return true
     }
 
     if (modal.mode === 'imei') {
-        const imeiRows = (modal.imei_entries || []).map(row => ({ ...row, imei: String(row.imei || '').trim() }))
-        if (!imeiRows.length || imeiRows.some(row => !row.imei)) {
-            entryError.value = 'Vui lòng nhập đủ IMEI / Serial theo số lượng.'
-            return
+        const imei = String(modal.imei_input || '').trim()
+        if (!imei) {
+            entryError.value = 'Vui lòng nhập IMEI / Serial.'
+            return false
         }
-        if (item.type === 'imei_variant' && imeiRows.some(row => !row.variant_id)) {
-            entryError.value = 'Vui lòng chọn biến thể cho từng IMEI.'
-            return
+        if (item.type === 'imei_variant' && !modal.variant_input) {
+            entryError.value = 'Vui lòng chọn biến thể cho IMEI này.'
+            return false
         }
         if (!item.imeis) item.imeis = []
-        const inputImeis = imeiRows.map(row => row.imei.toLowerCase())
-        if (new Set(inputImeis).size !== inputImeis.length) {
-            entryError.value = 'Danh sách IMEI / Serial đang có mã trùng nhau.'
-            return
-        }
         const duplicate = item.imeis.some((row, index) => {
             const value = typeof row === 'string' ? row : row.imei
-            return index !== editingEntryIndex.value && inputImeis.includes(String(value).toLowerCase())
+            return index !== editingEntryIndex.value && String(value).toLowerCase() === imei.toLowerCase()
         })
         if (duplicate) {
             entryError.value = 'IMEI / Serial đã có trong danh sách nhập.'
-            return
+            return false
         }
 
         entryError.value = ''
         imeiLookupLoading.value = true
         try {
-            for (const row of imeiRows) {
-                const lookup = await lookupImei(row.imei)
-                if (lookup && !lookup.can_import) {
-                    entryError.value = lookup.message || `IMEI ${row.imei} không thể nhập.`
-                    return
-                }
+            const lookup = await lookupImei(imei)
+            if (lookup && !lookup.can_import) {
+                entryError.value = lookup.message || `IMEI ${imei} không thể nhập.`
+                return false
             }
         } finally {
             imeiLookupLoading.value = false
             imeiLookup.value = null
         }
 
-        const nextRows = imeiRows.map(row => ({
-            imei: row.imei,
+        const variant = (item.available_variants || item.variants || []).find(option => Number(option.id) === Number(modal.variant_input))
+        const nextRow = {
+            imei,
             cost_price: Number(modal.cost_price_input),
             sell_price: Number(modal.sell_price_input),
-            variant_id: item.type === 'imei_variant' ? row.variant_id : null,
+            variant_id: item.type === 'imei_variant' ? modal.variant_input : null,
+            variant: item.type === 'imei_variant' ? variant : null,
             extra_info: buildExtraInfo(modal),
             warranty_duration_value: modal.warranty_duration_value_input || null,
             warranty_duration_unit: modal.warranty_duration_unit_input || 'months',
-        }))
-        if (editingEntryIndex.value !== null) item.imeis.splice(editingEntryIndex.value, 1, ...nextRows)
-        else item.imeis.push(...nextRows)
-        resetEntryInputs()
+        }
+        if (editingEntryIndex.value !== null) item.imeis.splice(editingEntryIndex.value, 1, nextRow)
+        else item.imeis.push(nextRow)
+        resetEntryInputs(true, item.type === 'imei_variant')
+        nextTick(() => document.getElementById('stock-import-imei-input')?.focus())
+        return true
     }
-}
-
-const setImeiQuantity = (value) => {
-    const quantity = Math.min(500, Math.max(0, Math.floor(Number(value || 0))))
-    entryModal.value.quantity_input = quantity
-    const rows = entryModal.value.imei_entries || []
-    entryModal.value.imei_entries = Array.from({ length: quantity }, (_, index) => rows[index] || { imei: '', variant_id: null })
-    entryError.value = ''
 }
 
 const parseMoneyInput = (value) => {
@@ -404,12 +497,30 @@ const parseMoneyInput = (value) => {
 }
 const updateRowMoney = (row, key, event) => { row[key] = parseMoneyInput(event.target.value) }
 
-const complete = () => {
+const complete = async () => {
+    if (entryModal.value.mode === 'imei') {
+        if (entryModal.value.imei_input.trim()) {
+            const added = await addEntry()
+            if (!added) return
+        }
+        if (!props.item.imeis?.length) {
+            entryError.value = 'Vui lòng thêm ít nhất một IMEI / Serial trước khi hoàn tất.'
+            return
+        }
+    }
+
+    if (entryModal.value.mode === 'variant' && !props.item.rows?.length) {
+        entryError.value = 'Vui lòng thêm ít nhất một biến thể trước khi hoàn tất.'
+        return
+    }
+
     if (['normal', 'variant'].includes(entryModal.value.mode)) {
         props.item.supplier_warranty_value = entryModal.value.warranty_duration_value_input || null
         props.item.supplier_warranty_unit = entryModal.value.warranty_duration_unit_input || 'months'
     }
+    stopCamera()
     emit('completed', props.item)
+    emit('close')
 }
 
 const removeImei = (item, index) => {
@@ -437,7 +548,7 @@ const handleClickOutside = (event) => {
     showVariantDropdown.value = false
 }
 
-const close = () => { resetEntryModal(); emit('close') }
+const close = () => { stopCamera(); resetEntryModal(); emit('close') }
 
 onMounted(() => {
     document.addEventListener('click', handleClickOutside)
@@ -446,6 +557,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     document.removeEventListener('click', handleClickOutside)
+    stopCamera()
 })
 </script>
 
@@ -469,7 +581,7 @@ onBeforeUnmount(() => {
                     <span>Đang nạp dòng đã chọn vào biểu mẫu.</span>
                     <button type="button" class="font-semibold underline" @click="resetEntryInputs">Thoát sửa</button>
                 </div>
-                <div class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))]">
+                <div class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]">
 
                     <!-- INPUT: SẢN PHẨM THƯỜNG -->
                     <div v-if="entryModal.mode === 'normal'" class="min-w-0">
@@ -481,19 +593,34 @@ onBeforeUnmount(() => {
                         />
                     </div>
 
-                    <!-- SỐ LƯỢNG IMEI: TẠO ĐỦ DÒNG TRƯỚC KHI NHẬP MÃ -->
+                    <!-- IMEI / SERIAL -->
                     <div v-if="entryModal.mode === 'imei'" class="min-w-0">
-                        <FloatingInput
-                            :model-value="entryModal.quantity_input"
-                            type="number"
-                            min="0"
-                            label="Số lượng IMEI / Serial"
-                            @update:model-value="setImeiQuantity"
-                        />
+                        <div class="relative">
+                            <FloatingInput
+                                id="stock-import-imei-input"
+                                v-model="entryModal.imei_input"
+                                type="text"
+                                label="IMEI / Serial"
+                                autocomplete="off"
+                                class="pr-10"
+                                @focus="startCamera"
+                                @keydown.enter.prevent="addEntry"
+                            />
+                            <button
+                                type="button"
+                                class="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-sky-700 transition hover:bg-sky-50"
+                                :aria-label="scanning ? 'Tắt camera' : 'Bật camera quét IMEI'"
+                                :title="scanning ? 'Tắt camera' : 'Bật camera quét IMEI'"
+                                @click.stop="scanning ? stopCamera() : startCamera()"
+                            >
+                                <CameraOff v-if="scanning" class="h-4 w-4" />
+                                <Camera v-else class="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
 
                     <!-- INPUT: BIẾN THỂ -->
-                    <div v-if="entryModal.mode === 'variant'" class="min-w-0">
+                    <div v-if="entryModal.mode === 'variant' || entryModal.item?.type === 'imei_variant'" class="min-w-0">
                         <div ref="dropdownVariantRef" class="relative w-full">
                             <FloatingInput
                                 v-model="variantSearch"
@@ -570,8 +697,40 @@ onBeforeUnmount(() => {
                         />
                     </div>
 
-                    <!-- BUTTON THÊM -->
+                    <div v-if="entryModal.mode !== 'normal'" class="min-w-0">
+                        <button
+                            type="button"
+                            class="flex h-[42px] w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="imeiLookupLoading"
+                            @click="addEntry"
+                        >
+                            <Plus class="h-4 w-4" />
+                            {{ editingEntryIndex !== null ? 'Cập nhật' : 'Thêm' }}
+                        </button>
+                    </div>
                 </div>
+
+                <div v-if="scanning" class="relative mt-3 overflow-hidden rounded-lg bg-slate-950">
+                    <video ref="videoRef" autoplay muted playsinline class="h-44 w-full object-cover sm:h-52" />
+                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <div class="flex aspect-[1.7/1] w-[72%] items-center justify-center rounded-lg border border-white/80 shadow-[0_0_0_999px_rgba(15,23,42,0.24)]">
+                            <span class="rounded bg-slate-950/60 px-2 py-1 text-[11px] font-medium text-white">Đưa mã IMEI vào khung quét</span>
+                        </div>
+                    </div>
+                    <div class="absolute left-2 top-2 rounded bg-slate-950/65 px-2 py-1 text-[11px] text-white">
+                        {{ scanBusy ? 'Đang thêm IMEI...' : 'Camera đang quét liên tục' }}
+                    </div>
+                    <button
+                        type="button"
+                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-slate-950/65 text-white hover:bg-rose-600"
+                        title="Tắt camera"
+                        aria-label="Tắt camera"
+                        @click="stopCamera"
+                    >
+                        <CameraOff class="h-4 w-4" />
+                    </button>
+                </div>
+                <p v-if="scanError" class="mt-2 text-xs font-medium text-rose-600">{{ scanError }}</p>
 
                 <!-- BẢO HÀNH NCC DÙNG ĐƯỢC CHO MỌI LOẠI SẢN PHẨM -->
                 <div class="mt-3 border-t border-slate-200/60 pt-2.5">
@@ -581,90 +740,48 @@ onBeforeUnmount(() => {
                         @click="showAdvancedInfo = !showAdvancedInfo"
                     >
                         <ShieldCheck class="h-4 w-4" />
-                        <span>{{ entryModal.mode === 'imei' ? 'Thông tin thiết bị & BH NCC' : 'Bảo hành nhà cung cấp' }}</span>
+                        <span>{{ entryModal.mode === 'imei' ? 'Thông tin phụ' : 'Bảo hành nhà cung cấp' }}</span>
                         <ChevronDown v-if="!showAdvancedInfo" class="h-3.5 w-3.5" />
                         <ChevronUp v-else class="h-3.5 w-3.5" />
                     </button>
 
                     <!-- KHỐI MỞ RỘNG -->
-                    <div v-if="showAdvancedInfo" class="mt-2.5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 sm:p-3">
-                        <div v-if="entryModal.mode === 'imei'" class="grid min-w-0 grid-cols-1 items-start gap-3">
-                            <div class="min-w-0">
-                                <label class="block text-xs font-bold text-slate-500 mb-1">
-                                    Thông tin thiết bị
-                                </label>
-                                <textarea
-                                    v-model="entryModal.info_text_input"
-                                    rows="2"
-                                    placeholder="Nhập QR, service code, tài khoản, ghi chú thiết bị..."
-                                    class="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                                ></textarea>
-                            </div>
-
+                    <div v-if="showAdvancedInfo" class="mt-2 grid min-w-0 grid-cols-1 items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/50 p-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(230px,1fr)]">
+                        <div v-if="entryModal.mode === 'imei'" class="min-w-0">
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">Thông tin thiết bị</label>
+                            <textarea
+                                v-model="entryModal.info_text_input"
+                                rows="2"
+                                placeholder="QR, service code, ghi chú..."
+                                class="w-full resize-y rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            ></textarea>
                         </div>
 
-                        <div class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))]">
-                            <div class="min-w-0">
-                                <label class="block text-xs font-bold text-slate-500">Hạn BH nhà cung cấp</label>
+                        <div class="min-w-0">
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">BH nhà cung cấp</label>
+                            <div class="flex h-9 min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
                                 <input
                                     v-model.number="entryModal.warranty_duration_value_input"
                                     type="number"
                                     min="0"
-                                    placeholder="Số lượng"
-                                    class="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-blue-500"
+                                    placeholder="Thời hạn"
+                                    class="min-w-0 flex-1 border-0 bg-transparent px-2.5 text-xs outline-none focus:ring-0"
                                 >
-                            </div>
-                            <div class="min-w-0">
-                                <label class="block text-xs font-bold text-slate-500">Đơn vị tính</label>
                                 <select
                                     v-model="entryModal.warranty_duration_unit_input"
-                                    class="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-blue-500"
+                                    class="w-[88px] shrink-0 border-0 border-l border-slate-200 bg-slate-50 px-2 text-xs outline-none focus:ring-0"
                                 >
                                     <option value="months">Tháng</option>
                                     <option value="days">Ngày</option>
                                 </select>
                             </div>
-                            <p class="min-w-0 pb-1 text-[11px] leading-snug text-slate-500">
-                                * Lưu thông tin bảo hành giữa Cửa hàng và Nhà cung cấp.
-                            </p>
                         </div>
                     </div>
-                </div>
-
-                <div v-if="entryModal.mode !== 'normal'" class="mt-3 flex justify-end">
-                    <button
-                        type="button"
-                        class="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[.99] sm:w-auto sm:min-w-32"
-                        :disabled="imeiLookupLoading"
-                        :class="{ 'cursor-not-allowed opacity-50': imeiLookupLoading }"
-                        @click="addEntry"
-                    >
-                        <Plus class="h-5 w-5" /> {{ editingEntryIndex !== null ? 'Cập nhật dòng' : 'Thêm' }}
-                    </button>
                 </div>
             </div>
 
             <div v-if="entryError" class="order-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
                 {{ entryError }}
-            </div>
-
-            <!-- MỖI IMEI CÓ MỘT Ô NHẬP; IMEI + BIẾN THỂ CHỌN BIẾN THỂ RIÊNG TỪNG DÒNG -->
-            <div v-if="entryModal.mode === 'imei' && entryModal.quantity_input > 0" class="order-3 grid gap-2 sm:grid-cols-2">
-                <div v-for="(row, index) in entryModal.imei_entries" :key="index" class="grid min-w-0 grid-cols-1 items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                    <FloatingInput
-                        v-model="row.imei"
-                        type="text"
-                        :label="`IMEI / Serial ${index + 1}`"
-                        @keydown.enter.prevent="index === entryModal.imei_entries.length - 1 && addEntry()"
-                    />
-                    <div v-if="entryModal.item?.type === 'imei_variant'" class="min-w-0">
-                        <label class="mb-1 block text-[11px] font-medium text-slate-500">Biến thể cho IMEI {{ index + 1 }}</label>
-                        <select v-model="row.variant_id" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500">
-                            <option :value="null">-- Chọn biến thể --</option>
-                            <option v-for="variant in entryModal.item.available_variants || entryModal.item.variants" :key="variant.id" :value="variant.id">{{ variantLabel(variant) }}</option>
-                        </select>
-                    </div>
-                </div>
             </div>
 
             <!-- KẾT QUẢ TRA CỨU IMEI (LOOKUP ALERT) -->
@@ -704,11 +821,11 @@ onBeforeUnmount(() => {
                     <span class="text-[10px] text-slate-500">Bấm vào dòng để nạp lại biểu mẫu bên dưới</span>
                 </div>
                 <div v-if="entryModal.item?.imeis?.length" class="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white">
-                    <table class="w-full text-xs">
+                    <table class="w-full min-w-[720px] table-fixed text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
                                 <th class="px-3 py-2.5 text-left">IMEI / Serial</th>
-                                <th v-if="entryModal.item?.type === 'imei_variant'" class="px-3 py-2.5 text-left">Biến thể</th>
+                                <th v-if="entryModal.item?.type === 'imei_variant'" class="w-48 px-3 py-2.5 text-left">Biến thể</th>
                                 <th class="px-3 py-2.5 text-right">Giá nhập</th>
                                 <th class="px-3 py-2.5 text-right">Giá bán</th>
                                 <th class="px-3 py-2.5 text-left">Bảo hành</th>
@@ -722,19 +839,9 @@ onBeforeUnmount(() => {
                                     {{ typeof row === 'string' ? row : row.imei }}
                                 </td>
                                 <td v-if="entryModal.item?.type === 'imei_variant'" class="px-3 py-2">
-                                    <select
-                                        v-model="row.variant_id"
-                                        class="h-7 w-full rounded-lg border border-slate-200 px-2 text-xs outline-none focus:border-blue-500"
-                                        @click.stop
-                                    >
-                                        <option
-                                            v-for="variant in entryModal.item.available_variants || entryModal.item.variants"
-                                            :key="variant.id"
-                                            :value="variant.id"
-                                        >
-                                            {{ variantLabel(variant) }}
-                                        </option>
-                                    </select>
+                                    <span class="block whitespace-normal break-words font-medium leading-snug text-slate-700" :title="imeiVariantLabel(row)">
+                                        {{ imeiVariantLabel(row) }}
+                                    </span>
                                 </td>
                                 <td class="px-3 py-2 text-right">
                                     <input
@@ -797,7 +904,14 @@ onBeforeUnmount(() => {
                         <QrCode class="h-5 w-5" />
                     </div>
                     <p class="text-xs font-bold text-slate-700">Chưa có mã IMEI / Serial nào</p>
-                    <p class="mt-1 text-[11px] text-slate-400">Nhập IMEI ở biểu mẫu bên dưới rồi bấm <strong>Thêm</strong> hoặc Enter.</p>
+                    <button
+                        type="button"
+                        class="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+                        @click="startCamera"
+                    >
+                        <Camera class="h-4 w-4" /> Quét bằng camera
+                    </button>
+                    <p class="mt-2 text-[11px] text-slate-400">Hoặc nhập IMEI / Serial ở biểu mẫu bên dưới.</p>
                 </div>
             </div>
 
@@ -878,10 +992,11 @@ onBeforeUnmount(() => {
             <div class="flex justify-end">
                 <button
                     type="button"
-                    class="rounded-xl bg-slate-900 px-6 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
+                    class="rounded-xl bg-slate-900 px-6 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="imeiLookupLoading"
                     @click="complete"
                 >
-                    Xác nhận & Hoàn tất
+                    {{ imeiLookupLoading ? 'Đang kiểm tra...' : 'Xác nhận & Hoàn tất' }}
                 </button>
             </div>
         </template>

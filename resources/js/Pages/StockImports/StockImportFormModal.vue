@@ -324,8 +324,13 @@ const closeProductModal = () => {
 const handleProductCompleted = (
     item
 ) => {
-    const index =
-        selectedItems.value.findIndex(
+    const currentItem = productModal.value.item
+    const index = selectedItems.value.findIndex(
+        selected => selected === currentItem
+    )
+    const matchingIndex = index !== -1
+        ? index
+        : selectedItems.value.findIndex(
             i =>
                 Number(i.product_id) ===
                     Number(
@@ -334,9 +339,11 @@ const handleProductCompleted = (
                 i.type === item.type
         )
 
-    if (index !== -1) {
-        selectedItems.value[index] =
+    if (matchingIndex !== -1) {
+        selectedItems.value[matchingIndex] =
             item
+    } else {
+        selectedItems.value.push(item)
     }
 
     closeProductModal()
