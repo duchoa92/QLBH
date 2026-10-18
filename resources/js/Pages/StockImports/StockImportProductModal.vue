@@ -12,6 +12,7 @@ import {
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { BrowserMultiFormatReader } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import api from '@/Services/api'
 import { filterByKeywords, highlightText } from '@/utils/searchHelper'
 import { formatNumber, formatDateTime } from '@/utils/format'
@@ -39,7 +40,23 @@ const dropdownVariantRef = ref(null)
 const videoRef = ref(null)
 const scanning = ref(false)
 const scanError = ref('')
-const codeReader = new BrowserMultiFormatReader()
+const scanStatus = ref('')
+const codeReader = new BrowserMultiFormatReader(new Map([
+    [DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.DATA_MATRIX,
+        BarcodeFormat.PDF_417,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.CODE_93,
+        BarcodeFormat.ITF,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+    ]],
+    [DecodeHintType.TRY_HARDER, true],
+]), { delayBetweenScanAttempts: 120, delayBetweenScanSuccess: 300 })
 const scanBusy = ref(false)
 const lastScanned = shallowRef({ value: '', at: 0 })
 let scanSession = 0
@@ -108,15 +125,24 @@ const startCamera = async () => {
     if (scanning.value) return
     const session = ++scanSession
     scanError.value = ''
+    scanStatus.value = ''
     scanning.value = true
     await nextTick()
 
     try {
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices()
-        const camera = devices.find(device => /back|rear|environment|sau/i.test(device.label)) || devices[0]
-        if (!camera?.deviceId) throw new Error('Không tìm thấy camera trên thiết bị này.')
+        if (!globalThis.isSecureContext || typeof globalThis.navigator?.mediaDevices?.getUserMedia !== 'function') {
+            throw new Error('Trình duyệt chỉ cho phép quét camera trên HTTPS hoặc localhost. Hãy mở website bằng HTTPS (có thể cần bật SSL trong Laragon).')
+        }
 
-        const controls = await codeReader.decodeFromVideoDevice(camera.deviceId, videoRef.value, async (result) => {
+        // Request the rear camera directly; device enumeration is unavailable in some contexts.
+        const controls = await codeReader.decodeFromConstraints({
+            audio: false,
+            video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+            },
+        }, videoRef.value, async (result) => {
             if (session !== scanSession || !result || scanBusy.value) return
             const value = result.getText().trim()
             const now = Date.now()
@@ -125,6 +151,7 @@ const startCamera = async () => {
             lastScanned.value = { value, at: now }
             scanBusy.value = true
             entryModal.value.imei_input = value
+            scanStatus.value = `Đã đọc mã: ${value}`
             try {
                 if (entryModal.value.item?.type === 'imei_variant' && !entryModal.value.variant_input) {
                     entryError.value = 'Đã quét được IMEI. Hãy chọn biến thể rồi bấm Thêm.'
@@ -576,10 +603,30 @@ onBeforeUnmount(() => {
     >
         <div class="flex flex-col gap-3">
             <!-- KHU VỰC 1: KHUNG DỰT FORM NHẬP TẬP TRUNG (CONTROL PANEL) -->
-            <div ref="entryFormRef" class="order-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <div ref="entryFormRef" class="order-1 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
                 <div v-if="editingEntryIndex !== null" class="mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
                     <span>Đang nạp dòng đã chọn vào biểu mẫu.</span>
                     <button type="button" class="font-semibold underline" @click="resetEntryInputs">Thoát sửa</button>
+                </div>
+                <div v-if="scanning" class="relative mb-3 overflow-hidden rounded-lg bg-slate-950">
+                    <video ref="videoRef" autoplay muted playsinline class="h-44 w-full object-cover sm:h-52" />
+                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <div class="flex aspect-[1.7/1] w-[72%] items-center justify-center rounded-lg border border-white/80 shadow-[0_0_0_999px_rgba(15,23,42,0.24)]">
+                            <span class="rounded bg-slate-950/60 px-2 py-1 text-[11px] font-medium text-white">Đưa mã IMEI vào khung quét</span>
+                        </div>
+                    </div>
+                    <div class="absolute left-2 top-2 rounded bg-slate-950/65 px-2 py-1 text-[11px] text-white">
+                        {{ scanBusy ? `Đã đọc ${entryModal.imei_input}, đang thêm...` : (scanStatus || 'Đưa mã vào khung để quét') }}
+                    </div>
+                    <button
+                        type="button"
+                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-slate-950/65 text-white hover:bg-rose-600"
+                        title="Tắt camera"
+                        aria-label="Tắt camera"
+                        @click="stopCamera"
+                    >
+                        <CameraOff class="h-4 w-4" />
+                    </button>
                 </div>
                 <div class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]">
 
@@ -596,16 +643,19 @@ onBeforeUnmount(() => {
                     <!-- IMEI / SERIAL -->
                     <div v-if="entryModal.mode === 'imei'" class="min-w-0">
                         <div class="relative">
-                            <FloatingInput
+                            <input
                                 id="stock-import-imei-input"
                                 v-model="entryModal.imei_input"
                                 type="text"
-                                label="IMEI / Serial"
                                 autocomplete="off"
-                                class="pr-10"
-                                @focus="startCamera"
+                                placeholder=" "
+                                class="peer w-full rounded-lg border border-gray-300 px-2 pb-2 pt-2.5 pr-10 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-0"
                                 @keydown.enter.prevent="addEntry"
                             />
+                            <label
+                                for="stock-import-imei-input"
+                                class="pointer-events-none absolute -top-2 left-3 bg-white px-1 text-xs text-gray-500 transition-all peer-focus:text-blue-600"
+                            >IMEI / Serial</label>
                             <button
                                 type="button"
                                 class="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-sky-700 transition hover:bg-sky-50"
@@ -697,39 +747,8 @@ onBeforeUnmount(() => {
                         />
                     </div>
 
-                    <div v-if="entryModal.mode !== 'normal'" class="min-w-0">
-                        <button
-                            type="button"
-                            class="flex h-[42px] w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            :disabled="imeiLookupLoading"
-                            @click="addEntry"
-                        >
-                            <Plus class="h-4 w-4" />
-                            {{ editingEntryIndex !== null ? 'Cập nhật' : 'Thêm' }}
-                        </button>
-                    </div>
                 </div>
 
-                <div v-if="scanning" class="relative mt-3 overflow-hidden rounded-lg bg-slate-950">
-                    <video ref="videoRef" autoplay muted playsinline class="h-44 w-full object-cover sm:h-52" />
-                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <div class="flex aspect-[1.7/1] w-[72%] items-center justify-center rounded-lg border border-white/80 shadow-[0_0_0_999px_rgba(15,23,42,0.24)]">
-                            <span class="rounded bg-slate-950/60 px-2 py-1 text-[11px] font-medium text-white">Đưa mã IMEI vào khung quét</span>
-                        </div>
-                    </div>
-                    <div class="absolute left-2 top-2 rounded bg-slate-950/65 px-2 py-1 text-[11px] text-white">
-                        {{ scanBusy ? 'Đang thêm IMEI...' : 'Camera đang quét liên tục' }}
-                    </div>
-                    <button
-                        type="button"
-                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-slate-950/65 text-white hover:bg-rose-600"
-                        title="Tắt camera"
-                        aria-label="Tắt camera"
-                        @click="stopCamera"
-                    >
-                        <CameraOff class="h-4 w-4" />
-                    </button>
-                </div>
                 <p v-if="scanError" class="mt-2 text-xs font-medium text-rose-600">{{ scanError }}</p>
 
                 <!-- BẢO HÀNH NCC DÙNG ĐƯỢC CHO MỌI LOẠI SẢN PHẨM -->
@@ -778,6 +797,18 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
                 </div>
+
+                <div v-if="entryModal.mode !== 'normal'" class="mt-3 flex justify-end">
+                    <button
+                        type="button"
+                        class="inline-flex h-10 min-w-28 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="imeiLookupLoading"
+                        @click="addEntry"
+                    >
+                        <Plus class="h-4 w-4" />
+                        {{ editingEntryIndex !== null ? 'Cập nhật' : 'Thêm' }}
+                    </button>
+                </div>
             </div>
 
             <div v-if="entryError" class="order-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
@@ -815,7 +846,7 @@ onBeforeUnmount(() => {
             <!-- KHU VỰC 2: DANH SÁCH BẢNG HIỂN THỊ (LIST ZONE) -->
 
             <!-- BẢNG IMEI -->
-            <div v-if="entryModal.mode === 'imei'" class="order-1">
+            <div v-if="entryModal.mode === 'imei'" class="order-2">
                 <div v-if="entryModal.item?.imeis?.length" class="mb-1.5 flex items-center justify-between gap-2 px-1">
                     <h3 class="text-xs font-bold text-slate-800">IMEI đã thêm</h3>
                     <span class="text-[10px] text-slate-500">Bấm vào dòng để nạp lại biểu mẫu bên dưới</span>
@@ -916,7 +947,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- BẢNG BIẾN THỂ -->
-            <div v-if="entryModal.mode === 'variant'" class="order-1">
+            <div v-if="entryModal.mode === 'variant'" class="order-2">
                 <div v-if="entryModal.item?.rows?.length" class="mb-1.5 flex items-center justify-between gap-2 px-1">
                     <h3 class="text-xs font-bold text-slate-800">Biến thể đã thêm</h3>
                     <span class="text-[10px] text-slate-500">Bấm vào dòng để nạp lại biểu mẫu bên dưới</span>

@@ -3,6 +3,7 @@ import {
     computed,
     ref,
     watch,
+    onMounted,
     onBeforeUnmount,
 } from 'vue'
 
@@ -29,6 +30,9 @@ import {
     CheckCircle2,
     AlertCircle,
     FileSpreadsheet,
+    Download,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -82,6 +86,8 @@ const keyword = ref('')
 const searchResults = ref([])
 const searching = ref(false)
 const showResults = ref(false)
+const productSearchRef = ref(null)
+const showFileTools = ref(false)
 const importFileInput = ref(null)
 const parsingFile = ref(false)
 const importedFileName = ref('')
@@ -135,8 +141,19 @@ watch(keyword, () => {
     )
 })
 
+const closeResultsOnOutsideClick = (event) => {
+    if (showResults.value && !productSearchRef.value?.contains(event.target)) {
+        showResults.value = false
+    }
+}
+
+onMounted(() => {
+    document.addEventListener('pointerdown', closeResultsOnOutsideClick)
+})
+
 onBeforeUnmount(() => {
     clearTimeout(searchTimeout)
+    document.removeEventListener('pointerdown', closeResultsOnOutsideClick)
 })
 
 /*
@@ -875,7 +892,7 @@ const confirm = () => {
     <BaseModal
         title="Tạo phiếu nhập kho"
         size="xl"
-        body-class="p-4 sm:p-5"
+        body-class="p-3 sm:p-5"
         @close="emit('close')"
     >
         <div class="flex min-h-0 flex-col gap-4">
@@ -903,61 +920,99 @@ const confirm = () => {
             </div>
 
             <!-- TÌM SẢN PHẨM -->
-            <div class="relative rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
-
-                <div
-                    class="flex flex-col gap-2 sm:flex-row sm:items-stretch"
-                >
-                    <div
-                        class="relative flex-1"
-                    >
+            <div :class="['relative transition-[z-index]', showResults ? 'z-50' : 'z-0']">
+                <div class="relative z-10 flex items-start gap-2">
+                    <div ref="productSearchRef" class="relative min-w-0 flex-1">
                         <FloatingInput
                             v-model="keyword"
                             type="text"
                             label="Tìm tên sản phẩm, SKU hoặc barcode"
                         />
 
+                        <div class="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-slate-400">
+                            <button v-if="keyword" type="button" class="p-1 hover:text-slate-600" aria-label="Xóa từ khóa tìm kiếm" @click="keyword = ''">
+                                <X class="h-4 w-4" />
+                            </button>
+                            <Search class="h-5 w-5" />
+                        </div>
+
+                        <!-- Keep the results attached to the search field and above the import form. -->
                         <div
-                            class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400"
+                            v-if="showResults"
+                            class="absolute left-0 right-0 top-full z-[100] mt-1 max-h-80 overflow-auto rounded-xl border border-slate-200 bg-white shadow-2xl"
                         >
+                            <div v-if="searching" class="px-4 py-4 text-center text-sm text-slate-500">
+                                Đang tìm sản phẩm...
+                            </div>
+
                             <button
-                                v-if="keyword"
+                                v-for="product in searchResults"
+                                :key="product.id"
                                 type="button"
-                                class="hover:text-slate-600 p-1"
-                                @click="
-                                    keyword = ''
-                                "
+                                class="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50"
+                                @click="selectProduct(product)"
                             >
-                                <X
-                                    class="h-4 w-4"
-                                />
+                                <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                                    <img v-if="imageUrl(product.image_url ?? product.image)" :src="imageUrl(product.image_url ?? product.image)" class="h-full w-full object-cover" />
+                                    <Package v-else class="h-5 w-5 text-slate-400" />
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate text-sm font-semibold text-slate-900">{{ product.name }}</div>
+                                    <div class="mt-0.5 flex gap-3 text-xs text-slate-500">
+                                        <span>SKU: {{ product.sku || '—' }}</span>
+                                        <span>Tồn: {{ product.stock ?? 0 }}</span>
+                                    </div>
+                                </div>
+                                <div class="text-sm font-bold text-slate-900">
+                                    {{ formatPrice(product.cost_price ?? product.price ?? 0) }} {{ $currency() }}
+                                </div>
                             </button>
 
-                            <Search
-                                class="h-5 w-5"
-                            />
+                            <div v-if="!searching && !searchResults.length" class="px-4 py-6 text-center text-sm text-slate-400">
+                                Không tìm thấy sản phẩm
+                            </div>
                         </div>
                     </div>
 
                     <button
                         type="button"
+                        class="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 sm:gap-2 sm:px-3 sm:text-xs"
+                        :aria-expanded="showFileTools"
+                        aria-controls="stock-import-file-tools"
+                        aria-label="Nhập từ file"
+                        title="Nhập từ file"
+                        @click="showFileTools = !showFileTools"
+                    >
+                        <FileSpreadsheet class="h-4 w-4 text-slate-500" />
+                        <span class="hidden sm:inline">Nhập từ file</span>
+                        <ChevronUp v-if="showFileTools" class="hidden h-3.5 w-3.5 sm:block" />
+                        <ChevronDown v-else class="hidden h-3.5 w-3.5 sm:block" />
+                    </button>
+                </div>
+
+                <div v-if="showFileTools" id="stock-import-file-tools" class="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-2 sm:grid-cols-2">
+                    <button
+                        type="button"
                         @click="importFile"
                         :disabled="parsingFile"
-                        class="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70"
+                        class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70"
                     >
                         <LoaderCircle v-if="parsingFile" class="h-4 w-4 animate-spin" />
                         <FileUp v-else class="h-4 w-4" />
-                        {{ parsingFile ? 'Đang đọc...' : 'Nhập từ file' }}
+                        {{ parsingFile ? 'Đang đọc...' : 'Chọn file' }}
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        @click="downloadImportTemplate"
+                    >
+                        <Download class="h-4 w-4" />
+                        Tải file mẫu CSV
                     </button>
                     <input ref="importFileInput" type="file" accept=".xlsx,.xls,.csv,.txt" class="hidden" @change="processImportFile" />
                 </div>
 
-                <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-                    <span class="inline-flex items-center gap-1.5"><Search class="h-3.5 w-3.5" /> Tìm theo tên, SKU, barcode để chọn sản phẩm có sẵn trong kho.</span>
-                    <button type="button" class="font-semibold text-blue-700 hover:text-blue-900" @click="downloadImportTemplate">Tải file mẫu CSV</button>
-                </div>
-
-                <div v-if="fileImportMessage || fileImportErrors.length" class="mt-3 rounded-xl border p-3 text-xs" :class="fileImportErrors.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'">
+                <div v-if="showFileTools && (fileImportMessage || fileImportErrors.length)" class="mt-3 rounded-xl border p-3 text-xs" :class="fileImportErrors.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'">
                     <div class="flex items-start gap-2">
                         <CheckCircle2 v-if="!fileImportErrors.length" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                         <AlertCircle v-else class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -973,104 +1028,6 @@ const confirm = () => {
                     </div>
                 </div>
 
-                <!-- DROPDOWN PRODUCT -->
-                <div
-                    v-if="showResults"
-                    class="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-auto rounded-xl border border-slate-200 bg-white shadow-2xl"
-                >
-                    <div
-                        v-if="searching"
-                        class="px-4 py-4 text-center text-sm text-slate-500"
-                    >
-                        Đang tìm sản phẩm...
-                    </div>
-
-                    <button
-                        v-for="product in searchResults"
-                        :key="product.id"
-                        type="button"
-                        class="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50"
-                        @click="
-                            selectProduct(
-                                product
-                            )
-                        "
-                    >
-                        <div
-                            class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100"
-                        >
-                            <img
-                                v-if="
-                                    imageUrl(product.image_url ?? product.image)
-                                "
-                                :src="
-                                    imageUrl(product.image_url ?? product.image)
-                                "
-                                class="h-full w-full object-cover"
-                            />
-
-                            <Package
-                                v-else
-                                class="h-5 w-5 text-slate-400"
-                            />
-                        </div>
-
-                        <div
-                            class="min-w-0 flex-1"
-                        >
-                            <div
-                                class="truncate text-sm font-semibold text-slate-900"
-                            >
-                                {{
-                                    product.name
-                                }}
-                            </div>
-
-                            <div
-                                class="mt-0.5 flex gap-3 text-xs text-slate-500"
-                            >
-                                <span>
-                                    SKU:
-                                    {{
-                                        product.sku ||
-                                        '—'
-                                    }}
-                                </span>
-
-                                <span>
-                                    Tồn:
-                                    {{
-                                        product.stock ??
-                                        0
-                                    }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div
-                            class="text-sm font-bold text-slate-900"
-                        >
-                            {{
-                                formatPrice(
-                                    product.cost_price ??
-                                    product.price ??
-                                    0
-                                )
-                            }}
-                            {{ $currency() }}
-                        </div>
-                    </button>
-
-                    <div
-                        v-if="
-                            !searching &&
-                            !searchResults.length
-                        "
-                        class="px-4 py-6 text-center text-sm text-slate-400"
-                    >
-                        Không tìm thấy sản phẩm
-                    </div>
-                </div>
             </div>
 
             <!-- DANH SÁCH -->
@@ -1107,10 +1064,51 @@ const confirm = () => {
                     <span class="mt-1 text-xs">Tìm và chọn sản phẩm ở phía trên hoặc nạp danh sách từ file.</span>
                 </div>
 
-                <div
-                    v-else
-                    class="overflow-x-auto"
-                >
+                <template v-else>
+                <div class="divide-y divide-slate-100 sm:hidden">
+                    <article
+                        v-for="(item, itemIndex) in selectedItems"
+                        :key="`mobile-${item.type}-${item.product_id}`"
+                        class="p-3"
+                    >
+                        <div class="flex items-start gap-2.5">
+                            <Package class="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+                            <div class="min-w-0 flex-1">
+                                <div class="break-words text-sm font-semibold leading-5 text-slate-900">{{ item.name }}</div>
+                                <div class="mt-1 flex flex-wrap gap-1.5">
+                                    <span v-if="item.type === 'variant' || item.type === 'imei_variant'" class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{{ (item.rows || []).length }} biến thể</span>
+                                    <span v-if="item.type === 'imei' || item.type === 'imei_variant'" class="rounded-md bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">{{ (item.imeis || []).length }} IMEI</span>
+                                    <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ itemUnit(item) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-1">
+                                <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg text-blue-600 hover:bg-blue-50" title="Chỉnh sửa cấu hình" aria-label="Chỉnh sửa cấu hình" @click="productModal = { open: true, item }">
+                                    <Pencil class="h-4 w-4" />
+                                </button>
+                                <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg text-red-500 hover:bg-red-50" title="Xóa sản phẩm" aria-label="Xóa sản phẩm" @click="removeItem(itemIndex)">
+                                    <Trash2 class="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                            <div>
+                                <div class="text-slate-500">Số lượng</div>
+                                <div class="mt-0.5 font-semibold text-slate-900">{{ itemQuantity(item) }} {{ itemUnit(item) }}</div>
+                                <div v-if="itemConversionHint(item)" class="mt-0.5 text-[11px] font-medium text-indigo-600">{{ itemConversionHint(item) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-slate-500">Giá nhập</div>
+                                <div class="mt-0.5 font-semibold text-slate-900">{{ itemCostPrice(item) !== null ? formatPrice(itemCostPrice(item)) : 'Nhiều giá' }}</div>
+                            </div>
+                            <div class="col-span-2 border-t border-slate-200 pt-2">
+                                <div class="text-slate-500">Giá bán</div>
+                                <div class="mt-0.5 font-semibold text-slate-900">{{ itemSellPrice(item) !== null ? formatPrice(itemSellPrice(item)) : 'Nhiều giá' }}</div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="hidden overflow-x-auto sm:block">
                     <table
                         class="w-full min-w-[750px] text-sm"
                     >
@@ -1361,13 +1359,14 @@ const confirm = () => {
                         </tbody>
                     </table>
                 </div>
+                </template>
 
                 <!-- TOTAL -->
                 <div
                     v-if="
                         selectedItems.length
                     "
-                    class="flex items-center justify-between border-t bg-slate-50/50 px-4 py-3"
+                    class="flex items-center justify-between gap-3 border-t bg-slate-50/50 px-3 py-3 sm:px-4"
                 >
                     <span
                         class="font-semibold text-slate-700"
@@ -1376,7 +1375,7 @@ const confirm = () => {
                     </span>
 
                     <span
-                        class="text-lg font-bold text-green-600"
+                        class="text-right text-base font-bold text-green-600 sm:text-lg"
                     >
                         {{
                             formatPrice(
@@ -1391,10 +1390,10 @@ const confirm = () => {
         <!-- FOOTER -->
         <template #footer>
             <div
-                class="flex items-center justify-between gap-3"
+                class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
             >
                 <div
-                    class="text-sm text-slate-500"
+                    class="text-center text-xs text-slate-500 sm:text-left sm:text-sm"
                 >
                     <span
                         class="font-semibold text-slate-700"
@@ -1416,14 +1415,14 @@ const confirm = () => {
                 </div>
 
                 <div
-                    class="ml-auto flex gap-2"
+                    class="grid grid-cols-2 gap-2 sm:ml-auto sm:flex"
                 >
                     <button
                         type="button"
                         @click="
                             emit('close')
                         "
-                        class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        class="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                         Hủy
                     </button>
@@ -1434,7 +1433,7 @@ const confirm = () => {
                         :disabled="
                             !canConfirm
                         "
-                        class="rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                        class="min-h-11 rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         Lưu kho
                     </button>
