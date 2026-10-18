@@ -7,6 +7,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { formatMoney } from '@/utils/format'
+import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 
 defineOptions({ layout: AdminLayout })
 
@@ -124,7 +125,7 @@ const submit = () => {
         <BaseModal v-if="selected" :title="isCustomer ? 'Ghi nhận khách trả nợ' : 'Thanh toán cho nhà cung cấp'" size="md" @close="selected = null">
             <p class="mb-4 text-sm text-slate-500">{{ nameOf(selected) }} · Còn nợ {{ formatMoney(selected.debt_balance) }}</p>
             <div class="mb-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3"><label class="block text-xs font-bold text-slate-700">Quét mã hóa đơn / phiếu nhập<input v-model="scanCode" autofocus @keyup.enter.prevent="scanOrder" class="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400" placeholder="Quét mã rồi nhấn Enter" /></label><div class="mt-2 flex items-center justify-between gap-2"><span class="text-xs" :class="scanMessage.startsWith('Đã chọn') ? 'text-emerald-700' : 'text-slate-500'">{{ scanMessage || 'Quét mã để gắn khoản thu/chi vào đúng đơn nợ.' }}</span><button type="button" class="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white" @click="scanOrder"><ScanLine :size="14" />Tìm đơn</button></div><select v-if="partyOrders.length" v-model="form.order_id" class="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">Thanh toán công nợ tổng</option><option v-for="order in partyOrders" :key="order.id" :value="order.id">{{ order.code }} — còn {{ formatMoney(order.due) }}</option></select></div>
-            <label class="mb-3 block text-sm font-semibold text-slate-700">Số tiền (đ)<input v-model="form.amount" type="number" min="1" step="1" required class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-400" /></label>
+            <label class="mb-3 block text-sm font-semibold text-slate-700">Số tiền (đ)<FormattedNumberInput v-model.number="form.amount" min="1" step="1" required class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-400" /></label>
             <label class="mb-3 block text-sm font-semibold text-slate-700">Phương thức<select v-model="form.payment_method" class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="cash">Tiền mặt</option><option value="bank">Chuyển khoản</option><option value="card">Thẻ</option></select></label>
             <label class="mb-3 block text-sm font-semibold text-slate-700">Ghi chú<input v-model="form.note" maxlength="1000" class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-400" placeholder="Không bắt buộc" /></label>
             <p v-if="error" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}</p>

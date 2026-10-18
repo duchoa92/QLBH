@@ -5,6 +5,8 @@ import axios from 'axios'
 import debounce from 'lodash/debounce'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { toast } from 'vue-sonner'
+import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 const props = defineProps({ modelValue: { type: Array, default: () => [] } })
 const emit = defineEmits(['update:modelValue'])
@@ -94,6 +96,22 @@ const closeSuggestions = () => {
     loading.value = false
 }
 
+const scanProduct = async () => {
+    const code = keyword.value.trim()
+    if (!code) return
+
+    try {
+        const match = await findProductByScannedCode(code)
+        if (match) {
+            addPart(match.product, match.variant)
+            return
+        }
+        runSearch(code, ++searchSequence)
+    } catch {
+        toast.error('Không tìm thấy linh kiện theo mã vừa quét')
+    }
+}
+
 const updatePart = (index, key, value) => {
     parts.value = parts.value.map((part, partIndex) => partIndex === index ? { ...part, [key]: value } : part)
 }
@@ -107,7 +125,7 @@ const removePart = (index) => {
     <div class="space-y-2">
 
         <div class="relative">
-            <FloatingInput v-model="keyword" label="Nhập để tìm linh kiện" id="repair_progress_part_search" autocomplete="off" />
+            <div class="relative"><FloatingInput v-model="keyword" label="Nhập để tìm linh kiện" id="repair_progress_part_search" autocomplete="off" class="pr-12" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { keyword = code; scanProduct() }" /></div>
             <div v-if="keyword.trim().length >= 2" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
                 <p v-if="loading" class="p-3 text-xs text-slate-500">Đang tìm trong kho...</p>
                 <p v-else-if="!products.length" class="p-3 text-xs text-slate-500">Không tìm thấy linh kiện phù hợp.</p>

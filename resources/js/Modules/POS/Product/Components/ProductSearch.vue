@@ -1,10 +1,11 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
 import { toast } from 'vue-sonner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { RotateCw, Search, PackageX, Loader2 } from 'lucide-vue-next'
 import { formatCurrency } from '@/utils/format'
@@ -51,6 +52,12 @@ const scanImei = async () => {
 
     try {
         const result = await productService.scan(value)
+
+        if (result.type !== 'imei') {
+            emit('selected', result.data)
+            keyword.value = ''
+            return
+        }
         
         // Kiểm tra xem mã IMEI / Serial này đã có trong giỏ hàng chưa
         const isImeiInCart = props.cart.some(item => 
@@ -61,7 +68,6 @@ const scanImei = async () => {
 
         if (isImeiInCart) {
             toast.error(`Mã IMEI/Serial (${value}) đã có trong giỏ hàng!`)
-            keyword.value = ''
             return
         }
 
@@ -88,11 +94,31 @@ const scanImei = async () => {
         console.error(error)
         const message = error.response?.data?.message ?? 'Không tìm thấy sản phẩm hoặc IMEI không hợp lệ'
         toast.error(message)
-        keyword.value = ''
     }
 }
 
+const onCameraScan = async (code) => {
+    keyword.value = code
+    await scanImei()
+}
+
 const formatPrice = formatCurrency
+const showingCostPriceFor = ref(null)
+
+const isShowingCostPrice = (product) => showingCostPriceFor.value === (product.variant_id ?? product.id)
+const startShowingCostPrice = (product, event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    showingCostPriceFor.value = product.variant_id ?? product.id
+    event.currentTarget?.setPointerCapture?.(event.pointerId)
+}
+const stopShowingCostPrice = (event) => {
+    event?.stopPropagation?.()
+    showingCostPriceFor.value = null
+}
+const displayedPriceLabel = (product) => isShowingCostPrice(product)
+    ? formatPrice(product.cost_price ?? product.import_price ?? 0)
+    : priceLabel(product)
 
 const canSellWithoutStock = (product) => allowsNegativeStock.value
     && product.product_type !== 'imei'
@@ -249,7 +275,7 @@ const categoryOptions = computed(() => [
     <div class="flex min-h-0 flex-1 flex-col font-sans antialiased">
         
         <!-- THANH LỌC & TÌM KIẾM SẢN PHẨM -->
-        <div class="border-b border-slate-200/80 bg-white p-3.5 rounded-xl shadow-sm mb-3">
+        <div class="mb-2 rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm sm:mb-3 sm:p-3.5">
             <div class="grid gap-3 md:grid-cols-[1fr_260px] lg:grid-cols-[1fr_320px] items-center">
                 
                 <!-- Ô TÌM KIẾM -->
@@ -258,9 +284,10 @@ const categoryOptions = computed(() => [
                         v-model="keyword"
                         @keyup.enter="scanImei"
                         type="text"
-                        label="Nhập tên sản phẩm, SKU, barcode hoặc IMEI (Ấn Enter để quét)"
-                        class="w-full"
+                        label="Tìm tên, SKU, barcode hoặc IMEI"
+                        class="pr-12"
                     />
+                    <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onCameraScan" />
                 </div>
 
                 <!-- LỌC DANH MỤC & NÚT REFRESH -->
@@ -301,7 +328,7 @@ const categoryOptions = computed(() => [
             <!-- CARD SẢN PHẨM -->
             <div
                 v-else-if="products.length"
-                class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+                class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4 2xl:grid-cols-5"
             >
                 <button
                     v-for="product in products"
@@ -317,7 +344,7 @@ const categoryOptions = computed(() => [
                     @click="selectProduct(product)"
                 >
                     <!-- KHU VỰC ẢNH -->
-                    <div class="relative h-36 w-full bg-slate-50 overflow-hidden shrink-0">
+                    <div class="relative h-24 w-full shrink-0 overflow-hidden bg-slate-50 sm:h-36">
                         <img
                             v-if="product.image_url"
                             :src="product.image_url"
@@ -346,9 +373,17 @@ const categoryOptions = computed(() => [
                         <!-- BADGE GIÁ -->
                         <div
                             v-else
-                            class="absolute bottom-2 left-2 rounded-lg bg-rose-600/90 backdrop-blur-sm px-2.5 py-1 text-xs font-bold text-white shadow-sm"
+                            class="absolute bottom-2 left-2 touch-none select-none rounded-lg bg-rose-600/90 px-2.5 py-1 text-xs font-bold text-white shadow-sm backdrop-blur-sm"
+                            :class="isShowingCostPrice(product) ? 'bg-amber-600/95' : ''"
+                            title="Nhấn giữ để xem giá nhập"
+                            @pointerdown="startShowingCostPrice(product, $event)"
+                            @pointerup="stopShowingCostPrice($event)"
+                            @pointercancel="stopShowingCostPrice($event)"
+                            @lostpointercapture="stopShowingCostPrice($event)"
+                            @contextmenu.prevent.stop
+                            @click.stop
                         >
-                            {{ priceLabel(product) }}
+                            {{ displayedPriceLabel(product) }}
                         </div>
 
                         <!-- BADGE LOẠI SẢN PHẨM -->
@@ -368,16 +403,16 @@ const categoryOptions = computed(() => [
                     </div>
 
                     <!-- THÔNG TIN TÊN & TỒN KHO -->
-                    <div class="p-3 flex flex-col justify-between flex-1 bg-white">
+                    <div class="flex flex-1 flex-col justify-between bg-white p-2 sm:p-3">
                         <div
-                            class="line-clamp-2 min-h-[36px] text-xs font-semibold leading-snug transition-colors"
+                            class="line-clamp-2 min-h-[32px] text-[11px] font-semibold leading-snug transition-colors sm:min-h-[36px] sm:text-xs"
                             :class="getDisplayStock(product) > 0 ? 'text-slate-800 group-hover:text-indigo-600' : 'text-slate-400'"
                             :title="product.name"
                         >
                             {{ product.name }}
                         </div>
 
-                        <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-medium">
+                        <div class="mt-2 border-t border-slate-100 pt-1.5 text-[10px] font-medium sm:mt-2.5 sm:pt-2 sm:text-[11px]">
                             <span
                                 class="font-bold px-1.5 py-0.5 rounded"
                                 :class="getDisplayStock(product) > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'"
@@ -385,7 +420,7 @@ const categoryOptions = computed(() => [
                                 Tồn: {{ getDisplayStock(product) }} {{ product.unit_name || '' }}
                             </span>
 
-                            <span class="text-slate-400">
+                            <span class="hidden text-slate-400 sm:inline">
                                 Đã bán: {{ product.sold_count || 0 }}
                             </span>
                         </div>

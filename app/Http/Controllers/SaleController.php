@@ -26,7 +26,10 @@ class SaleController extends Controller
             ->where(function ($query) use ($term): void {
                 $query->where('name', 'like', "%{$term}%")
                     ->orWhere('sku', 'like', "%{$term}%")
-                    ->orWhere('barcode', 'like', "%{$term}%");
+                    ->orWhere('barcode', 'like', "%{$term}%")
+                    ->orWhereHas('variants', fn ($variantQuery) => $variantQuery
+                        ->where('barcode', $term)
+                        ->orWhere('sku', 'like', "%{$term}%"));
             })
             ->with(['variants' => fn ($query) => $query->where('is_active', true)])
             ->limit(12)
@@ -42,6 +45,7 @@ class SaleController extends Controller
                     'id' => $variant->id,
                     'name' => $product->name . ' · ' . collect($variant->attributes ?? [])->filter()->join(' / '),
                     'sku' => $variant->sku,
+                    'barcode' => $variant->barcode,
                     'price' => (float) ($variant->sell_price ?: $product->sell_price),
                     'stock' => (int) $variant->stock,
                 ])->values(),

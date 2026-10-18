@@ -87,6 +87,7 @@ const closePos = () => {
 }
 
 const invoiceData = ref(null)
+const cartItemCount = computed(() => cart.value.reduce((count, item) => count + Number(item.quantity || 1), 0))
 
 const showInvoice = ref(false)
 
@@ -97,6 +98,12 @@ const showSelectModal = ref(false)
 const selectedProduct = ref(null)
 
 const handleSelectProduct = (product) => {
+
+    if (product.scanned_variant) {
+        selectedProduct.value = product
+        handleConfirmSelect({ variant: product.scanned_variant })
+        return
+    }
 
     // Đã xác định đúng 1 IMEI cụ thể rồi (quét mã hoặc quét barcode máy)
     // -> thêm thẳng vào giỏ, không cần hỏi lại
@@ -260,7 +267,7 @@ useBarcodeScanner(
 
 <template>
 
-    <PosLayout @close="closePos">
+    <PosLayout :cart-count="cartItemCount" :grand-total="grandTotal" @close="closePos">
         <template #main>
             <PosMainPanel
                 :cart="cart"

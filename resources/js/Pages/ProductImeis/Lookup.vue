@@ -17,6 +17,7 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import api from '@/Services/api'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 defineOptions({
     layout: AdminLayout,
@@ -115,6 +116,11 @@ const lookup = async () => {
         loading.value = false
     }
 }
+
+const lookupScannedCode = (code) => {
+    keyword.value = code
+    lookup()
+}
 </script>
 
 <template>
@@ -127,15 +133,18 @@ const lookup = async () => {
         <DataPanel>
             <div class="border-b border-slate-200 p-4">
                 <div class="flex flex-col gap-3 md:flex-row">
-                    <div class="relative flex-1">
+                    <div class="flex min-w-0 flex-1 items-center gap-2">
+                      <div class="relative min-w-0 flex-1">
                         <Search class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                         <input
                             v-model="keyword"
                             type="text"
                             placeholder="Nhập hoặc quét IMEI / Serial..."
-                            class="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                            class="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-12 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             @keyup.enter="lookup"
                         >
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-9 !w-9" @scanned="lookupScannedCode" />
+                      </div>
                     </div>
 
                     <button

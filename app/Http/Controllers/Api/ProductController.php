@@ -115,6 +115,10 @@ class ProductController extends Controller
                     $sub->where('barcode', $keyword)
                         ->orWhere('sku', 'like', $keyword . '%')
                         ->orWhere('search_text', 'like', '%' . $normalizedKeyword . '%')
+                        ->orWhereHas('variants', function ($variantQuery) use ($keyword) {
+                            $variantQuery->where('barcode', $keyword)
+                                ->orWhere('sku', 'like', $keyword . '%');
+                        })
                         ->orWhereHas('imeis', function ($q) use ($keyword) {
                             $q->where('imei', 'like', "%{$keyword}%");
                         });

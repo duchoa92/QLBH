@@ -4,6 +4,10 @@ import { Link, useForm } from '@inertiajs/vue3'
 import { ArrowLeft, Plus, Search, Trash2, Save } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { formatMoney } from '@/utils/format'
+import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
+import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
+import { toast } from 'vue-sonner'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({ sale: Object, customers: Array, blockedReason: String })
@@ -41,6 +45,22 @@ const addProduct = (product, variant = null) => {
     search.value = ''
     results.value = []
 }
+const scanProduct = async () => {
+    const code = search.value.trim()
+    if (!code) return
+
+    clearTimeout(searchTimer)
+    try {
+        const match = await findProductByScannedCode(code)
+        if (match) {
+            addProduct(match.product, match.variant)
+            return
+        }
+        searchProducts()
+    } catch {
+        toast.error('Không tìm thấy sản phẩm theo mã vừa quét')
+    }
+}
 const subtotal = computed(() => form.items.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unit_price || 0), 0))
 const discount = computed(() => form.items.reduce((sum, row) => {
     const amount = Number(row.quantity || 0) * Number(row.unit_price || 0)
@@ -67,7 +87,7 @@ const submit = () => form.put(route('sales.update', props.sale.id))
 
             <div class="relative rounded-xl border bg-white p-4">
                 <label class="mb-1 block text-xs font-bold text-slate-600">Thêm sản phẩm</label>
-                <div class="flex items-center gap-2 rounded-lg border px-3"><Search :size="16" class="text-slate-400"/><input v-model="search" @input="searchProducts" placeholder="Tìm theo tên, mã hoặc barcode" class="w-full border-0 py-2.5 text-sm outline-none focus:ring-0" /></div>
+                <div class="relative flex items-center rounded-lg border px-3"><Search :size="16" class="shrink-0 text-slate-400"/><input v-model="search" @input="searchProducts" @keydown.enter.prevent="scanProduct" placeholder="Tìm theo tên, mã hoặc barcode" class="w-full border-0 py-2.5 pr-10 text-sm outline-none focus:ring-0" /><BarcodeCameraButton class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { search = code; scanProduct() }" /></div>
                 <div v-if="results.length" class="absolute left-4 right-4 top-[78px] z-10 max-h-64 overflow-y-auto rounded-lg border bg-white shadow-lg">
                     <template v-for="product in results" :key="product.id">
                         <button v-if="!product.is_imei && !product.variants.length" type="button" @click="addProduct(product)" class="flex w-full items-center justify-between border-b px-3 py-2 text-left text-sm hover:bg-blue-50"><span>{{ product.name }} <small class="text-slate-400">{{ product.sku }}</small></span><span>{{ formatMoney(product.price) }}</span></button>
@@ -85,8 +105,8 @@ const submit = () => form.put(route('sales.update', props.sale.id))
                         <tr v-for="(item, index) in form.items" :key="`${item.product_id}-${item.variant_id}`" class="border-t">
                             <td class="p-3 font-semibold">{{ item.name }} <small v-if="item.variant_name" class="block text-slate-500">{{ item.variant_name }}</small></td>
                             <td class="p-2"><input v-model.number="item.quantity" type="number" min="1" class="w-full rounded border p-2 text-center" /></td>
-                            <td class="p-2"><input v-model.number="item.unit_price" type="number" min="0" step="100" class="w-full rounded border p-2 text-right" /></td>
-                            <td class="p-2"><div class="flex gap-1"><select v-model="item.discount_type" class="w-20 rounded border p-2"><option value="">Không</option><option value="percent">%</option><option value="amount">₫</option></select><input v-if="item.discount_type" v-model.number="item.discount_value" type="number" min="0" :max="item.discount_type === 'percent' ? 100 : undefined" class="min-w-0 flex-1 rounded border p-2" /></div></td>
+                            <td class="p-2"><FormattedNumberInput v-model.number="item.unit_price" min="0" step="100" class="w-full rounded border p-2 text-right" /></td>
+                            <td class="p-2"><div class="flex gap-1"><select v-model="item.discount_type" class="w-20 rounded border p-2"><option value="">Không</option><option value="percent">%</option><option value="amount">₫</option></select><FormattedNumberInput v-if="item.discount_type === 'amount'" v-model.number="item.discount_value" min="0" class="min-w-0 flex-1 rounded border p-2" /><input v-else-if="item.discount_type === 'percent'" v-model.number="item.discount_value" type="number" min="0" max="100" class="min-w-0 flex-1 rounded border p-2" /></div></td>
                             <td class="p-3 text-right font-bold">{{ formatMoney(Math.max(0, item.quantity * item.unit_price - (item.discount_type === 'percent' ? item.quantity * item.unit_price * item.discount_value / 100 : item.discount_type === 'amount' ? item.discount_value : 0))) }}</td>
                             <td class="p-2"><button type="button" @click="form.items.splice(index, 1)" class="rounded p-2 text-rose-600 hover:bg-rose-50"><Trash2 :size="16" /></button></td>
                         </tr>

@@ -14,6 +14,48 @@ export function formatNumber(value) {
     return Number(value || 0).toLocaleString(settings.currency_format || 'vi-VN')
 }
 
+export function formatThousandsText(value) {
+    if (value === '' || value === null || value === undefined) return ''
+    return Number(value).toLocaleString(settings.currency_format || 'vi-VN')
+}
+
+export function parseThousandsText(value) {
+    const locale = settings.currency_format || 'vi-VN'
+    const parts = new Intl.NumberFormat(locale).formatToParts(12345.6)
+    const group = parts.find(part => part.type === 'group')?.value || ','
+    const decimal = parts.find(part => part.type === 'decimal')?.value || '.'
+    let normalized = String(value ?? '').trim()
+    if (!normalized) return ''
+
+    normalized = normalized
+        .split(group).join('')
+        .replace(/\s/g, '')
+        .replace(decimal, '.')
+        .replace(/[^\d.-]/g, '')
+
+    const number = Number(normalized)
+    return Number.isFinite(number) ? number : ''
+}
+
+export function formatThousandsInput(event) {
+    const input = event.target
+    const oldValue = input.value
+    const cursor = input.selectionStart ?? oldValue.length
+    const digitsBeforeCursor = oldValue.slice(0, cursor).replace(/\D/g, '').length
+    const value = parseThousandsText(oldValue)
+    const formatted = formatThousandsText(value)
+    input.value = formatted
+
+    let nextCursor = 0
+    let digitCount = 0
+    while (nextCursor < formatted.length && digitCount < digitsBeforeCursor) {
+        if (/\d/.test(formatted[nextCursor])) digitCount += 1
+        nextCursor += 1
+    }
+    input.setSelectionRange?.(nextCursor, nextCursor)
+    return value
+}
+
 export function formatCurrency(value) {
     const symbol = getCurrencySymbol()
     return `${formatNumber(value)} ${symbol}`

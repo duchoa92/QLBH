@@ -16,20 +16,20 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <section class="min-h-0 lg:flex-1 rounded-2xl border border-slate-200/80 bg-white shadow-sm lg:col-span-7 xl:col-span-8 overflow-hidden font-sans">
+    <section class="min-h-0 w-full flex-1 rounded-2xl border border-slate-200/80 bg-white shadow-sm lg:col-span-7 xl:col-span-8 overflow-hidden font-sans">
         <div class="flex flex-col h-full min-h-0">
 
             <!-- HEADER POS PANEL -->
-            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 bg-white">
+            <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2.5 bg-white sm:px-5 sm:py-3.5">
                 <div class="flex items-center gap-2.5">
-                    <div class="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                        <PackageSearch class="w-5 h-5" />
+                    <div class="rounded-xl bg-indigo-50 p-1.5 text-indigo-600 sm:p-2">
+                        <PackageSearch class="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div>
-                        <h1 class="text-base font-bold text-slate-900 leading-tight">
+                        <h1 class="text-sm font-bold leading-tight text-slate-900 sm:text-base">
                             Chọn & Tìm kiếm Sản phẩm
                         </h1>
-                        <p class="text-xs text-slate-400">Gõ tên, mã vạch hoặc IMEI để thêm vào đơn</p>
+                        <p class="text-[10px] text-slate-400 sm:text-xs">Gõ tên, mã vạch hoặc IMEI để thêm vào đơn</p>
                     </div>
                 </div>
 
@@ -40,7 +40,7 @@ const emit = defineEmits([
             </div>
 
             <!-- BODY PANEL -->
-            <div class="flex-1 min-h-0 lg:overflow-auto p-4 bg-slate-50/40">
+            <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/40 p-2.5 sm:p-4">
                 <ProductSearch
                     :cart="cart"
                     @selected="emit('add-product', $event)"

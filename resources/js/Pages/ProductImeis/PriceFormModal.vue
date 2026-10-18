@@ -35,6 +35,7 @@ const submit = () => {
             <FloatingInput
                 v-model.number="form.sell_price"
                 type="number"
+                format-thousands
                 min="0"
                 label="Giá bán mới"
                 :error="form.errors.sell_price"

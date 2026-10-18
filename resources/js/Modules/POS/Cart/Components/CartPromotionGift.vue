@@ -2,8 +2,11 @@
 
 import FloatingInput
 from '@/Components/UI/FloatingInput.vue'
+import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
+import { toast } from 'vue-sonner'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
-defineProps({
+const props = defineProps({
 
     item: Object,
 
@@ -12,11 +15,25 @@ defineProps({
     selectGiftProduct: Function,
 })
 
+const scanGiftProduct = async (item) => {
+    const code = String(item.gift_keyword || '').trim()
+    if (!code) return
+
+    try {
+        const match = await findProductByScannedCode(code)
+        if (match && match.product.product_type !== 'imei') {
+            props.selectGiftProduct(item, match.product)
+        }
+    } catch {
+        toast.error('Không tìm thấy sản phẩm quà tặng theo mã vừa quét')
+    }
+}
+
 </script>
 
 <template>
 
-    <div class="flex-[2] relative">
+    <div class="relative flex-[2]">
 
         <FloatingInput
             v-model="item.gift_keyword"
@@ -25,8 +42,11 @@ defineProps({
                     item
                 )
             "
+            @keydown.enter.prevent="scanGiftProduct(item)"
             label="Tìm quà tặng"
+            class="pr-12"
         />
+        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { item.gift_keyword = code; scanGiftProduct(item) }" />
 
         <div
             v-if="

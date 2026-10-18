@@ -8,13 +8,15 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer } from 'lucide-vue-next'
+import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
+import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 
 defineOptions({ layout: AdminLayout })
 
 const props = defineProps({
     settings: Object,
+    banks: { type: Array, default: () => [] },
     can_update_bank_settings: Boolean,
     can_edit_settings: { type: Boolean, default: false },
     can_manage_payment_accounts: { type: Boolean, default: false },
@@ -67,7 +69,71 @@ const form = useForm({
     bank_account: props.settings.bank_account || '',
     bank_account_name: props.settings.bank_account_name || '',
     bank_transfer_content: props.settings.bank_transfer_content || 'Thanh toan don hang',
+    bank_qr_theme: props.settings.bank_qr_theme || 'classic',
+    bank_accounts: (props.settings.bank_accounts?.length
+        ? props.settings.bank_accounts
+        : (props.settings.bank_bin || props.settings.bank_account
+            ? [{
+                id: 'legacy-default',
+                bank_bin: props.settings.bank_bin || '',
+                bank_account: props.settings.bank_account || '',
+                bank_account_name: props.settings.bank_account_name || '',
+                is_default: true,
+            }]
+            : [])).map((account, index) => ({
+        id: account.id || `bank-${index + 1}`,
+        bank_bin: account.bank_bin || '',
+        bank_name: account.bank_name || props.banks.find(bank => String(bank.bin) === String(account.bank_bin))?.shortName || '',
+        bank_account: account.bank_account || '',
+        bank_account_name: account.bank_account_name || '',
+        is_default: props.settings.bank_accounts?.some(saved => saved.is_default)
+            ? Boolean(account.is_default)
+            : index === 0,
+    })),
 })
+
+const bankOptions = computed(() => {
+    const options = props.banks.map(bank => ({
+        ...bank,
+        label: `${bank.shortName || bank.code || bank.name} — ${bank.name || 'Ngân hàng'} (BIN: ${bank.bin})`,
+    }))
+
+    form.bank_accounts.forEach(account => {
+        if (account.bank_bin && !options.some(bank => String(bank.bin) === String(account.bank_bin))) {
+            options.unshift({ bin: account.bank_bin, label: `Mã đang cấu hình: ${account.bank_bin}` })
+        }
+    })
+
+    return [{ bin: '', label: 'Chọn ngân hàng...' }, ...options]
+})
+
+const addBankAccount = () => {
+    form.bank_accounts.push({
+        id: `bank-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        bank_bin: '',
+        bank_account: '',
+        bank_account_name: '',
+        is_default: form.bank_accounts.length === 0,
+    })
+}
+
+const removeBankAccount = (index) => {
+    form.bank_accounts.splice(index, 1)
+    if (form.bank_accounts.length && !form.bank_accounts.some(account => account.is_default)) {
+        form.bank_accounts[0].is_default = true
+    }
+}
+
+const setDefaultBankAccount = (index) => {
+    form.bank_accounts.forEach((account, accountIndex) => {
+        account.is_default = accountIndex === index
+    })
+}
+
+const setAccountBank = (account, bin) => {
+    account.bank_bin = bin
+    account.bank_name = props.banks.find(bank => String(bank.bin) === String(bin))?.shortName || ''
+}
 
 const currencyFormatOptions = [
     { value: 'vi-VN', label: 'Việt Nam' },
@@ -482,30 +548,81 @@ const unitDisplayName = (unit) =>
                 </template>
 
                 <div class="space-y-4 p-4">
-                    <FloatingInput
-                        v-model="form.bank_bin"
-                        name="bank_bin"
-                        label="Mã ngân hàng VietQR / BIN"
-                        placeholder="Ví dụ: 970422"
-                        :disabled="!can_update_bank_settings"
-                        :error="form.errors.bank_bin"
-                    />
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-xs text-slate-500">Chọn ngân hàng, nhập số tài khoản và tên chủ tài khoản.</p>
+                        <ActionButton type="button" variant="secondary" :disabled="!can_update_bank_settings || form.bank_accounts.length >= 10" @click="addBankAccount">
+                            <Plus :size="15" /> Thêm tài khoản
+                        </ActionButton>
+                    </div>
 
-                    <FloatingInput
-                        v-model="form.bank_account"
-                        name="bank_account"
-                        label="Số tài khoản"
-                        :disabled="!can_update_bank_settings"
-                        :error="form.errors.bank_account"
-                    />
+                    <div v-if="!banks.length" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        Chưa tải được danh sách VietQR. Bạn có thể nhập BIN thủ công.
+                    </div>
+                    <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        API tra cứu tên STK cũ của VietQR đã dừng cung cấp. Hiện hãy nhập tên chủ tài khoản thủ công; cần thông tin tích hợp CAS/BankHub để bật tra cứu tự động.
+                    </div>
 
-                    <FloatingInput
-                        v-model="form.bank_account_name"
-                        name="bank_account_name"
-                        label="Tên chủ tài khoản"
-                        :disabled="!can_update_bank_settings"
-                        :error="form.errors.bank_account_name"
-                    />
+                    <div v-for="(account, index) in form.bank_accounts" :key="account.id" class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                                <input
+                                    type="radio"
+                                    name="default-bank-account"
+                                    :checked="account.is_default"
+                                    :disabled="!can_update_bank_settings"
+                                    class="border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    @change="setDefaultBankAccount(index)"
+                                >
+                                Tài khoản mặc định cho POS
+                            </label>
+                            <button type="button" class="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" :disabled="!can_update_bank_settings" aria-label="Xóa tài khoản ngân hàng" @click="removeBankAccount(index)">
+                                <Trash2 class="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div class="grid gap-3 md:grid-cols-3">
+                            <FloatingSelect
+                                v-if="banks.length"
+                                v-model="account.bank_bin"
+                                :name="`bank_accounts_${index}_bin`"
+                                label="Ngân hàng"
+                                :options="bankOptions"
+                                option-label="label"
+                                option-value="bin"
+                                :disabled="!can_update_bank_settings"
+                                :error="form.errors[`bank_accounts.${index}.bank_bin`]"
+                                @update:model-value="setAccountBank(account, $event)"
+                            />
+                            <FloatingInput
+                                v-else
+                                v-model="account.bank_bin"
+                                :name="`bank_accounts_${index}_bin`"
+                                label="Mã ngân hàng VietQR / BIN"
+                                placeholder="Ví dụ: 970422"
+                                :disabled="!can_update_bank_settings"
+                                :error="form.errors[`bank_accounts.${index}.bank_bin`]"
+                            />
+                            <FloatingInput
+                                v-model="account.bank_account"
+                                :name="`bank_accounts_${index}_account`"
+                                label="Số tài khoản"
+                                autocomplete="off"
+                                :disabled="!can_update_bank_settings"
+                                :error="form.errors[`bank_accounts.${index}.bank_account`]"
+                            />
+                            <FloatingInput
+                                v-model="account.bank_account_name"
+                                :name="`bank_accounts_${index}_account_name`"
+                                label="Tên chủ tài khoản"
+                                :disabled="!can_update_bank_settings"
+                                :error="form.errors[`bank_accounts.${index}.bank_account_name`]"
+                            />
+                        </div>
+                    </div>
+
+                    <div v-if="!form.bank_accounts.length" class="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+                        Chưa có tài khoản ngân hàng. Bấm “Thêm tài khoản” để bắt đầu.
+                    </div>
 
                     <FloatingInput
                         v-model="form.bank_transfer_content"
@@ -514,6 +631,34 @@ const unitDisplayName = (unit) =>
                         :disabled="!can_update_bank_settings"
                         :error="form.errors.bank_transfer_content"
                     />
+
+                    <div>
+                        <p class="mb-1.5 text-sm font-semibold text-slate-700">Kiểu màu mã QR</p>
+                        <p class="mb-3 text-xs text-slate-500">Chọn màu phù hợp với cửa hàng. Nền luôn sáng để mã dễ quét.</p>
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                            <button
+                                v-for="theme in VIET_QR_THEMES"
+                                :key="theme.value"
+                                type="button"
+                                class="flex items-center gap-2 rounded-xl border p-2 text-left transition"
+                                :class="form.bank_qr_theme === theme.value
+                                    ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-100'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'"
+                                :disabled="!can_update_bank_settings"
+                                :aria-pressed="form.bank_qr_theme === theme.value"
+                                @click="form.bank_qr_theme = theme.value"
+                            >
+                                <span
+                                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200"
+                                    :style="{ backgroundColor: theme.background, color: theme.foreground }"
+                                >
+                                    <QrCode class="h-6 w-6" />
+                                </span>
+                                <span class="text-xs font-semibold text-slate-700">{{ theme.label }}</span>
+                            </button>
+                        </div>
+                        <p v-if="form.errors.bank_qr_theme" class="mt-1 text-xs text-rose-600">{{ form.errors.bank_qr_theme }}</p>
+                    </div>
                 </div>
             </DataPanel>
         </div>

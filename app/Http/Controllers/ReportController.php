@@ -140,7 +140,11 @@ class ReportController extends Controller
 
             $query->where(function ($sub) use ($keyword) {
                 $sub->where('name', 'like', "%{$keyword}%")
-                    ->orWhere('sku', 'like', "%{$keyword}%");
+                    ->orWhere('sku', 'like', "%{$keyword}%")
+                    ->orWhere('barcode', 'like', "%{$keyword}%")
+                    ->orWhereHas('variants', fn ($variantQuery) => $variantQuery
+                        ->where('barcode', 'like', "%{$keyword}%")
+                        ->orWhere('sku', 'like', "%{$keyword}%"));
             });
         }
 

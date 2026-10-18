@@ -55,12 +55,12 @@ defineProps({
 
                 <div>
                     <strong>Giá nhập:</strong>
-                    {{ product.cost_price }}
+                    {{ $money(product.cost_price) }}
                 </div>
 
                 <div>
                     <strong>Giá bán:</strong>
-                    {{ product.price }}
+                    {{ $money(product.price ?? product.sell_price) }}
                 </div>
 
                 <div>

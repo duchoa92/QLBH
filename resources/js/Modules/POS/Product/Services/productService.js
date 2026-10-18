@@ -1,4 +1,5 @@
 import api from '@/Services/api'
+import { findProductByScannedCode } from './productBarcodeLookup'
 
 export const productService = {
 
@@ -45,6 +46,23 @@ export const productService = {
 
     // Quét barcode hoặc IMEI
     async scan(code) {
+
+        let match = null
+        try {
+            match = await findProductByScannedCode(code)
+        } catch {
+            // Keep the legacy IMEI/product scan endpoint available if catalog search fails.
+        }
+
+        if (match) {
+            return {
+                type: match.variant ? 'variant' : 'barcode',
+                data: {
+                    ...match.product,
+                    scanned_variant: match.variant,
+                },
+            }
+        }
 
         const response =
             await api.post(

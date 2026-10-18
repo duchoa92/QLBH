@@ -9,6 +9,7 @@ import { openModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
 import ImportExportModal from './ImportExportModal.vue'
@@ -374,11 +375,14 @@ const productStockDisplay = (row) => {
     <div class="flex gap-3 my-5">
 
         <!-- SEARCH -->
-        <FloatingInput
-            v-model="search"
-            label="Tìm sản phẩm..."
-            class="w-64"
-        />
+        <div class="relative w-80">
+            <FloatingInput
+                v-model="search"
+                label="Tìm tên, SKU hoặc barcode..."
+                class="pr-12"
+            />
+            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => search = code" />
+        </div>
 
         <!-- CATEGORY -->
         <FloatingSelect

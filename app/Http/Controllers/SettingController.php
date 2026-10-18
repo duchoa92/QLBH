@@ -7,6 +7,8 @@ use Inertia\Inertia;
 use App\Models\Setting;
 use App\Models\Unit;
 use App\Services\CloudBackupStorage;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 class SettingController extends Controller
 {
@@ -14,15 +16,19 @@ class SettingController extends Controller
         'bank_bin',
         'bank_account',
         'bank_account_name',
+        'bank_accounts',
         'bank_transfer_content',
+        'bank_qr_theme',
     ];
 
     public function index(Request $request, BackupController $backupController, CloudBackupStorage $cloudStorage)
     {
         $user = $request->user();
         $canManageBackups = $user?->can('backups.manage') ?? false;
+        $banks = $this->vietQrBanks();
 
         return Inertia::render('Settings/Index', array_merge([
+            'banks' => $banks,
             'settings' => [
                 'shop_name' => setting('shop_name', config('app.name', 'QLBH POS')),
                 'currency_symbol' => setting('currency_symbol', '₫'),
@@ -36,7 +42,9 @@ class SettingController extends Controller
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),
+                'bank_accounts' => json_decode((string) setting('bank_accounts', '[]'), true) ?: [],
                 'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
+                'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
             ],
             'can_update_bank_settings' => $this->canUpdateBankSettings($request),
             'can_edit_settings' => $user?->can('settings.edit') ?? false,
@@ -74,7 +82,15 @@ class SettingController extends Controller
             'bank_bin' => ['sometimes', 'nullable', 'string', 'max:20'],
             'bank_account' => ['sometimes', 'nullable', 'string', 'max:50'],
             'bank_account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'bank_accounts' => ['sometimes', 'array', 'max:10'],
+            'bank_accounts.*.id' => ['nullable', 'string', 'max:80'],
+            'bank_accounts.*.bank_bin' => ['required_with:bank_accounts.*.bank_account', 'nullable', 'string', 'max:20'],
+            'bank_accounts.*.bank_name' => ['nullable', 'string', 'max:150'],
+            'bank_accounts.*.bank_account' => ['required_with:bank_accounts.*.bank_bin', 'nullable', 'string', 'max:50'],
+            'bank_accounts.*.bank_account_name' => ['nullable', 'string', 'max:150'],
+            'bank_accounts.*.is_default' => ['sometimes', 'boolean'],
             'bank_transfer_content' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'bank_qr_theme' => ['sometimes', 'in:classic,emerald,indigo,blue,rose'],
         ]);
 
         if ($user->can('settings.edit')) {
@@ -88,7 +104,52 @@ class SettingController extends Controller
         }
 
         foreach ($data as $key => $value) {
-            Setting::set($key, $value);
+            if ($key !== 'bank_accounts') {
+                Setting::set($key, $value);
+            }
+        }
+
+        if (array_key_exists('bank_accounts', $data)) {
+            $accounts = collect($data['bank_accounts'])
+                ->filter(fn ($account) => filled($account['bank_bin'] ?? null) && filled($account['bank_account'] ?? null))
+                ->values()
+                ->map(fn ($account, $index) => [
+                    'id' => (string) ($account['id'] ?? ('bank-' . ($index + 1))),
+                    'bank_bin' => (string) $account['bank_bin'],
+                    'bank_name' => trim((string) ($account['bank_name'] ?? '')),
+                    'bank_account' => trim((string) $account['bank_account']),
+                    'bank_account_name' => trim((string) ($account['bank_account_name'] ?? '')),
+                    'is_default' => (bool) ($account['is_default'] ?? false),
+                ]);
+
+            if ($accounts->isNotEmpty()) {
+                $defaultIndex = $accounts->search(fn ($account) => $account['is_default']);
+                $defaultIndex = $defaultIndex === false ? 0 : $defaultIndex;
+                $accounts = $accounts->map(fn ($account, $index) => [
+                    ...$account,
+                    'is_default' => $index === $defaultIndex,
+                ]);
+                $defaultAccount = $accounts[$defaultIndex];
+            } else {
+                $defaultAccount = null;
+            }
+
+            Setting::set('bank_accounts', json_encode($accounts->all(), JSON_UNESCAPED_UNICODE));
+            Setting::set('bank_bin', $defaultAccount['bank_bin'] ?? '');
+            Setting::set('bank_account', $defaultAccount['bank_account'] ?? '');
+            Setting::set('bank_account_name', $defaultAccount['bank_account_name'] ?? '');
+        } elseif (array_intersect(['bank_bin', 'bank_account', 'bank_account_name'], array_keys($data))) {
+            $legacyAccount = [
+                'id' => 'legacy-default',
+                'bank_bin' => (string) ($data['bank_bin'] ?? setting('bank_bin', '')),
+                'bank_name' => '',
+                'bank_account' => (string) ($data['bank_account'] ?? setting('bank_account', '')),
+                'bank_account_name' => (string) ($data['bank_account_name'] ?? setting('bank_account_name', '')),
+                'is_default' => true,
+            ];
+            Setting::set('bank_accounts', filled($legacyAccount['bank_bin']) && filled($legacyAccount['bank_account'])
+                ? json_encode([$legacyAccount], JSON_UNESCAPED_UNICODE)
+                : '[]');
         }
 
         return back()->with('success', 'Đã lưu cài đặt');
@@ -100,4 +161,49 @@ class SettingController extends Controller
 
         return $user?->can('payment_accounts.manage') ?? false;
     }
+
+    private function vietQrBanks(): array
+    {
+        $freshCacheKey = 'settings.vietqr_banks';
+        $staleCacheKey = 'settings.vietqr_banks.stale';
+        $banks = Cache::get($freshCacheKey);
+
+        if (is_array($banks)) {
+            return $banks;
+        }
+
+        try {
+            $response = Http::timeout(5)->get('https://api.vietqr.io/v2/banks');
+            $rows = $response->successful() ? $response->json('data') : null;
+
+            if (! is_array($rows)) {
+                throw new \UnexpectedValueException('VietQR bank list response is invalid.');
+            }
+
+            $banks = collect($rows)
+                ->filter(fn ($bank) => is_array($bank) && filled($bank['bin'] ?? null))
+                ->map(fn ($bank) => [
+                    'bin' => (string) $bank['bin'],
+                    'code' => (string) ($bank['code'] ?? ''),
+                    'shortName' => (string) ($bank['shortName'] ?? $bank['code'] ?? ''),
+                    'name' => (string) ($bank['name'] ?? ''),
+                ])
+                ->values()
+                ->all();
+
+            if (! $banks) {
+                throw new \UnexpectedValueException('VietQR bank list is empty.');
+            }
+
+            Cache::put($freshCacheKey, $banks, now()->addDay());
+            Cache::put($staleCacheKey, $banks, now()->addDays(90));
+
+            return $banks;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return Cache::get($staleCacheKey, []);
+        }
+    }
+
 }

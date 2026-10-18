@@ -37,6 +37,7 @@ const { categories, brands, units } = useReferenceData({
 
 
 const showVariants = ref(!!props.product?.variants?.length)
+const priceUnitBasis = ref('base')
 
 // Đặt autoSku ở đây, TRƯỚC TẤT CẢ watcher có sử dụng nó
 const autoSku = ref(props.product?.sku ?? '')
@@ -133,6 +134,19 @@ const form = useForm({
     manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
     product_type: props.product?.product_type ?? 'normal',
 })
+
+const changePriceUnitBasis = (basis) => {
+    if (priceUnitBasis.value === basis) return
+    const factor = Math.max(1, Number(form.conversion_factor || 1))
+    const multiplier = basis === 'conversion' ? factor : 1 / factor
+    form.cost_price = Number(form.cost_price || 0) * multiplier
+    form.sell_price = Number(form.sell_price || 0) * multiplier
+    ;(form.variants || []).forEach(variant => {
+        variant.cost_price = Number(variant.cost_price || 0) * multiplier
+        variant.sell_price = Number(variant.sell_price || 0) * multiplier
+    })
+    priceUnitBasis.value = basis
+}
 
 const clearVariantDrafts = () => {
     ;[pendingValueDrafts, pendingAttributeDrafts, addingAttributeFor].forEach(drafts => {
@@ -272,6 +286,7 @@ watch(() => props.product, (p) => {
     form.sku = p.sku ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
+    priceUnitBasis.value = 'base'
 
     // Ảnh cũ chỉ dùng để preview
     // Không đưa tên file cũ vào form.image
@@ -847,6 +862,19 @@ const submit = () => {
     const normalizePayload = (data) => {
         const payload = { ...data }
 
+        // Giá trong sản phẩm được lưu theo đơn vị cơ sở. Nếu người dùng nhập
+        // theo đơn vị quy đổi thì chuẩn hóa trước khi gửi lên máy chủ.
+        if (payload.has_unit_conversion && priceUnitBasis.value === 'conversion') {
+            const factor = Math.max(1, Number(payload.conversion_factor || 1))
+            payload.cost_price = Number(payload.cost_price || 0) / factor
+            payload.sell_price = Number(payload.sell_price || 0) / factor
+            payload.variants = (payload.variants || []).map(variant => ({
+                ...variant,
+                cost_price: Number(variant.cost_price || 0) / factor,
+                sell_price: Number(variant.sell_price || 0) / factor,
+            }))
+        }
+
         if (payload.manage_stock_by_serial || !payload.has_unit_conversion) {
             payload.has_unit_conversion = false
             payload.conversion_unit_id = null
@@ -1211,17 +1239,30 @@ const submit = () => {
                     </div>
 
                     <div class="grid gap-4 md:col-span-2 md:grid-cols-2">
+                        <div v-if="form.has_unit_conversion" class="md:col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                            <span class="font-semibold text-slate-700">Nhập giá theo:</span>
+                            <label class="inline-flex cursor-pointer items-center gap-2">
+                                <input :checked="priceUnitBasis === 'base'" type="radio" value="base" name="product-price-unit-basis" class="text-emerald-600 focus:ring-emerald-500" @change="changePriceUnitBasis('base')" />
+                                <span>Đơn vị cơ sở ({{ selectedUnitName }})</span>
+                            </label>
+                            <label class="inline-flex cursor-pointer items-center gap-2">
+                                <input :checked="priceUnitBasis === 'conversion'" type="radio" value="conversion" name="product-price-unit-basis" class="text-emerald-600 focus:ring-emerald-500" @change="changePriceUnitBasis('conversion')" />
+                                <span>Đơn vị quy đổi ({{ selectedImportUnitName }})</span>
+                            </label>
+                        </div>
                         <FloatingInput
                             v-model="form.cost_price"
-                            label="Giá vốn"
+                            :label="`Giá vốn / ${priceUnitBasis === 'conversion' ? selectedImportUnitName : selectedUnitName}`"
                             type="number"
+                            format-thousands
                             :error="form.errors.cost_price"
                         />
 
                         <FloatingInput
                             v-model="form.sell_price"
-                            label="Giá bán"
+                            :label="`Giá bán / ${priceUnitBasis === 'conversion' ? selectedImportUnitName : selectedUnitName}`"
                             type="number"
+                            format-thousands
                             :error="form.errors.sell_price"
 
                         />

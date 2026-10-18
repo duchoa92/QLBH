@@ -50,7 +50,7 @@ const activeTab = ref('Tổng quan')
                             ? 'text-red-600'
                             : 'text-green-600'"
                     >
-                        Công nợ: {{ customer.debt_balance }}
+                        Công nợ: {{ $money(customer.debt_balance) }}
                     </div>
 
                 </div>
@@ -231,7 +231,7 @@ const activeTab = ref('Tổng quan')
                         </td>
 
                         <td class="p-2">
-                            {{ item.amount }}
+                            {{ $money(item.amount) }}
                         </td>
 
                         <td class="p-2">

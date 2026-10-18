@@ -115,12 +115,12 @@ defineExpose({ submit, saving: computed(() => saving.value) })
             </div>
             <p v-if="errors.parts" class="text-sm text-rose-600">{{ errors.parts[0] }}</p>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <FloatingInput v-model="laborCost" type="number" min="0" step="1000" label="Công sửa (VNĐ)" id="repair_labor_cost" :error="errors.labor_cost?.[0]" />
-                <FloatingInput v-model="surcharge" type="number" min="0" step="1000" label="Phụ phí (VNĐ)" id="repair_surcharge" :error="errors.surcharge?.[0]" />
+                <FloatingInput v-model="laborCost" type="number" format-thousands min="0" step="1000" label="Công sửa (VNĐ)" id="repair_labor_cost" :error="errors.labor_cost?.[0]" />
+                <FloatingInput v-model="surcharge" type="number" format-thousands min="0" step="1000" label="Phụ phí (VNĐ)" id="repair_surcharge" :error="errors.surcharge?.[0]" />
                 <FloatingInput v-model.number="repairWarrantyDays" type="number" min="0" max="3650" step="1" label="BH cho lần sửa này (ngày, 0 = không BH)" id="repair_warranty_days" />
             </div>
             <div v-if="isWarrantyBilling" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FloatingInput v-model.number="warrantyCoveredAmount" type="number" min="0" :max="total" step="1000" label="Chi phí được bảo hành (VNĐ)" id="repair_warranty_covered" @input="coverageTouched = true" />
+                <FloatingInput v-model.number="warrantyCoveredAmount" type="number" format-thousands min="0" :max="total" step="1000" label="Chi phí được bảo hành (VNĐ)" id="repair_warranty_covered" @input="coverageTouched = true" />
             </div>
             <div class="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm">
                 <div class="flex justify-between"><span>Tiền linh kiện</span><strong>{{ money(totalParts) }}</strong></div>

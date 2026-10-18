@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { Trash2, Gift, Percent, Tag, MessageSquare } from 'lucide-vue-next'
 import { formatCurrency } from '@/utils/format'
+import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 
 const props = defineProps({
     items: {
@@ -186,10 +187,19 @@ const toggleDiscountInput = (itemId) => {
                         <div class="flex items-center gap-2">
                             <span class="font-bold text-amber-800 text-[11px]">Giảm món:</span>
                             <div class="flex flex-1 items-center gap-1">
+                                <FormattedNumberInput
+                                    v-if="item.discount_type === 'amount'"
+                                    v-model.number="item.discount_value"
+                                    min="0"
+                                    placeholder="0"
+                                    class="w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs font-bold outline-none focus:ring-1 focus:ring-amber-500"
+                                />
                                 <input
+                                    v-else
                                     v-model.number="item.discount_value"
                                     type="number"
                                     min="0"
+                                    max="100"
                                     placeholder="0"
                                     class="w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs font-bold outline-none focus:ring-1 focus:ring-amber-500"
                                 />

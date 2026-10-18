@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -29,6 +29,36 @@ const page = usePage()
 
 const bankSettings = computed(() =>
     page.props.settings || {}
+)
+
+const bankAccounts = computed(() => {
+    const configuredAccounts = bankSettings.value.bank_accounts
+    if (Array.isArray(configuredAccounts) && configuredAccounts.length) return configuredAccounts
+    if (bankSettings.value.bank_bin && bankSettings.value.bank_account) {
+        return [{
+            id: 'legacy-default',
+            bank_bin: bankSettings.value.bank_bin,
+            bank_name: '',
+            bank_account: bankSettings.value.bank_account,
+            bank_account_name: bankSettings.value.bank_account_name,
+            is_default: true,
+        }]
+    }
+    return []
+})
+
+const selectedBankAccountId = ref('')
+watch(bankAccounts, accounts => {
+    if (!accounts.some(account => String(account.id) === String(selectedBankAccountId.value))) {
+        selectedBankAccountId.value = String(accounts.find(account => account.is_default)?.id ?? accounts[0]?.id ?? '')
+    }
+}, { immediate: true })
+
+const selectedBankAccount = computed(() =>
+    bankAccounts.value.find(account => String(account.id) === String(selectedBankAccountId.value))
+        || bankAccounts.value.find(account => account.is_default)
+        || bankAccounts.value[0]
+        || null
 )
 
 const totalNeedToPay = computed(() => {
@@ -91,18 +121,8 @@ const balanceStatus = computed(() => {
 })
 
 const hasBankSettings = computed(() =>
-    Boolean(bankSettings.value.bank_bin && bankSettings.value.bank_account)
+    Boolean(selectedBankAccount.value?.bank_bin && selectedBankAccount.value?.bank_account)
 )
-
-const vietQrUrl = computed(() => {
-    if (!hasBankSettings.value) return ''
-
-    const description = encodeURIComponent(
-        bankSettings.value.bank_transfer_content || 'Thanh toan don hang'
-    )
-
-    return `https://img.vietqr.io/image/${bankSettings.value.bank_bin}-${bankSettings.value.bank_account}-compact2.png?amount=${transferAmount.value}&addInfo=${description}`
-})
 
 const submit = () => {
     emit('confirm', {
@@ -166,12 +186,21 @@ const submit = () => {
 
                 <!-- MA QR THANH TOAN -->
                 <div v-if="paymentMethod === 'bank'">
+                    <div v-if="bankAccounts.length > 1" class="mb-3">
+                        <label for="checkout-bank-account" class="mb-1 block text-xs font-semibold text-slate-600">Tài khoản nhận tiền</label>
+                        <select id="checkout-bank-account" v-model="selectedBankAccountId" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                            <option v-for="account in bankAccounts" :key="account.id" :value="String(account.id)">
+                                {{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}{{ account.bank_account_name ? ` · ${account.bank_account_name}` : '' }}{{ account.is_default ? ' (Mặc định)' : '' }}
+                            </option>
+                        </select>
+                    </div>
                     <QrPayment
-                        v-if="vietQrUrl"
-                        :url="vietQrUrl"
+                        v-if="hasBankSettings"
+                        :bank-bin="String(selectedBankAccount.bank_bin)"
+                        :bank-account="String(selectedBankAccount.bank_account)"
                         :amount="transferAmount"
-                        :account="bankSettings.bank_account"
-                        :account-name="bankSettings.bank_account_name"
+                        :description="bankSettings.bank_transfer_content || 'Thanh toan don hang'"
+                        :theme="bankSettings.bank_qr_theme || 'classic'"
                     />
 
                     <div

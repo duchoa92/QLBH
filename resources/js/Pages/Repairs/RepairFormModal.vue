@@ -1142,6 +1142,7 @@ const selectWorkflowStep = (status) => {
                         <FloatingInput
                             v-model="form.estimated_cost"
                             type="number"
+                            format-thousands
                             min="0"
                             step="1"
                             inputmode="numeric"

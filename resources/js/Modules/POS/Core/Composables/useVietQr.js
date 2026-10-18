@@ -2,22 +2,21 @@ import { computed } from 'vue'
 
 import { paymentConfig }
 from '@/config/payment'
+import { buildVietQrPayload, renderVietQrImage } from '@/Modules/POS/Payment/Utils/vietQr'
 
 export function useVietQr(total) {
 
     const vietQrUrl = computed(() => {
 
-        const {
-
+        const { bankBin, bankAccount, description } = paymentConfig.vietQr
+        const payload = buildVietQrPayload({
             bankBin,
-
             bankAccount,
-
+            amount: Number(total.value || 0),
             description,
+        })
 
-        } = paymentConfig.vietQr
-
-        return `https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${Number(total.value || 0)}&addInfo=${description}`
+        return renderVietQrImage(payload)
     })
 
     return {

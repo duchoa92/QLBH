@@ -1,8 +1,13 @@
 <script setup>
-import { QrCode } from 'lucide-vue-next'
+import { computed } from 'vue'
+import { buildVietQrPayload, renderVietQrImage } from '@/Modules/POS/Payment/Utils/vietQr'
 
-defineProps({
-    url: {
+const props = defineProps({
+    bankBin: {
+        type: String,
+        required: true,
+    },
+    bankAccount: {
         type: String,
         required: true,
     },
@@ -10,38 +15,46 @@ defineProps({
         type: Number,
         default: 0,
     },
-    account: {
+    description: {
         type: String,
         default: '',
     },
-    accountName: {
+    theme: {
         type: String,
-        default: '',
+        default: 'classic',
     },
+})
+
+const qrImage = computed(() => {
+    const payload = buildVietQrPayload({
+        bankBin: props.bankBin,
+        bankAccount: props.bankAccount,
+        amount: props.amount,
+        description: props.description,
+    })
+
+    if (!payload) return ''
+
+    return renderVietQrImage(payload, props.theme)
 })
 </script>
 
 <template>
-    <div class="flex flex-col items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 text-center">
-        <div class="flex items-center gap-1.5 text-xs font-bold text-slate-500 mb-2">
-            <QrCode class="w-4 h-4 text-indigo-600" />
-            <span>Quét mã VietQR thanh toán</span>
-        </div>
-
-        <div v-if="account" class="text-xs font-extrabold text-slate-800">
-            {{ accountName || 'Tài khoản' }} · <span class="font-mono text-indigo-600">{{ account }}</span>
-        </div>
-
-        <div class="text-sm font-black text-emerald-600 my-1">
+    <div class="flex flex-col items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 text-center">
+        <div class="text-sm font-black text-emerald-600 mb-2">
             {{ $money(amount) }}
         </div>
 
-        <div class="mt-2 rounded-xl bg-white p-2 shadow-sm border border-slate-100">
+        <div class="rounded-xl bg-white p-2 shadow-sm border border-slate-100">
             <img
-                :src="url"
+                v-if="qrImage"
+                :src="qrImage"
                 alt="VietQR Payment"
-                class="w-48 h-48 object-contain rounded-lg"
+                class="h-72 w-72 max-w-full object-contain rounded-lg sm:h-80 sm:w-80"
             />
+            <p v-else class="px-3 py-8 text-sm font-semibold text-rose-600">
+                BIN hoặc số tài khoản chưa đúng định dạng để tạo mã QR.
+            </p>
         </div>
     </div>
 </template>

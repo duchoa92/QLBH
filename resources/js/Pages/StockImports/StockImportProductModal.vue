@@ -11,6 +11,7 @@ import {
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import api from '@/Services/api'
@@ -83,6 +84,7 @@ const entryModal = ref({
     quantity_input: 1,
     cost_price_input: 0,
     sell_price_input: 0,
+    price_unit_basis: 'base',
 })
 const entryError = ref('')
 
@@ -277,14 +279,15 @@ const selectEntryVariant = () => {
 
     modal.variant_input = variant.id
     const factor = item.has_unit_conversion ? Math.max(1, Number(item.conversion_factor || 1)) : 1
+    const priceFactor = modal.price_unit_basis === 'conversion' ? factor : 1
     const rawCost = variant.cost_price ?? variant.import_price
     const rawSell = variant.sell_price ?? variant.retail_price ?? variant.price
     const cost = rawCost === null || rawCost === undefined
         ? Number(item.cost_price || 0)
-        : Number(rawCost) * factor
+        : Number(rawCost) * priceFactor
     const sell = rawSell === null || rawSell === undefined
         ? Number(item.sell_price || 0)
-        : Number(rawSell) * factor
+        : Number(rawSell) * priceFactor
 
     entryModal.value.cost_price_input = cost
     entryModal.value.sell_price_input = sell
@@ -296,6 +299,22 @@ const selectVariant = (variant) => {
     variantSearch.value = variantLabel(variant)
     showVariantDropdown.value = false
     nextTick(() => { selectEntryVariant() })
+}
+
+const selectScannedVariant = () => {
+    const code = String(variantSearch.value || '').trim().toLocaleLowerCase()
+    if (!code) return
+
+    const variants = entryModal.value.item?.available_variants || entryModal.value.item?.variants || []
+    const match = variants.find(variant => [variant.barcode, variant.sku]
+        .some(value => String(value || '').trim().toLocaleLowerCase() === code))
+
+    if (match) selectVariant(match)
+}
+
+const onVariantCameraScan = (code) => {
+    variantSearch.value = code
+    selectScannedVariant()
 }
 
 watch(variantSearch, () => { if (entryModal.value.item) selectEntryVariant() })
@@ -310,13 +329,15 @@ const openEntryModal = (item) => {
     const variants = item.available_variants || item.variants || []
     const defaultVariant = mode === 'variant' && variants.length ? variants[0] : null
     const factor = item.has_unit_conversion ? Math.max(1, Number(item.conversion_factor || 1)) : 1
+    const priceUnitBasis = item.price_unit_basis || (item.has_unit_conversion ? 'conversion' : 'base')
+    item.price_unit_basis = priceUnitBasis
     const rawVariantCost = defaultVariant?.cost_price ?? defaultVariant?.import_price
     const rawVariantSell = defaultVariant?.sell_price ?? defaultVariant?.retail_price ?? defaultVariant?.price
     const defaultCost = defaultVariant
-        ? (rawVariantCost == null ? Number(item.cost_price || 0) : Number(rawVariantCost) * factor)
+        ? (rawVariantCost == null ? Number(item.cost_price || 0) : Number(rawVariantCost) * (priceUnitBasis === 'conversion' ? factor : 1))
         : Number(item.cost_price ?? item.import_price ?? 0)
     const defaultSell = defaultVariant
-        ? (rawVariantSell == null ? Number(item.sell_price || 0) : Number(rawVariantSell) * factor)
+        ? (rawVariantSell == null ? Number(item.sell_price || 0) : Number(rawVariantSell) * (priceUnitBasis === 'conversion' ? factor : 1))
         : Number(item.sell_price ?? item.price ?? 0)
 
     entryModal.value = {
@@ -330,6 +351,7 @@ const openEntryModal = (item) => {
         quantity_input: 1,
         cost_price_input: defaultCost,
         sell_price_input: defaultSell,
+        price_unit_basis: priceUnitBasis,
     }
 
     variantSearch.value = ''
@@ -351,11 +373,32 @@ const resetEntryModal = () => {
         quantity_input: 1,
         cost_price_input: 0,
         sell_price_input: 0,
+        price_unit_basis: 'base',
     }
     variantSearch.value = ''
     showVariantDropdown.value = false
     showAdvancedInfo.value = false
     editingEntryIndex.value = null
+}
+
+const changePriceUnitBasis = (basis) => {
+    const modal = entryModal.value
+    const item = modal.item
+    if (!item || modal.price_unit_basis === basis) return
+    const factor = item.has_unit_conversion ? Math.max(1, Number(item.conversion_factor || 1)) : 1
+    const multiplier = basis === 'base' ? 1 / factor : factor
+    const scale = (record) => {
+        if (!record || typeof record !== 'object') return
+        record.cost_price = Number(record.cost_price || 0) * multiplier
+        record.sell_price = Number(record.sell_price || 0) * multiplier
+    }
+    scale(item)
+    ;(item.rows || []).forEach(scale)
+    ;(item.imeis || []).forEach(scale)
+    modal.cost_price_input = Number(modal.cost_price_input || 0) * multiplier
+    modal.sell_price_input = Number(modal.sell_price_input || 0) * multiplier
+    modal.price_unit_basis = basis
+    item.price_unit_basis = basis
 }
 
 const resetEntryInputs = (keepPrices = false, keepVariant = false) => {
@@ -562,13 +605,16 @@ const removeVariantRow = (item, index) => {
 }
 
 const sellPriceLabel = (item) => {
-    if (!item?.has_unit_conversion || Number(item.conversion_factor || 1) <= 1) {
-        return 'Giá bán / đơn vị bán'
-    }
-    const importUnit = item.unit || 'đơn vị nhập'
-    const baseUnit = item.base_unit_name || 'đơn vị bán'
-    return `Giá bán / ${importUnit} (quy đổi về ${baseUnit})`
+    const unit = entryModal.value.price_unit_basis === 'base'
+        ? (item?.base_unit_name || 'đơn vị cơ sở')
+        : (item?.unit || 'đơn vị nhập')
+    return `Giá bán / ${unit}`
 }
+
+const priceBasisLabel = (basis, item) => basis === 'base'
+    ? (item?.base_unit_name || 'đơn vị cơ sở')
+    : (item?.unit || 'đơn vị nhập')
+const costPriceLabel = (item) => `Giá nhập / ${priceBasisLabel(entryModal.value.price_unit_basis, item)}`
 
 const handleClickOutside = (event) => {
     if (dropdownVariantRef.value && dropdownVariantRef.value.contains(event.target)) return
@@ -628,6 +674,13 @@ onBeforeUnmount(() => {
                         <CameraOff class="h-4 w-4" />
                     </button>
                 </div>
+                <div v-if="entryModal.item?.has_unit_conversion && Number(entryModal.item.conversion_factor || 1) > 1" class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                    <span class="font-semibold text-slate-700">Nhập giá theo:</span>
+                    <label v-for="basis in ['base', 'conversion']" :key="basis" class="inline-flex cursor-pointer items-center gap-1.5">
+                        <input type="radio" name="stock-import-price-basis" :checked="entryModal.price_unit_basis === basis" :value="basis" class="text-emerald-600 focus:ring-emerald-500" @change="changePriceUnitBasis(basis)" />
+                        {{ priceBasisLabel(basis, entryModal.item) }}
+                    </label>
+                </div>
                 <div class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]">
 
                     <!-- INPUT: SẢN PHẨM THƯỜNG -->
@@ -676,8 +729,11 @@ onBeforeUnmount(() => {
                                 v-model="variantSearch"
                                 type="text"
                                 label="Gõ để tìm biến thể..."
+                                class="pr-12"
                                 @focus="showVariantDropdown = true"
+                                @keydown.enter.prevent="selectScannedVariant"
                             />
+                            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onVariantCameraScan" />
                             <div
                                 v-if="showVariantDropdown"
                                 class="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl"
@@ -714,7 +770,7 @@ onBeforeUnmount(() => {
                             :model-value="formatPrice(entryModal.cost_price_input)"
                             type="text"
                             inputmode="numeric"
-                            label="Giá nhập"
+                            :label="costPriceLabel(entryModal.item)"
                             @update:model-value="entryModal.cost_price_input = parseMoneyInput($event)"
                         />
                         <FloatingInput
@@ -722,7 +778,7 @@ onBeforeUnmount(() => {
                             :model-value="formatPrice(entryModal.item.cost_price)"
                             type="text"
                             inputmode="numeric"
-                            label="Giá nhập"
+                            :label="costPriceLabel(entryModal.item)"
                             @update:model-value="entryModal.item.cost_price = parseMoneyInput($event)"
                         />
                     </div>
@@ -935,14 +991,7 @@ onBeforeUnmount(() => {
                         <QrCode class="h-5 w-5" />
                     </div>
                     <p class="text-xs font-bold text-slate-700">Chưa có mã IMEI / Serial nào</p>
-                    <button
-                        type="button"
-                        class="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
-                        @click="startCamera"
-                    >
-                        <Camera class="h-4 w-4" /> Quét bằng camera
-                    </button>
-                    <p class="mt-2 text-[11px] text-slate-400">Hoặc nhập IMEI / Serial ở biểu mẫu bên dưới.</p>
+                    <p class="mt-3 text-[11px] text-slate-400">Nhập IMEI / Serial hoặc bấm biểu tượng camera trong ô nhập bên dưới.</p>
                 </div>
             </div>
 

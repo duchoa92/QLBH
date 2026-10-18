@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { LoaderCircle, Search, X } from 'lucide-vue-next'
 import api from '@/Services/api'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 const emit = defineEmits(['selected'])
 
@@ -82,6 +83,11 @@ const clear = () => {
     open.value = false
 }
 
+const setScannedCode = (code) => {
+    query.value = code
+    open.value = true
+}
+
 onMounted(() => document.addEventListener('mousedown', closeIfOutside))
 onBeforeUnmount(() => {
     clearTimeout(timer)
@@ -94,21 +100,24 @@ onBeforeUnmount(() => {
     <!-- Relative bao bọc toàn bộ component -->
     <div ref="root" class="relative w-full">
         <!-- Input Search -->
-        <div class="relative w-full">
+        <div class="w-full">
+          <div class="relative min-w-0 flex-1">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
                 v-model="query"
                 type="input"
                 autocomplete="off"
                 placeholder="Tìm nhanh toàn hệ thống..."
-                class="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-8 text-xs font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                class="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-20 text-xs font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
                 @focus="open = true"
                 @keydown="onKeydown"
             />
-            <LoaderCircle v-if="loading" class="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
-            <button v-else-if="query" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100" aria-label="Xóa tìm kiếm" @click="clear">
+            <LoaderCircle v-if="loading" class="absolute right-12 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
+            <button v-else-if="query" type="button" class="absolute right-12 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100" aria-label="Xóa tìm kiếm" @click="clear">
                 <X class="h-3.5 w-3.5" />
             </button>
+            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-7 !w-7" @scanned="setScannedCode" />
+          </div>
         </div>
 
         <!-- Popup kết quả: Đã fix left-0 right-0 w-full để nằm khớp dưới thanh search -->

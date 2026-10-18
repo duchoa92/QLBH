@@ -10,6 +10,8 @@ import {
 import { useForm } from '@inertiajs/vue3'
 
 import api from '@/Services/api'
+import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import { formatNumber } from '@/utils/format'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -269,6 +271,8 @@ const selectProduct = (product, { configure = true } = {}) => {
             has_unit_conversion:
                 Boolean(item.has_unit_conversion),
 
+            price_unit_basis: item.has_unit_conversion ? 'conversion' : 'base',
+
             conversion_factor: Math.max(1, Number(item.import_conversion_factor ?? item.conversion_factor ?? 1)),
 
             conversion_unit: item.conversion_unit ?? null,
@@ -323,6 +327,23 @@ const selectProduct = (product, { configure = true } = {}) => {
     }
 
     return target
+}
+
+const scanProduct = async () => {
+    const code = keyword.value.trim()
+    if (!code) return
+
+    clearTimeout(searchTimeout)
+    try {
+        const match = await findProductByScannedCode(code)
+        if (match) {
+            selectProduct(match.product)
+            return
+        }
+        await searchProducts()
+    } catch {
+        await searchProducts()
+    }
 }
 
 /*
@@ -570,7 +591,7 @@ const total = computed(() =>
                         Math.max(0, Number(item.quantity || 0))
                     ) *
                     Number(
-                        item.cost_price || 0
+                        importPrice(item, item.cost_price)
                     )
                 )
             }
@@ -589,10 +610,7 @@ const total = computed(() =>
                     ) =>
                         sum +
                         Math.max(0, Number(row.quantity || 0)) *
-                        Number(
-                            row.cost_price ||
-                            0
-                        ),
+                        importPrice(item, row.cost_price),
                     0
                 )
 
@@ -603,10 +621,7 @@ const total = computed(() =>
                         row
                     ) =>
                         sum +
-                        Number(
-                            row.cost_price ||
-                            0
-                        ),
+                        importPrice(item, row.cost_price),
                     0
                 )
 
@@ -792,6 +807,14 @@ const canConfirm = computed(
         selectedItems.value.some(item => itemQuantity(item) > 0)
 )
 
+// API và phiếu nhập lưu giá theo đơn vị nhập; nếu người dùng nhập theo
+// đơn vị cơ sở thì đổi sang giá mỗi đơn vị nhập trước khi gửi.
+const importPrice = (item, value) => {
+    const price = Number(value || 0)
+    if (!item.has_unit_conversion || item.price_unit_basis !== 'base') return price
+    return price * Math.max(1, Number(item.conversion_factor || 1))
+}
+
 const confirm = () => {
     if (!selectedSupplier.value) {
         return
@@ -812,8 +835,8 @@ const confirm = () => {
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
                 quantity: Math.max(0, Math.round(Number(item.quantity || 0))),
-                cost_price: Number(item.cost_price || 0),
-                sell_price: Number(item.sell_price || 0),
+                cost_price: importPrice(item, item.cost_price),
+                sell_price: importPrice(item, item.sell_price),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                 imeis: [],
@@ -830,8 +853,8 @@ const confirm = () => {
                     unit_id: item.unit_id ?? null,
                     unit_name: item.unit_name ?? itemUnit(item),
                     quantity: Math.max(0, Math.round(Number(row.quantity || 0))),
-                    cost_price: Number(row.cost_price || 0),
-                    sell_price: Number(row.sell_price || 0),
+                    cost_price: importPrice(item, row.cost_price),
+                    sell_price: importPrice(item, row.sell_price),
                     supplier_warranty_value: item.supplier_warranty_value || null,
                     supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                     imeis: [],
@@ -846,8 +869,8 @@ const confirm = () => {
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
                 quantity: 1,
-                cost_price: Number(imei.cost_price || item.cost_price || 0),
-                sell_price: Number(imei.sell_price || item.sell_price || 0),
+                cost_price: importPrice(item, imei.cost_price ?? item.cost_price),
+                sell_price: importPrice(item, imei.sell_price ?? item.sell_price),
                 imeis: [imei],
             }))
         }
@@ -860,8 +883,8 @@ const confirm = () => {
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
                 quantity: 1,
-                cost_price: Number(imei.cost_price || item.cost_price || 0),
-                sell_price: Number(imei.sell_price || item.sell_price || 0),
+                cost_price: importPrice(item, imei.cost_price ?? item.cost_price),
+                sell_price: importPrice(item, imei.sell_price ?? item.sell_price),
                 imeis: [imei],
             }))
         }
@@ -927,14 +950,17 @@ const confirm = () => {
                             v-model="keyword"
                             type="text"
                             label="Tìm tên sản phẩm, SKU hoặc barcode"
+                            class="pr-20"
+                            @keydown.enter.prevent="scanProduct"
                         />
 
-                        <div class="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-slate-400">
+                        <div class="absolute right-12 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-slate-400">
                             <button v-if="keyword" type="button" class="p-1 hover:text-slate-600" aria-label="Xóa từ khóa tìm kiếm" @click="keyword = ''">
                                 <X class="h-4 w-4" />
                             </button>
                             <Search class="h-5 w-5" />
                         </div>
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { keyword = code; scanProduct() }" />
 
                         <!-- Keep the results attached to the search field and above the import form. -->
                         <div
@@ -973,7 +999,6 @@ const confirm = () => {
                             </div>
                         </div>
                     </div>
-
                     <button
                         type="button"
                         class="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 sm:gap-2 sm:px-3 sm:text-xs"

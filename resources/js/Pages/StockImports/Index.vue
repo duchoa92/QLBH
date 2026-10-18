@@ -1,5 +1,6 @@
 <script setup>
 import { formatCurrency } from '@/utils/format'
+import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './StockImportProductModal.vue'
@@ -1020,10 +1021,9 @@ const submit = () => {
                             <span class="text-slate-500">Chiết khấu</span>
                         </div>
                         <div class="relative">
-                            <input
+                            <FormattedNumberInput
                                 v-model.number="form.discount"
                                 name="discount"
-                                type="number"
                                 min="0"
                                 @input="form.clearErrors('discount')"
                                 class="w-full rounded-lg border py-2 pl-3 pr-10 text-right text-sm outline-none transition"
@@ -1041,10 +1041,9 @@ const submit = () => {
                     <div class="mt-4">
                         <div class="mb-1.5 text-sm text-slate-500">Phụ phí</div>
                         <div class="relative">
-                            <input
+                            <FormattedNumberInput
                                 v-model.number="form.extra_fee"
                                 name="extra_fee"
-                                type="number"
                                 min="0"
                                 @input="form.clearErrors('extra_fee')"
                                 class="w-full rounded-lg border py-2 pl-3 pr-10 text-right text-sm outline-none transition"

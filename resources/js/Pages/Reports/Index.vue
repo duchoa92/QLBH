@@ -5,6 +5,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import axios from 'axios'
 import { formatMoney, formatDate } from '@/utils/format'
 import SimpleBarChart from '@/Components/Charts/SimpleBarChart.vue'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import {
     TrendingUp,
     PiggyBank,
@@ -684,12 +685,15 @@ onMounted(() => {
                 </section>
 
                 <section class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <input
-                        v-model="inventoryFilters.search"
-                        type="text"
-                        placeholder="Tìm sản phẩm theo tên hoặc SKU..."
-                        class="flex-1 min-w-[220px] rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    >
+                    <div class="relative flex min-w-[280px] flex-1 items-center">
+                        <input
+                            v-model="inventoryFilters.search"
+                            type="text"
+                            placeholder="Tìm sản phẩm theo tên, SKU hoặc barcode..."
+                            class="w-full rounded-md border border-slate-300 px-3 py-2 pr-12 text-sm"
+                        >
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => inventoryFilters.search = code" />
+                    </div>
 
                     <label class="flex items-center gap-2 text-sm font-semibold text-slate-600">
                         <input

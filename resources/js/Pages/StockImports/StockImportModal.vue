@@ -20,6 +20,8 @@ import {
 } from 'lucide-vue-next'
 
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 const props = defineProps({
     item: {
@@ -284,6 +286,22 @@ const selectVariant = (variant) => {
             isSelecting.value = false
         }, 100)
     })
+}
+
+const selectScannedVariant = () => {
+    const code = String(variantSearch.value || '').trim().toLocaleLowerCase()
+    if (!code) return
+
+    const variants = entryModal.value.item?.available_variants || entryModal.value.item?.variants || []
+    const match = variants.find(variant => [variant.barcode, variant.sku]
+        .some(value => String(value || '').trim().toLocaleLowerCase() === code))
+
+    if (match) selectVariant(match)
+}
+
+const onVariantCameraScan = (code) => {
+    variantSearch.value = code
+    selectScannedVariant()
 }
 
 const onFocusVariant = () => {
@@ -601,9 +619,12 @@ init()
                             @input="
                                 showVariantDropdown = true
                             "
+                            @keydown.enter.prevent="selectScannedVariant"
                             type="text"
                             label="Gõ để tìm biến thể..."
+                            class="pr-12"
                         />
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onVariantCameraScan" />
 
                         <div
                             v-if="showVariantDropdown"
@@ -674,9 +695,12 @@ init()
                             @input="
                                 showVariantDropdown = true
                             "
+                            @keydown.enter.prevent="selectScannedVariant"
                             type="text"
                             label="Gõ để tìm biến thể..."
+                            class="pr-12"
                         />
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onVariantCameraScan" />
 
                         <div
                             v-if="showVariantDropdown"
@@ -737,6 +761,7 @@ init()
                             entryModal.cost_price_input
                         "
                         type="number"
+                        format-thousands
                         label="Giá nhập"
                     />
 
@@ -746,6 +771,7 @@ init()
                             entryModal.item.cost_price
                         "
                         type="number"
+                        format-thousands
                         label="Giá nhập"
                     />
                 </div>
@@ -760,6 +786,7 @@ init()
                             entryModal.sell_price_input
                         "
                         type="number"
+                        format-thousands
                         label="Giá bán"
                     />
 
@@ -769,6 +796,7 @@ init()
                             entryModal.item.sell_price
                         "
                         type="number"
+                        format-thousands
                         label="Giá bán"
                     />
                 </div>
@@ -876,7 +904,7 @@ init()
                                 <td
                                     class="px-3 py-2 text-right"
                                 >
-                                    <input
+                                    <FormattedNumberInput
                                         v-if="
                                             typeof row !==
                                             'string'
@@ -884,7 +912,6 @@ init()
                                         v-model.number="
                                             row.cost_price
                                         "
-                                        type="number"
                                         class="h-8 w-28 rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                     />
 
@@ -904,7 +931,7 @@ init()
                                 <td
                                     class="px-3 py-2 text-right"
                                 >
-                                    <input
+                                    <FormattedNumberInput
                                         v-if="
                                             typeof row !==
                                             'string'
@@ -912,7 +939,6 @@ init()
                                         v-model.number="
                                             row.sell_price
                                         "
-                                        type="number"
                                         class="h-8 w-28 rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                     />
 
@@ -1053,21 +1079,19 @@ init()
                                 </td>
 
                                 <td class="px-3 py-2">
-                                    <input
+                                    <FormattedNumberInput
                                         v-model.number="
                                             row.cost_price
                                         "
-                                        type="number"
                                         class="h-8 w-full rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                     />
                                 </td>
 
                                 <td class="px-3 py-2">
-                                    <input
+                                    <FormattedNumberInput
                                         v-model.number="
                                             row.sell_price
                                         "
-                                        type="number"
                                         class="h-8 w-full rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                     />
                                 </td>

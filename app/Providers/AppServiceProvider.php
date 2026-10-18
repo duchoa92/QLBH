@@ -43,7 +43,9 @@ class AppServiceProvider extends ServiceProvider
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),
+                'bank_accounts' => json_decode((string) setting('bank_accounts', '[]'), true) ?: [],
                 'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
+                'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
             ]
         ]);
     }
