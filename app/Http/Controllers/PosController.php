@@ -92,6 +92,8 @@ class PosController extends Controller
             'items' => 'required|array',
 
             'payment_method' => 'required|string',
+            'bank_account' => 'required_if:payment_method,bank|nullable|string|max:50',
+            'invoice_code' => ['nullable', 'string', 'regex:/^INV-[0-9]{14}$/', 'unique:sales,code'],
 
             'items.*.discount_type' => 'nullable|string',
 
@@ -138,9 +140,13 @@ class PosController extends Controller
                 paymentMethod: $request->payment_method ?? 'cash',
                 payOldDebt: (bool) $request->pay_old_debt,
                 userId: auth()->id(),
+                invoiceCode: $request->input('invoice_code'),
             );
 
-            $sale->update(['work_shift_id' => $workShift->id]);
+            $sale->update([
+                'work_shift_id' => $workShift->id,
+                'bank_account' => $request->payment_method === 'bank' ? $request->bank_account : null,
+            ]);
 
             $sale->load([
                 'items.product.conversionUnit',

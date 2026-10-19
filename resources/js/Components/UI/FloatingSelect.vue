@@ -29,11 +29,16 @@ const props = defineProps({
 
     name: String,
     error: String,
+    disabled: { type: Boolean, default: false },
+    placeholderText: { type: String, default: 'Chọn...' },
+    showPlaceholder: { type: Boolean, default: true },
+    createLabel: { type: String, default: '' },
 
 })
 
 const emit = defineEmits([
     'update:modelValue',
+    'create',
 ])
 
 const handleChange = (event) => {
@@ -86,6 +91,7 @@ const handleChange = (event) => {
             :id="name"
             ref="input"
             :value="modelValue ?? ''"
+            :disabled="disabled"
             @change="handleChange"
             class="
                 peer
@@ -98,8 +104,12 @@ const handleChange = (event) => {
                 text-sm
                 focus:border-blue-500
                 focus:ring-0
+                disabled:cursor-not-allowed
+                disabled:bg-gray-100
             "
         >
+
+            <option v-if="showPlaceholder" value="">{{ placeholderText }}</option>
 
             <option
                 v-for="item in options"
@@ -118,6 +128,15 @@ const handleChange = (event) => {
         >
             {{ error }}
         </p>
+
+        <button
+            v-if="createLabel"
+            type="button"
+            class="mt-1 text-xs font-medium text-blue-700 hover:underline"
+            @click="emit('create')"
+        >
+            + {{ createLabel }}
+        </button>
 
         <label
             class="

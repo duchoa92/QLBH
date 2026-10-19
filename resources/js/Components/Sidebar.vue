@@ -14,7 +14,6 @@ import {
     Package,
     Boxes,
     FolderTree,
-    Tags,
     Settings,
     ChevronDown,
     ChevronRight,
@@ -151,18 +150,11 @@ const menuGroups = [
                 permission: 'products.view',
             },
             {
-                label: 'Danh mục',
+                label: 'Danh mục & Thương hiệu',
                 icon: FolderTree,
-                href: '/categories',
-                paths: ['/categories'],
-                permission: 'categories.view',
-            },
-            {
-                label: 'Thương hiệu',
-                icon: Tags,
-                href: '/brands',
-                paths: ['/brands', '/brands-trash'],
-                permission: 'brands.view',
+                href: can('categories.view') ? '/categories' : '/brands',
+                paths: ['/categories', '/brands'],
+                permissions: ['categories.view', 'brands.view'],
             },
             {
                 label: 'Nhà cung cấp',
@@ -237,7 +229,9 @@ const menuGroups = [
     },
 ]
 
-const visibleItems = (items) => items.filter(item => can(item.permission))
+const visibleItems = (items) => items.filter(item =>
+    item.permissions ? item.permissions.some(permission => can(permission)) : can(item.permission)
+)
 const isGroupActive = (group) => visibleItems(group.items).some(item => isActive(item.paths))
 
 /* GROUP OPEN STATE */

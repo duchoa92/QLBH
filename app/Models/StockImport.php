@@ -19,6 +19,12 @@ class StockImport extends Model
     protected $fillable = [
         'code',
         'supplier_id',
+        'party_type',
+        'customer_id',
+        'party_name',
+        'party_phone',
+        'party_cccd',
+        'party_address',
         'user_id',
         'import_date',
         'discount',
@@ -54,6 +60,11 @@ class StockImport extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     /**

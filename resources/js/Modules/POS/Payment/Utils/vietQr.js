@@ -43,7 +43,7 @@ export function buildVietQrPayload({ bankBin, bankAccount, amount, description }
     const bankAccountInfo = field('00', 'A000000727')
         + field('01', recipient)
         + field('02', 'QRIBFTTA')
-    const transferContent = normalizeTransferContent(description) || 'Thanh toan'
+    const transferContent = normalizeTransferContent(description)
 
     let payload = field('00', '01')
         + field('01', numericAmount > 0 ? '12' : '11')
@@ -55,8 +55,12 @@ export function buildVietQrPayload({ bankBin, bankAccount, amount, description }
     }
 
     payload += field('58', 'VN')
-        + field('62', field('08', transferContent))
-        + '6304'
+
+    if (transferContent) {
+        payload += field('62', field('08', transferContent))
+    }
+
+    payload += '6304'
 
     return payload + crc16CcittFalse(payload)
 }

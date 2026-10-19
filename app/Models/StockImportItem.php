@@ -19,6 +19,7 @@ class StockImportItem extends Model
         'cost_price',
         'supplier_warranty_value',
         'supplier_warranty_unit',
+        'extra_info',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class StockImportItem extends Model
         'conversion_factor' => 'integer',
         'cost_price' => 'decimal:2',
         'supplier_warranty_value' => 'integer',
+        'extra_info' => 'array',
     ];
 
     public function stockImport(): BelongsTo

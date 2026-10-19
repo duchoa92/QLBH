@@ -86,6 +86,7 @@ const form = useForm({
         bank_name: account.bank_name || props.banks.find(bank => String(bank.bin) === String(account.bank_bin))?.shortName || '',
         bank_account: account.bank_account || '',
         bank_account_name: account.bank_account_name || '',
+        transfer_content_mode: account.transfer_content_mode === 'invoice' ? 'invoice' : 'default',
         is_default: props.settings.bank_accounts?.some(saved => saved.is_default)
             ? Boolean(account.is_default)
             : index === 0,
@@ -113,6 +114,7 @@ const addBankAccount = () => {
         bank_bin: '',
         bank_account: '',
         bank_account_name: '',
+        transfer_content_mode: 'default',
         is_default: form.bank_accounts.length === 0,
     })
 }
@@ -547,7 +549,7 @@ const unitDisplayName = (unit) =>
                     </div>
                 </template>
 
-                <div class="space-y-4 p-4">
+                <div class="space-y-3 p-4">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <p class="text-xs text-slate-500">Chọn ngân hàng, nhập số tài khoản và tên chủ tài khoản.</p>
                         <ActionButton type="button" variant="secondary" :disabled="!can_update_bank_settings || form.bank_accounts.length >= 10" @click="addBankAccount">
@@ -555,16 +557,12 @@ const unitDisplayName = (unit) =>
                         </ActionButton>
                     </div>
 
-                    <div v-if="!banks.length" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    <div v-if="!banks.length" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                         Chưa tải được danh sách VietQR. Bạn có thể nhập BIN thủ công.
                     </div>
-                    <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                        API tra cứu tên STK cũ của VietQR đã dừng cung cấp. Hiện hãy nhập tên chủ tài khoản thủ công; cần thông tin tích hợp CAS/BankHub để bật tra cứu tự động.
-                    </div>
-
-                    <div v-for="(account, index) in form.bank_accounts" :key="account.id" class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div v-for="(account, index) in form.bank_accounts" :key="account.id" class="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-emerald-200 sm:p-4">
                         <div class="flex items-center justify-between gap-3">
-                            <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                            <label class="flex min-w-0 cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
                                 <input
                                     type="radio"
                                     name="default-bank-account"
@@ -573,14 +571,15 @@ const unitDisplayName = (unit) =>
                                     class="border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                     @change="setDefaultBankAccount(index)"
                                 >
-                                Tài khoản mặc định cho POS
+                                <span>Tài khoản mặc định cho POS</span>
+                                <span v-if="account.is_default" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">MẶC ĐỊNH</span>
                             </label>
                             <button type="button" class="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" :disabled="!can_update_bank_settings" aria-label="Xóa tài khoản ngân hàng" @click="removeBankAccount(index)">
                                 <Trash2 class="h-4 w-4" />
                             </button>
                         </div>
 
-                        <div class="grid gap-3 md:grid-cols-3">
+                        <div class="grid gap-2.5 md:grid-cols-3">
                             <FloatingSelect
                                 v-if="banks.length"
                                 v-model="account.bank_bin"
@@ -618,19 +617,31 @@ const unitDisplayName = (unit) =>
                                 :error="form.errors[`bank_accounts.${index}.bank_account_name`]"
                             />
                         </div>
+
+                        <div class="rounded-xl bg-slate-50 p-3">
+                            <div class="mb-2 flex items-center justify-between gap-2">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-700">Nội dung chuyển khoản</p>
+                                    <p class="mt-0.5 text-[11px] text-slate-500">Thiết lập riêng cho tài khoản này</p>
+                                </div>
+                            </div>
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <label class="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 transition" :class="account.transfer_content_mode === 'default' ? 'border-emerald-300 bg-emerald-50/70 ring-1 ring-emerald-100' : 'border-slate-200 bg-white'">
+                                    <input v-model="account.transfer_content_mode" type="radio" value="default" :name="`bank-transfer-mode-${account.id}`" :disabled="!can_update_bank_settings" class="mt-0.5 border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span><span class="block text-xs font-semibold text-slate-700">Để ngân hàng mặc định</span><span class="mt-0.5 block text-[11px] leading-relaxed text-slate-500">Không điền nội dung chuyển khoản</span></span>
+                                </label>
+                                <label class="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 transition" :class="account.transfer_content_mode === 'invoice' ? 'border-emerald-300 bg-emerald-50/70 ring-1 ring-emerald-100' : 'border-slate-200 bg-white'">
+                                    <input v-model="account.transfer_content_mode" type="radio" value="invoice" :name="`bank-transfer-mode-${account.id}`" :disabled="!can_update_bank_settings" class="mt-0.5 border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span><span class="block text-xs font-semibold text-slate-700">Mã hóa đơn hiện tại</span><span class="mt-0.5 block text-[11px] leading-relaxed text-slate-500">Tự điền mã đơn để đối soát</span></span>
+                                </label>
+                            </div>
+                            <p v-if="form.errors[`bank_accounts.${index}.transfer_content_mode`]" class="mt-1 text-xs text-rose-600">{{ form.errors[`bank_accounts.${index}.transfer_content_mode`] }}</p>
+                        </div>
                     </div>
 
                     <div v-if="!form.bank_accounts.length" class="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
                         Chưa có tài khoản ngân hàng. Bấm “Thêm tài khoản” để bắt đầu.
                     </div>
-
-                    <FloatingInput
-                        v-model="form.bank_transfer_content"
-                        name="bank_transfer_content"
-                        label="Nội dung chuyển khoản mặc định"
-                        :disabled="!can_update_bank_settings"
-                        :error="form.errors.bank_transfer_content"
-                    />
 
                     <div>
                         <p class="mb-1.5 text-sm font-semibold text-slate-700">Kiểu màu mã QR</p>

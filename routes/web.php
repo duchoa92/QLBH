@@ -118,12 +118,12 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/print-data', [ProductController::class, 'printData'])->middleware('permission:products.view')->name('printData');
 
         // Preview SKU
-        Route::get('/preview-sku', [ProductController::class, 'previewSku'])->middleware('permission:products.create')->name('previewSku');
+        Route::get('/preview-sku', [ProductController::class, 'previewSku'])->middleware('permission:products.create|stock_imports.create')->name('previewSku');
 
         // Standard CRUD
         Route::get('/', [ProductController::class, 'index'])->middleware('permission:products.view')->name('index');
         Route::get('/create', [ProductController::class, 'create'])->middleware('permission:products.create')->name('create');
-        Route::post('/', [ProductController::class, 'store'])->middleware('permission:products.create')->name('store');
+        Route::post('/', [ProductController::class, 'store'])->middleware('permission:products.create|stock_imports.create')->name('store');
 
         /* Dynamic Routes (Các route có tham số ID/{product} đặt ở cuối) */
         Route::get('/{product}', [ProductController::class, 'show'])->whereNumber('product')->middleware('permission:products.view')->name('show');
@@ -158,15 +158,25 @@ Route::middleware(['auth'])->group(function () {
         [StockImportController::class, 'index']
     )->middleware('permission:stock_imports.view')->name('stock.index');
 
+    Route::get(
+        '/stock-import/replenishment-products',
+        [StockImportController::class, 'replenishmentProducts']
+    )->middleware('permission:stock_imports.view')->name('stock.replenishment-products');
+
     Route::post(
         '/stock-import',
         [StockImportController::class, 'store']
     )->middleware('permission:stock_imports.create')->name('stock.import');
 
-    Route::post(
-        '/stock-import/parse-file',
-        [StockImportController::class, 'parseImportFile']
-    )->middleware('permission:stock_imports.create')->name('stock.import.parse-file');
+    Route::get(
+        '/stock-import/customers/search',
+        [StockImportController::class, 'searchCustomers']
+    )->middleware('permission:stock_imports.create')->name('stock.import.customers.search');
+
+    Route::get(
+        '/stock-import/{stockImport}/contract',
+        [StockImportController::class, 'contract']
+    )->middleware('permission:stock_imports.view')->name('stock.import.contract');
 
     Route::get(
         '/stock-import/{stockImport}',
@@ -229,6 +239,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/work-shifts', [WorkShiftController::class, 'index'])->middleware('permission:pos.access')->name('work-shifts.index');
     Route::prefix('pos/shifts')->name('pos.shifts.')->controller(WorkShiftController::class)->middleware('permission:pos.access')->group(function () {
         Route::get('/current', 'current')->name('current');
+        Route::post('/dismiss-prompt', 'dismissPrompt')->name('dismiss-prompt');
         Route::get('/history', 'history')->name('history');
         Route::post('/', 'open')->name('open');
         Route::post('/close', 'close')->name('close');

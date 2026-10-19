@@ -131,6 +131,12 @@ export function useCheckout(
                     payment_method:
                         paymentData.payment_method,
 
+                    bank_account:
+                        paymentData.bank_account ?? null,
+
+                    invoice_code:
+                        paymentData.invoice_code ?? null,
+
                     pay_old_debt:
                         paymentData.pay_old_debt,
                 })

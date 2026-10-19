@@ -53,6 +53,12 @@ class StockImportService
                 'code' => 'IMP-' . now()->format('YmdHis'),
 
                 'supplier_id' => $data['supplier_id'],
+                'party_type' => $data['party_type'] ?? 'supplier',
+                'customer_id' => $data['customer_id'] ?? null,
+                'party_name' => $data['party_name'] ?? null,
+                'party_phone' => $data['party_phone'] ?? null,
+                'party_cccd' => $data['party_cccd'] ?? null,
+                'party_address' => $data['party_address'] ?? null,
 
                 'user_id' => auth()->id(),
 
@@ -197,6 +203,8 @@ class StockImportService
                     'supplier_warranty_unit' => ! empty($item['supplier_warranty_value'])
                         ? ($item['supplier_warranty_unit'] ?? 'months')
                         : null,
+
+                    'extra_info' => $item['extra_info'] ?? null,
                 ]);
 
 
@@ -339,6 +347,11 @@ class StockImportService
 
         $normalized = collect([
             'note' => $extraInfo['note'] ?? null,
+            'is_used' => $extraInfo['is_used'] ?? null,
+            'account' => $extraInfo['account'] ?? null,
+            'password' => $extraInfo['password'] ?? null,
+            'customer_warranty_duration_value' => $extraInfo['customer_warranty_duration_value'] ?? null,
+            'customer_warranty_duration_unit' => $extraInfo['customer_warranty_duration_unit'] ?? null,
             'image_path' => $imagePath,
             'supplier_warranty_value' => $imeiData['warranty_duration_value'] ?? null,
             'supplier_warranty_unit' => $imeiData['warranty_duration_unit'] ?? null,

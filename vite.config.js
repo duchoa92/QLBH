@@ -8,7 +8,10 @@ const devHost = appEnv.VITE_DEV_HOST || new URL(appEnv.APP_URL || 'http://qlbh.t
 const appOrigin = appEnv.APP_URL ? new URL(appEnv.APP_URL).origin : `https://${devHost}`;
 const laragonCert = 'C:/laragon/etc/ssl/laragon.crt';
 const laragonKey = 'C:/laragon/etc/ssl/laragon.key';
-const httpsOptions = fs.existsSync(laragonCert) && fs.existsSync(laragonKey)
+const hasLaragonCertificate = fs.existsSync(laragonCert) && fs.existsSync(laragonKey);
+const httpsOptions = appEnv.VITE_DEV_HTTPS === 'false'
+    ? undefined
+    : hasLaragonCertificate
     ? { cert: fs.readFileSync(laragonCert), key: fs.readFileSync(laragonKey) }
     : undefined;
 
@@ -25,10 +28,10 @@ export default defineConfig({
     ],
 
     server: {
-        host: devHost,
+        host: true,
         port: 5173,
         strictPort: true,
-        origin: `https://${devHost}:5173`,
+        origin: `${httpsOptions ? 'https' : 'http'}://${devHost}:5173`,
         cors: {
             origin: [...new Set([appOrigin, `https://${devHost}`, `http://${devHost}`, 'https://qlbh.test', 'http://qlbh.test'])],
         },

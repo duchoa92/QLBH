@@ -3,6 +3,7 @@ import { formatCurrency, formatDate as formatConfiguredDate } from '@/utils/form
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import StockImportFormModal from './StockImportFormModal.vue'
+import ReplenishmentListModal from './ReplenishmentListModal.vue'
 import api from '@/Services/api'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
@@ -11,6 +12,8 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 
 import {
     ref,
+    watch,
+    onBeforeUnmount,
 } from 'vue'
 
 import {
@@ -22,6 +25,10 @@ import {
     Search,
     Truck,
     Eye,
+    ClipboardList,
+    Printer,
+    SlidersHorizontal,
+    RotateCcw,
 } from 'lucide-vue-next'
 
 
@@ -52,6 +59,10 @@ const props = defineProps({
         type: Object,
         default: () => ({
             search: '',
+            party_type: '',
+            status: '',
+            date_from: '',
+            date_to: '',
         }),
     },
 
@@ -65,11 +76,14 @@ const props = defineProps({
 */
 
 const showCreateModal = ref(false)
+const importPartyType = ref('supplier')
+const showReplenishmentModal = ref(false)
 const detailImport = ref(null)
 const loadingDetail = ref(false)
 
 
-const openCreateModal = () => {
+const openCreateModal = (partyType = 'supplier') => {
+    importPartyType.value = partyType
     showCreateModal.value = true
 }
 
@@ -99,22 +113,36 @@ const handleCreated = () => {
 const search = ref(
     props.filters.search || ''
 )
+const partyTypeFilter = ref(props.filters.party_type || '')
+const statusFilter = ref(props.filters.status || '')
+const dateFrom = ref(props.filters.date_from || '')
+const dateTo = ref(props.filters.date_to || '')
+const showFilters = ref(Boolean(props.filters.party_type || props.filters.status || props.filters.date_from || props.filters.date_to))
 
+
+let searchTimer = null
 
 const submitSearch = () => {
-
-    router.get(
-        '/stock-import',
-        {
-            search: search.value,
-        },
-        {
-            preserveState: true,
-            preserveScroll: true,
-        }
-    )
-
+    clearTimeout(searchTimer)
+    router.get('/stock-import', {
+        search: search.value.trim(),
+        party_type: partyTypeFilter.value,
+        status: statusFilter.value,
+        date_from: dateFrom.value,
+        date_to: dateTo.value,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    })
 }
+
+watch([search, partyTypeFilter, statusFilter, dateFrom, dateTo], () => {
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(submitSearch, 300)
+})
+
+onBeforeUnmount(() => clearTimeout(searchTimer))
 
 
 /*
@@ -127,6 +155,13 @@ const money = formatCurrency
 
 
 const formatDate = (value) => value ? formatConfiguredDate(value) : '-'
+
+const statusLabel = (status) => ({
+    draft: 'Nháp',
+    completed: 'Hoàn thành',
+    pending: 'Chờ xử lý',
+    cancelled: 'Đã hủy',
+})[String(status || '').toLowerCase()] || status || 'Hoàn thành'
 
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') {
@@ -163,6 +198,8 @@ const hasExtraInfo = (imei) => {
 
     return Boolean(
         extraInfo.note ||
+        extraInfo.account ||
+        extraInfo.password ||
         extraInfo.image_path
     )
 }
@@ -200,71 +237,94 @@ const showImport = (id) => {
 
 <template>
 
-<div class="min-h-screen bg-slate-100">
+<div class="min-h-screen bg-slate-50">
 
     <!-- HEADER -->
 
     <!-- CONTENT -->
 
-    <div class="space-y-4 p-6">
+    <div class="mx-auto max-w-[1600px] space-y-4 p-4 sm:p-6">
 
         <DataPanel>
 
             <!-- SEARCH -->
 
             <div
-                class="
-                    flex
-                    items-center
-                    justify-between
-                    gap-4
-                    border-b
-                    border-slate-200
-                    p-4
-                "
+                class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
             >
 
-                <div class="relative w-full max-w-md">
-
-                    <Search
-                        :size="18"
-                        class="
-                            absolute
-                            left-3
-                            top-1/2
-                            -translate-y-1/2
-                            text-slate-400
-                        "
-                    />
-
-                    <input
-                        v-model="search"
-                        type="text"
-                        placeholder="Tìm mã đơn, nhà cung cấp, số điện thoại..."
-                        @keyup.enter="submitSearch"
-                        class="
-                            w-full
-                            rounded-lg
-                            border
-                            border-slate-200
-                            py-2.5
-                            pl-10
-                            pr-3
-                            text-sm
-                            outline-none
-                            focus:border-emerald-500
-                            focus:ring-2
-                            focus:ring-emerald-100
-                        "
-                    />
-
+                <div class="min-w-0 flex-1 sm:max-w-lg">
+                    <div class="relative">
+                        <Search :size="18" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            v-model="search"
+                            type="search"
+                            placeholder="Tìm mã phiếu, nhà cung cấp / khách, SĐT, CCCD..."
+                            @keyup.enter="submitSearch"
+                            class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                        />
+                        <button v-if="search" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 hover:text-slate-700" aria-label="Xóa tìm kiếm" @click="search = ''">Xóa</button>
+                    </div>
                 </div>
 
-                <ActionButton @click="openCreateModal">
-                    <Plus :size="18" />
-                    Tạo đơn nhập
-                </ActionButton>
+                <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+                    <button
+                        type="button"
+                        :class="showFilters ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                        class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition"
+                        @click="showFilters = !showFilters"
+                    >
+                        <SlidersHorizontal :size="16" />
+                        Bộ lọc
+                        <span v-if="[partyTypeFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length" class="rounded-full bg-blue-100 px-1.5 text-[11px] text-blue-700">{{ [partyTypeFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
+                        @click="showReplenishmentModal = true"
+                    >
+                        <ClipboardList :size="17" />
+                        Lập DS lấy hàng
+                    </button>
+                    <ActionButton @click="openCreateModal('supplier')">
+                        <Plus :size="18" />
+                        Tạo đơn nhập
+                    </ActionButton>
+                </div>
 
+            </div>
+
+            <div v-if="showFilters" class="grid gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:grid-cols-2 sm:px-5 lg:grid-cols-5">
+                <label class="space-y-1 text-xs font-semibold text-slate-600">
+                    <span>Loại phiếu</span>
+                    <select v-model="partyTypeFilter" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                        <option value="">Tất cả</option>
+                        <option value="supplier">Nhà cung cấp</option>
+                        <option value="customer">Mua từ khách lẻ</option>
+                    </select>
+                </label>
+                <label class="space-y-1 text-xs font-semibold text-slate-600">
+                    <span>Trạng thái</span>
+                    <select v-model="statusFilter" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                        <option value="">Tất cả</option>
+                        <option value="completed">Hoàn thành</option>
+                        <option value="draft">Nháp</option>
+                        <option value="cancelled">Đã hủy</option>
+                    </select>
+                </label>
+                <label class="space-y-1 text-xs font-semibold text-slate-600">
+                    <span>Từ ngày</span>
+                    <input v-model="dateFrom" type="date" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                </label>
+                <label class="space-y-1 text-xs font-semibold text-slate-600">
+                    <span>Đến ngày</span>
+                    <input v-model="dateTo" type="date" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                </label>
+                <div class="flex items-end">
+                    <button type="button" class="inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-800" @click="partyTypeFilter = ''; statusFilter = ''; dateFrom = ''; dateTo = ''; search = ''">
+                        <RotateCcw :size="15" /> Xóa bộ lọc
+                    </button>
+                </div>
             </div>
 
 
@@ -291,7 +351,7 @@ const showImport = (id) => {
                             </th>
 
                             <th class="px-3 py-3 text-left">
-                                Nhà cung cấp
+                                Nhà cung cấp / khách lẻ
                             </th>
 
                             <th class="px-3 py-3 text-center">
@@ -323,11 +383,7 @@ const showImport = (id) => {
                         <tr
                             v-for="item in props.imports.data"
                             :key="item.id"
-                            class="
-                                border-t
-                                border-slate-100
-                                hover:bg-slate-50
-                            "
+                            class="border-t border-slate-100 transition-colors hover:bg-emerald-50/40"
                         >
 
                             <!-- CODE -->
@@ -356,18 +412,11 @@ const showImport = (id) => {
                                         text-slate-800
                                     "
                                 >
-                                    {{ item.supplier?.name || '—' }}
+                                    {{ item.party_name || item.customer?.full_name || item.supplier?.name || '—' }}
                                 </div>
 
-                                <div
-                                    v-if="item.supplier?.phone"
-                                    class="
-                                        mt-0.5
-                                        text-xs
-                                        text-slate-500
-                                    "
-                                >
-                                    {{ item.supplier.phone }}
+                                <div v-if="item.party_phone || item.customer?.phone || item.supplier?.phone" class="mt-0.5 text-xs text-slate-500">
+                                    {{ item.party_phone || item.customer?.phone || item.supplier?.phone }}
                                 </div>
 
                             </td>
@@ -431,7 +480,7 @@ const showImport = (id) => {
                                         text-emerald-600
                                     "
                                 >
-                                    {{ item.status || 'Hoàn thành' }}
+                                    {{ statusLabel(item.status) }}
                                 </span>
 
                             </td>
@@ -482,7 +531,11 @@ const showImport = (id) => {
                                     text-slate-400
                                 "
                             >
-                                Chưa có đơn nhập hàng
+                                <div class="mx-auto flex max-w-sm flex-col items-center gap-2">
+                                    <Search v-if="search" :size="22" class="text-slate-300" />
+                                    <span>{{ search ? `Không tìm thấy phiếu nhập phù hợp với “${search}”` : 'Chưa có đơn nhập hàng' }}</span>
+                                    <button v-if="search" type="button" class="text-xs font-semibold text-emerald-700 hover:text-emerald-900" @click="search = ''">Xóa từ khóa tìm kiếm</button>
+                                </div>
                             </td>
 
                         </tr>
@@ -504,10 +557,17 @@ const showImport = (id) => {
 
     <StockImportFormModal
         v-if="showCreateModal"
+        :initial-party-type="importPartyType"
         :categories="props.categories"
         :suppliers="props.suppliers"
         @close="closeCreateModal"
         @created="handleCreated"
+    />
+
+    <ReplenishmentListModal
+        v-if="showReplenishmentModal"
+        :suppliers="props.suppliers"
+        @close="showReplenishmentModal = false"
     />
 
     <BaseModal
@@ -517,6 +577,11 @@ const showImport = (id) => {
         @close="detailImport = null"
     >
         <div class="space-y-4">
+            <div class="flex justify-end">
+                <a :href="`/stock-import/${detailImport.id}/contract`" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                    <Printer class="h-4 w-4" /> In hợp đồng mua bán
+                </a>
+            </div>
             <div class="grid gap-3 md:grid-cols-5">
                 <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                     <div class="text-xs font-semibold uppercase text-slate-400">Mã đơn</div>
@@ -524,11 +589,13 @@ const showImport = (id) => {
                 </div>
 
                 <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2">
-                    <div class="text-xs font-semibold uppercase text-slate-400">Nhà cung cấp</div>
-                    <div class="mt-1 font-semibold text-slate-900">{{ detailImport.supplier?.name || '-' }}</div>
+                    <div class="text-xs font-semibold uppercase text-slate-400">Nhà cung cấp / khách lẻ</div>
+                    <div class="mt-1 font-semibold text-slate-900">{{ detailImport.party_name || detailImport.customer?.full_name || detailImport.supplier?.name || '-' }}</div>
                     <div class="mt-0.5 text-xs text-slate-500">
-                        {{ detailImport.supplier?.phone || '-' }}
+                        {{ detailImport.party_phone || detailImport.customer?.phone || detailImport.supplier?.phone || '-' }}
                     </div>
+                    <div v-if="detailImport.party_cccd || detailImport.customer?.cccd" class="mt-0.5 text-xs text-slate-500">CCCD: {{ detailImport.party_cccd || detailImport.customer?.cccd }}</div>
+                    <div v-if="detailImport.party_address || detailImport.customer?.address" class="mt-0.5 text-xs text-slate-500">{{ detailImport.party_address || detailImport.customer?.address }}</div>
                 </div>
 
                 <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -589,6 +656,11 @@ const showImport = (id) => {
                                     </div>
                                     <div class="mt-0.5 text-xs text-slate-500">
                                         SKU: {{ item.product?.sku || '-' }}
+                                    </div>
+                                    <div v-if="item.extra_info?.is_used" class="mt-1 space-y-0.5 text-[11px] text-amber-800">
+                                        <div class="font-semibold">Sản phẩm đã qua sử dụng</div>
+                                        <div v-if="item.extra_info.account">Tài khoản: {{ item.extra_info.account }}</div>
+                                        <div v-if="item.extra_info.password">Mật khẩu: {{ item.extra_info.password }}</div>
                                     </div>
                                 </td>
                                 <td class="px-3 py-3 text-xs font-semibold text-indigo-700">
@@ -663,6 +735,8 @@ const showImport = (id) => {
                                                 <div v-if="history.product_imei.extra_info?.note">
                                                     {{ history.product_imei.extra_info.note }}
                                                 </div>
+                                                <div v-if="history.product_imei.extra_info?.account">Tài khoản: {{ history.product_imei.extra_info.account }}</div>
+                                                <div v-if="history.product_imei.extra_info?.password">Mật khẩu: {{ history.product_imei.extra_info.password }}</div>
                                                 <a
                                                     v-if="extraInfoImageUrl(history.product_imei)"
                                                     :href="extraInfoImageUrl(history.product_imei)"

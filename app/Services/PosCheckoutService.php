@@ -22,6 +22,7 @@ class PosCheckoutService
         ?string $paymentMethod, // SỬA LỖI TYPEERROR: Chuyển thành ?string để chấp nhận null
         bool $payOldDebt,
         int $userId,
+        ?string $invoiceCode = null,
     ): Sale {
 
         return DB::transaction(function () use (
@@ -31,6 +32,7 @@ class PosCheckoutService
             $paymentMethod,
             $payOldDebt,
             $userId,
+            $invoiceCode,
         ): Sale {
 
             /*
@@ -92,7 +94,7 @@ class PosCheckoutService
             */
 
             $sale = Sale::query()->create([
-                'code' => $this->generateCode(),
+                'code' => $invoiceCode ?: $this->generateCode(),
                 'customer_id' => $customerId,
                 'user_id' => $userId,
                 'subtotal' => $subtotal,

@@ -5,6 +5,9 @@ import { router, usePage } from '@inertiajs/vue3'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { toast } from 'vue-sonner'
+import WorkShiftCountForm from '@/Components/WorkShiftCountForm.vue'
+import WorkShiftOpenModal from '@/Components/WorkShiftOpenModal.vue'
+import { formatMoney as formatConfiguredMoney } from '@/utils/format'
 import { useCart } from '@/Modules/POS/Cart/Composables/useCart'
 import { useCheckout } from '@/Modules/POS/Payment/Composables/useCheckout'
 import { useKeyboardShortcuts } from '@/Modules/POS/Core/Composables/useKeyboardShortcuts'
@@ -64,6 +67,8 @@ const shiftModal = ref(false)
 const shiftMode = ref('open')
 const denominationValues = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 const shiftDenominations = ref({})
+const shiftCashAmount = ref(0)
+const shiftCashDetail = ref(false)
 const shiftBankBalances = ref({})
 const shiftLoading = ref(false)
 const shiftResult = ref(null)
@@ -71,8 +76,7 @@ const shiftHistoryModal = ref(false)
 const shiftHistory = ref([])
 const shiftHistoryLoading = ref(false)
 let shiftRefreshTimer = null
-const formatMoney = value => `${Number(value || 0).toLocaleString('vi-VN')} ₫`
-const denominationTotal = computed(() => Object.entries(shiftDenominations.value).reduce((total, [value, count]) => total + Number(value) * Number(count || 0), 0))
+const formatMoney = formatConfiguredMoney
 const denominationRows = counts => denominationValues.filter(value => Number(counts?.[value] || 0) > 0).map(value => ({ value, count: Number(counts[value]) }))
 const denominationComparison = computed(() => denominationValues.map(value => {
     const openingCount = Number(shiftResult.value?.opening_denominations?.[value] || 0)
@@ -88,7 +92,7 @@ const groupedShiftHistory = computed(() => {
     return [...groups.entries()].map(([date, shifts]) => ({ date, shifts }))
 })
 const displayHistoryDate = date => new Intl.DateTimeFormat('vi-VN', { dateStyle: 'full' }).format(new Date(`${date}T00:00:00`))
-const normalizedDenominations = () => Object.fromEntries(denominationValues.map(value => [value, Math.max(0, Math.floor(Number(shiftDenominations.value[value] || 0)))]))
+const normalizedDenominations = () => Object.fromEntries(denominationValues.map(value => [value, shiftCashDetail.value ? Math.max(0, Math.floor(Number(shiftDenominations.value[value] || 0))) : 0]))
 const normalizedBankBalances = () => Object.fromEntries(bankAccounts.value.map(account => [account.shift_key, Math.max(0, Number(shiftBankBalances.value[account.shift_key] || 0))]))
 const bankAccounts = computed(() => {
     const accounts = page.props.settings?.bank_accounts || []
@@ -96,25 +100,36 @@ const bankAccounts = computed(() => {
     const settings = page.props.settings || {}
     return settings.bank_bin && settings.bank_account ? [{ id: 'default', shift_key: 'default', bank_name: `BIN ${settings.bank_bin}`, bank_account: settings.bank_account, bank_account_name: settings.bank_account_name }] : []
 })
+const closingBankTotal = computed(() => bankAccounts.value.reduce((sum, account) => sum + Number(shiftResult.value?.closing_bank_balances?.[account.shift_key] || 0), 0))
+const combinedClosingTotal = computed(() => Number(shiftResult.value?.closing_amount || 0) + closingBankTotal.value)
+const balanceTotal = balances => Object.values(balances || {}).reduce((sum, amount) => sum + Number(amount || 0), 0)
+const resultBankTransferTotal = computed(() => balanceTotal(shiftResult.value?.bank_collected))
+const openingBankTotal = computed(() => balanceTotal(shift.value?.opening_bank_balances))
+const openingCombinedTotal = computed(() => Number(shift.value?.opening_amount || 0) + openingBankTotal.value)
+const bankTransferTotal = computed(() => balanceTotal(shift.value?.bank_collected))
+const countedBankTotal = computed(() => balanceTotal(shiftBankBalances.value))
+const countedCashTotal = computed(() => shiftCashDetail.value
+    ? denominationValues.reduce((sum, value) => sum + value * Number(shiftDenominations.value[value] || 0), 0)
+    : Math.max(0, Number(String(shiftCashAmount.value).replace(/\D/g, '') || 0)))
+const countedCashAndBankTotal = computed(() => countedCashTotal.value + countedBankTotal.value)
 const bankBalanceRows = balances => bankAccounts.value.map(account => ({ ...account, balance: balances?.[account.shift_key] ?? 0 }))
-const bankBalanceTotal = balances => bankAccounts.value.reduce((total, account) => total + Number(balances?.[account.shift_key] || 0), 0)
-const focusNextCount = event => {
-    event.preventDefault()
-    const inputs = [...document.querySelectorAll('[data-shift-count]')]
-    const next = inputs.indexOf(event.currentTarget) + 1
-    if (inputs[next]) inputs[next].focus()
-}
-const selectShiftInputValue = event => event.target.select()
 
 const loadShift = async () => {
     const { data } = await axios.get(route('pos.shifts.current'))
     shift.value = data.shift
-    if (!data.shift) {
+    if (!data.shift && !data.prompt_dismissed) {
         shiftMode.value = 'open'
         shiftDenominations.value = Object.fromEntries(denominationValues.map(value => [value, 0]))
+        shiftCashAmount.value = 0
+        shiftCashDetail.value = false
         shiftBankBalances.value = Object.fromEntries(bankAccounts.value.map(account => [account.shift_key, 0]))
         shiftModal.value = true
     }
+}
+
+const handleShiftOpened = openedShift => {
+    shift.value = openedShift
+    shiftModal.value = false
 }
 
 const refreshShiftSummary = async () => {
@@ -136,13 +151,15 @@ onBeforeUnmount(() => window.clearInterval(shiftRefreshTimer))
 const manageShift = async () => {
     if (shift.value) await refreshShiftSummary()
     shiftMode.value = shift.value ? 'close' : 'open'
+    shiftCashDetail.value = false
+    shiftCashAmount.value = shiftMode.value === 'close' ? Number(shift.value?.expected_cash || 0) : 0
     shiftDenominations.value = Object.fromEntries(denominationValues.map(value => [
         value,
         shiftMode.value === 'close' ? Number(shift.value?.opening_denominations?.[value] || 0) : 0,
     ]))
     shiftBankBalances.value = Object.fromEntries(bankAccounts.value.map(account => [
         account.shift_key,
-        shiftMode.value === 'close' ? Number(shift.value?.opening_bank_balances?.[account.shift_key] || 0) : 0,
+        shiftMode.value === 'close' ? Number(shift.value?.expected_bank_balances?.[account.shift_key] ?? shift.value?.opening_bank_balances?.[account.shift_key] ?? 0) : 0,
     ]))
     shiftResult.value = null
     shiftModal.value = true
@@ -165,11 +182,11 @@ const submitShift = async () => {
     shiftLoading.value = true
     try {
         if (shiftMode.value === 'open') {
-            const { data } = await axios.post(route('pos.shifts.open'), { denominations: normalizedDenominations(), bank_balances: normalizedBankBalances() })
+            const { data } = await axios.post(route('pos.shifts.open'), { denominations: normalizedDenominations(), cash_amount: shiftCashDetail.value ? null : countedCashTotal.value, bank_balances: normalizedBankBalances() })
             shift.value = data.shift
             shiftModal.value = false
         } else {
-            const { data } = await axios.post(route('pos.shifts.close'), { denominations: normalizedDenominations(), bank_balances: normalizedBankBalances() })
+            const { data } = await axios.post(route('pos.shifts.close'), { denominations: normalizedDenominations(), cash_amount: shiftCashDetail.value ? null : countedCashTotal.value, bank_balances: normalizedBankBalances() })
             shiftResult.value = data.summary
             shift.value = null
         }
@@ -344,12 +361,30 @@ const checkout = async (data) => {
         payment_method: data.payment_method,
         paid_amount: Number(data.paid_amount || 0),
         pay_old_debt: data.pay_old_debt,
+        invoice_code: data.invoice_code,
     })
 }
 
 
 // Hiện popup thanh toán
 const showCheckoutModal = ref(false)
+const checkoutInvoiceCode = ref('')
+
+const makeInvoiceCode = () => {
+    const timeZone = page.props.settings?.app_timezone || 'Asia/Ho_Chi_Minh'
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(new Date()).map(({ type, value }) => [type, value]))
+
+    return `INV-${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}${parts.second}`
+}
 
 
 const openCheckoutModal = () => {
@@ -361,6 +396,7 @@ const openCheckoutModal = () => {
         return
     }
 
+    checkoutInvoiceCode.value = makeInvoiceCode()
     showCheckoutModal.value = true
 }
 
@@ -419,6 +455,7 @@ useBarcodeScanner(
     <CheckoutModal
         :loading="loading"
         :show="showCheckoutModal"
+        :invoice-code="checkoutInvoiceCode"
         :cart="cart"
         :grand-total="grandTotal"
         :selected-customer="selectedCustomer"
@@ -435,49 +472,57 @@ useBarcodeScanner(
         @confirm="handleConfirmSelect"
     />
 
-    <div v-if="shiftModal" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
+    <WorkShiftOpenModal v-if="shiftModal && shiftMode === 'open' && !shiftResult" :denominations="denominationValues" :counts="shiftDenominations" :balances="shiftBankBalances" :accounts="bankAccounts" :money="formatMoney" @close="shiftModal = false" @opened="handleShiftOpened" />
+
+    <div v-if="shiftModal && (shiftMode === 'close' || shiftResult)" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
         <section class="flex h-[92vh] max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <template v-if="!shiftResult">
                 <h2 class="text-lg font-bold text-slate-900">{{ shiftMode === 'open' ? 'Mở ca làm' : 'Kết thúc ca làm' }}</h2>
                 <p class="mt-0.5 text-xs text-slate-500">{{ shiftMode === 'open' ? 'Nhập số lượng tiền mặt đầu ca và số dư các tài khoản.' : 'Kiểm đếm tiền mặt và cập nhật số dư các tài khoản cuối ca.' }}</p>
-                <div class="mt-3 grid min-h-0 flex-1 gap-4 overflow-y-auto lg:grid-cols-2">
-                  <div>
-                    <h3 class="mb-2 text-sm font-bold text-slate-800">Tiền mặt theo mệnh giá</h3>
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-slate-100 text-[11px] uppercase text-slate-500"><tr><th class="rounded-l-lg px-2 py-1.5">Mệnh giá</th><th class="px-2 py-1.5">Số lượng</th><th class="rounded-r-lg px-2 py-1.5 text-right">Thành tiền</th></tr></thead>
-                        <tbody class="divide-y divide-slate-100"><tr v-for="value in denominationValues" :key="value">
-                            <td class="px-2 py-1.5 font-semibold text-slate-700">{{ formatMoney(value) }}</td>
-                            <td class="px-2 py-1"><input v-model.number="shiftDenominations[value]" data-shift-count type="text" inputmode="numeric" class="w-20 rounded-lg border-slate-300 px-2 py-1 text-right text-sm" @focus="selectShiftInputValue" @keydown.enter="focusNextCount" /></td>
-                            <td class="px-2 py-1.5 text-right text-slate-600">{{ formatMoney(value * Number(shiftDenominations[value] || 0)) }}</td>
-                        </tr></tbody>
-                    </table>
-                    <div class="mt-2 flex justify-between rounded-lg bg-indigo-50 px-3 py-2 text-sm"><span class="font-semibold text-indigo-800">{{ shiftMode === 'open' ? 'Tổng tiền đầu ca' : 'Tổng tiền kiểm đếm' }}</span><strong class="text-indigo-800">{{ formatMoney(denominationTotal) }}</strong></div>
-                  </div>
-                  <div class="space-y-3">
-                    <div v-if="bankAccounts.length">
-                        <h3 class="mb-2 text-sm font-bold text-slate-800">Số dư tài khoản ngân hàng</h3>
-                        <table class="w-full text-left text-sm"><thead class="bg-slate-100 text-[11px] uppercase text-slate-500"><tr><th class="rounded-l-lg px-2 py-1.5">Tài khoản</th><th class="px-2 py-1.5">Chủ tài khoản</th><th class="rounded-r-lg px-2 py-1.5 text-right">Số dư</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="account in bankAccounts" :key="account.shift_key"><td class="px-2 py-2"><strong>{{ account.bank_name || `BIN ${account.bank_bin}` }}</strong><div class="text-xs text-slate-500">{{ account.bank_account }}</div></td><td class="px-2 py-2 text-xs text-slate-600">{{ account.bank_account_name || '—' }}</td><td class="px-2 py-2 text-right"><input v-model.number="shiftBankBalances[account.shift_key]" data-shift-count type="text" inputmode="numeric" class="w-28 rounded-lg border-slate-300 px-2 py-1 text-right text-sm" @focus="selectShiftInputValue" @keydown.enter="focusNextCount" /></td></tr></tbody></table>
-                        <p class="mt-1 text-right text-xs font-bold text-slate-700">Tổng số dư: {{ formatMoney(bankBalanceTotal(shiftBankBalances)) }}</p>
+                <div class="mt-3 min-h-0 flex-1 overflow-y-auto">
+                    <WorkShiftCountForm :denominations="denominationValues" :counts="shiftDenominations" :cash-amount="shiftCashAmount" :cash-detail="shiftCashDetail" :balances="shiftBankBalances" :accounts="bankAccounts" :money="formatMoney" :mode="shiftMode" @update:cash-amount="shiftCashAmount = $event" @update:cash-detail="shiftCashDetail = $event" />
+                    <div v-if="shiftMode === 'close' && shift" class="mt-4 space-y-3 rounded-xl bg-slate-50 p-3 text-sm sm:p-4">
+                        <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 rounded-lg bg-white px-2 py-2 text-right text-[11px] font-bold text-slate-500 sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:px-3 sm:text-xs">
+                            <span class="text-left">Khoản mục</span><span>Đầu ca</span><span>Cuối ca</span>
+                        </div>
+                        <div class="space-y-2 px-1">
+                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền mặt</span><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(shift.opening_amount) }}</strong><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(countedCashTotal) }}</strong></div>
+                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền tài khoản</span><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(openingBankTotal) }}</strong><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(countedBankTotal) }}</strong></div>
+                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs text-slate-600 sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền mặt bán hàng thu</span><span>—</span><span class="whitespace-nowrap tabular-nums">{{ formatMoney(shift.cash_collected) }}</span></div>
+                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs text-slate-600 sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền chuyển khoản thu</span><span>—</span><span class="whitespace-nowrap tabular-nums">{{ formatMoney(bankTransferTotal) }}</span></div>
+                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs text-slate-600 sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Nợ khách phát sinh</span><span>—</span><span class="whitespace-nowrap tabular-nums">{{ formatMoney(shift.customer_debt_amount) }}</span></div>
+                        </div>
+                        <div class="grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2">
+                            <div class="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2"><span class="font-semibold text-slate-600">Tổng đầu ca</span><strong class="text-slate-900">{{ formatMoney(openingCombinedTotal) }}</strong></div>
+                            <div class="flex items-center justify-between gap-2 rounded-lg bg-emerald-100 px-3 py-2"><span class="font-bold text-emerald-800">Tổng cuối ca</span><strong class="text-emerald-900">{{ formatMoney(countedCashAndBankTotal) }}</strong></div>
+                        </div>
+                        <details v-if="shift.bank_sales?.length" class="border-t border-slate-200 pt-2">
+                            <summary class="cursor-pointer font-semibold text-indigo-700">Chi tiết {{ shift.bank_sales.length }} đơn chuyển khoản</summary>
+                            <div class="mt-1.5 max-h-36 overflow-y-auto">
+                                <p v-for="sale in shift.bank_sales" :key="sale.id" class="flex justify-between gap-3 py-1 text-xs"><span class="min-w-0 truncate text-slate-600">{{ sale.code }} · {{ sale.bank_name || sale.bank_account || 'Chưa xác định tài khoản' }}</span><strong class="shrink-0">{{ formatMoney(sale.amount) }}</strong></p>
+                            </div>
+                        </details>
                     </div>
-                    <div v-if="shiftMode === 'close' && shift" class="space-y-1.5 rounded-xl bg-slate-50 p-3 text-sm">
-                        <p class="flex justify-between"><span>Tiền đầu ca</span><strong>{{ formatMoney(shift.opening_amount) }}</strong></p>
-                        <p class="flex justify-between"><span>Tiền mặt bán hàng thu được</span><strong>{{ formatMoney(shift.cash_collected) }}</strong></p>
-                        <p class="flex justify-between"><span>Nợ khách phát sinh trong ca</span><strong>{{ formatMoney(shift.customer_debt_amount) }}</strong></p>
-                        <p class="flex justify-between border-t border-slate-200 pt-1.5"><span>Tổng Tiền mặt cuối ca</span><strong>{{ formatMoney(shift.expected_cash) }}</strong></p>
-                    </div>
-                  </div>
                 </div>
                 <div class="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3"><button class="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="shiftModal = false">Đóng</button><button :disabled="shiftLoading" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="submitShift">{{ shiftLoading ? 'Đang lưu…' : shiftMode === 'open' ? 'Bắt đầu ca' : 'Kết thúc ca' }}</button></div>
             </template>
             <template v-else>
                 <h2 class="shrink-0 text-lg font-bold text-slate-900">Tổng kết ca làm</h2>
                 <div class="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 text-sm">
-                    <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                         <div class="rounded-xl bg-slate-50 px-3 py-2"><span class="text-xs text-slate-500">Tiền đầu ca</span><strong class="mt-0.5 block">{{ formatMoney(shiftResult.opening_amount) }}</strong></div>
                         <div class="rounded-xl bg-emerald-50 px-3 py-2"><span class="text-xs text-emerald-700">Tiền mặt bán hàng thu</span><strong class="mt-0.5 block text-emerald-800">{{ formatMoney(shiftResult.cash_collected) }}</strong></div>
                         <div class="rounded-xl bg-amber-50 px-3 py-2"><span class="text-xs text-amber-700">Nợ khách trong ca</span><strong class="mt-0.5 block text-amber-800">{{ formatMoney(shiftResult.customer_debt_amount) }}</strong></div>
                         <div class="rounded-xl bg-indigo-50 px-3 py-2"><span class="text-xs text-indigo-700">Tiền mặt cuối ca</span><strong class="mt-0.5 block text-indigo-800">{{ formatMoney(shiftResult.expected_cash) }}</strong></div>
+                        <div class="rounded-xl bg-blue-50 px-3 py-2"><span class="text-xs text-blue-700">Tiền chuyển khoản trong ca</span><strong class="mt-0.5 block text-blue-800">{{ formatMoney(resultBankTransferTotal) }}</strong></div>
+                        <div class="rounded-xl bg-cyan-50 px-3 py-2"><span class="text-xs text-cyan-700">Tài khoản cuối ca</span><strong class="mt-0.5 block text-cyan-800">{{ formatMoney(closingBankTotal) }}</strong></div>
+                        <div class="rounded-xl bg-emerald-100 px-3 py-2"><span class="text-xs text-emerald-800">Tổng tiền mặt + tài khoản</span><strong class="mt-0.5 block text-emerald-900">{{ formatMoney(combinedClosingTotal) }}</strong></div>
                     </div>
+
+                    <details v-if="shiftResult.bank_sales?.length" class="overflow-hidden rounded-xl border border-slate-200">
+                        <summary class="cursor-pointer bg-slate-50 px-3 py-2 text-sm font-bold text-indigo-700">Chi tiết {{ shiftResult.bank_sales.length }} đơn chuyển khoản</summary>
+                        <div class="max-h-40 overflow-y-auto"><p v-for="sale in shiftResult.bank_sales" :key="sale.id" class="flex justify-between gap-3 border-t border-slate-100 px-3 py-1.5 text-xs"><span class="min-w-0 truncate text-slate-600">{{ sale.code }} · {{ sale.bank_name || sale.bank_account || 'Chưa xác định tài khoản' }}</span><strong class="shrink-0">{{ formatMoney(sale.amount) }}</strong></p></div>
+                    </details>
 
                     <section class="overflow-hidden rounded-xl border border-slate-200">
                         <h3 class="bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">Đối chiếu tiền mặt theo mệnh giá</h3>
@@ -492,8 +537,9 @@ useBarcodeScanner(
 
                     <section v-if="bankAccounts.length" class="overflow-hidden rounded-xl border border-slate-200">
                         <h3 class="bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">Đối chiếu số dư ngân hàng</h3>
-                        <div class="overflow-x-auto"><table class="w-full min-w-[480px] text-sm"><thead class="bg-slate-100 text-xs text-slate-500"><tr><th class="px-3 py-2 text-left">Tài khoản</th><th class="px-3 py-2 text-right">Đầu ca</th><th class="px-3 py-2 text-right">Cuối ca</th><th class="px-3 py-2 text-right">Chênh lệch</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="(account, index) in bankAccounts" :key="account.shift_key" :class="index % 2 === 0 ? 'bg-white' : 'bg-slate-50'"><td class="px-3 py-1.5 font-medium">{{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.opening_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right font-semibold">{{ formatMoney(shiftResult.closing_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(Number(shiftResult.closing_bank_balances?.[account.shift_key] || 0) - Number(shiftResult.opening_bank_balances?.[account.shift_key] || 0)) }}</td></tr></tbody></table></div>
+                        <div class="overflow-x-auto"><table class="w-full min-w-[760px] text-sm"><thead class="bg-slate-100 text-xs text-slate-500"><tr><th class="px-3 py-2 text-left">Tài khoản</th><th class="px-3 py-2 text-right">Đầu ca</th><th class="px-3 py-2 text-right">Đơn CK</th><th class="px-3 py-2 text-right">Dự kiến</th><th class="px-3 py-2 text-right">Cuối ca</th><th class="px-3 py-2 text-right">Lệch</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="(account, index) in bankAccounts" :key="account.shift_key" :class="index % 2 === 0 ? 'bg-white' : 'bg-slate-50'"><td class="px-3 py-1.5 font-medium">{{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.opening_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right text-emerald-700">{{ formatMoney(shiftResult.bank_collected?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.expected_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right font-semibold">{{ formatMoney(shiftResult.closing_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(Number(shiftResult.closing_bank_balances?.[account.shift_key] || 0) - Number(shiftResult.expected_bank_balances?.[account.shift_key] || 0)) }}</td></tr></tbody></table></div>
                     </section>
+
 
                     <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span>Chênh lệch tiền mặt (thực tế so với dự kiến)</span><strong :class="shiftResult.difference < 0 ? 'text-rose-600' : 'text-emerald-700'">{{ formatMoney(shiftResult.difference) }}</strong></div>
                 </div>

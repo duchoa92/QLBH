@@ -93,6 +93,8 @@ class UpdateProductRequest extends FormRequest
                 'min:0',
             ],
 
+            'warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+
             'stock' => [
                 'nullable',
                 'integer',

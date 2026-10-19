@@ -55,7 +55,8 @@ onBeforeUnmount(() => {
                 'max-w-md': size === 'sm',
                 'max-w-xl': size === 'md',
                 'max-w-3xl': size === 'lg',
-                'max-w-4xl': size === 'xl'
+                'max-w-4xl': size === 'xl',
+                'max-w-6xl': size === '2xl'
             }"
         >
             <!-- HEADER -->

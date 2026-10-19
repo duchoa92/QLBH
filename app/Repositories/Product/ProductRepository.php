@@ -44,7 +44,7 @@ class ProductRepository extends BaseRepository
                 'brand:id,name',
                 'unit:id,name,short_name',
                 'conversionUnit:id,name,short_name',
-                'imeis:id,product_id,variant_id,imei',
+                'imeis:id,product_id,variant_id,imei,serial,status,cost_price,sell_price,warranty_expired_at,imported_at,created_at',
                 'variants' => fn ($query) => $query
                     ->where('is_active', true)
                     ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),

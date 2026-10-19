@@ -14,6 +14,10 @@ import {
     X,
     Plus,
     CalendarDays,
+    UserRound,
+    Search,
+    UserRoundPlus,
+    LoaderCircle,
 } from 'lucide-vue-next'
 
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -21,6 +25,8 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { useSupplierSearch } from './Composables/useSupplierSearch.js'
 import { openModal } from '@/Stores/modal'
 import SupplierForm from '@/Pages/Suppliers/Form.vue'
+import CustomerFormModal from '@/Pages/Customers/CustomerFormModal.vue'
+import api from '@/Services/api'
 
 
 /*
@@ -31,6 +37,9 @@ import SupplierForm from '@/Pages/Suppliers/Form.vue'
 
 const emit = defineEmits([
     'selected',
+    'customer-selected',
+    'customer-draft',
+    'update:party-type',
     'update:date',
 ])
 
@@ -50,6 +59,9 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    partyType: { type: String, default: 'supplier' },
+    partyTypeLocked: { type: Boolean, default: false },
+    customer: { type: Object, default: null },
 
 })
 
@@ -134,6 +146,65 @@ watch(
 */
 
 const supplierSearchRef = ref(null)
+const customerSearchRef = ref(null)
+const customerKeyword = ref('')
+const customerResults = ref([])
+const customerSearchLoading = ref(false)
+let customerSearchTimeout = null
+
+watch(() => props.customer, customer => {
+    if (customer) customerKeyword.value = customer.full_name
+}, { immediate: true })
+
+watch(customerKeyword, value => {
+    clearTimeout(customerSearchTimeout)
+    if (props.customer || value.trim().length < 2) {
+        customerResults.value = []
+        return
+    }
+    customerSearchTimeout = setTimeout(async () => {
+        customerSearchLoading.value = true
+        try {
+            const { data } = await api.get('/stock-import/customers/search', { params: { search: value.trim() } })
+            customerResults.value = data.customers || []
+        } catch {
+            customerResults.value = []
+        } finally {
+            customerSearchLoading.value = false
+        }
+    }, 220)
+})
+
+const selectCustomer = customer => {
+    customerKeyword.value = customer.full_name
+    customerResults.value = []
+    emit('customer-selected', customer)
+    emit('customer-draft', {
+        full_name: customer.full_name || '', phone: customer.phone || '',
+        address: customer.address || '', cccd: customer.cccd || '',
+    })
+}
+
+const clearCustomer = () => {
+    customerKeyword.value = ''
+    emit('customer-selected', null)
+    emit('customer-draft', { full_name: 'Khách lẻ', phone: '', address: '', cccd: '' })
+}
+
+const createCustomer = () => {
+    openModal(CustomerFormModal, {
+        props: {
+            title: 'Thêm khách lẻ',
+            apiMode: true,
+            customer: {
+                full_name: customerKeyword.value.trim(),
+            },
+        },
+        onUpdated: customer => {
+            if (customer) selectCustomer(customer)
+        },
+    })
+}
 
 
 /*
@@ -203,6 +274,8 @@ onMounted(() => {
         handleClickOutside
     )
 
+    document.addEventListener('pointerdown', handleCustomerOutsideClick)
+
 })
 
 
@@ -212,6 +285,9 @@ onBeforeUnmount(() => {
         'click',
         handleClickOutside
     )
+
+    document.removeEventListener('pointerdown', handleCustomerOutsideClick)
+    clearTimeout(customerSearchTimeout)
 
 })
 
@@ -223,6 +299,10 @@ onBeforeUnmount(() => {
 */
 
 const money = formatCurrency
+
+const handleCustomerOutsideClick = event => {
+    if (!customerSearchRef.value?.contains(event.target)) customerResults.value = []
+}
 
 </script>
 
@@ -245,13 +325,22 @@ const money = formatCurrency
         <!-- NCC + NGÀY NHẬP HÀNG -->
         <!-- ===================================================== -->
 
+        <div v-if="!props.partyTypeLocked" class="mb-3 inline-flex rounded-xl bg-slate-100 p-1">
+            <button type="button" :class="props.partyType === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'supplier')">
+                <Truck class="h-4 w-4" /> Nhà cung cấp
+            </button>
+            <button type="button" :class="props.partyType === 'customer' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'customer')">
+                <UserRound class="h-4 w-4" /> Khách lẻ
+            </button>
+        </div>
+
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
             <!-- ================================================= -->
             <!-- NHÀ CUNG CẤP -->
             <!-- ================================================= -->
 
-            <div>
+            <div v-if="props.partyType === 'supplier'">
 
                 <!-- ĐÃ CHỌN NCC -->
                 <div
@@ -495,6 +584,30 @@ const money = formatCurrency
 
                 </div>
 
+            </div>
+
+            <div v-else ref="customerSearchRef" class="relative">
+                <div v-if="props.customer" class="flex h-10 items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 shadow-sm">
+                    <div class="flex min-w-0 items-center gap-2">
+                        <UserRound class="h-4 w-4 shrink-0 text-blue-700" />
+                        <div class="min-w-0">
+                            <div class="truncate text-sm font-semibold text-blue-950">{{ props.customer.full_name }}</div>
+                            <div class="truncate text-[11px] text-blue-700">{{ props.customer.phone || 'Khách lẻ' }}<span v-if="props.customer.code"> · {{ props.customer.code }}</span></div>
+                        </div>
+                    </div>
+                    <button type="button" title="Bỏ chọn người bán" class="ml-2 rounded-full p-1 text-blue-500 hover:bg-white hover:text-rose-600" @click="clearCustomer"><X :size="15" /></button>
+                </div>
+                <div v-else class="relative">
+                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Tìm người bán" placeholder-text="Khách lẻ" input-class="pr-20" />
+                    <LoaderCircle v-if="customerSearchLoading" class="absolute right-11 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
+                    <button v-if="customerKeyword.trim()" type="button" title="Thêm khách lẻ mới" aria-label="Thêm khách lẻ mới" class="absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-700 transition hover:bg-blue-50" @click="createCustomer"><UserRoundPlus class="h-5 w-5" /></button>
+                    <div v-if="customerResults.length" class="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                        <button v-for="customer in customerResults" :key="customer.id" type="button" class="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-blue-50" @mousedown.prevent="selectCustomer(customer)">
+                            <span class="block text-sm font-semibold text-slate-900">{{ customer.full_name }}</span>
+                            <span class="mt-0.5 block text-xs text-slate-500">{{ customer.phone || 'Chưa có SĐT' }} · {{ customer.cccd || customer.code || 'Chưa có CCCD' }}</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
 

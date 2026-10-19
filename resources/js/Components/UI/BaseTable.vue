@@ -8,6 +8,7 @@ const props = defineProps({
     columns: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     selectable: { type: Boolean, default: false },
+    rowClickable: { type: Boolean, default: false },
     selectedIds: { type: Array, default: () => [] }
 })
 
@@ -15,7 +16,8 @@ const emit = defineEmits([
     'toggleOne',
     'toggleAll',
     'sort',
-    'changePerPage'
+    'changePerPage',
+    'rowClick'
 ])
 
 const rows = computed(() => props.data?.data || [])
@@ -47,6 +49,7 @@ const go = (url) => {
                         <input
                             type="checkbox"
                             :checked="isAllSelected"
+                            @click.stop
                             @change="$emit('toggleAll')"
                         />
                     </th>
@@ -84,12 +87,15 @@ const go = (url) => {
                 <tr v-for="row in data.data"
                     :key="row.id"
                     class="border-t border-slate-100 hover:bg-slate-50"
+                    :class="rowClickable ? 'cursor-pointer' : ''"
+                    @click="rowClickable && $emit('rowClick', row)"
                 >
                     <!-- checkbox -->
                     <td v-if="selectable" class="border-r border-slate-100 p-2 text-center">
                         <input
                             type="checkbox"
                             :checked="selectedIds.includes(row.id)"
+                            @click.stop
                             @change="$emit('toggleOne', row.id)"
                         />
                     </td>

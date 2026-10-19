@@ -10,9 +10,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Category;
 use App\Models\Supplier;
+use App\Models\Product;
+use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
-use Maatwebsite\Excel\Facades\Excel;
 
 class StockImportController extends Controller
 {
@@ -32,13 +33,26 @@ class StockImportController extends Controller
             ->string('search')
             ->trim()
             ->toString();
+        $partyType = in_array($request->query('party_type'), ['supplier', 'customer'], true)
+            ? $request->query('party_type')
+            : '';
+        $status = in_array($request->query('status'), ['completed', 'draft', 'cancelled'], true)
+            ? $request->query('status')
+            : '';
+        $dateFrom = $request->date('date_from')?->toDateString() ?? '';
+        $dateTo = $request->date('date_to')?->toDateString() ?? '';
 
         $imports = StockImport::query()
             ->with([
                 'supplier:id,name,phone',
+                'customer:id,code,full_name,phone,cccd,address',
                 'user:id,name',
             ])
             ->withCount('items')
+            ->when($partyType !== '', fn ($query) => $query->where('party_type', $partyType))
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($dateFrom !== '', fn ($query) => $query->whereDate('import_date', '>=', $dateFrom))
+            ->when($dateTo !== '', fn ($query) => $query->whereDate('import_date', '<=', $dateTo))
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query
@@ -47,7 +61,15 @@ class StockImportController extends Controller
                             $supplier
                                 ->where('name', 'like', "%{$search}%")
                                 ->orWhere('phone', 'like', "%{$search}%");
-                        });
+                        })
+                        ->orWhereHas('customer', function ($customer) use ($search) {
+                            $customer
+                                ->where('full_name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('cccd', 'like', "%{$search}%");
+                        })
+                        ->orWhere('party_name', 'like', "%{$search}%")
+                        ->orWhere('party_phone', 'like', "%{$search}%");
                 });
             })
             ->latest('id')
@@ -59,6 +81,10 @@ class StockImportController extends Controller
 
             'filters' => [
                 'search' => $search,
+                'party_type' => $partyType,
+                'status' => $status,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
             ],
 
             'categories' => Category::query()
@@ -72,16 +98,44 @@ class StockImportController extends Controller
         ]);
     }
 
+    /** Products that are at or below their configured stock alert level. */
+    public function replenishmentProducts(): JsonResponse
+    {
+        $products = Product::query()
+            ->where('is_active', true)
+            ->whereColumn('stock', '<=', 'alert_stock')
+            ->with('unit:id,name,short_name')
+            ->select('id', 'name', 'sku', 'barcode', 'stock', 'alert_stock', 'cost_price', 'unit_id')
+            ->orderBy('stock')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Product $product) => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'barcode' => $product->barcode,
+                'stock' => (float) $product->stock,
+                'alert_stock' => (float) $product->alert_stock,
+                'cost_price' => (float) $product->cost_price,
+                'unit_name' => $product->unit?->short_name ?: ($product->unit?->name ?: 'Cái'),
+            ]);
+
+        return response()->json(['products' => $products]);
+    }
+
     /**
      * Lưu phiếu nhập hàng
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'supplier_id' => [
-                'required',
-                'exists:suppliers,id',
-            ],
+        $validated = $request->validate([
+            'party_type' => ['required', Rule::in(['supplier', 'customer'])],
+            'supplier_id' => ['nullable', 'required_if:party_type,supplier', 'exists:suppliers,id'],
+            'customer_id' => ['nullable', 'exists:customers,id'],
+            'party_name' => ['nullable', 'required_if:party_type,customer', 'string', 'max:255'],
+            'party_phone' => ['nullable', 'string', 'max:30'],
+            'party_address' => ['nullable', 'string', 'max:2000'],
+            'party_cccd' => ['nullable', 'string', 'max:30'],
 
             'import_date' => [
                 'required',
@@ -145,6 +199,11 @@ class StockImportController extends Controller
                 Rule::in(['days', 'months']),
             ],
 
+            'items.*.extra_info' => ['nullable', 'array'],
+            'items.*.extra_info.is_used' => ['nullable', 'boolean'],
+            'items.*.extra_info.account' => ['nullable', 'string', 'max:255'],
+            'items.*.extra_info.password' => ['nullable', 'string', 'max:255'],
+
             'items.*.imeis' => [
                 'nullable',
                 'array',
@@ -166,6 +225,10 @@ class StockImportController extends Controller
                 'string',
                 'max:2000',
             ],
+
+            'items.*.imeis.*.extra_info.is_used' => ['nullable', 'boolean'],
+            'items.*.imeis.*.extra_info.account' => ['nullable', 'string', 'max:255'],
+            'items.*.imeis.*.extra_info.password' => ['nullable', 'string', 'max:255'],
 
             'items.*.imeis.*.info_image' => [
                 'nullable',
@@ -203,7 +266,21 @@ class StockImportController extends Controller
             ],
         ]);
 
-        $this->service->import($request->all());
+        if (($validated['party_type'] ?? 'supplier') === 'customer' && !empty($validated['customer_id'])) {
+            $customer = Customer::query()->findOrFail($validated['customer_id']);
+            $validated['party_name'] = $customer->full_name;
+            $validated['party_phone'] = $customer->phone;
+            $validated['party_address'] = $customer->address;
+            $validated['party_cccd'] = $customer->cccd;
+        } elseif (($validated['party_type'] ?? 'supplier') === 'supplier' && !empty($validated['supplier_id'])) {
+            $supplier = Supplier::query()->findOrFail($validated['supplier_id']);
+            $validated['party_name'] = $supplier->name;
+            $validated['party_phone'] = $supplier->phone;
+            $validated['party_address'] = $supplier->address;
+            $validated['party_cccd'] = null;
+        }
+
+        $this->service->import($validated);
 
         return back()->with(
             'success',
@@ -211,37 +288,41 @@ class StockImportController extends Controller
         );
     }
 
-    /** Parse a spreadsheet for the stock-import modal without saving it yet. */
-    public function parseImportFile(Request $request): JsonResponse
+    public function searchCustomers(Request $request): JsonResponse
     {
-        $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
-        ]);
-
-        $sheets = Excel::toArray([], $request->file('file'));
-        $sheet = $sheets[0] ?? [];
-
-        if (count($sheet) < 2) {
-            return response()->json([
-                'message' => 'File cần có dòng tiêu đề và ít nhất một dòng sản phẩm.',
-            ], 422);
+        $search = trim((string) $request->query('search', ''));
+        if (mb_strlen($search) < 2) {
+            return response()->json(['customers' => []]);
         }
 
-        $headers = array_map(fn ($value) => trim((string) $value), $sheet[0]);
-        $rows = collect(array_slice($sheet, 1))
-            ->filter(fn ($row) => collect($row)->contains(fn ($value) => trim((string) $value) !== ''))
-            ->map(function ($row) use ($headers): array {
-                $values = array_pad($row, count($headers), null);
-                return collect($headers)
-                    ->mapWithKeys(fn ($header, $index) => [$header => $values[$index] ?? null])
-                    ->all();
+        $customers = Customer::query()
+            ->where(function ($query) use ($search): void {
+                $query->where('full_name', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('cccd', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
             })
-            ->values();
+            ->orderBy('full_name')
+            ->limit(10)
+            ->get(['id', 'code', 'full_name', 'phone', 'cccd', 'address']);
 
-        return response()->json([
-            'headers' => $headers,
-            'rows' => $rows,
+        return response()->json(['customers' => $customers]);
+    }
+
+    public function contract(StockImport $stockImport)
+    {
+        $stockImport->load([
+            'supplier:id,name,phone,email,address,tax_code',
+            'customer:id,code,full_name,phone,cccd,address',
+            'user:id,name',
+            'items.product:id,name,sku,unit_id,conversion_unit_id',
+            'items.product.unit:id,name,short_name',
+            'items.product.conversionUnit:id,name,short_name',
+            'items.variant:id,product_id,sku,attributes',
+            'items.unit:id,name,short_name',
         ]);
+
+        return view('stock-imports.contract', ['import' => $stockImport]);
     }
 
     /**
@@ -253,6 +334,7 @@ class StockImportController extends Controller
     ): Response|JsonResponse {
         $stockImport->load([
             'supplier:id,name,phone,email,address',
+            'customer:id,code,full_name,phone,cccd,address',
             'user:id,name',
             'items.product:id,name,sku,image,unit_id,conversion_unit_id',
             'items.product.unit:id,name,short_name',

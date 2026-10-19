@@ -114,6 +114,7 @@ onBeforeUnmount(() => document.removeEventListener('click', hideSuggestionsOnOut
             <FloatingInput
                 v-model="keyword"
                 label="Tìm khách hàng theo tên, SĐT, mã hoặc CCCD"
+                placeholder-text="Khách lẻ"
                 id="repair_customer_search"
                 autocomplete="off"
                 @input="handleInput"

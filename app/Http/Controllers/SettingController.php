@@ -88,6 +88,7 @@ class SettingController extends Controller
             'bank_accounts.*.bank_name' => ['nullable', 'string', 'max:150'],
             'bank_accounts.*.bank_account' => ['required_with:bank_accounts.*.bank_bin', 'nullable', 'string', 'max:50'],
             'bank_accounts.*.bank_account_name' => ['nullable', 'string', 'max:150'],
+            'bank_accounts.*.transfer_content_mode' => ['nullable', 'in:default,invoice'],
             'bank_accounts.*.is_default' => ['sometimes', 'boolean'],
             'bank_transfer_content' => ['sometimes', 'nullable', 'string', 'max:255'],
             'bank_qr_theme' => ['sometimes', 'in:classic,emerald,indigo,blue,rose'],
@@ -119,6 +120,7 @@ class SettingController extends Controller
                     'bank_name' => trim((string) ($account['bank_name'] ?? '')),
                     'bank_account' => trim((string) $account['bank_account']),
                     'bank_account_name' => trim((string) ($account['bank_account_name'] ?? '')),
+                    'transfer_content_mode' => ($account['transfer_content_mode'] ?? 'default') === 'invoice' ? 'invoice' : 'default',
                     'is_default' => (bool) ($account['is_default'] ?? false),
                 ]);
 

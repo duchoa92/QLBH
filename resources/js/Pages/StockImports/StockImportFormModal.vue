@@ -7,7 +7,8 @@ import {
     onBeforeUnmount,
 } from 'vue'
 
-import { useForm } from '@inertiajs/vue3'
+import { useForm, usePage } from '@inertiajs/vue3'
+import { openModal } from '@/Stores/modal'
 
 import api from '@/Services/api'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
@@ -20,24 +21,20 @@ import { imageUrl } from '@/utils/imageUrl'
 
 import SupplierSection from './SupplierSection.vue'
 import StockImportProductModal from './StockImportProductModal.vue'
+import ProductForm from '@/Pages/Products/Form.vue'
 
 import {
-    Search,
     X,
-    FileUp,
     Package,
+    Plus,
     Pencil,
     Trash2,
     LoaderCircle,
-    CheckCircle2,
-    AlertCircle,
-    FileSpreadsheet,
-    Download,
-    ChevronDown,
-    ChevronUp,
+    Printer,
 } from 'lucide-vue-next'
 
 const props = defineProps({
+    initialPartyType: { type: String, default: 'supplier' },
     suppliers: {
         type: Array,
         default: () => [],
@@ -53,9 +50,16 @@ const emit = defineEmits([
     'close',
     'created',
 ])
+const page = usePage()
 
 const form = useForm({
+    party_type: props.initialPartyType,
     supplier_id: null,
+    customer_id: null,
+    party_name: '',
+    party_phone: '',
+    party_address: '',
+    party_cccd: '',
     import_date: new Date().toISOString().slice(0, 10),
 
     items: [],
@@ -72,10 +76,38 @@ const form = useForm({
 */
 
 const selectedSupplier = ref(null)
+const partyType = ref(props.initialPartyType)
+const selectedCustomer = ref(null)
+const customerDraft = ref({ full_name: 'Khách lẻ', phone: '', address: '', cccd: '' })
 
 const selectSupplier = (supplier) => {
     selectedSupplier.value = supplier
     form.supplier_id = supplier?.id ?? null
+}
+
+const setPartyType = (value) => {
+    if (!['supplier', 'customer'].includes(value)) return
+    partyType.value = value
+    form.party_type = value
+}
+
+const selectCustomer = (customer) => {
+    selectedCustomer.value = customer
+    form.customer_id = customer?.id ?? null
+    if (customer) {
+        customerDraft.value = {
+            full_name: customer.full_name || '', phone: customer.phone || '',
+            address: customer.address || '', cccd: customer.cccd || '',
+        }
+    }
+}
+
+const updateCustomerDraft = (draft) => {
+    customerDraft.value = draft
+    if (selectedCustomer.value && ['full_name', 'phone', 'address', 'cccd'].some(key => (draft[key] || '') !== (selectedCustomer.value[key] || ''))) {
+        selectedCustomer.value = null
+        form.customer_id = null
+    }
 }
 
 /*
@@ -89,17 +121,13 @@ const searchResults = ref([])
 const searching = ref(false)
 const showResults = ref(false)
 const productSearchRef = ref(null)
-const showFileTools = ref(false)
-const importFileInput = ref(null)
-const parsingFile = ref(false)
-const importedFileName = ref('')
-const fileImportMessage = ref('')
-const fileImportErrors = ref([])
+let productSearchRequest = 0
 
 let searchTimeout = null
 
 const searchProducts = async () => {
     const value = keyword.value.trim()
+    const requestId = ++productSearchRequest
 
     if (!value) {
         searchResults.value = []
@@ -120,28 +148,72 @@ const searchProducts = async () => {
             }
         )
 
-        searchResults.value =
-            res.data || []
+        if (requestId === productSearchRequest) searchResults.value = res.data || []
     } catch (error) {
         console.error(
             'Lỗi khi tải danh sách sản phẩm:',
             error
         )
 
-        searchResults.value = []
+        if (requestId === productSearchRequest) searchResults.value = []
     } finally {
-        searching.value = false
+        if (requestId === productSearchRequest) searching.value = false
     }
 }
 
 watch(keyword, () => {
     clearTimeout(searchTimeout)
+    productSearchRequest++
+    searching.value = false
 
     searchTimeout = setTimeout(
         searchProducts,
         300
     )
 })
+
+const createProductFromSearch = () => {
+    const initialName = keyword.value.trim()
+    if (!initialName) return
+
+    openModal(ProductForm, {
+        props: {
+            title: 'Tạo sản phẩm để nhập lại',
+            size: 'xl',
+            categories: props.categories,
+            initialName,
+        },
+        onUpdated: async (productId) => {
+            try {
+                let product = null
+                if (productId) {
+                    const { data } = await api.get(`/api/products/${productId}`)
+                    product = data
+                } else {
+                    // Flash ID is not present in some Inertia responses; recover the
+                    // just-created item from the same catalog search used by this form.
+                    const { data } = await api.get('/api/products', { params: { keyword: initialName } })
+                    const products = Array.isArray(data) ? data : (data?.data || [])
+                    const normalizedName = initialName.trim().toLocaleLowerCase()
+                    const exactMatches = products.filter(item => item.name?.trim().toLocaleLowerCase() === normalizedName)
+                    product = exactMatches.length === 1 ? exactMatches[0] : null
+                }
+
+                if (!product?.id) {
+                    window.alert('Sản phẩm đã tạo nhưng chưa xác định được bản ghi để thêm vào phiếu. Hãy tìm và chọn sản phẩm trong ô tìm kiếm.')
+                    return
+                }
+
+                showResults.value = false
+                selectProduct(product)
+                keyword.value = ''
+            } catch (error) {
+                console.error('Không tải được sản phẩm vừa tạo:', error)
+                window.alert('Đã tạo sản phẩm nhưng không thể mở thông tin nhập hàng. Hãy tìm lại sản phẩm trong ô tìm kiếm.')
+            }
+        },
+    })
+}
 
 const closeResultsOnOutsideClick = (event) => {
     if (showResults.value && !productSearchRef.value?.contains(event.target)) {
@@ -177,6 +249,39 @@ const formErrorMessages = computed(() =>
         .flat()
         .filter(Boolean)
 )
+
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
+})[character])
+
+const printPurchaseContract = () => {
+    const party = partyType.value === 'supplier'
+        ? { name: selectedSupplier.value?.name || '', phone: selectedSupplier.value?.phone || '', address: selectedSupplier.value?.address || '', cccd: '' }
+        : { name: customerDraft.value.full_name || '', phone: customerDraft.value.phone || '', address: customerDraft.value.address || '', cccd: customerDraft.value.cccd || '' }
+    if (!party.name?.trim()) {
+        window.alert('Vui lòng chọn nhà cung cấp hoặc nhập họ tên khách lẻ trước khi in hợp đồng.')
+        return
+    }
+    const rows = selectedItems.value.flatMap(item => {
+        if (item.type === 'simple') return [{ name: item.name, variant: '', quantity: item.quantity, unit: itemUnit(item), price: item.cost_price }]
+        if (item.type === 'variant') return (item.rows || []).map(row => ({ name: item.name, variant: variantLabel(row.variant), quantity: row.quantity, unit: itemUnit(item), price: row.cost_price }))
+        return (item.imeis || []).map(row => ({
+            name: item.name,
+            variant: item.type === 'imei_variant' ? variantLabel((item.available_variants || item.variants || []).find(variant => Number(variant.id) === Number(row.variant_id))) : '',
+            quantity: 1, unit: itemUnit(item), price: row.cost_price || item.cost_price,
+            imei: typeof row === 'string' ? row : row.imei,
+        }))
+    }).filter(row => Number(row.quantity || 0) > 0)
+    const totalAmount = rows.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.price || 0), 0)
+    const tableRows = rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.name)}${row.variant ? `<br><small>${escapeHtml(row.variant)}</small>` : ''}${row.imei ? `<br><small>IMEI/Serial: ${escapeHtml(row.imei)}</small>` : ''}</td><td>${escapeHtml(row.unit || '')}</td><td class="num">${Number(row.quantity || 0).toLocaleString('vi-VN')}</td><td class="num">${Number(row.price || 0).toLocaleString('vi-VN')} đ</td><td class="num">${(Number(row.price || 0) * Number(row.quantity || 0)).toLocaleString('vi-VN')} đ</td></tr>`).join('')
+    const printWindow = window.open('', '_blank', 'width=920,height=720')
+    if (!printWindow) {
+        window.alert('Trình duyệt đang chặn cửa sổ in. Hãy cho phép cửa sổ bật lên để in hợp đồng.')
+        return
+    }
+    printWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Hợp đồng mua bán hàng hóa</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font:13px/1.55 Arial,sans-serif;color:#111;margin:0}h1{text-align:center;font-size:20px;margin:0 0 4px;text-transform:uppercase}h2{text-align:center;font-size:14px;margin:0 0 20px;font-weight:400}p{margin:5px 0}.parties{margin:18px 0}.party{margin:10px 0}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{border:1px solid #555;padding:7px;vertical-align:top}th{background:#f3f4f6;text-align:center}.num{text-align:right;white-space:nowrap}.total{text-align:right;font-size:15px;font-weight:bold}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:55px;text-align:center}.signatures strong{display:block}.signatures span{font-size:11px;font-style:italic}@media print{button{display:none}}</style></head><body><h1>Hợp đồng mua bán hàng hóa</h1><h2>Số: ${escapeHtml(`IMP-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`)}</h2><p>Hôm nay, ngày ${escapeHtml(new Date().toLocaleDateString('vi-VN'))}, các bên gồm:</p><div class="parties"><div class="party"><strong>BÊN MUA (CỬA HÀNG):</strong> ${escapeHtml(page.props.auth?.user?.name || 'Cửa hàng')}<br>Đại diện: ${escapeHtml(page.props.auth?.user?.name || '')}</div><div class="party"><strong>BÊN BÁN:</strong> ${escapeHtml(party.name)}<br>Số điện thoại: ${escapeHtml(party.phone || '—')}<br>CCCD: ${escapeHtml(party.cccd || '—')}<br>Địa chỉ: ${escapeHtml(party.address || '—')}</div></div><p>Hai bên thống nhất việc mua bán hàng hóa với nội dung sau:</p><table><thead><tr><th>STT</th><th>Tên hàng / thông tin</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${tableRows}</tbody></table><p class="total">Tổng tiền hàng: ${totalAmount.toLocaleString('vi-VN')} đ</p><p>Giảm giá: ${Number(form.discount || 0).toLocaleString('vi-VN')} đ</p><p>Phí khác: ${Number(form.extra_fee || 0).toLocaleString('vi-VN')} đ</p><p class="total">Tổng thanh toán: ${Math.max(0, totalAmount - Number(form.discount || 0) + Number(form.extra_fee || 0)).toLocaleString('vi-VN')} đ</p><p>Ngày giao nhận hàng: ${escapeHtml(form.import_date)}.</p><p>Hai bên xác nhận hàng hóa và giá trị nêu trên, cùng ký tên dưới đây.</p><div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>${escapeHtml(party.name)}</div></div><script>window.onload=()=>window.print()<\/script></body></html>`)
+    printWindow.document.close()
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -299,6 +404,9 @@ const selectProduct = (product, { configure = true } = {}) => {
             sell_price_input:
                 sellPrice,
 
+            is_used: false,
+            extra_info: {},
+
             imeis: [],
 
             rows: [],
@@ -411,6 +519,14 @@ const formatPrice = formatNumber
 const itemUnit = (item) =>
     item.unit_name ||
     unitLabel(item.unit)
+
+const variantLabel = (variant) => {
+    if (!variant) return ''
+    const attributes = Object.values(variant.attributes || {})
+        .map(value => typeof value === 'object' ? (value.value || value.label || value.name || '') : value)
+        .filter(Boolean)
+    return attributes.join(' / ') || variant.sku || ''
+}
 
 const itemConversionHint = (item) => {
     const factor = Math.max(1, Number(item.conversion_factor || 1))
@@ -572,6 +688,13 @@ const totalQuantity =
         )
     )
 
+const itemTypeCounts = computed(() => ({
+    simple: selectedItems.value.filter(item => item.type === 'simple').length,
+    variant: selectedItems.value.filter(item => item.type === 'variant').length,
+    imei: selectedItems.value.filter(item => item.type === 'imei').length,
+    imeiVariant: selectedItems.value.filter(item => item.type === 'imei_variant').length,
+}))
+
 /*
 |--------------------------------------------------------------------------
 | TOTAL
@@ -637,173 +760,13 @@ const total = computed(() =>
 
 /*
 |--------------------------------------------------------------------------
-| IMPORT FILE
-|--------------------------------------------------------------------------
-*/
-
-const normalizeFileKey = (value) => String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/gi, 'd')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '')
-
-const fileValue = (row, keys) => {
-    const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeFileKey(key), value]))
-    for (const key of keys) {
-        const value = normalized[normalizeFileKey(key)]
-        if (value !== null && value !== undefined && String(value).trim() !== '') return value
-    }
-    return ''
-}
-
-const fileProductCache = new Map()
-
-const findProductForFileRow = async (row) => {
-    const code = String(fileValue(row, ['sku', 'ma_sku', 'ma_san_pham', 'barcode', 'ma_vach']) || '').trim()
-    const name = String(fileValue(row, ['product', 'product_name', 'ten_san_pham', 'ten_hang']) || '').trim()
-    const keyword = code || name
-    if (!keyword) return null
-
-    const cacheKey = keyword.toLowerCase()
-    if (!fileProductCache.has(cacheKey)) {
-        fileProductCache.set(cacheKey, api.get('/api/products', { params: { keyword } }).then(({ data }) => Array.isArray(data) ? data : []))
-    }
-    const products = await fileProductCache.get(cacheKey)
-    if (code) {
-        const exact = products.find(product => [product.sku, product.barcode].some(value => String(value || '').toLowerCase() === code.toLowerCase()))
-        if (exact) return exact
-    }
-    return products.find(product => product.name?.trim().toLowerCase() === name.toLowerCase()) || null
-}
-
-const importFile = () => importFileInput.value?.click()
-
-const processImportFile = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
-    parsingFile.value = true
-    importedFileName.value = file.name
-    fileImportMessage.value = ''
-    fileImportErrors.value = []
-    fileProductCache.clear()
-
-    try {
-        const payload = new FormData()
-        payload.append('file', file)
-        const { data } = await api.post('/stock-import/parse-file', payload)
-        let added = 0
-
-        for (const [index, row] of data.rows.entries()) {
-            try {
-                const product = await findProductForFileRow(row)
-                if (!product) {
-                    fileImportErrors.value.push(`Dòng ${index + 2}: Không khớp sản phẩm theo mã hoặc tên.`)
-                    continue
-                }
-
-                const type = product.manage_stock_by_serial || product.has_imei
-                    ? ((product.variants?.length || product.has_variants) ? 'imei_variant' : 'imei')
-                    : ((product.variants?.length || product.has_variants) ? 'variant' : 'simple')
-                const existed = selectedItems.value.some(item => Number(item.product_id) === Number(product.id) && item.type === type)
-                const target = selectProduct(product, { configure: false })
-                const quantity = Math.max(1, Math.round(Number(fileValue(row, ['quantity', 'qty', 'so_luong', 'sl']) || 1)))
-                const cost = Number(fileValue(row, ['cost_price', 'purchase_price', 'gia_nhap', 'don_gia_nhap']) || target.cost_price || 0)
-                const sell = Number(fileValue(row, ['sell_price', 'retail_price', 'gia_ban', 'don_gia_ban']) || target.sell_price || 0)
-                const supplierWarrantyValue = Number(fileValue(row, ['supplier_warranty_value', 'warranty_duration_value', 'warranty_months', 'bao_hanh_thang']) || 0) || null
-                const supplierWarrantyUnit = String(fileValue(row, ['supplier_warranty_unit', 'warranty_duration_unit', 'warranty_unit']) || 'months').toLowerCase().startsWith('ngay') ? 'days' : 'months'
-                const imei = String(fileValue(row, ['imei', 'serial', 'imei_serial']) || '').trim()
-                const variantText = String(fileValue(row, ['variant', 'variant_sku', 'bien_the', 'sku_bien_the', 'phan_loai']) || '').trim()
-
-                if (target.type === 'simple') {
-                    target.quantity = existed ? (Number(target.quantity) || 0) + quantity : quantity
-                    target.cost_price = cost
-                    target.sell_price = sell
-                    target.supplier_warranty_value = supplierWarrantyValue
-                    target.supplier_warranty_unit = supplierWarrantyUnit
-                } else if (target.type === 'variant' || target.type === 'imei_variant') {
-                    const variants = target.available_variants || target.variants || []
-                    const variant = variants.find(option => [option.sku, variantLabel(option), option.barcode].some(value => String(value || '').toLowerCase() === variantText.toLowerCase()))
-                    if (!variant) {
-                        fileImportErrors.value.push(`Dòng ${index + 2}: Không tìm thấy biến thể “${variantText || '(trống)'}” của ${product.name}.`)
-                        continue
-                    }
-                    if (target.type === 'variant') {
-                        target.supplier_warranty_value = supplierWarrantyValue
-                        target.supplier_warranty_unit = supplierWarrantyUnit
-                        const existing = target.rows.find(entry => Number(entry.variant_id) === Number(variant.id))
-                        if (existing) existing.quantity += quantity
-                        else target.rows.push({ variant_id: variant.id, variant, quantity, cost_price: cost, sell_price: sell })
-                    } else {
-                        const imeis = imei.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean)
-                        if (!imeis.length) {
-                            fileImportErrors.value.push(`Dòng ${index + 2}: Sản phẩm ${product.name} cần IMEI/Serial.`)
-                            continue
-                        }
-                        const warrantyValue = Number(fileValue(row, ['warranty_duration_value', 'warranty_months', 'bao_hanh_thang']) || 0) || null
-                        const warrantyUnit = String(fileValue(row, ['warranty_duration_unit', 'warranty_unit']) || 'months').toLowerCase().startsWith('ngay') ? 'days' : 'months'
-                        for (const value of imeis) {
-                            if (target.imeis.some(existing => String(typeof existing === 'string' ? existing : existing.imei).toLowerCase() === value.toLowerCase())) {
-                                fileImportErrors.value.push(`Dòng ${index + 2}: IMEI/Serial ${value} bị lặp.`)
-                                continue
-                            }
-                            target.imeis.push({
-                                imei: value, variant_id: variant.id, cost_price: cost, sell_price: sell,
-                                warranty_duration_value: warrantyValue,
-                                warranty_duration_unit: warrantyUnit,
-                            })
-                        }
-                    }
-                } else {
-                    const imeis = imei.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean)
-                    if (!imeis.length) {
-                        fileImportErrors.value.push(`Dòng ${index + 2}: Sản phẩm ${product.name} cần IMEI/Serial.`)
-                        continue
-                    }
-                    const months = Number(fileValue(row, ['warranty_duration_value', 'warranty_months', 'bao_hanh_thang']) || 0) || null
-                    const warrantyUnit = String(fileValue(row, ['warranty_duration_unit', 'warranty_unit']) || 'months').toLowerCase().startsWith('ngay') ? 'days' : 'months'
-                    for (const value of imeis) {
-                        if (!target.imeis.some(existing => String(typeof existing === 'string' ? existing : existing.imei).toLowerCase() === value.toLowerCase())) {
-                            target.imeis.push({ imei: value, cost_price: cost, sell_price: sell, warranty_duration_value: months, warranty_duration_unit: warrantyUnit })
-                        }
-                    }
-                }
-                added++
-            } catch (error) {
-                fileImportErrors.value.push(`Dòng ${index + 2}: ${error.response?.data?.message || 'Không thể đọc dữ liệu sản phẩm.'}`)
-            }
-        }
-
-        fileImportMessage.value = `Đã nạp ${added}/${data.rows.length} dòng vào phiếu nhập. Kiểm tra lại danh sách trước khi lưu.`
-    } catch (error) {
-        fileImportErrors.value = [error.response?.data?.message || 'Không đọc được file. Hãy dùng file Excel hoặc CSV có dòng tiêu đề.']
-    } finally {
-        parsingFile.value = false
-    }
-}
-
-const downloadImportTemplate = () => {
-    const content = '\uFEFFSKU,Tên sản phẩm,SKU biến thể,Số lượng,Giá nhập,Giá bán,IMEI/Serial,Số tháng bảo hành,Bảo hành đơn vị\r\nSP001,Sản phẩm thường,,10,100000,150000,,,\r\n'
-    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'mau-nhap-hang.csv'
-    link.click()
-    URL.revokeObjectURL(url)
-}
-
-/*
-|--------------------------------------------------------------------------
 | SAVE
 |--------------------------------------------------------------------------
 */
 
 const canConfirm = computed(
     () =>
-        selectedSupplier.value &&
+        (partyType.value === 'supplier' ? selectedSupplier.value : customerDraft.value.full_name?.trim()) &&
         selectedItems.value.some(item => itemQuantity(item) > 0)
 )
 
@@ -816,7 +779,10 @@ const importPrice = (item, value) => {
 }
 
 const confirm = () => {
-    if (!selectedSupplier.value) {
+    if (partyType.value === 'supplier' && !selectedSupplier.value) {
+        return
+    }
+    if (partyType.value === 'customer' && !customerDraft.value.full_name?.trim()) {
         return
     }
 
@@ -824,7 +790,13 @@ const confirm = () => {
         return
     }
 
-    form.supplier_id = selectedSupplier.value.id
+    form.party_type = partyType.value
+    form.supplier_id = partyType.value === 'supplier' ? selectedSupplier.value.id : null
+    form.customer_id = partyType.value === 'customer' ? selectedCustomer.value?.id ?? null : null
+    form.party_name = partyType.value === 'customer' ? customerDraft.value.full_name.trim() : selectedSupplier.value.name
+    form.party_phone = partyType.value === 'customer' ? customerDraft.value.phone : (selectedSupplier.value.phone || '')
+    form.party_address = partyType.value === 'customer' ? customerDraft.value.address : (selectedSupplier.value.address || '')
+    form.party_cccd = partyType.value === 'customer' ? customerDraft.value.cccd : ''
 
     form.items = selectedItems.value.flatMap(item => {
         // Sản phẩm thường
@@ -839,6 +811,9 @@ const confirm = () => {
                 sell_price: importPrice(item, item.sell_price),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
+                extra_info: partyType.value === 'customer' && item.is_used
+                    ? { is_used: true, account: item.extra_info?.account || null, password: item.extra_info?.password || null }
+                    : null,
                 imeis: [],
             }]
         }
@@ -857,6 +832,9 @@ const confirm = () => {
                     sell_price: importPrice(item, row.sell_price),
                     supplier_warranty_value: item.supplier_warranty_value || null,
                     supplier_warranty_unit: item.supplier_warranty_unit || 'months',
+                    extra_info: partyType.value === 'customer' && item.is_used
+                        ? { is_used: true, account: item.extra_info?.account || null, password: item.extra_info?.password || null }
+                        : null,
                     imeis: [],
                 }))
         }
@@ -913,8 +891,8 @@ const confirm = () => {
 
 <template>
     <BaseModal
-        title="Tạo phiếu nhập kho"
-        size="xl"
+        :title="partyType === 'customer' ? 'Nhập hàng từ khách lẻ' : 'Lên danh sách nhập hàng'"
+        size="2xl"
         body-class="p-3 sm:p-5"
         @close="emit('close')"
     >
@@ -923,9 +901,15 @@ const confirm = () => {
             <!-- NHÀ CUNG CẤP -->
             <SupplierSection
                 :supplier="selectedSupplier"
+                :party-type="partyType"
+                :party-type-locked="false"
+                :customer="selectedCustomer"
                 :date="form.import_date"
                 :error="form.errors.supplier_id"
                 @selected="selectSupplier"
+                @customer-selected="selectCustomer"
+                @customer-draft="updateCustomerDraft"
+                @update:party-type="setPartyType"
                 @update:date="form.import_date = $event"
             />
 
@@ -950,15 +934,14 @@ const confirm = () => {
                             v-model="keyword"
                             type="text"
                             label="Tìm tên sản phẩm, SKU hoặc barcode"
-                            class="pr-20"
+                            input-class="pr-20"
                             @keydown.enter.prevent="scanProduct"
                         />
 
-                        <div class="absolute right-12 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-slate-400">
+                        <div class="absolute right-11 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-slate-400">
                             <button v-if="keyword" type="button" class="p-1 hover:text-slate-600" aria-label="Xóa từ khóa tìm kiếm" @click="keyword = ''">
                                 <X class="h-4 w-4" />
                             </button>
-                            <Search class="h-5 w-5" />
                         </div>
                         <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { keyword = code; scanProduct() }" />
 
@@ -995,61 +978,16 @@ const confirm = () => {
                             </button>
 
                             <div v-if="!searching && !searchResults.length" class="px-4 py-6 text-center text-sm text-slate-400">
-                                Không tìm thấy sản phẩm
+                                <p>Chưa có sản phẩm phù hợp với “{{ keyword }}”.</p>
+                                <button
+                                    type="button"
+                                    class="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                                    @click="createProductFromSearch"
+                                >
+                                    <Plus class="h-4 w-4" /> Tạo sản phẩm mới
+                                </button>
                             </div>
                         </div>
-                    </div>
-                    <button
-                        type="button"
-                        class="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 sm:gap-2 sm:px-3 sm:text-xs"
-                        :aria-expanded="showFileTools"
-                        aria-controls="stock-import-file-tools"
-                        aria-label="Nhập từ file"
-                        title="Nhập từ file"
-                        @click="showFileTools = !showFileTools"
-                    >
-                        <FileSpreadsheet class="h-4 w-4 text-slate-500" />
-                        <span class="hidden sm:inline">Nhập từ file</span>
-                        <ChevronUp v-if="showFileTools" class="hidden h-3.5 w-3.5 sm:block" />
-                        <ChevronDown v-else class="hidden h-3.5 w-3.5 sm:block" />
-                    </button>
-                </div>
-
-                <div v-if="showFileTools" id="stock-import-file-tools" class="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-2 sm:grid-cols-2">
-                    <button
-                        type="button"
-                        @click="importFile"
-                        :disabled="parsingFile"
-                        class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70"
-                    >
-                        <LoaderCircle v-if="parsingFile" class="h-4 w-4 animate-spin" />
-                        <FileUp v-else class="h-4 w-4" />
-                        {{ parsingFile ? 'Đang đọc...' : 'Chọn file' }}
-                    </button>
-                    <button
-                        type="button"
-                        class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        @click="downloadImportTemplate"
-                    >
-                        <Download class="h-4 w-4" />
-                        Tải file mẫu CSV
-                    </button>
-                    <input ref="importFileInput" type="file" accept=".xlsx,.xls,.csv,.txt" class="hidden" @change="processImportFile" />
-                </div>
-
-                <div v-if="showFileTools && (fileImportMessage || fileImportErrors.length)" class="mt-3 rounded-xl border p-3 text-xs" :class="fileImportErrors.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'">
-                    <div class="flex items-start gap-2">
-                        <CheckCircle2 v-if="!fileImportErrors.length" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                        <AlertCircle v-else class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                        <div class="min-w-0 flex-1">
-                            <div v-if="importedFileName" class="font-semibold text-slate-800"><FileSpreadsheet class="mr-1 inline h-3.5 w-3.5" />{{ importedFileName }}</div>
-                            <p v-if="fileImportMessage" class="mt-0.5 text-slate-700">{{ fileImportMessage }}</p>
-                            <ul v-if="fileImportErrors.length" class="mt-1 max-h-24 list-inside list-disc space-y-0.5 overflow-auto text-amber-800">
-                                <li v-for="(error, index) in fileImportErrors.slice(0, 20)" :key="index">{{ error }}</li>
-                                <li v-if="fileImportErrors.length > 20">Còn {{ fileImportErrors.length - 20 }} dòng lỗi khác.</li>
-                            </ul>
-                        </div>
-                        <button type="button" class="rounded p-1 text-slate-400 hover:bg-white" aria-label="Đóng thông báo nhập file" @click="fileImportMessage = ''; fileImportErrors = []; importedFileName = ''"><X class="h-4 w-4" /></button>
                     </div>
                 </div>
 
@@ -1059,22 +997,19 @@ const confirm = () => {
             <div
                 class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
             >
-                <div
-                    class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3"
-                >
-                    <div
-                        class="flex items-center gap-2 font-semibold text-slate-900"
-                    >
-                        <Package class="h-4 w-4 text-blue-600" /> Danh sách hàng nhập
+                <div class="border-b border-slate-200 bg-white px-4 py-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 font-semibold text-slate-900">
+                            <Package class="h-4 w-4 text-blue-600" /> Danh sách hàng nhập
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{{ selectedItems.length }} mặt hàng</span>
+                        </div>
+                        <div class="text-sm font-semibold text-blue-700">{{ totalQuantity }} sản phẩm</div>
                     </div>
-
-                    <div
-                        class="text-sm font-semibold text-blue-600"
-                    >
-                        {{
-                            totalQuantity
-                        }}
-                        sản phẩm
+                    <div v-if="selectedItems.length" class="mt-2.5 flex flex-wrap gap-1.5">
+                        <span v-if="itemTypeCounts.simple" class="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">Hàng thường {{ itemTypeCounts.simple }}</span>
+                        <span v-if="itemTypeCounts.variant" class="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">Có biến thể {{ itemTypeCounts.variant }}</span>
+                        <span v-if="itemTypeCounts.imei" class="rounded-md bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-700">Có IMEI {{ itemTypeCounts.imei }}</span>
+                        <span v-if="itemTypeCounts.imeiVariant" class="rounded-md bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700">IMEI + biến thể {{ itemTypeCounts.imeiVariant }}</span>
                     </div>
                 </div>
 
@@ -1086,7 +1021,7 @@ const confirm = () => {
                 >
                     <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Package class="h-6 w-6" /></div>
                     <span class="font-semibold text-slate-600">Chưa có sản phẩm trong phiếu</span>
-                    <span class="mt-1 text-xs">Tìm và chọn sản phẩm ở phía trên hoặc nạp danh sách từ file.</span>
+                    <span class="mt-1 text-xs">Tìm sản phẩm đã có trong kho hoặc tạo mới nếu đây là mẫu máy chưa quản lý.</span>
                 </div>
 
                 <template v-else>
@@ -1443,6 +1378,15 @@ const confirm = () => {
                     class="grid grid-cols-2 gap-2 sm:ml-auto sm:flex"
                 >
                     <button
+                        v-if="partyType === 'customer'"
+                        type="button"
+                        @click="printPurchaseContract"
+                        :disabled="!selectedItems.some(item => itemQuantity(item) > 0) || (partyType === 'customer' ? !customerDraft.full_name?.trim() : !selectedSupplier)"
+                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Printer class="h-4 w-4" /> In hợp đồng
+                    </button>
+                    <button
                         type="button"
                         @click="
                             emit('close')
@@ -1460,7 +1404,7 @@ const confirm = () => {
                         "
                         class="min-h-11 rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        Lưu kho
+                        Tạo phiếu nhập
                     </button>
                 </div>
             </div>
@@ -1475,6 +1419,7 @@ const confirm = () => {
             :item="
                 productModal.item
             "
+            :customer-import="partyType === 'customer'"
             @close="
                 closeProductModal
             "

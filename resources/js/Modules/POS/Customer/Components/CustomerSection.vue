@@ -267,6 +267,7 @@ onBeforeUnmount(() => {
                 <div ref="customerSearchRef" class="relative">
                     <FloatingInput
                         v-model="keyword"
+                        placeholder-text="Khách lẻ"
                         @input="search"
                         @keydown="onKeyDown"
                         type="text"

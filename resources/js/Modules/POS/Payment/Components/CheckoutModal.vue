@@ -11,6 +11,7 @@ const props = defineProps({
     loading: Boolean,
     show: Boolean,
     grandTotal: Number,
+    invoiceCode: { type: String, default: '' },
     selectedCustomer: Object,
     cart: {
         type: Array,
@@ -124,9 +125,17 @@ const hasBankSettings = computed(() =>
     Boolean(selectedBankAccount.value?.bank_bin && selectedBankAccount.value?.bank_account)
 )
 
+const transferDescription = computed(() =>
+    selectedBankAccount.value?.transfer_content_mode === 'invoice'
+        ? props.invoiceCode
+        : ''
+)
+
 const submit = () => {
     emit('confirm', {
         payment_method: paymentMethod.value,
+        bank_account: paymentMethod.value === 'bank' ? selectedBankAccount.value?.bank_account ?? null : null,
+        invoice_code: props.invoiceCode,
         paid_amount: effectivePaidAmount.value,
         note: note.value,
         pay_old_debt: payOldDebt.value,
@@ -199,7 +208,7 @@ const submit = () => {
                         :bank-bin="String(selectedBankAccount.bank_bin)"
                         :bank-account="String(selectedBankAccount.bank_account)"
                         :amount="transferAmount"
-                        :description="bankSettings.bank_transfer_content || 'Thanh toan don hang'"
+                        :description="transferDescription"
                         :theme="bankSettings.bank_qr_theme || 'classic'"
                     />
 

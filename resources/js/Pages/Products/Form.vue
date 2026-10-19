@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, computed, watch, nextTick } 
 import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import SearchableReferenceSelect from '@/Components/UI/SearchableReferenceSelect.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
@@ -21,6 +22,7 @@ const props = defineProps({
         default: 'xl',
     },
     product: Object,
+    initialName: { type: String, default: '' },
     categories: Array,
     brands: Array,
     units: {
@@ -54,6 +56,12 @@ const dropdown = ref({
 const pendingValueDrafts = reactive({})
 const pendingAttributeDrafts = reactive({})
 const addingAttributeFor = reactive({})
+const existingWarrantyDays = Number(props.product?.warranty_days ?? 0)
+const initialWarrantyUnit = existingWarrantyDays > 0 && existingWarrantyDays % 30 === 0 ? 'month' : 'day'
+const warrantyUnitOptions = [
+    { value: 'month', label: 'Tháng' },
+    { value: 'day', label: 'Ngày' },
+]
 
 const variantDraftKey = (variantIndex) => String(form.variants[variantIndex]?.id ?? variantIndex)
 const valueDraftKey = (variantIndex, attr) => `${variantDraftKey(variantIndex)}:${attr.id ?? attr.name}`
@@ -119,7 +127,7 @@ onBeforeUnmount(() => {
 */
 const form = useForm({
     id: props.product?.id ?? null,
-    name: props.product?.name ?? '',
+    name: props.product?.name ?? props.initialName ?? '',
     category_id: props.product?.category_id ?? null,
     brand_id: props.product?.brand_id ?? null,
     unit_id: props.product?.unit_id ?? null,
@@ -129,6 +137,11 @@ const form = useForm({
     sku: props.product?.sku ?? '',
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
+    warranty_days: existingWarrantyDays,
+    warranty_value: existingWarrantyDays > 0
+        ? existingWarrantyDays / (initialWarrantyUnit === 'month' ? 30 : 1)
+        : '',
+    warranty_unit: initialWarrantyUnit,
     image: null,
     variants: props.product?.variants ?? [],
     manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
@@ -881,15 +894,23 @@ const submit = () => {
             payload.conversion_factor = null
         }
 
+        const warrantyValue = Math.max(0, Number(payload.warranty_value || 0))
+        payload.warranty_days = Math.min(3650, Math.round(
+            warrantyValue * (payload.warranty_unit === 'month' ? 30 : 1)
+        ))
+        delete payload.warranty_value
+        delete payload.warranty_unit
+
         return payload
     }
 
     const options = {
-        onSuccess: () => {
+        onSuccess: (page) => {
+            const createdProductId = page?.props?.flash?.createdProductId ?? null
             form.reset()
             form.clearErrors()
             clearVariantDrafts()
-            emit('updated')
+            emit('updated', createdProductId)
             closeModal()
         }
     }
@@ -929,8 +950,8 @@ const submit = () => {
     >
         <div class="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
             <!-- LEFT -->
-            <div class="space-y-3">
-                <label class="group flex aspect-square w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-emerald-400 hover:bg-emerald-50/40">
+            <div class="flex items-start gap-3 lg:block lg:space-y-3">
+                <label class="group flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-emerald-400 hover:bg-emerald-50/40 sm:h-28 sm:w-28 lg:aspect-square lg:h-auto lg:w-full">
 
                     <img
                         v-if="preview"
@@ -941,7 +962,7 @@ const submit = () => {
 
                     <span
                         v-else
-                        class="px-4 text-center text-sm font-semibold text-slate-400 group-hover:text-emerald-600"
+                        class="px-2 text-center text-xs font-semibold text-slate-400 group-hover:text-emerald-600 sm:px-4 sm:text-sm"
                     >
                         Bấm để thêm ảnh sản phẩm
                     </span>
@@ -954,7 +975,7 @@ const submit = () => {
                     />
                 </label>
 
-                <div class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                <div class="min-w-0 flex-1 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500 lg:flex-none">
                     Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm.
                 </div>
             </div>
@@ -973,29 +994,44 @@ const submit = () => {
                         />
                     </div>
 
-                    <SearchableReferenceSelect
+                    <FloatingSelect
                         v-model="form.category_id"
                         :options="categories"
                         label="Danh mục"
+                        name="product-category"
+                        option-label="name"
+                        option-value="id"
+                        placeholder-text="Chọn danh mục"
+                        create-label="Thêm danh mục"
                         :error="form.errors.category_id"
-                        @create="openReferenceCreate('category', $event)"
+                        @create="openReferenceCreate('category')"
                     />
 
-                    <SearchableReferenceSelect
+                    <FloatingSelect
                         v-model="form.brand_id"
                         :options="filteredBrands"
                         label="Thương hiệu"
+                        name="product-brand"
+                        option-label="name"
+                        option-value="id"
+                        placeholder-text="Chọn thương hiệu"
+                        create-label="Thêm thương hiệu"
                         :disabled="!form.category_id"
                         :error="form.errors.brand_id"
-                        @create="openReferenceCreate('brand', $event)"
+                        @create="openReferenceCreate('brand')"
                     />
 
-                    <SearchableReferenceSelect
+                    <FloatingSelect
                         v-model="form.unit_id"
                         :options="unitOptions"
                         label="Đơn vị bán và tồn kho"
+                        name="product-unit"
+                        option-label="name"
+                        option-value="id"
+                        placeholder-text="Chọn đơn vị"
+                        create-label="Thêm đơn vị"
                         :error="form.errors.unit_id"
-                        @create="openReferenceCreate('unit', $event)"
+                        @create="openReferenceCreate('unit')"
                     />
 
                     <!-- SKU + IMEI + BIẾN THỂ -->
@@ -1044,6 +1080,33 @@ const submit = () => {
                                 />
                                 Nhập theo cuộn / thùng
                             </label>
+
+                            <div class="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 p-2 sm:basis-auto sm:flex-nowrap">
+                                <span class="shrink-0 text-xs font-semibold text-emerald-900">Bảo hành cho khách</span>
+                                <div class="grid min-w-0 flex-1 grid-cols-[minmax(76px,1fr)_minmax(95px,0.8fr)] gap-2 sm:max-w-xs">
+                                    <FloatingInput
+                                        v-model="form.warranty_value"
+                                        type="number"
+                                        min="0"
+                                        :max="form.warranty_unit === 'month' ? 121 : 3650"
+                                        step="1"
+                                        label="Thời hạn"
+                                        input-class="!py-2 !text-xs"
+                                    />
+                                    <FloatingSelect
+                                        v-model="form.warranty_unit"
+                                        :options="warrantyUnitOptions"
+                                        label="Đơn vị"
+                                        name="product-warranty-unit"
+                                        placeholder-text="Đơn vị"
+                                    />
+                                </div>
+                                <span v-if="Number(form.warranty_value || 0) > 0" class="w-full text-[10px] text-slate-500 sm:w-auto">
+                                    Tương đương {{ Math.min(3650, Number(form.warranty_value) * (form.warranty_unit === 'month' ? 30 : 1)) }} ngày
+                                </span>
+                                <span v-else class="w-full text-[10px] text-slate-500 sm:w-auto">Để trống nếu không bảo hành</span>
+                                <span v-if="form.errors.warranty_days" class="w-full text-[11px] text-red-600">{{ form.errors.warranty_days }}</span>
+                            </div>
                             </div>
 
                             <div

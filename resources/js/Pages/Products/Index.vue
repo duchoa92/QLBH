@@ -1,8 +1,9 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
+import ProductDetailModal from './ProductDetailModal.vue'
 import { ArrowDownUp, ArrowUpDown, FileDown, FileInput, FileOutput, FilePlus, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
@@ -43,10 +44,10 @@ const brand_id = ref(props.filters?.brand_id || '')
 const per_page = ref(props.filters?.per_page || 10) 
 
 let timeout = null
+let isSyncingFilters = false
 
 watch([search, category_id, brand_id], () => {
-    
-    if (isChangingPerPage.value) {
+    if (isSyncingFilters || isChangingPerPage.value) {
         isChangingPerPage.value = false
         return
     }
@@ -68,6 +69,16 @@ watch([search, category_id, brand_id], () => {
         })
     }, 300)
 })
+
+watch(() => props.filters, (filters) => {
+    if (!filters) return
+    isSyncingFilters = true
+    search.value = filters.search || ''
+    category_id.value = filters.category_id || ''
+    brand_id.value = filters.brand_id || ''
+    if (filters.per_page) per_page.value = Number(filters.per_page)
+    nextTick(() => { isSyncingFilters = false })
+}, { deep: true })
 
 
 
@@ -136,6 +147,12 @@ const openEdit = (item) => {
             loadData()
             loadTrashCount()
         }
+    })
+}
+
+const openProductDetail = (item) => {
+    openModal(ProductDetailModal, {
+        props: { product: item },
     })
 }
 
@@ -328,16 +345,21 @@ const productUnitName = (row) =>
 
 const productStockDisplay = (row) => {
     const factor = Math.max(1, Number(row.conversion_factor || 1))
+    const quantity = row.manage_stock_by_serial || row.imeis?.length
+        ? (row.imeis || []).filter(imei => imei.status === 'in_stock').length
+        : row.variants?.length
+            ? row.variants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
+            : Number(row.stock || 0)
 
     if (!row.has_unit_conversion || factor === 1) {
-        return `${Number(row.stock || 0)} ${productUnitName(row)}`
+        return `${quantity} ${productUnitName(row)}`
     }
 
     const importUnit = row.conversion_unit?.short_name
         || row.conversion_unit?.name
         || 'đơn vị nhập'
 
-    return `${Number(row.stock || 0)} ${productUnitName(row)} (nhập: 1 ${importUnit} = ${factor} ${productUnitName(row)})`
+    return `${quantity} ${productUnitName(row)} (nhập: 1 ${importUnit} = ${factor} ${productUnitName(row)})`
 }
 
 </script>
@@ -372,14 +394,14 @@ const productStockDisplay = (row) => {
     </div>
 
    <!-- FILTER -->
-    <div class="flex gap-3 my-5">
+    <div class="grid grid-cols-1 gap-3 my-5 lg:grid-cols-[minmax(260px,1.2fr)_minmax(200px,1fr)_minmax(200px,1fr)]">
 
         <!-- SEARCH -->
-        <div class="relative w-80">
+        <div class="relative min-w-0">
             <FloatingInput
                 v-model="search"
                 label="Tìm tên, SKU hoặc barcode..."
-                class="pr-12"
+                input-class="pr-12"
             />
             <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => search = code" />
         </div>
@@ -388,26 +410,20 @@ const productStockDisplay = (row) => {
         <FloatingSelect
             v-model="category_id"
             label="Danh mục"
-            :options="[
-                { id: '', name: 'Tất cả' },
-                ...categories
-            ]"
+            :options="categories"
             option-label="name"
             option-value="id"
-            class="w-64"
+            placeholder-text="Tất cả danh mục"
         />
 
         <!-- BRAND -->
         <FloatingSelect
             v-model="brand_id"
             label="Thương hiệu"
-            :options="[
-                { id: '', name: 'Tất cả' },
-                ...brands.filter(b => !category_id || b.category_id == category_id)
-            ]"
+            :options="brands"
             option-label="name"
             option-value="id"
-            class="w-64"
+            placeholder-text="Tất cả thương hiệu"
         />
 
     </div>
@@ -446,8 +462,10 @@ const productStockDisplay = (row) => {
         @changePerPage="changePerPage" 
         :selectedIds="selectedIds"
         selectable
+        row-clickable
         @toggleOne="toggleOne"
         @toggleAll="toggleAll"
+        @row-click="openProductDetail"
     >
         <template #row="{ row }">
 
@@ -498,7 +516,7 @@ const productStockDisplay = (row) => {
             </td>
 
             <!-- ACTION -->
-            <td class="text-center p-1">
+            <td class="text-center p-1" @click.stop>
                 <div class="flex">
                     <Tooltip text="In tem" position="top">
                         <button @click="printOne(row.id)"  class="p-1 hover:bg-gray-200 rounded">

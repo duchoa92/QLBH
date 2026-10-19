@@ -15,6 +15,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { useReferenceData } from '@/Stores/referenceData'
+import CatalogTabs from '@/Components/CatalogTabs.vue'
 
 
 
@@ -190,10 +191,11 @@ const sort = ({ field, order }) => {
 <template>
 <div class="space-y-5">
     <PageHeader
-        title="Thương hiệu"
+        title="Danh mục & Thương hiệu"
         description="Quản lý thương hiệu và liên kết danh mục sản phẩm."
-    >
-        <template #actions>
+    />
+
+    <CatalogTabs>
             <ActionButton @click="openCreate">
                 <FilePlus :size="16" />
                 Thêm
@@ -206,8 +208,7 @@ const sort = ({ field, order }) => {
                 <Trash2 :size="16" />
                 Thùng rác ({{ trashCount }})
             </ActionButton>
-        </template>
-    </PageHeader>
+    </CatalogTabs>
 
     <DataPanel>
         <template #header>
@@ -221,6 +222,7 @@ const sort = ({ field, order }) => {
                     v-model="category_id"
                     name="category_id"
                     label="Danh mục"
+                    :show-placeholder="false"
                     :options="[
                         { value: '', label: 'Tất cả' },
                         ...categories.map(c => ({ value: c.id, label: c.name }))

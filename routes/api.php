@@ -36,9 +36,9 @@ Route::middleware(['web', 'auth'])->group(function ()
     )->middleware('permission:products.view|pos.access');
 
     // Lấy danh sách sản phẩm
-    Route::get('/products', [ProductController::class, 'index'])->middleware('permission:products.view|pos.access');
+    Route::get('/products', [ProductController::class, 'index'])->middleware('permission:products.view|pos.access|stock_imports.create');
 
-    Route::get('/products/{id}', [ProductController::class, 'getProductApi'])->middleware('permission:products.view|pos.access');
+    Route::get('/products/{id}', [ProductController::class, 'getProductApi'])->middleware('permission:products.view|pos.access|stock_imports.create');
 
     // Danh sách IMEI còn trong kho của 1 sản phẩm (POS chọn IMEI)
     Route::get('/products/{id}/imeis', [ProductController::class, 'imeis'])->middleware('permission:products.view|pos.access');
@@ -47,7 +47,7 @@ Route::middleware(['web', 'auth'])->group(function ()
     // Tìm kiếm khách hàng
     Route::get('/customers/search', [CustomerController::class, 'search'])->middleware('permission:customers.view|pos.access|repairs.view');
     // Thêm khách hàng mới
-    Route::post('/customers', [CustomerController::class, 'store'])->middleware('permission:customers.create|pos.access');
+    Route::post('/customers', [CustomerController::class, 'store'])->middleware('permission:customers.create|pos.access|stock_imports.create');
 
     // Lấy danh sách danh mục
     Route::get('/categories', [CategoryController::class, 'index'])->middleware('permission:categories.view|products.view|pos.access');

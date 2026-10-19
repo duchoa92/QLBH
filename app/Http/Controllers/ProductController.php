@@ -132,9 +132,9 @@ class ProductController extends Controller
     // Lưu sản phẩm mới
     public function store(StoreProductRequest $request)
     {
-        $this->service->create($request->validated());
+        $product = $this->service->create($request->validated());
 
-        return back()->with('success', 'Thêm sản phẩm thành công');
+        return back()->with('success', 'Thêm sản phẩm thành công')->with('createdProductId', $product->id);
     }
 
     // Cập nhật sản phẩm

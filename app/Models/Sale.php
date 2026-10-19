@@ -21,6 +21,7 @@ class Sale extends Model
         'paid_amount',
         'change_amount',
         'payment_method',
+        'bank_account',
         'status',
         'cancel_reason', 
         'cancelled_at',

@@ -75,7 +75,7 @@ const handleInput = () => {
         <input
             v-model="keyword"
             @input="handleInput"
-            placeholder="Tìm SĐT / Tên khách"
+            placeholder="Khách lẻ · tìm SĐT / tên khách"
             class="w-full border p-2 rounded"
         />
 

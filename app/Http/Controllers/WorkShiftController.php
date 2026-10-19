@@ -28,7 +28,17 @@ class WorkShiftController extends Controller
             ->latest('opened_at')
             ->first();
 
-        return response()->json(['shift' => $shift ? $this->summary($shift) : null]);
+        return response()->json([
+            'shift' => $shift ? $this->summary($shift) : null,
+            'prompt_dismissed' => (bool) request()->session()->get('work_shift_auto_open_dismissed', false),
+        ]);
+    }
+
+    public function dismissPrompt(Request $request): JsonResponse
+    {
+        $request->session()->put('work_shift_auto_open_dismissed', true);
+
+        return response()->json(['dismissed' => true]);
     }
 
     public function history(): JsonResponse
@@ -56,11 +66,14 @@ class WorkShiftController extends Controller
         $data = $request->validate([
             'denominations' => ['required', 'array'],
             'denominations.*' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'cash_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_balances' => ['nullable', 'array', 'max:10'],
             'bank_balances.*' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
         $this->validateDenominations($data['denominations']);
-        $openingAmount = $this->totalFromDenominations($data['denominations']);
+        $openingAmount = isset($data['cash_amount'])
+            ? (float) $data['cash_amount']
+            : $this->totalFromDenominations($data['denominations']);
 
         $shift = DB::transaction(function () use ($data, $openingAmount): WorkShift {
             WorkShift::query()
@@ -82,6 +95,8 @@ class WorkShiftController extends Controller
             ]);
         });
 
+        $request->session()->put('work_shift_auto_open_dismissed', true);
+
         return response()->json(['shift' => $this->summary($shift)], 201);
     }
 
@@ -90,11 +105,14 @@ class WorkShiftController extends Controller
         $data = $request->validate([
             'denominations' => ['required', 'array'],
             'denominations.*' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'cash_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_balances' => ['nullable', 'array', 'max:10'],
             'bank_balances.*' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
         $this->validateDenominations($data['denominations']);
-        $closingAmount = $this->totalFromDenominations($data['denominations']);
+        $closingAmount = isset($data['cash_amount'])
+            ? (float) $data['cash_amount']
+            : $this->totalFromDenominations($data['denominations']);
 
         $shift = DB::transaction(function () use ($data, $closingAmount): WorkShift {
             $shift = WorkShift::query()
@@ -123,12 +141,19 @@ class WorkShiftController extends Controller
             return $shift->refresh();
         });
 
+        $request->session()->put('work_shift_auto_open_dismissed', true);
+
         return response()->json(['summary' => $this->summary($shift)]);
     }
 
     private function summary(WorkShift $shift): array
     {
         $sales = $shift->sales()->where('status', '!=', 'cancelled');
+        $bankCollection = $this->bankCollectionFor($shift);
+        $expectedBankBalances = $shift->opening_bank_balances ?? [];
+        foreach ($bankCollection['by_account'] as $key => $amount) {
+            $expectedBankBalances[$key] = (float) ($expectedBankBalances[$key] ?? 0) + $amount;
+        }
         $cashCollected = $shift->cash_collected === null
             ? (float) (clone $sales)->where('payment_method', 'cash')->selectRaw('COALESCE(SUM(paid_amount - change_amount), 0) as total')->value('total')
             : (float) $shift->cash_collected;
@@ -145,6 +170,9 @@ class WorkShiftController extends Controller
             'opening_amount' => (float) $shift->opening_amount,
             'opening_denominations' => $shift->opening_denominations,
             'opening_bank_balances' => $shift->opening_bank_balances,
+            'bank_collected' => $bankCollection['by_account'],
+            'expected_bank_balances' => $expectedBankBalances,
+            'bank_sales' => $bankCollection['sales'],
             'cash_collected' => $cashCollected,
             'customer_debt_amount' => $customerDebt,
             'expected_cash' => $expectedCash,
@@ -156,6 +184,59 @@ class WorkShiftController extends Controller
             'closed_at' => $shift->closed_at?->format('d/m/Y H:i'),
             'sale_count' => (int) (clone $sales)->count(),
         ];
+    }
+
+    private function bankCollectionFor(WorkShift $shift): array
+    {
+        $accounts = $this->configuredBankAccounts();
+        $byAccount = [];
+        foreach ($accounts as $account) {
+            $byAccount[$account['key']] = 0.0;
+        }
+
+        $bankSales = $shift->sales()
+            ->where('status', '!=', 'cancelled')
+            ->where('payment_method', 'bank')
+            ->orderBy('created_at')
+            ->get(['id', 'code', 'bank_account', 'paid_amount', 'created_at']);
+
+        $sales = $bankSales->map(function ($sale) use ($accounts, &$byAccount): array {
+            $account = collect($accounts)->first(fn (array $item): bool => (string) ($item['bank_account'] ?? '') === (string) ($sale->bank_account ?? ''));
+            $key = $account['key'] ?? ($sale->bank_account ?: 'unassigned');
+            $amount = (float) $sale->paid_amount;
+            $byAccount[$key] = (float) ($byAccount[$key] ?? 0) + $amount;
+
+            return [
+                'id' => $sale->id,
+                'code' => $sale->code,
+                'bank_account' => $sale->bank_account,
+                'bank_name' => $account['bank_name'] ?? null,
+                'amount' => $amount,
+                'created_at' => $sale->created_at?->format('d/m/Y H:i'),
+            ];
+        })->values()->all();
+
+        return ['by_account' => $byAccount, 'sales' => $sales];
+    }
+
+    private function configuredBankAccounts(): array
+    {
+        $accounts = json_decode((string) setting('bank_accounts', '[]'), true) ?: [];
+        $accounts = array_values(array_filter($accounts, fn ($account) => filled($account['bank_account'] ?? null)));
+
+        if ($accounts === [] && filled(setting('bank_account', ''))) {
+            $accounts[] = [
+                'id' => 'default',
+                'bank_name' => 'Ngân hàng',
+                'bank_account' => setting('bank_account', ''),
+            ];
+        }
+
+        return array_map(function (array $account): array {
+            $account['key'] = (string) (($account['id'] ?? null) ?: $account['bank_account']);
+
+            return $account;
+        }, $accounts);
     }
 
     private function validateDenominations(array $denominations): void
