@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\Sale;
+use App\Models\WorkShift;
 use App\Services\PosCheckoutService;
 use App\Models\User;
 use App\Notifications\SystemNotification;
@@ -75,6 +76,16 @@ class PosController extends Controller
         PosCheckoutService $service,
     )
     {
+        $workShift = WorkShift::query()
+            ->where('user_id', auth()->id())
+            ->whereNull('closed_at')
+            ->latest('opened_at')
+            ->first();
+
+        if (! $workShift) {
+            return response()->json(['success' => false, 'message' => 'Vui lòng mở ca làm trước khi bán hàng.'], 422);
+        }
+
         // 1. THÊM VALIDATE: Kiểm tra dữ liệu đầu vào chặt chẽ
         $request->validate([
 
@@ -92,7 +103,19 @@ class PosController extends Controller
 
             'items.*.warranty_days' => 'nullable|integer|min:0|max:3650',
 
+            'items.*.warranty_value' => 'nullable|integer|min:0|max:3650',
+
+            'items.*.warranty_unit' => 'nullable|in:day,month',
+
             'items.*.gift_product_id' => 'nullable|integer',
+
+            'items.*.gifts' => 'nullable|array',
+
+            'items.*.gifts.*.id' => 'required|integer|exists:products,id',
+
+            'items.*.gifts.*.quantity' => 'nullable|integer|min:1',
+
+            'items.*.gifts.*.imei_id' => 'nullable|integer|exists:product_imeis,id',
 
             'items.*.unit_id' => 'nullable|integer|exists:units,id',
 
@@ -116,6 +139,8 @@ class PosController extends Controller
                 payOldDebt: (bool) $request->pay_old_debt,
                 userId: auth()->id(),
             );
+
+            $sale->update(['work_shift_id' => $workShift->id]);
 
             $sale->load([
                 'items.product.conversionUnit',
@@ -152,7 +177,9 @@ class PosController extends Controller
                             'unit_price' => $item->unit_price,
                             'subtotal' => $item->subtotal,
                             'imei' => $item->productImei?->imei,
-                            'warranty_days' => $item->productImei?->customer_warranty_days,
+                            'warranty_days' => $item->warranty_days,
+                            'warranty_value' => $item->warranty_value,
+                            'warranty_unit' => $item->warranty_unit,
                             'warranty_expires_at' => $item->productImei?->customer_warranty_expires_at,
                             'variant' => $item->variant
                                 ? [

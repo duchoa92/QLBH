@@ -1,12 +1,15 @@
 <script setup>
 
+import { computed } from 'vue'
+
 import {
     PenSquare,
     Trash2,
     Gift,
+    ShieldCheck,
 } from 'lucide-vue-next'
 
-defineProps({
+const props = defineProps({
 
     item: {
         type: Object,
@@ -14,9 +17,24 @@ defineProps({
     },
 })
 
+const noteCount = computed(() => {
+    return props.item.note?.trim() ? 1 : 0
+})
+
+const giftCount = computed(() => {
+    return (props.item.gifts || []).reduce((total, gift) => {
+        return total + Math.max(1, Number(gift.quantity ?? 1))
+    }, 0)
+})
+
+const warrantyCount = computed(() => {
+    return Number(props.item.customer_warranty_days ?? 0) > 0 ? 1 : 0
+})
+
 const emit = defineEmits([
     'toggle-note',
     'toggle-promotion',
+    'toggle-warranty',
     'remove',
 ])
 
@@ -86,38 +104,73 @@ const emit = defineEmits([
                 >
 
                     <button
+                        type="button"
                         @click="
                             emit(
                                 'toggle-note'
                             )
                         "
-                        class="
-                            text-gray-400
-                            hover:text-blue-600
-                        "
+                        class="relative transition"
+                        :class="noteCount > 0
+                            ? 'text-blue-600 hover:text-blue-700'
+                            : 'text-gray-400 hover:text-blue-600'"
+                        title="Ghi chú"
                     >
                         <PenSquare
                             class="w-4 h-4"
                         />
+                        <span
+                            v-if="noteCount"
+                            class="absolute -right-2 -top-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-600 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+                        >
+                            {{ noteCount }}
+                        </span>
                     </button>
 
                     <button
+                        type="button"
                         @click="
                             emit(
                                 'toggle-promotion'
                             )
                         "
-                        class="
-                            text-gray-400
-                            hover:text-amber-600
-                        "
+                        class="relative transition"
+                        :class="giftCount > 0
+                            ? 'text-amber-600 hover:text-amber-700'
+                            : 'text-gray-400 hover:text-amber-600'"
+                        title="Quà tặng và giảm giá"
                     >
                         <Gift
                             class="w-4 h-4"
                         />
+                        <span
+                            v-if="giftCount"
+                            class="absolute -right-2 -top-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+                        >
+                            {{ giftCount }}
+                        </span>
                     </button>
 
                     <button
+                        type="button"
+                        @click="emit('toggle-warranty')"
+                        class="relative transition"
+                        :class="warrantyCount > 0
+                            ? 'text-emerald-600 hover:text-emerald-700'
+                            : 'text-gray-400 hover:text-emerald-600'"
+                        title="Bảo hành"
+                    >
+                        <ShieldCheck class="w-4 h-4" />
+                        <span
+                            v-if="warrantyCount"
+                            class="absolute -right-2 -top-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-emerald-600 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+                        >
+                            {{ warrantyCount }}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
                         @click="
                             emit(
                                 'remove'
@@ -127,6 +180,7 @@ const emit = defineEmits([
                             text-red-400
                             hover:text-red-600
                         "
+                        title="Xóa sản phẩm"
                     >
                         <Trash2
                             class="w-4 h-4"

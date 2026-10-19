@@ -505,6 +505,15 @@ export function useCart() {
                 customer_warranty_days:
                     Number(product.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
 
+                customer_warranty_value:
+                    null,
+
+                customer_warranty_unit:
+                    null,
+
+                showWarranty:
+                    false,
+
                 price:
                     Number(
                         product.sell_price
@@ -578,7 +587,16 @@ export function useCart() {
                     Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
                 customer_warranty_days:
-                    Number(product.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
+                    0,
+
+                customer_warranty_value:
+                    null,
+
+                customer_warranty_unit:
+                    null,
+
+                showWarranty:
+                    false,
 
                 price:
                     Number(
@@ -646,7 +664,16 @@ export function useCart() {
                 Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
             customer_warranty_days:
-                Number(product.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
+                0,
+
+            customer_warranty_value:
+                null,
+
+            customer_warranty_unit:
+                null,
+
+            showWarranty:
+                false,
 
             price:
                 Number(

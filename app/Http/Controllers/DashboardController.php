@@ -103,6 +103,8 @@ class DashboardController extends Controller
                 'debtorCount' => $debtorCount,
             ],
 
+            'expenseReminders' => ExpenseController::dashboardReminders(),
+
             'topDebtors' => $topDebtors,
 
             'recentOrders' => $this->recentOrders(),

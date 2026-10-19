@@ -25,6 +25,8 @@ import {
     UserCog,
     SearchCheck,
     HandCoins,
+    Receipt,
+    History,
 } from 'lucide-vue-next'
 
 const emit = defineEmits(['toggle', 'navigate'])
@@ -83,6 +85,13 @@ const menuGroups = [
                 href: '/pos',
                 paths: ['/pos'],
                 badge: 'Nhanh',
+                permission: 'pos.access',
+            },
+            {
+                label: 'Lịch sử kiểm kê',
+                icon: History,
+                href: '/work-shifts',
+                paths: ['/work-shifts'],
                 permission: 'pos.access',
             },
             {
@@ -183,6 +192,13 @@ const menuGroups = [
         title: 'Báo cáo & Tài chính',
         icon: BarChart3,
         items: [
+            {
+                label: 'Chi phí cửa hàng',
+                icon: Receipt,
+                href: '/expenses',
+                paths: ['/expenses'],
+                permission: 'expenses.view',
+            },
             {
                 label: 'Báo cáo bán hàng',
                 icon: BarChart3,

@@ -33,13 +33,7 @@ export function useCartGift() {
                             item.gift_keyword
                         )
 
-                    item.gift_results =
-                        results
-                            .filter(
-                                product =>
-                                    product.product_type !== 'imei'
-                            )
-                            .slice(0, 10)
+                    item.gift_results = results.slice(0, 10)
 
                 } catch (error) {
 
@@ -53,7 +47,7 @@ export function useCartGift() {
         )
     }
 
-    const selectGiftProduct = (
+    const selectGiftProduct = async (
         item,
         product
     ) => {
@@ -63,9 +57,41 @@ export function useCartGift() {
             item.gifts = []
         }
 
+        const requiresImei =
+            product.product_type === 'imei'
+            || Boolean(product.manage_stock_by_serial)
+
+        if (requiresImei) {
+            try {
+                const imeiOptions = await productService.imeis(product.id)
+
+                if (!imeiOptions.length) {
+                    return
+                }
+
+                item.gifts.push({
+                    key: `gift-imei-${product.id}-${Date.now()}-${Math.random()}`,
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    quantity: 1,
+                    requires_imei: true,
+                    imei_id: imeiOptions.length === 1 ? imeiOptions[0].id : null,
+                    imei_options: imeiOptions,
+                })
+            } catch (error) {
+                console.error(error)
+            }
+
+            item.gift_keyword = ''
+            item.gift_results = []
+
+            return
+        }
+
         const gift =
             item.gifts.find(
-                g => g.id === product.id
+                g => g.id === product.id && !g.requires_imei
             )
 
         if (gift) {
@@ -75,7 +101,7 @@ export function useCartGift() {
         else {
 
             item.gifts.push({
-
+                key: `gift-${product.id}`,
                 id: product.id,
 
                 name: product.name,
@@ -98,7 +124,8 @@ export function useCartGift() {
 
         const gift =
             item.gifts.find(
-                g => g.id === giftId
+                g => g.key === giftId
+                    || (!g.key && g.id === giftId)
             )
 
         if (!gift) {
@@ -114,7 +141,8 @@ export function useCartGift() {
 
             item.gifts =
                 item.gifts.filter(
-                    g => g.id !== giftId
+                    g => g.key !== giftId
+                        && (g.key || g.id) !== giftId
                 )
         }
     }

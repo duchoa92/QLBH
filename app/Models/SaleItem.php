@@ -39,6 +39,12 @@ class SaleItem extends Model
         'discount_type',
 
         'discount_value',
+
+        'warranty_days',
+
+        'warranty_value',
+
+        'warranty_unit',
     ];
 
     protected $casts = [
@@ -48,6 +54,8 @@ class SaleItem extends Model
         'unit_price' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'discount_value' => 'decimal:2',
+        'warranty_days' => 'integer',
+        'warranty_value' => 'integer',
     ];
 
     /*

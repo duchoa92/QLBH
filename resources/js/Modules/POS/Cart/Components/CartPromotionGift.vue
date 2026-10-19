@@ -2,9 +2,6 @@
 
 import FloatingInput
 from '@/Components/UI/FloatingInput.vue'
-import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
-import { toast } from 'vue-sonner'
-import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 const props = defineProps({
 
@@ -14,20 +11,6 @@ const props = defineProps({
 
     selectGiftProduct: Function,
 })
-
-const scanGiftProduct = async (item) => {
-    const code = String(item.gift_keyword || '').trim()
-    if (!code) return
-
-    try {
-        const match = await findProductByScannedCode(code)
-        if (match && match.product.product_type !== 'imei') {
-            props.selectGiftProduct(item, match.product)
-        }
-    } catch {
-        toast.error('Không tìm thấy sản phẩm quà tặng theo mã vừa quét')
-    }
-}
 
 </script>
 
@@ -42,11 +25,8 @@ const scanGiftProduct = async (item) => {
                     item
                 )
             "
-            @keydown.enter.prevent="scanGiftProduct(item)"
-            label="Tìm quà tặng"
-            class="pr-12"
+            label="Tìm quà tặng hoặc IMEI"
         />
-        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { item.gift_keyword = code; scanGiftProduct(item) }" />
 
         <div
             v-if="
@@ -66,7 +46,7 @@ const scanGiftProduct = async (item) => {
             "
         >
 
-            <div
+            <button
 
                 v-for="
                     product
@@ -78,6 +58,7 @@ const scanGiftProduct = async (item) => {
                     product.id
                 "
 
+                type="button"
                 @click="
                     selectGiftProduct(
                         item,
@@ -86,6 +67,8 @@ const scanGiftProduct = async (item) => {
                 "
 
                 class="
+                    block
+                    text-left
                     px-3
                     py-2
                     cursor-pointer
@@ -98,6 +81,9 @@ const scanGiftProduct = async (item) => {
                     class="font-medium"
                 >
                     {{ product.name }}
+                    <span v-if="product.product_type === 'imei' || product.manage_stock_by_serial" class="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                        IMEI
+                    </span>
                 </div>
 
                 <div
@@ -109,7 +95,7 @@ const scanGiftProduct = async (item) => {
                     {{ product.sku }}
                 </div>
 
-            </div>
+            </button>
 
         </div>
 

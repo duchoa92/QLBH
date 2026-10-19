@@ -63,6 +63,10 @@ return [
         'supplier_debts.view' => 'Xem công nợ nhà cung cấp',
         'supplier_debts.pay' => 'Thanh toán công nợ nhà cung cấp',
     ],
+    'expenses' => [
+        'expenses.view' => 'Xem chi phí cửa hàng',
+        'expenses.manage' => 'Thêm, sửa và xóa chi phí cửa hàng',
+    ],
     'reports' => [
         'reports.view' => 'Xem báo cáo và thống kê',
     ],

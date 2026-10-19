@@ -3,8 +3,8 @@ import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import debounce from 'lodash/debounce';
-import { BrowserMultiFormatReader } from '@zxing/browser';
 
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue';
 import PatternLock from '@/Components/PatternLock.vue';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
@@ -349,47 +349,12 @@ const removeImage = (index) => {
 | Scan IMEI bằng Camera
 |--------------------------------------------------------------------------
 */
-const videoRef = ref(null);
-const scanning = ref(false);
-const codeReader = new BrowserMultiFormatReader();
-
-const startScan = async () => {
-    try {
-        scanning.value = true;
-        await nextTick();
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        const selectedDeviceId = devices[0]?.deviceId;
-
-        if (!selectedDeviceId) {
-            toast.error('Không tìm thấy camera');
-            scanning.value = false;
-            return;
-        }
-
-        codeReader.decodeFromVideoDevice(
-            selectedDeviceId,
-            videoRef.value,
-                (result) => {
-                if (result) {
-                    lookupAfterScan = true;
-                    form.imei = result.getText().trim();
-                    deviceSearchQuery.value = form.imei;
-                    deviceFocused.value = true;
-                    searchDeviceCatalog(deviceSearchQuery.value);
-                    stopScan();
-                }
-            }
-        );
-    } catch (err) {
-        console.error(err);
-        toast.error('Không thể mở camera');
-        scanning.value = false;
-    }
-};
-
-const stopScan = () => {
-    scanning.value = false;
-    codeReader.reset();
+const handleScannedImei = (code) => {
+    lookupAfterScan = true;
+    form.imei = code.trim();
+    deviceSearchQuery.value = form.imei;
+    deviceFocused.value = true;
+    searchDeviceCatalog(deviceSearchQuery.value);
 };
 
 /*
@@ -730,13 +695,6 @@ onUnmounted(() => {
     deviceSearchSequence += 1;
     runDeviceSearch.cancel();
     revokeImagePreviews();
-    if (scanning.value) {
-        try {
-            stopScan();
-        } catch (error) {
-            console.warn('Không thể dừng camera khi đóng phiếu sửa chữa', error);
-        }
-    }
 });
 
 watch(issueInput, (value) => {
@@ -886,8 +844,8 @@ const selectWorkflowStep = (status) => {
         body-class="px-4 pb-4"
         @close="emit('close')"
     >
-        <div class="sticky top-0 z-40 -mx-4 mb-2 border-b border-slate-200 bg-slate-50/95 px-3 py-1.5 shadow-sm backdrop-blur">
-            <div class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+        <div class="sticky top-0 z-40 -mx-4 mb-2 bg-slate-100 px-4 py-2">
+            <div class="px-1 py-1">
             <RepairStatusProgress
                 class="min-w-0"
                 :status="createdRepair?.status || 'pending'"
@@ -898,7 +856,7 @@ const selectWorkflowStep = (status) => {
                 :workflow-stage="workflowStage"
                 @select="selectWorkflowStep"
             />
-            <div class="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-1">
+            <div v-if="step === 'repair' && createdRepair" class="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-1">
                 <div v-if="step === 'repair' && createdRepair" class="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] sm:grid-cols-4">
                     <div class="min-w-0 truncate"><span class="text-slate-500">Khách</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.name || createdRepair.customer_name || 'Khách lẻ' }}</strong></div>
                     <div class="min-w-0 truncate"><span class="text-slate-500">SĐT</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.phone || createdRepair.contact_phone || '—' }}</strong></div>
@@ -928,11 +886,13 @@ const selectWorkflowStep = (status) => {
         <div class="space-y-3 lg:col-span-8">
             
             <!-- Tra cứu nhanh gọn, dùng lại được sau khi đã chọn kết quả -->
-            <div ref="searchLookupRef" class="relative z-50 px-1">
+            <div ref="searchLookupRef" class="relative px-1">
                 <div class="space-y-2">
-                    <div class="relative flex items-center gap-1.5">
+                    <div class="relative">
                         <div class="relative min-w-0 flex-1">
-                            <FloatingInput v-model="deviceSearchQuery" label="Tra cứu khách hàng, tên máy, IMEI / Serial" id="repair_unified_search" autocomplete="off" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" />
+                            <FloatingInput v-model="deviceSearchQuery" label="Tra cứu khách hàng, tên máy, IMEI / Serial" id="repair_unified_search" autocomplete="off" class="pr-14" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" />
+                            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="handleScannedImei" />
+                        </div>
                             <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 flex max-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-slate-900/5">
                                 <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
                                 <p v-if="customerSuggestions.length" class="sticky top-0 z-10 flex items-center gap-2 border-b border-blue-100 bg-blue-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-blue-800"><span class="h-1.5 w-1.5 rounded-full bg-blue-600"></span>Khách hàng<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-blue-700">{{ customerSuggestions.length }}</span></p>
@@ -976,11 +936,6 @@ const selectWorkflowStep = (status) => {
                                 </div>
                             </div>
                         </div>
-                        <button type="button" @click="startScan" title="Quét IMEI từ Camera" class="flex shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-indigo-600 transition hover:bg-indigo-100 active:bg-indigo-200">
-                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89L18 7h1a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        </button>
-                    </div>
-                    <div v-if="scanning" class="relative overflow-hidden rounded-xl border bg-slate-900"><video ref="videoRef" class="h-32 w-full object-cover"/><button type="button" @click="stopScan" class="absolute right-2 top-2 rounded-lg bg-rose-600 px-2 py-0.5 text-[10px] text-white">Tắt camera</button></div>
                     <div v-if="isImeiBlocked(deviceSearchQuery)" class="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-800">
                         IMEI này đang được xử lý trong phiếu {{ activeRepairForImei(deviceSearchQuery)?.code }}. Không thể tạo phiếu mới.
                     </div>

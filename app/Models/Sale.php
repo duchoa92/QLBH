@@ -13,6 +13,7 @@ class Sale extends Model
         'code',
         'customer_id',
         'user_id',
+        'work_shift_id',
         'subtotal',
         'discount',
         'tax',

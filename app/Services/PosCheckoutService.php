@@ -275,6 +275,19 @@ class PosCheckoutService
                     'discount_value' =>
                         (float) ($item['discount_value'] ?? 0),
 
+                    'warranty_days' =>
+                        max(0, min(3650, (int) ($item['warranty_days'] ?? 0))),
+
+                    'warranty_value' =>
+                        isset($item['warranty_value'])
+                            ? max(0, min(3650, (int) $item['warranty_value']))
+                            : null,
+
+                    'warranty_unit' =>
+                        in_array(($item['warranty_unit'] ?? null), ['day', 'month'], true)
+                            ? $item['warranty_unit']
+                            : null,
+
                     'discount_amount' =>
                         $lineDiscount,
 
@@ -288,13 +301,27 @@ class PosCheckoutService
 
                 if (!empty($item['gifts'])) {
                     foreach ($item['gifts'] as $gift) {
-                        $giftProduct = Product::query()->find($gift['id']);
+                        $giftProduct = Product::query()->findOrFail($gift['id']);
                         $giftQuantity = max(1, (int) ($gift['quantity'] ?? 1));
                         $giftFactor = 1;
+                        $giftRequiresImei =
+                            $giftProduct->product_type === 'imei'
+                            || (bool) $giftProduct->manage_stock_by_serial;
+
+                        if ($giftRequiresImei && empty($gift['imei_id'])) {
+                            throw new \Exception(
+                                'Vui lòng chọn IMEI cho quà tặng ' . $giftProduct->name
+                            );
+                        }
+
+                        if ($giftRequiresImei) {
+                            $giftQuantity = 1;
+                        }
 
                         SaleItemGift::create([
                             'sale_item_id' => $saleItem->id,
                             'product_id' => $gift['id'],
+                            'product_imei_id' => $gift['imei_id'] ?? null,
                             'quantity' => $giftQuantity,
                             'base_quantity' => $giftQuantity * $giftFactor,
                             'conversion_factor' => $giftFactor,
@@ -416,6 +443,55 @@ class PosCheckoutService
                         }
                         $qty = max(1, (int) ($gift['quantity'] ?? 1));
                         $giftBaseQuantity = $qty;
+
+                        $giftRequiresImei =
+                            $giftProduct->product_type === 'imei'
+                            || (bool) $giftProduct->manage_stock_by_serial;
+
+                        if ($giftRequiresImei) {
+                            $giftImei = ProductImei::query()
+                                ->lockForUpdate()
+                                ->findOrFail($gift['imei_id'] ?? null);
+
+                            if ((int) $giftImei->product_id !== (int) $giftProduct->id) {
+                                throw new \Exception(
+                                    'IMEI quà tặng không thuộc sản phẩm ' . $giftProduct->name
+                                );
+                            }
+
+                            if ($giftImei->status !== ProductImei::STATUS_IN_STOCK) {
+                                throw new \Exception(
+                                    'IMEI quà tặng ' . $giftImei->imei . ' không còn khả dụng'
+                                );
+                            }
+
+                            $soldAt = now();
+                            $warrantyDays = max(0, min(3650, (int) $giftProduct->warranty_days));
+
+                            $giftImei->update([
+                                'status' => ProductImei::STATUS_SOLD,
+                                'sold_at' => $soldAt,
+                                'customer_warranty_days' => $warrantyDays,
+                                'customer_warranty_expires_at' => $warrantyDays > 0
+                                    ? $soldAt->copy()->addDays($warrantyDays)
+                                    : null,
+                                'customer_warranty_voided_at' => null,
+                                'customer_warranty_void_reason' => null,
+                                'customer_warranty_voided_by' => null,
+                            ]);
+
+                            $giftProduct->update([
+                                'stock' => ProductImei::query()
+                                    ->where('product_id', $giftProduct->id)
+                                    ->where('status', ProductImei::STATUS_IN_STOCK)
+                                    ->count(),
+                            ]);
+
+                            $giftProduct->increment('sold_count');
+
+                            continue;
+                        }
+
                         if (! filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)
                             && $giftProduct->stock < $giftBaseQuantity) {
                             throw new \Exception(

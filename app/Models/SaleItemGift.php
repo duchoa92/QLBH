@@ -15,6 +15,8 @@ class SaleItemGift extends Model
 
         'product_id',
 
+        'product_imei_id',
+
         'quantity',
 
         'base_quantity',
@@ -39,6 +41,14 @@ class SaleItemGift extends Model
     {
         return $this->belongsTo(
             Product::class
+        );
+    }
+
+    public function productImei(): BelongsTo
+    {
+        return $this->belongsTo(
+            ProductImei::class,
+            'product_imei_id'
         );
     }
 }

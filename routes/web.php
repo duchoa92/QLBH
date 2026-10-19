@@ -8,8 +8,10 @@ use App\Http\Controllers\CategoryAttributeValueController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DebtPaymentController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PosController;
+use App\Http\Controllers\WorkShiftController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\ProfileController;
@@ -224,6 +226,13 @@ Route::middleware(['auth'])->group(function () {
     |--------------------------------------------------------------------------
     */
     // POS
+    Route::get('/work-shifts', [WorkShiftController::class, 'index'])->middleware('permission:pos.access')->name('work-shifts.index');
+    Route::prefix('pos/shifts')->name('pos.shifts.')->controller(WorkShiftController::class)->middleware('permission:pos.access')->group(function () {
+        Route::get('/current', 'current')->name('current');
+        Route::get('/history', 'history')->name('history');
+        Route::post('/', 'open')->name('open');
+        Route::post('/close', 'close')->name('close');
+    });
     Route::prefix('pos')->name('pos.')->controller(PosController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:pos.access')->name('index');
         Route::post('/scan-imei', 'scanImei')->middleware('permission:pos.access')->name('scan-imei');
@@ -277,6 +286,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/debts/customers/{customer}/payments', [DebtPaymentController::class, 'receiveCustomerPayment'])->middleware('permission:customer_debts.pay')->name('debts.customers.payments');
     Route::get('/debts/suppliers', [DebtPaymentController::class, 'suppliers'])->middleware('permission:supplier_debts.view')->name('debts.suppliers');
     Route::post('/debts/suppliers/{supplier}/payments', [DebtPaymentController::class, 'paySupplier'])->middleware('permission:supplier_debts.pay')->name('debts.suppliers.payments');
+    Route::get('/expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses.view')->name('expenses.index');
+    Route::post('/expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses.manage')->name('expenses.store');
+    Route::put('/expenses/{expense}', [ExpenseController::class, 'update'])->middleware('permission:expenses.manage')->name('expenses.update');
+    Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->middleware('permission:expenses.manage')->name('expenses.destroy');
+    Route::post('/expenses/recurring', [ExpenseController::class, 'storeRecurring'])->middleware('permission:expenses.manage')->name('expenses.recurring.store');
+    Route::put('/expenses/recurring/{recurringExpense}', [ExpenseController::class, 'updateRecurring'])->middleware('permission:expenses.manage')->name('expenses.recurring.update');
+    Route::delete('/expenses/recurring/{recurringExpense}', [ExpenseController::class, 'destroyRecurring'])->middleware('permission:expenses.manage')->name('expenses.recurring.destroy');
+    Route::post('/expenses/recurring/{recurringExpense}/paid', [ExpenseController::class, 'markRecurringPaid'])->middleware('permission:expenses.manage')->name('expenses.recurring.paid');
     Route::get('/api/suppliers/search', [SupplierController::class, 'search'])->middleware('permission:suppliers.view|stock_imports.view')->name('api.suppliers.search');
     Route::resource('suppliers', SupplierController::class)
         ->middlewareFor(['index', 'show'], 'permission:suppliers.view')

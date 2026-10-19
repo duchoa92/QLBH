@@ -30,7 +30,7 @@ export default defineConfig({
         strictPort: true,
         origin: `https://${devHost}:5173`,
         cors: {
-            origin: [...new Set([appOrigin, `https://${devHost}`, `http://${devHost}`])],
+            origin: [...new Set([appOrigin, `https://${devHost}`, `http://${devHost}`, 'https://qlbh.test', 'http://qlbh.test'])],
         },
         allowedHosts: [...new Set([devHost, 'qlbh.test'])],
         https: httpsOptions,

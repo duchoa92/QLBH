@@ -14,6 +14,7 @@ import {
     ShoppingBag,
     Wrench,
     ChevronRight,
+    BellRing,
 } from 'lucide-vue-next'
 
 // Chart.js Setup
@@ -84,6 +85,7 @@ const props = defineProps({
             data: [0, 0, 0],
         })
     },
+    expenseReminders: { type: Array, default: () => [] },
 })
 
 // Formatting helper
@@ -179,6 +181,19 @@ const doughnutChartOptions = {
 <template>
     <AdminLayout>
         <div class="space-y-6">
+
+            <section v-if="expenseReminders.length" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                <div class="mb-3 flex items-center justify-between gap-2">
+                    <h2 class="flex items-center gap-2 font-bold text-amber-950"><BellRing :size="18" /> Nhắc chi phí sắp đến hạn</h2>
+                    <Link href="/expenses" class="text-sm font-semibold text-amber-800 hover:underline">Quản lý lịch chi phí</Link>
+                </div>
+                <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    <div v-for="item in expenseReminders" :key="`${item.id}-${item.period}`" class="rounded-xl border border-amber-200 bg-white p-3">
+                        <div class="flex items-start justify-between gap-2"><strong class="text-sm text-slate-800">{{ item.description }}</strong><span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="item.days_until < 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'">{{ item.days_until < 0 ? `Quá hạn ${Math.abs(item.days_until)} ngày` : item.days_until === 0 ? 'Đến hạn hôm nay' : `Còn ${item.days_until} ngày` }}</span></div>
+                        <div class="mt-1 text-xs text-slate-500">Hạn {{ item.due_date }} · {{ formatMoney(item.amount) }}</div>
+                    </div>
+                </div>
+            </section>
 
             <!-- 1. HÀNG THỐNG KÊ KPI TÀI CHÍNH -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

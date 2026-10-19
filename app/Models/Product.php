@@ -32,6 +32,7 @@ class Product extends Model
         'alert_stock',
         'product_type',
         'manage_stock_by_serial',
+        'warranty_days',
         'is_active',
         'description',
 
@@ -54,6 +55,8 @@ class Product extends Model
         'has_unit_conversion' => 'boolean',
 
         'conversion_factor' => 'integer',
+
+        'warranty_days' => 'integer',
     ];
 
     protected $attributes = [

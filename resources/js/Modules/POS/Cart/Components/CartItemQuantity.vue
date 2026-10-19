@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 
 const props = defineProps({
 
@@ -12,6 +13,16 @@ const emit = defineEmits([
     'remove',
 ])
 
+const quantity = computed({
+    get: () => props.item.quantity,
+    set: (value) => {
+        const normalized = Math.floor(Number(value))
+        props.item.quantity = Number.isFinite(normalized)
+            ? Math.max(1, normalized)
+            : 1
+    },
+})
+
 </script>
 
 <template>
@@ -23,7 +34,7 @@ const emit = defineEmits([
             border
             rounded-lg
             overflow-hidden
-            h-7
+            h-9
             shrink-0
         "
         :class="{
@@ -35,9 +46,11 @@ const emit = defineEmits([
         <button
             :disabled="item.imei_id"
             class="
-                w-8
+                w-9
                 bg-gray-50
                 border-r
+                text-base
+                font-bold
             "
             @click="
                 item.quantity > 1
@@ -49,22 +62,29 @@ const emit = defineEmits([
         </button>
 
         <input
-            v-model="item.quantity"
+            v-model="quantity"
             type="number"
+            min="1"
+            step="1"
             :disabled="item.imei_id"
             class="
-                w-12
+                w-20
                 text-center
                 border-none
+                px-2
+                text-sm
+                font-semibold
             "
         >
 
         <button
             :disabled="item.imei_id"
             class="
-                w-8
+                w-9
                 bg-gray-50
                 border-l
+                text-base
+                font-bold
             "
             @click="
                 item.quantity++

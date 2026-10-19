@@ -1,7 +1,3 @@
-import { productService } from '@/Modules/POS/Product/Services/productService'
-
-let giftTimer = null
-
 export function useCartItem() {
 
     const toggleNote = (item) => {
@@ -18,10 +14,17 @@ export function useCartItem() {
             !item.showPromotion
     }
 
+    const toggleWarranty = (item) => {
+
+        item.showWarranty = !item.showWarranty
+    }
+
     return {
 
         toggleNote,
 
         togglePromotion,
+
+        toggleWarranty,
     }
 }

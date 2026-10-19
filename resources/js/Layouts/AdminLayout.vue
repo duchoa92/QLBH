@@ -18,6 +18,7 @@ import ConfirmBox from '@/Components/ConfirmBox.vue'
 import GlobalSearch from '@/Components/GlobalSearch.vue'
 // Thông báo
 import NotificationBell from '@/Components/NotificationBell.vue'
+import WorkShiftAutoOpen from '@/Components/WorkShiftAutoOpen.vue'
 import { openModal } from '@/Stores/modal'
 import { prepareOpenPos } from '@/utils/pos'
 
@@ -53,6 +54,7 @@ const currentTitle = computed(() => {
     if (path.startsWith('/brands')) return 'Thương hiệu'
     if (path.startsWith('/customers')) return 'Khách hàng'
     if (path.startsWith('/sales')) return 'Hóa đơn'
+    if (path.startsWith('/work-shifts')) return 'Lịch sử kiểm kê'
     if (path.startsWith('/debts/customers')) return 'Thu công nợ khách hàng'
     if (path.startsWith('/debts/suppliers')) return 'Thanh toán công nợ nhà cung cấp'
     if (path.startsWith('/repairs')) return 'Sửa chữa thiết bị'
@@ -292,4 +294,5 @@ onBeforeUnmount(() => {
 </div>
 
 <ConfirmBox />
+<WorkShiftAutoOpen />
 </template>

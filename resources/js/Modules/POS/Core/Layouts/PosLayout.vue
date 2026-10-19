@@ -2,10 +2,11 @@
 import { computed, ref } from 'vue'
 import { PackageSearch, ShoppingCart, X, Store } from 'lucide-vue-next'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'manage-shift', 'show-shift-history'])
 const props = defineProps({
   cartCount: { type: Number, default: 0 },
   grandTotal: { type: Number, default: 0 },
+  shift: { type: Object, default: null },
 })
 const mobilePanel = ref('products')
 const formattedTotal = computed(() => `${Number(props.grandTotal || 0).toLocaleString('vi-VN')} ₫`)
@@ -21,6 +22,12 @@ const formattedTotal = computed(() => `${Number(props.grandTotal || 0).toLocaleS
         <Store class="h-4 w-4 text-indigo-600" />
         POS bán hàng
       </div>
+
+      <button type="button" class="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100" @click="emit('manage-shift')">
+        {{ shift ? `Tiền mặt ${Number(shift.expected_cash).toLocaleString('vi-VN')} ₫ · Nợ khách ${Number(shift.customer_debt_amount).toLocaleString('vi-VN')} ₫` : 'Mở ca làm' }}
+      </button>
+
+      <button type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200" @click="emit('show-shift-history')">Lịch sử kiểm kê</button>
 
       <button
         type="button"

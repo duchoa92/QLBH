@@ -95,6 +95,12 @@ export function useCheckout(
                         warranty_days:
                             item.customer_warranty_days ?? item.warranty_days ?? null,
 
+                        warranty_value:
+                            item.customer_warranty_value ?? null,
+
+                        warranty_unit:
+                            item.customer_warranty_unit ?? null,
+
                         note:
                             item.note,
 
@@ -107,7 +113,11 @@ export function useCheckout(
                             ),
 
                         gifts:
-                            item.gifts ?? [],
+                            (item.gifts ?? []).map(gift => ({
+                                id: gift.id,
+                                quantity: gift.quantity,
+                                imei_id: gift.imei_id ?? null,
+                            })),
 
                     })),
 

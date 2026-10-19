@@ -130,7 +130,7 @@ onBeforeUnmount(stop)
         <Camera class="h-4 w-4" />
     </button>
     <Teleport to="body">
-        <div v-if="open" class="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4" @click.self="close">
+        <div v-if="open" class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-4" @click.self="close">
             <section class="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl">
                 <header class="flex items-center justify-between border-b px-4 py-3">
                     <h2 class="font-semibold text-slate-800">Quét mã sản phẩm</h2>
