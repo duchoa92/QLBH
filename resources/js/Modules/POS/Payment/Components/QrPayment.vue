@@ -19,6 +19,8 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    providerQrUrl: { type: String, default: '' },
+    providerPaymentUrl: { type: String, default: '' },
     theme: {
         type: String,
         default: 'classic',
@@ -26,6 +28,7 @@ const props = defineProps({
 })
 
 const qrImage = computed(() => {
+    if (props.providerQrUrl) return props.providerQrUrl
     const payload = buildVietQrPayload({
         bankBin: props.bankBin,
         bankAccount: props.bankAccount,
@@ -70,6 +73,7 @@ const qrImage = computed(() => {
                 {{ $money(amount) }}
             </div>
             <p class="mt-2 text-xs font-medium text-slate-500">Mở ứng dụng ngân hàng và quét mã phía trên</p>
+            <a v-if="providerPaymentUrl" :href="providerPaymentUrl" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex text-xs font-semibold text-violet-700 underline">Mở trang thanh toán ApiPay</a>
         </div>
     </div>
 </template>

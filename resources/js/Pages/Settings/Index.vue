@@ -87,11 +87,23 @@ const form = useForm({
         bank_account: account.bank_account || '',
         bank_account_name: account.bank_account_name || '',
         transfer_content_mode: account.transfer_content_mode === 'invoice' ? 'invoice' : 'default',
+        payment_provider: account.payment_provider || '',
+        payment_provider_account_id: account.payment_provider_account_id || '',
+        payment_api_key: '',
+        payment_api_access_key: '',
+        payment_api_secret_key: '',
+        payment_webhook_secret: '',
+        payment_api_key_configured: Boolean(account.payment_api_key_configured),
+        payment_api_access_key_configured: Boolean(account.payment_api_access_key_configured),
+        payment_api_secret_key_configured: Boolean(account.payment_api_secret_key_configured),
+        payment_webhook_secret_configured: Boolean(account.payment_webhook_secret_configured),
+        payment_auto_enabled: Boolean(account.payment_auto_enabled),
         is_default: props.settings.bank_accounts?.some(saved => saved.is_default)
             ? Boolean(account.is_default)
             : index === 0,
     })),
 })
+const bankWebhookEndpoint = computed(() => `${window.location.origin}/api/webhooks/bank-transactions`)
 
 const bankOptions = computed(() => {
     const options = props.banks.map(bank => ({
@@ -116,6 +128,16 @@ const addBankAccount = () => {
         bank_account_name: '',
         transfer_content_mode: 'default',
         is_default: form.bank_accounts.length === 0,
+        payment_provider: '',
+        payment_provider_account_id: '',
+        payment_api_key: '',
+        payment_api_access_key: '',
+        payment_api_secret_key: '',
+        payment_webhook_secret: '',
+        payment_api_key_configured: false,
+        payment_api_access_key_configured: false,
+        payment_api_secret_key_configured: false,
+        payment_webhook_secret_configured: false,
     })
 }
 
@@ -637,6 +659,52 @@ const unitDisplayName = (unit) =>
                             </div>
                             <p v-if="form.errors[`bank_accounts.${index}.transfer_content_mode`]" class="mt-1 text-xs text-rose-600">{{ form.errors[`bank_accounts.${index}.transfer_content_mode`] }}</p>
                         </div>
+
+                        <div class="rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+                            <div class="mb-2 flex items-center justify-between gap-2">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800">Tự đối soát giao dịch</p>
+                                    <p class="mt-0.5 text-[11px] text-slate-500">Cấu hình độc lập cho tài khoản ngân hàng này</p>
+                                </div>
+                                <span v-if="account.payment_auto_enabled" class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">ĐANG BẬT</span>
+                            </div>
+                            <label class="block text-xs font-semibold text-slate-600">Dịch vụ nhận giao dịch
+                                <select v-model="account.payment_provider" :disabled="!can_update_bank_settings" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100">
+                                    <option value="">Không dùng tự động</option>
+                                    <option value="apipay">ApiPay · API + webhook HMAC</option>
+                                    <option value="sepay">SePay · API Key hoặc webhook secret</option>
+                                </select>
+                            </label>
+                            <div v-if="account.payment_provider === 'apipay'" class="mt-2 grid gap-2 sm:grid-cols-2">
+                                <label class="text-xs font-semibold text-slate-600 sm:col-span-2">Bank Account Public ID trên ApiPay
+                                    <input v-model="account.payment_provider_account_id" :disabled="!can_update_bank_settings" placeholder="bk_... (dùng để xác định tài khoản nhận)" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
+                                </label>
+                                <label class="text-xs font-semibold text-slate-600">ApiPay Access Key
+                                    <input v-model="account.payment_api_access_key" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_api_access_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'ak_live_… hoặc ak_test_…'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
+                                </label>
+                                <label class="text-xs font-semibold text-slate-600">ApiPay Secret Key
+                                    <input v-model="account.payment_api_secret_key" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_api_secret_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret key của API Key'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
+                                </label>
+                                <label class="text-xs font-semibold text-slate-600 sm:col-span-2">Webhook signing secret
+                                    <input v-model="account.payment_webhook_secret" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret ApiPay trả về khi tạo webhook'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
+                                    <span v-if="account.payment_webhook_secret_configured" class="mt-1 block font-normal text-emerald-700">Đã lưu secret.</span>
+                                </label>
+                            </div>
+                            <div v-else-if="account.payment_provider === 'sepay'" class="mt-2 grid gap-2 sm:grid-cols-2">
+                                <label class="text-xs font-semibold text-slate-600">SePay API Key
+                                    <input v-model="account.payment_api_key" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_api_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'API key trong cấu hình webhook SePay'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
+                                    <span v-if="account.payment_api_key_configured" class="mt-1 block font-normal text-emerald-700">Đã lưu API key.</span>
+                                </label>
+                                <label class="text-xs font-semibold text-slate-600">Webhook secret tùy chỉnh (nếu dùng)
+                                    <input v-model="account.payment_webhook_secret" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Tùy chọn'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
+                                    <span v-if="account.payment_webhook_secret_configured" class="mt-1 block font-normal text-emerald-700">Đã lưu secret.</span>
+                                </label>
+                            </div>
+                            <div v-if="account.payment_provider" class="mt-2 rounded-lg bg-white/80 px-2.5 py-2 text-[11px] leading-relaxed text-slate-600">
+                                Webhook URL: <code class="select-all break-all font-semibold text-violet-700">{{ bankWebhookEndpoint }}</code>
+                                <p class="mt-1">Dán URL này vào dịch vụ. POS sẽ gắn mã hóa đơn vào nội dung QR và tự cập nhật khi nhận giao dịch.</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div v-if="!form.bank_accounts.length" class="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
@@ -670,6 +738,7 @@ const unitDisplayName = (unit) =>
                         </div>
                         <p v-if="form.errors.bank_qr_theme" class="mt-1 text-xs text-rose-600">{{ form.errors.bank_qr_theme }}</p>
                     </div>
+
                 </div>
             </DataPanel>
         </div>

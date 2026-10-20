@@ -43,7 +43,22 @@ class AppServiceProvider extends ServiceProvider
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),
-                'bank_accounts' => json_decode((string) setting('bank_accounts', '[]'), true) ?: [],
+                'bank_accounts' => collect(json_decode((string) setting('bank_accounts', '[]'), true) ?: [])->map(function (array $account): array {
+                    $apiKey = (string) ($account['payment_api_key'] ?? '');
+                    $apiAccessKey = (string) ($account['payment_api_access_key'] ?? '');
+                    $apiSecretKey = (string) ($account['payment_api_secret_key'] ?? '');
+                    $webhookSecret = (string) ($account['payment_webhook_secret'] ?? '');
+                    unset($account['payment_api_key'], $account['payment_api_access_key'], $account['payment_api_secret_key'], $account['payment_webhook_secret']);
+                    $provider = strtolower((string) ($account['payment_provider'] ?? ''));
+                    $account['payment_api_key_configured'] = filled($apiKey);
+                    $account['payment_api_access_key_configured'] = filled($apiAccessKey);
+                    $account['payment_api_secret_key_configured'] = filled($apiSecretKey);
+                    $account['payment_webhook_secret_configured'] = filled($webhookSecret);
+                    $account['payment_auto_enabled'] = $provider === 'apipay'
+                        ? (filled($webhookSecret) && filled($apiAccessKey) && filled($apiSecretKey) && filled($account['payment_provider_account_id'] ?? null))
+                        : ($provider === 'sepay' && (filled($apiKey) || filled($webhookSecret)));
+                    return $account;
+                })->values()->all(),
                 'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
                 'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
             ]

@@ -29,11 +29,11 @@ const focusNext = event => {
 </script>
 
 <template>
-    <div class="grid min-h-0 gap-4 overflow-y-auto lg:grid-cols-2">
+    <div class="grid min-h-0 gap-4 lg:grid-cols-2">
         <div>
             <h3 class="mb-2 text-sm font-bold text-slate-800">Tiền mặt theo mệnh giá</h3>
-            <label class="mb-2 flex items-center gap-2 text-xs font-medium text-slate-600">
-                <input type="checkbox" :checked="cashDetail" class="rounded border-slate-300 text-indigo-600" @change="emit('update:cashDetail', $event.target.checked)" />
+            <label class="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-slate-600">
+                <input type="checkbox" :checked="cashDetail" class="h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500" @change="emit('update:cashDetail', $event.target.checked)" />
                 Nhập chi tiết theo mệnh giá
             </label>
             <label v-if="!cashDetail" class="block text-xs font-semibold text-slate-600">

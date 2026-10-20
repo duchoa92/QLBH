@@ -130,14 +130,14 @@ onBeforeUnmount(stop)
         <Camera class="h-4 w-4" />
     </button>
     <Teleport to="body">
-        <div v-if="open" class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-4" @click.self="close">
-            <section class="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl">
+        <div v-if="open" class="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/70 p-3 sm:p-4" @click.self="close">
+            <section class="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
                 <header class="flex items-center justify-between border-b px-4 py-3">
                     <h2 class="font-semibold text-slate-800">Quét mã sản phẩm</h2>
                     <button type="button" class="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="Tắt camera" aria-label="Tắt camera và đóng cửa sổ quét" @click="close"><CameraOff class="h-4 w-4" /><span>Tắt camera</span></button>
                 </header>
-                <div class="p-4">
-                    <div class="relative mx-auto aspect-square w-[78vw] max-w-[460px] overflow-hidden rounded-lg bg-black">
+                <div class="p-3 sm:p-4">
+                    <div class="relative mx-auto aspect-square w-[min(78vw,52dvh,360px)] max-w-full overflow-hidden rounded-lg bg-black">
                         <video ref="video" class="absolute inset-0 h-full w-full object-cover" autoplay muted playsinline webkit-playsinline />
                         <div class="absolute left-1/2 top-1/2 aspect-square w-[76%] -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.42)]">
                             <span class="absolute inset-x-2 top-1/2 border-t border-dashed border-emerald-200/90" />

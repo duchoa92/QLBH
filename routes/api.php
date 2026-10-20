@@ -10,6 +10,9 @@ use App\Http\Controllers\Api\ReferenceDataController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\BankTransferWebhookController;
+
+Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class, 'receive'])->name('bank-payments.webhook');
 
 
 Route::middleware(['web', 'auth'])->group(function ()

@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\Unit;
 use App\Services\CloudBackupStorage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 
 class SettingController extends Controller
@@ -42,7 +43,22 @@ class SettingController extends Controller
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),
-                'bank_accounts' => json_decode((string) setting('bank_accounts', '[]'), true) ?: [],
+                'bank_accounts' => collect(json_decode((string) setting('bank_accounts', '[]'), true) ?: [])->map(function (array $account): array {
+                    $apiKey = (string) ($account['payment_api_key'] ?? '');
+                    $apiAccessKey = (string) ($account['payment_api_access_key'] ?? '');
+                    $apiSecretKey = (string) ($account['payment_api_secret_key'] ?? '');
+                    $webhookSecret = (string) ($account['payment_webhook_secret'] ?? '');
+                    unset($account['payment_api_key'], $account['payment_api_access_key'], $account['payment_api_secret_key'], $account['payment_webhook_secret']);
+                    $account['payment_api_key_configured'] = filled($apiKey);
+                    $account['payment_api_access_key_configured'] = filled($apiAccessKey);
+                    $account['payment_api_secret_key_configured'] = filled($apiSecretKey);
+                    $account['payment_webhook_secret_configured'] = filled($webhookSecret);
+                    $provider = strtolower((string) ($account['payment_provider'] ?? ''));
+                    $account['payment_auto_enabled'] = $provider === 'apipay'
+                        ? (filled($webhookSecret) && filled($apiAccessKey) && filled($apiSecretKey) && filled($account['payment_provider_account_id'] ?? null))
+                        : ($provider === 'sepay' && (filled($apiKey) || filled($webhookSecret)));
+                    return $account;
+                })->values()->all(),
                 'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
                 'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
             ],
@@ -90,6 +106,12 @@ class SettingController extends Controller
             'bank_accounts.*.bank_account_name' => ['nullable', 'string', 'max:150'],
             'bank_accounts.*.transfer_content_mode' => ['nullable', 'in:default,invoice'],
             'bank_accounts.*.is_default' => ['sometimes', 'boolean'],
+            'bank_accounts.*.payment_provider' => ['nullable', 'in:none,apipay,sepay'],
+            'bank_accounts.*.payment_provider_account_id' => ['nullable', 'string', 'max:150'],
+            'bank_accounts.*.payment_api_key' => ['nullable', 'string', 'max:2000'],
+            'bank_accounts.*.payment_api_access_key' => ['nullable', 'string', 'max:2000'],
+            'bank_accounts.*.payment_api_secret_key' => ['nullable', 'string', 'max:2000'],
+            'bank_accounts.*.payment_webhook_secret' => ['nullable', 'string', 'max:2000'],
             'bank_transfer_content' => ['sometimes', 'nullable', 'string', 'max:255'],
             'bank_qr_theme' => ['sometimes', 'in:classic,emerald,indigo,blue,rose'],
         ]);
@@ -111,18 +133,32 @@ class SettingController extends Controller
         }
 
         if (array_key_exists('bank_accounts', $data)) {
+            $existingAccounts = collect(json_decode((string) setting('bank_accounts', '[]'), true) ?: [])->keyBy(fn ($account) => (string) ($account['id'] ?? ''));
             $accounts = collect($data['bank_accounts'])
                 ->filter(fn ($account) => filled($account['bank_bin'] ?? null) && filled($account['bank_account'] ?? null))
                 ->values()
-                ->map(fn ($account, $index) => [
-                    'id' => (string) ($account['id'] ?? ('bank-' . ($index + 1))),
-                    'bank_bin' => (string) $account['bank_bin'],
-                    'bank_name' => trim((string) ($account['bank_name'] ?? '')),
-                    'bank_account' => trim((string) $account['bank_account']),
-                    'bank_account_name' => trim((string) ($account['bank_account_name'] ?? '')),
-                    'transfer_content_mode' => ($account['transfer_content_mode'] ?? 'default') === 'invoice' ? 'invoice' : 'default',
-                    'is_default' => (bool) ($account['is_default'] ?? false),
-                ]);
+                ->map(function ($account, $index) use ($existingAccounts): array {
+                    $id = (string) ($account['id'] ?? ('bank-' . ($index + 1)));
+                    $existing = $existingAccounts->get($id, []);
+                    $entry = [
+                        'id' => $id,
+                        'bank_bin' => (string) $account['bank_bin'],
+                        'bank_name' => trim((string) ($account['bank_name'] ?? '')),
+                        'bank_account' => trim((string) $account['bank_account']),
+                        'bank_account_name' => trim((string) ($account['bank_account_name'] ?? '')),
+                        'transfer_content_mode' => ($account['transfer_content_mode'] ?? 'default') === 'invoice' ? 'invoice' : 'default',
+                        'is_default' => (bool) ($account['is_default'] ?? false),
+                        'payment_provider' => in_array($account['payment_provider'] ?? '', ['apipay', 'sepay'], true) ? $account['payment_provider'] : '',
+                        'payment_provider_account_id' => trim((string) ($account['payment_provider_account_id'] ?? '')),
+                    ];
+                    foreach (['payment_api_key', 'payment_api_access_key', 'payment_api_secret_key', 'payment_webhook_secret'] as $secretKey) {
+                        $incoming = trim((string) ($account[$secretKey] ?? ''));
+                        $entry[$secretKey] = $incoming !== ''
+                            ? Crypt::encryptString($incoming)
+                            : (string) ($existing[$secretKey] ?? '');
+                    }
+                    return $entry;
+                });
 
             if ($accounts->isNotEmpty()) {
                 $defaultIndex = $accounts->search(fn ($account) => $account['is_default']);

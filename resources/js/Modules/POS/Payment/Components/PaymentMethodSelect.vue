@@ -6,6 +6,7 @@ const props = defineProps({
         type: String,
         default: 'cash',
     },
+    disabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -27,6 +28,7 @@ const methods = [
             :class="props.modelValue === item.id
                 ? 'border-indigo-600 bg-indigo-50/60 text-indigo-600 shadow-sm'
                 : 'border-slate-200/80 bg-white text-slate-600 hover:border-slate-300'"
+            :disabled="props.disabled"
             @click="emit('update:modelValue', item.id)"
         >
             <component :is="item.icon" class="w-4 h-4" />

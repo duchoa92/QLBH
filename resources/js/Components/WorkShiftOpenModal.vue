@@ -45,17 +45,24 @@ const startShift = async () => {
 
 <template>
     <div class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-4">
-        <section class="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
+        <section class="flex max-h-[84vh] w-full max-w-4xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <div class="flex items-start justify-between gap-3">
                 <div><h2 class="text-lg font-bold text-slate-900">Bảng kê tiền đầu ca</h2><p class="mt-0.5 text-xs text-slate-500">Nhập số lượng tiền mặt và số dư tài khoản để bắt đầu ca.</p></div>
                 <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100" @click="dismiss">Đóng</button>
             </div>
-            <div class="mt-3 min-h-0 flex-1 overflow-y-auto">
+            <div class="custom-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto px-1">
                 <WorkShiftCountForm :denominations="denominations" :counts="counts" :cash-amount="cashAmount" :cash-detail="cashDetail" :balances="balances" :accounts="accounts" :money="money" @update:cash-amount="cashAmount = $event" @update:cash-detail="cashDetail = $event" />
             </div>
-            <div class="mt-3 flex justify-end border-t border-slate-100 pt-3">
+            <div class="mt-3 flex shrink-0 justify-end border-t border-slate-100 pt-3">
                 <button :disabled="saving" class="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="startShift">{{ saving ? 'Đang lưu…' : 'Bắt đầu ca' }}</button>
             </div>
         </section>
     </div>
 </template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+</style>

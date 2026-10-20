@@ -348,6 +348,20 @@ const handleCheckout = async (data) => {
     }
 }
 
+const handleBankCheckoutCompleted = async (saleResponse) => {
+    clearCart()
+    showCheckoutModal.value = false
+    invoiceData.value = saleResponse
+    showInvoice.value = true
+    const excess = Number(saleResponse?.data?.change || 0)
+    toast.success(excess > 0
+        ? `Đã nhận đủ tiền và tự hoàn tất hóa đơn. Khách chuyển thừa ${formatMoney(excess)}.`
+        : 'Đã nhận đủ tiền chuyển khoản, hóa đơn đã tự hoàn tất.')
+    await refreshShiftSummary()
+    switchToNextTab()
+    cleanupEmptyTabs()
+}
+
 
 const checkout = async (data) => {
 
@@ -461,6 +475,7 @@ useBarcodeScanner(
         :selected-customer="selectedCustomer"
         @close="showCheckoutModal = false"
         @confirm="checkout($event)"
+        @bank-completed="handleBankCheckoutCompleted"
     />
 
     <SelectProductModal

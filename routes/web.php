@@ -248,6 +248,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/', 'index')->middleware('permission:pos.access')->name('index');
         Route::post('/scan-imei', 'scanImei')->middleware('permission:pos.access')->name('scan-imei');
         Route::post('/checkout', 'checkout')->middleware('permission:pos.access')->name('checkout');
+        Route::post('/bank-payments', 'startBankPayment')->middleware('permission:pos.access')->name('bank-payments.start');
+        Route::get('/bank-payments/{intent}', 'bankPaymentStatus')->middleware('permission:pos.access')->name('bank-payments.status');
+        Route::delete('/bank-payments/{intent}', 'cancelBankPayment')->middleware('permission:pos.access')->name('bank-payments.cancel');
         Route::get('/sales/{sale}', 'showSale')->middleware('permission:sales.view')->name('sale.show');
         Route::get('/sales/{sale}/receipt', 'receipt')->middleware('permission:sales.view')->name('receipt'); // Xử lý hóa đơn trực tiếp tại POS
     });

@@ -6,6 +6,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import QrPayment from './QrPayment.vue'
 import { X, CreditCard, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
 import { formatCurrency, formatNumber } from '@/utils/format'
+import axios from 'axios'
 
 const props = defineProps({
     loading: Boolean,
@@ -19,12 +20,17 @@ const props = defineProps({
     },
 })
 
-const emit = defineEmits(['close', 'confirm'])
+const emit = defineEmits(['close', 'confirm', 'bank-completed'])
 
 const paymentMethod = ref('cash')
 const paidAmount = ref('')
 const note = ref('')
 const payOldDebt = ref(false)
+const bankIntent = ref(null)
+const bankStatus = ref(null)
+const bankError = ref('')
+const bankStarting = ref(false)
+let bankPollTimer = null
 
 const page = usePage()
 
@@ -73,9 +79,13 @@ const transferAmount = computed(() =>
     Math.max(0, Number(totalNeedToPay.value || 0))
 )
 
+const autoBankEnabled = computed(() => paymentMethod.value === 'bank' && Boolean(selectedBankAccount.value?.payment_auto_enabled))
+
 const effectivePaidAmount = computed(() =>
     paymentMethod.value === 'bank'
-        ? Number(paidAmount.value || transferAmount.value || 0)
+        ? (autoBankEnabled.value
+            ? Number(bankStatus.value?.received_amount || 0)
+            : Number(paidAmount.value || transferAmount.value || 0))
         : Number(paidAmount.value || 0)
 )
 
@@ -126,12 +136,105 @@ const hasBankSettings = computed(() =>
 )
 
 const transferDescription = computed(() =>
-    selectedBankAccount.value?.transfer_content_mode === 'invoice'
+    autoBankEnabled.value || selectedBankAccount.value?.transfer_content_mode === 'invoice'
         ? props.invoiceCode
         : ''
 )
 
+const paymentStatusLabel = computed(() => {
+    if (bankStatus.value?.status === 'paid') return 'Đã nhận đủ tiền, hóa đơn đã tự hoàn tất.'
+    if (bankStatus.value?.status === 'expired') return 'Đã hết thời gian chờ. Nếu khách đã chuyển, vui lòng kiểm tra lịch sử giao dịch.'
+    if (bankStatus.value?.status === 'cancelled') return 'Đã dừng chờ giao dịch.'
+    if (Number(bankStatus.value?.received_amount || 0) === 0) return 'Đang chờ ngân hàng báo giao dịch vào tài khoản…'
+    const difference = Number(bankStatus.value?.difference || 0)
+    if (difference < 0) return `Đã nhận thiếu ${formatMoney(Math.abs(difference))}. Đang tiếp tục chờ chuyển thêm.`
+    if (difference > 0) return `Khách đã chuyển thừa ${formatMoney(difference)}.`
+    return 'Đang chờ ngân hàng báo giao dịch vào tài khoản…'
+})
+
+const pollBankPayment = async () => {
+    if (!bankIntent.value || !props.show) return
+    try {
+        const { data } = await axios.get(route('pos.bank-payments.status', bankIntent.value.id))
+        bankStatus.value = data.data
+        if (data.data.status === 'paid' && data.data.sale) {
+            bankIntent.value = null
+            emit('bank-completed', data.data.sale)
+            return
+        }
+        if (data.data.status === 'waiting') bankPollTimer = setTimeout(pollBankPayment, 1500)
+    } catch (error) {
+        bankError.value = error.response?.data?.message || 'Không kiểm tra được trạng thái giao dịch.'
+        bankPollTimer = setTimeout(pollBankPayment, 3000)
+    }
+}
+
+const startBankPayment = async () => {
+    if (bankStarting.value) return
+    bankStarting.value = true
+    bankError.value = ''
+    try {
+        const items = props.cart.map(item => ({
+            id: item.id,
+            price: item.price,
+            quantity: item.quantity,
+            unit_id: item.unit_id ?? null,
+            unit_name: item.unit_name ?? 'Cái',
+            conversion_factor: item.conversion_factor ?? 1,
+            variant_id: item.variant_id ?? null,
+            imei_id: item.imei_id ?? null,
+            warranty_days: item.customer_warranty_days ?? item.warranty_days ?? null,
+            warranty_value: item.customer_warranty_value ?? null,
+            warranty_unit: item.customer_warranty_unit ?? null,
+            note: item.note,
+            discount_type: item.discount_type ?? null,
+            discount_value: Number(item.discount_value ?? 0),
+            gifts: (item.gifts ?? []).map(gift => ({ id: gift.id, quantity: gift.quantity, imei_id: gift.imei_id ?? null })),
+        }))
+        const { data } = await axios.post(route('pos.bank-payments.start'), {
+            items,
+            customer_id: props.selectedCustomer?.id ?? null,
+            pay_old_debt: payOldDebt.value,
+            invoice_code: props.invoiceCode,
+            expected_amount: Math.round(totalNeedToPay.value),
+            bank_account: selectedBankAccount.value?.bank_account,
+        })
+        bankIntent.value = data.data
+        bankStatus.value = { status: 'waiting', expected_amount: data.data.expected_amount, received_amount: 0, difference: -data.data.expected_amount }
+        bankPollTimer = setTimeout(pollBankPayment, 1200)
+    } catch (error) {
+        bankError.value = error.response?.data?.message || 'Không thể bắt đầu theo dõi thanh toán.'
+    } finally {
+        bankStarting.value = false
+    }
+}
+
+const stopBankPayment = async () => {
+    if (bankPollTimer) clearTimeout(bankPollTimer)
+    if (bankIntent.value) {
+        try { await axios.delete(route('pos.bank-payments.cancel', bankIntent.value.id)) }
+        catch (error) {
+            bankError.value = error.response?.data?.message || 'Không thể dừng chờ sau khi đã có tiền vào.'
+            bankPollTimer = setTimeout(pollBankPayment, 1500)
+            return false
+        }
+    }
+    bankIntent.value = null
+    bankStatus.value = null
+    return true
+}
+
+const closeModal = async () => {
+    const stopped = await stopBankPayment()
+    if (!stopped) return
+    emit('close')
+}
+
 const submit = () => {
+    if (autoBankEnabled.value) {
+        if (!bankIntent.value) startBankPayment()
+        return
+    }
     emit('confirm', {
         payment_method: paymentMethod.value,
         bank_account: paymentMethod.value === 'bank' ? selectedBankAccount.value?.bank_account ?? null : null,
@@ -141,6 +244,10 @@ const submit = () => {
         pay_old_debt: payOldDebt.value,
     })
 }
+
+watch(() => props.show, shown => {
+    if (!shown) stopBankPayment()
+})
 </script>
 
 <template>
@@ -165,7 +272,7 @@ const submit = () => {
                 <button
                     type="button"
                     class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                    @click="emit('close')"
+                    @click="closeModal"
                 >
                     <X class="w-5 h-5" />
                 </button>
@@ -179,11 +286,11 @@ const submit = () => {
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                         Phương thức thanh toán
                     </label>
-                    <PaymentMethodSelect v-model="paymentMethod" />
+                    <PaymentMethodSelect v-model="paymentMethod" :disabled="Boolean(bankIntent)" />
                 </div>
 
                 <!-- SỐ TIỀN KHÁCH ĐƯA -->
-                <div>
+                <div v-if="!autoBankEnabled">
                     <FloatingInput
                         :model-value="formatMoneyInput(paidAmount)"
                         @input="handlePaidAmountInput"
@@ -197,7 +304,7 @@ const submit = () => {
                 <div v-if="paymentMethod === 'bank'">
                     <div v-if="bankAccounts.length > 1" class="mb-3">
                         <label for="checkout-bank-account" class="mb-1 block text-xs font-semibold text-slate-600">Tài khoản nhận tiền</label>
-                        <select id="checkout-bank-account" v-model="selectedBankAccountId" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                        <select id="checkout-bank-account" v-model="selectedBankAccountId" :disabled="Boolean(bankIntent)" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100">
                             <option v-for="account in bankAccounts" :key="account.id" :value="String(account.id)">
                                 {{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}{{ account.bank_account_name ? ` · ${account.bank_account_name}` : '' }}{{ account.is_default ? ' (Mặc định)' : '' }}
                             </option>
@@ -209,8 +316,17 @@ const submit = () => {
                         :bank-account="String(selectedBankAccount.bank_account)"
                         :amount="transferAmount"
                         :description="transferDescription"
+                        :provider-qr-url="bankIntent?.provider_qr_url || ''"
+                        :provider-payment-url="bankIntent?.provider_payment_url || ''"
                         :theme="bankSettings.bank_qr_theme || 'classic'"
                     />
+
+                    <div v-if="autoBankEnabled" class="mt-3 rounded-xl border px-3 py-3 text-sm" :class="bankStatus?.status === 'paid' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : bankStatus?.difference > 0 ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-blue-200 bg-blue-50 text-blue-800'">
+                        <p class="font-bold">{{ paymentStatusLabel }}</p>
+                        <p v-if="bankStatus" class="mt-1 text-xs">Đã nhận {{ formatMoney(bankStatus.received_amount) }} / {{ formatMoney(bankStatus.expected_amount) }}</p>
+                        <p v-else class="mt-1 text-xs">Nội dung chuyển khoản tự gắn mã {{ invoiceCode }} để tự đối soát.</p>
+                        <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-700">{{ bankError }}</p>
+                    </div>
 
                     <div
                         v-else
@@ -270,19 +386,19 @@ const submit = () => {
                 <button
                     type="button"
                     class="flex-1 rounded-xl border border-slate-200/80 bg-white py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-                    @click="emit('close')"
+                    @click="closeModal"
                 >
                     Hủy bỏ
                 </button>
 
                 <button
-                    :disabled="loading"
+                    :disabled="loading || bankStarting || Boolean(bankIntent)"
                     @click="submit"
                     class="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-md shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50"
                 >
                     <Loader2 v-if="loading" class="w-4 h-4 animate-spin" />
                     <CheckCircle2 v-else class="w-4 h-4" />
-                    <span>{{ loading ? 'Đang xử lý...' : 'Xác nhận thanh toán' }}</span>
+                    <span>{{ loading ? 'Đang xử lý...' : bankStarting ? 'Đang kết nối...' : bankIntent ? 'Đang chờ tiền vào...' : autoBankEnabled ? 'Bắt đầu theo dõi chuyển khoản' : 'Xác nhận thanh toán' }}</span>
                 </button>
             </div>
 
