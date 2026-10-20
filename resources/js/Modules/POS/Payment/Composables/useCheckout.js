@@ -186,10 +186,6 @@ export function useCheckout(
                 loadingToast
             )
 
-            toast.success(
-                'Thanh toán thành công'
-            )
-
             return response
 
         } catch (error) {

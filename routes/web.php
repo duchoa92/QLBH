@@ -246,6 +246,7 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::prefix('pos')->name('pos.')->controller(PosController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:pos.access')->name('index');
+        Route::get('/payment-settings', 'paymentSettings')->middleware('permission:pos.access')->name('payment-settings');
         Route::post('/scan-imei', 'scanImei')->middleware('permission:pos.access')->name('scan-imei');
         Route::post('/checkout', 'checkout')->middleware('permission:pos.access')->name('checkout');
         Route::post('/bank-payments', 'startBankPayment')->middleware('permission:pos.access')->name('bank-payments.start');

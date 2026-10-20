@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
+import { useConfirm } from '@/Composables/useConfirm'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
@@ -11,6 +12,7 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
+import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
 
 defineOptions({ layout: AdminLayout })
 
@@ -35,6 +37,19 @@ const props = defineProps({
 })
 
 const activeModal = ref(null)
+const confirmBox = useConfirm()
+const paymentVoiceAvailable = ref(false)
+const paymentVoiceChecked = ref(false)
+const paymentVoiceTestMessage = ref('')
+const updatePaymentVoiceAvailability = () => {
+    paymentVoiceAvailable.value = hasPaymentVoice(form.payment_voice_language || 'vi-VN')
+    paymentVoiceChecked.value = true
+}
+const testSelectedPaymentVoice = () => {
+    paymentVoiceTestMessage.value = playPaymentVoiceTest(form.payment_voice_language || 'vi-VN')
+        ? 'Đã phát câu thử. Nếu chưa nghe, hãy kiểm tra âm lượng hoặc thiết bị đầu ra.'
+        : 'Không tìm thấy giọng đọc tương ứng trên máy này.'
+}
 watch(() => props.active_section, (section) => {
     if (section === 'backups' && props.can_manage_backups) activeModal.value = 'backups'
     else if (section === 'system' && props.can_edit_settings) activeModal.value = section
@@ -70,6 +85,10 @@ const form = useForm({
     bank_account_name: props.settings.bank_account_name || '',
     bank_transfer_content: props.settings.bank_transfer_content || 'Thanh toan don hang',
     bank_qr_theme: props.settings.bank_qr_theme || 'classic',
+    payment_voice_language: props.settings.payment_voice_language || 'vi-VN',
+    payment_voice_enabled: props.settings.payment_voice_enabled !== false
+        && props.settings.payment_voice_enabled !== 0
+        && props.settings.payment_voice_enabled !== '0',
     bank_accounts: (props.settings.bank_accounts?.length
         ? props.settings.bank_accounts
         : (props.settings.bank_bin || props.settings.bank_account
@@ -103,6 +122,39 @@ const form = useForm({
             : index === 0,
     })),
 })
+const selectedBankAccountId = ref(String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || ''))
+const selectedBankAccount = computed(() => form.bank_accounts.find(account => String(account.id) === String(selectedBankAccountId.value)) || null)
+const selectedBankAccountIndex = computed(() => form.bank_accounts.findIndex(account => String(account.id) === String(selectedBankAccountId.value)))
+const visibleBankAccounts = computed(() => selectedBankAccount.value ? [selectedBankAccount.value] : [])
+const bankAccountSelectOptions = computed(() => [
+    { value: '', label: 'Chọn tài khoản ngân hàng...' },
+    ...form.bank_accounts.map(account => ({
+        value: String(account.id),
+        label: `${bankAccountLabel(account)} · ${account.bank_account || 'Chưa có số tài khoản'}${account.is_default ? ' · Mặc định' : ''}`,
+    })),
+    ...(props.can_update_bank_settings && form.bank_accounts.length < 10
+        ? [{ value: '__create_new__', label: '+ Tạo tài khoản mới' }]
+        : []),
+])
+const transferContentOptions = [
+    { value: 'default', label: 'Để ngân hàng mặc định' },
+    { value: 'invoice', label: 'Mã hóa đơn hiện tại' },
+]
+const paymentProviderOptions = [
+    { value: 'apipay', label: 'ApiPay · tạo payment request và QR, đối soát bằng webhook' },
+    { value: 'sepay', label: 'SePay · API Key hoặc webhook secret' },
+]
+const paymentVoiceOptions = [
+    { value: 'vi-VN', label: 'Tiếng Việt' },
+    { value: 'en-US', label: 'English (United States)' },
+]
+watch(() => form.payment_voice_language, updatePaymentVoiceAvailability)
+onMounted(() => {
+    updatePaymentVoiceAvailability()
+    window.speechSynthesis?.addEventListener?.('voiceschanged', updatePaymentVoiceAvailability)
+})
+onBeforeUnmount(() => window.speechSynthesis?.removeEventListener?.('voiceschanged', updatePaymentVoiceAvailability))
+
 const bankWebhookEndpoint = computed(() => `${window.location.origin}/api/webhooks/bank-transactions`)
 
 const bankOptions = computed(() => {
@@ -121,8 +173,11 @@ const bankOptions = computed(() => {
 })
 
 const addBankAccount = () => {
+    if (!can_update_bank_settings || form.bank_accounts.length >= 10) return
+
+    const id = `bank-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     form.bank_accounts.push({
-        id: `bank-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id,
         bank_bin: '',
         bank_account: '',
         bank_account_name: '',
@@ -139,19 +194,44 @@ const addBankAccount = () => {
         payment_api_secret_key_configured: false,
         payment_webhook_secret_configured: false,
     })
+    selectedBankAccountId.value = id
 }
 
-const removeBankAccount = (index) => {
-    form.bank_accounts.splice(index, 1)
-    if (form.bank_accounts.length && !form.bank_accounts.some(account => account.is_default)) {
-        form.bank_accounts[0].is_default = true
-    }
-}
+const removeBankAccount = () => {
+    const account = selectedBankAccount.value
+    if (!account) return
 
-const setDefaultBankAccount = (index) => {
-    form.bank_accounts.forEach((account, accountIndex) => {
-        account.is_default = accountIndex === index
+    confirmBox.show({
+        title: 'Xác nhận xóa tài khoản',
+        message: `Bạn có chắc muốn xóa tài khoản ${bankAccountLabel(account)} · ${account.bank_account || ''}?`,
+        confirmText: 'Xóa tài khoản',
+        cancelText: 'Giữ lại',
+        onConfirm: () => {
+            const index = selectedBankAccountIndex.value
+            form.bank_accounts.splice(index, 1)
+            if (form.bank_accounts.length && !form.bank_accounts.some(item => item.is_default)) {
+                form.bank_accounts[0].is_default = true
+            }
+            selectedBankAccountId.value = String(form.bank_accounts[Math.min(index, form.bank_accounts.length - 1)]?.id || '')
+        },
     })
+}
+
+const bankAccountLabel = (account) => {
+    const bank = props.banks.find(item => String(item.bin) === String(account.bank_bin))
+    return bank?.shortName || bank?.name || account.bank_name || (account.bank_bin ? `BIN ${account.bank_bin}` : 'Chưa chọn ngân hàng')
+}
+
+const setAutoReconcile = (account, enabled) => {
+    account.payment_provider = enabled ? (account.payment_provider || 'apipay') : ''
+}
+
+const handleBankAccountSelection = (value) => {
+    if (String(value || '') === '__create_new__') {
+        addBankAccount()
+        return
+    }
+    selectedBankAccountId.value = String(value || '')
 }
 
 const setAccountBank = (account, bin) => {
@@ -208,8 +288,22 @@ const unitForm = useForm({
 })
 
 const save = () => {
+    const accountsToSave = form.bank_accounts.filter(account =>
+        [account.bank_bin, account.bank_account, account.bank_account_name].some(value => String(value || '').trim() !== '')
+    )
+    const selectedAccountIsSaved = accountsToSave.some(account => String(account.id) === String(selectedBankAccountId.value))
+    const defaultAccountId = selectedAccountIsSaved
+        ? String(selectedBankAccountId.value)
+        : String(accountsToSave.find(account => account.is_default)?.id || accountsToSave[0]?.id || '')
+    accountsToSave.forEach(account => { account.is_default = String(account.id) === defaultAccountId })
+    form.bank_accounts = accountsToSave
+
     form.post(route('settings.update'), {
         preserveScroll: true,
+        onSuccess: () => {
+            selectedBankAccountId.value = defaultAccountId
+            localStorage.setItem('pos-payment-settings-updated', String(Date.now()))
+        },
     })
 }
 
@@ -301,7 +395,7 @@ const unitDisplayName = (unit) =>
             v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings)"
             :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : 'Hàng hóa và kho hàng'"
             size="lg"
-            body-class="p-4 sm:p-5"
+            body-class="max-h-[70vh] overflow-y-auto p-3 sm:p-4"
             @close="closeModal"
         >
        
@@ -548,10 +642,9 @@ const unitDisplayName = (unit) =>
                 </DataPanel>
             </div>
 
-            <DataPanel v-if="activeModal === 'payments'">
-                <template #header>
+            <section v-if="activeModal === 'payments'" class="w-full">
                     <div class="flex items-start justify-between gap-3">
-                        <div>
+                        <div class="min-w-0">
                             <h2 class="text-sm font-bold text-slate-900">
                                 Tài khoản chuyển khoản
                             </h2>
@@ -569,152 +662,173 @@ const unitDisplayName = (unit) =>
                             {{ can_update_bank_settings ? 'Có quyền sửa' : 'Chỉ xem' }}
                         </span>
                     </div>
-                </template>
-
-                <div class="space-y-3 p-4">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <p class="text-xs text-slate-500">Chọn ngân hàng, nhập số tài khoản và tên chủ tài khoản.</p>
-                        <ActionButton type="button" variant="secondary" :disabled="!can_update_bank_settings || form.bank_accounts.length >= 10" @click="addBankAccount">
-                            <Plus :size="15" /> Thêm tài khoản
-                        </ActionButton>
+                <div class="mt-4 space-y-5">
+                    <div class="space-y-3 rounded-xl bg-slate-50/70 p-3">
+                    <div class="flex items-end gap-2">
+                        <FloatingSelect
+                            :model-value="selectedBankAccountId"
+                            label="Tài khoản ngân hàng"
+                            :options="bankAccountSelectOptions"
+                            :disabled="!bankAccountSelectOptions.length"
+                            :show-placeholder="false"
+                            class="min-w-0 flex-1"
+                            @update:model-value="handleBankAccountSelection"
+                        />
+                        <button v-if="selectedBankAccount" type="button" class="mb-0.5 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40" :disabled="!can_update_bank_settings" @click="removeBankAccount">
+                            <Trash2 :size="15" /> Xóa
+                        </button>
                     </div>
-
-                    <div v-if="!banks.length" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    <div v-if="!banks.length" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                         Chưa tải được danh sách VietQR. Bạn có thể nhập BIN thủ công.
                     </div>
-                    <div v-for="(account, index) in form.bank_accounts" :key="account.id" class="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-emerald-200 sm:p-4">
-                        <div class="flex items-center justify-between gap-3">
-                            <label class="flex min-w-0 cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                                <input
-                                    type="radio"
-                                    name="default-bank-account"
-                                    :checked="account.is_default"
-                                    :disabled="!can_update_bank_settings"
-                                    class="border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                    @change="setDefaultBankAccount(index)"
-                                >
-                                <span>Tài khoản mặc định cho POS</span>
-                                <span v-if="account.is_default" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">MẶC ĐỊNH</span>
-                            </label>
-                            <button type="button" class="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" :disabled="!can_update_bank_settings" aria-label="Xóa tài khoản ngân hàng" @click="removeBankAccount(index)">
-                                <Trash2 class="h-4 w-4" />
-                            </button>
-                        </div>
-
+                    <div v-for="account in visibleBankAccounts" :key="account.id" class="space-y-3 pt-1">
+                        <div class="space-y-3">
                         <div class="grid gap-2.5 md:grid-cols-3">
                             <FloatingSelect
                                 v-if="banks.length"
                                 v-model="account.bank_bin"
-                                :name="`bank_accounts_${index}_bin`"
+                                :name="`bank_accounts_${selectedBankAccountIndex}_bin`"
                                 label="Ngân hàng"
                                 :options="bankOptions"
                                 option-label="label"
                                 option-value="bin"
                                 :disabled="!can_update_bank_settings"
-                                :error="form.errors[`bank_accounts.${index}.bank_bin`]"
+                                :error="form.errors[`bank_accounts.${selectedBankAccountIndex}.bank_bin`]"
                                 @update:model-value="setAccountBank(account, $event)"
                             />
                             <FloatingInput
                                 v-else
                                 v-model="account.bank_bin"
-                                :name="`bank_accounts_${index}_bin`"
+                                :name="`bank_accounts_${selectedBankAccountIndex}_bin`"
                                 label="Mã ngân hàng VietQR / BIN"
-                                placeholder="Ví dụ: 970422"
+                                placeholder-text="Ví dụ: 970422"
                                 :disabled="!can_update_bank_settings"
-                                :error="form.errors[`bank_accounts.${index}.bank_bin`]"
+                                :error="form.errors[`bank_accounts.${selectedBankAccountIndex}.bank_bin`]"
                             />
                             <FloatingInput
                                 v-model="account.bank_account"
-                                :name="`bank_accounts_${index}_account`"
+                                :name="`bank_accounts_${selectedBankAccountIndex}_account`"
                                 label="Số tài khoản"
                                 autocomplete="off"
                                 :disabled="!can_update_bank_settings"
-                                :error="form.errors[`bank_accounts.${index}.bank_account`]"
+                                :error="form.errors[`bank_accounts.${selectedBankAccountIndex}.bank_account`]"
                             />
                             <FloatingInput
                                 v-model="account.bank_account_name"
-                                :name="`bank_accounts_${index}_account_name`"
+                                :name="`bank_accounts_${selectedBankAccountIndex}_account_name`"
                                 label="Tên chủ tài khoản"
                                 :disabled="!can_update_bank_settings"
-                                :error="form.errors[`bank_accounts.${index}.bank_account_name`]"
+                                :error="form.errors[`bank_accounts.${selectedBankAccountIndex}.bank_account_name`]"
                             />
                         </div>
 
-                        <div class="rounded-xl bg-slate-50 p-3">
+                        <div class="pt-1">
                             <div class="mb-2 flex items-center justify-between gap-2">
                                 <div>
                                     <p class="text-xs font-bold text-slate-700">Nội dung chuyển khoản</p>
                                     <p class="mt-0.5 text-[11px] text-slate-500">Thiết lập riêng cho tài khoản này</p>
                                 </div>
                             </div>
-                            <div class="grid gap-2 sm:grid-cols-2">
-                                <label class="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 transition" :class="account.transfer_content_mode === 'default' ? 'border-emerald-300 bg-emerald-50/70 ring-1 ring-emerald-100' : 'border-slate-200 bg-white'">
-                                    <input v-model="account.transfer_content_mode" type="radio" value="default" :name="`bank-transfer-mode-${account.id}`" :disabled="!can_update_bank_settings" class="mt-0.5 border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                                    <span><span class="block text-xs font-semibold text-slate-700">Để ngân hàng mặc định</span><span class="mt-0.5 block text-[11px] leading-relaxed text-slate-500">Không điền nội dung chuyển khoản</span></span>
-                                </label>
-                                <label class="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 transition" :class="account.transfer_content_mode === 'invoice' ? 'border-emerald-300 bg-emerald-50/70 ring-1 ring-emerald-100' : 'border-slate-200 bg-white'">
-                                    <input v-model="account.transfer_content_mode" type="radio" value="invoice" :name="`bank-transfer-mode-${account.id}`" :disabled="!can_update_bank_settings" class="mt-0.5 border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                                    <span><span class="block text-xs font-semibold text-slate-700">Mã hóa đơn hiện tại</span><span class="mt-0.5 block text-[11px] leading-relaxed text-slate-500">Tự điền mã đơn để đối soát</span></span>
-                                </label>
-                            </div>
-                            <p v-if="form.errors[`bank_accounts.${index}.transfer_content_mode`]" class="mt-1 text-xs text-rose-600">{{ form.errors[`bank_accounts.${index}.transfer_content_mode`] }}</p>
+                            <FloatingSelect
+                                v-model="account.transfer_content_mode"
+                                :name="`bank_accounts_${selectedBankAccountIndex}_transfer_content_mode`"
+                                label="Nội dung chuyển khoản"
+                                :options="transferContentOptions"
+                                :disabled="!can_update_bank_settings"
+                                :error="form.errors[`bank_accounts.${selectedBankAccountIndex}.transfer_content_mode`]"
+                                :show-placeholder="false"
+                            />
                         </div>
 
-                        <div class="rounded-xl border border-violet-100 bg-violet-50/40 p-3">
-                            <div class="mb-2 flex items-center justify-between gap-2">
-                                <div>
-                                    <p class="text-xs font-bold text-slate-800">Tự đối soát giao dịch</p>
-                                    <p class="mt-0.5 text-[11px] text-slate-500">Cấu hình độc lập cho tài khoản ngân hàng này</p>
-                                </div>
+                        <div class="pt-1">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800">
+                                    <input type="checkbox" :checked="Boolean(account.payment_provider)" :disabled="!can_update_bank_settings" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" @change="setAutoReconcile(account, $event.target.checked)">
+                                    <span>Tự đối soát giao dịch</span>
+                                </label>
                                 <span v-if="account.payment_auto_enabled" class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">ĐANG BẬT</span>
+                                <span v-else-if="account.payment_provider" class="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">CHƯA ĐỦ CẤU HÌNH</span>
                             </div>
-                            <label class="block text-xs font-semibold text-slate-600">Dịch vụ nhận giao dịch
-                                <select v-model="account.payment_provider" :disabled="!can_update_bank_settings" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100">
-                                    <option value="">Không dùng tự động</option>
-                                    <option value="apipay">ApiPay · API + webhook HMAC</option>
-                                    <option value="sepay">SePay · API Key hoặc webhook secret</option>
-                                </select>
-                            </label>
-                            <div v-if="account.payment_provider === 'apipay'" class="mt-2 grid gap-2 sm:grid-cols-2">
-                                <label class="text-xs font-semibold text-slate-600 sm:col-span-2">Bank Account Public ID trên ApiPay
-                                    <input v-model="account.payment_provider_account_id" :disabled="!can_update_bank_settings" placeholder="bk_... (dùng để xác định tài khoản nhận)" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
-                                </label>
-                                <label class="text-xs font-semibold text-slate-600">ApiPay Access Key
-                                    <input v-model="account.payment_api_access_key" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_api_access_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'ak_live_… hoặc ak_test_…'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
-                                </label>
-                                <label class="text-xs font-semibold text-slate-600">ApiPay Secret Key
-                                    <input v-model="account.payment_api_secret_key" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_api_secret_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret key của API Key'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
-                                </label>
-                                <label class="text-xs font-semibold text-slate-600 sm:col-span-2">Webhook signing secret
-                                    <input v-model="account.payment_webhook_secret" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret ApiPay trả về khi tạo webhook'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
-                                    <span v-if="account.payment_webhook_secret_configured" class="mt-1 block font-normal text-emerald-700">Đã lưu secret.</span>
-                                </label>
+                            <div v-if="account.payment_provider" class="mt-3 space-y-3">
+                            <FloatingSelect
+                                v-model="account.payment_provider"
+                                :name="`bank_accounts_${selectedBankAccountIndex}_payment_provider`"
+                                label="Dịch vụ nhận giao dịch"
+                                :options="paymentProviderOptions"
+                                :disabled="!can_update_bank_settings"
+                                :show-placeholder="false"
+                            />
+                            <div v-if="account.payment_provider === 'apipay'" class="mt-2 grid gap-3 sm:grid-cols-2">
+                                <FloatingInput v-model="account.payment_provider_account_id" :name="`bank_accounts_${selectedBankAccountIndex}_provider_account_id`" label="Bank Account Public ID ApiPay" placeholder-text="bk_..." :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                <FloatingInput v-model="account.payment_api_access_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_access_key`" label="ApiPay Access Key" type="password" autocomplete="new-password" :placeholder-text="account.payment_api_access_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'ak_live_… hoặc ak_test_…'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                <FloatingInput v-model="account.payment_api_secret_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_secret_key`" label="ApiPay Secret Key" type="password" autocomplete="new-password" :placeholder-text="account.payment_api_secret_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret key của API Key'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                <div>
+                                    <FloatingInput v-model="account.payment_webhook_secret" :name="`bank_accounts_${selectedBankAccountIndex}_webhook_secret`" label="Webhook signing secret" type="password" autocomplete="new-password" :placeholder-text="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret ApiPay trả về khi tạo webhook'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                    <span v-if="account.payment_webhook_secret_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu secret.</span>
+                                </div>
                             </div>
-                            <div v-else-if="account.payment_provider === 'sepay'" class="mt-2 grid gap-2 sm:grid-cols-2">
-                                <label class="text-xs font-semibold text-slate-600">SePay API Key
-                                    <input v-model="account.payment_api_key" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_api_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'API key trong cấu hình webhook SePay'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
-                                    <span v-if="account.payment_api_key_configured" class="mt-1 block font-normal text-emerald-700">Đã lưu API key.</span>
-                                </label>
-                                <label class="text-xs font-semibold text-slate-600">Webhook secret tùy chỉnh (nếu dùng)
-                                    <input v-model="account.payment_webhook_secret" :disabled="!can_update_bank_settings" type="password" autocomplete="new-password" :placeholder="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Tùy chọn'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-100" />
-                                    <span v-if="account.payment_webhook_secret_configured" class="mt-1 block font-normal text-emerald-700">Đã lưu secret.</span>
-                                </label>
+                            <p v-if="account.payment_provider === 'apipay' && !account.payment_auto_enabled" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-800">
+                                ApiPay cần Bank Account Public ID, Access Key, Secret Key và Webhook signing secret. Hãy nhập đủ các thông tin này rồi lưu cài đặt.
+                            </p>
+                            <div v-else-if="account.payment_provider === 'sepay'" class="mt-2 grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <FloatingInput v-model="account.payment_api_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_key`" label="SePay API Key" type="password" autocomplete="new-password" :placeholder-text="account.payment_api_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'API key cấu hình webhook'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                    <span v-if="account.payment_api_key_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu API key.</span>
+                                </div>
+                                <div>
+                                    <FloatingInput v-model="account.payment_webhook_secret" :name="`bank_accounts_${selectedBankAccountIndex}_webhook_secret`" label="Webhook secret tùy chỉnh" type="password" autocomplete="new-password" :placeholder-text="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Không bắt buộc'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                    <span v-if="account.payment_webhook_secret_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu secret.</span>
+                                </div>
                             </div>
                             <div v-if="account.payment_provider" class="mt-2 rounded-lg bg-white/80 px-2.5 py-2 text-[11px] leading-relaxed text-slate-600">
                                 Webhook URL: <code class="select-all break-all font-semibold text-violet-700">{{ bankWebhookEndpoint }}</code>
-                                <p class="mt-1">Dán URL này vào dịch vụ. POS sẽ gắn mã hóa đơn vào nội dung QR và tự cập nhật khi nhận giao dịch.</p>
+                                <p v-if="account.payment_provider === 'apipay'" class="mt-1">Trong ApiPay, đăng ký URL này tại Cài đặt → Webhooks (URL phải HTTPS và truy cập được từ Internet), rồi nhập secret trả về. QLBH gửi mã hóa đơn hiện tại làm nội dung khi tạo payment request; QR ApiPay trả về sẽ được hiển thị và webhook dùng chính nội dung đó để ghép giao dịch với hóa đơn.</p>
+                                <p v-else class="mt-1">Dán URL này vào cấu hình webhook của dịch vụ. URL cần truy cập được từ Internet; POS gửi mã hóa đơn trong nội dung thanh toán để tự đối soát.</p>
                             </div>
+                            </div>
+                        </div>
                         </div>
                     </div>
 
-                    <div v-if="!form.bank_accounts.length" class="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
-                        Chưa có tài khoản ngân hàng. Bấm “Thêm tài khoản” để bắt đầu.
+                    <div v-if="!selectedBankAccount" class="rounded-lg bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                        Chọn tài khoản đã có hoặc chọn “Tạo tài khoản mới”.
                     </div>
 
-                    <div>
+                    </div>
+
+                    <div class="grid gap-4 md:grid-cols-2">
+                    <section class="rounded-lg bg-slate-50 p-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-semibold text-slate-700">Âm báo bằng giọng nói</p>
+                                <p class="mt-0.5 text-xs text-slate-500">Đọc thông báo khi tiền vào.</p>
+                            </div>
+                            <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                                <input v-model="form.payment_voice_enabled" type="checkbox" :disabled="!can_update_bank_settings" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                {{ form.payment_voice_enabled ? 'Bật' : 'Tắt' }}
+                            </label>
+                        </div>
+                        <div v-if="form.payment_voice_enabled" class="mt-3 grid gap-2">
+                            <FloatingSelect
+                                v-model="form.payment_voice_language"
+                                name="payment_voice_language"
+                                label="Ngôn ngữ đọc"
+                                :options="paymentVoiceOptions"
+                                :disabled="!can_update_bank_settings"
+                                :show-placeholder="false"
+                            />
+                            <button type="button" :disabled="!paymentVoiceAvailable" class="w-fit rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice">Thử giọng đọc</button>
+                            <p v-if="paymentVoiceTestMessage" class="text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
+                            <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="text-xs text-amber-700">
+                                Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.
+                            </p>
+                        </div>
+                    </section>
+
+                    <section class="rounded-lg bg-slate-50 p-3">
                         <p class="mb-1.5 text-sm font-semibold text-slate-700">Kiểu màu mã QR</p>
                         <p class="mb-3 text-xs text-slate-500">Chọn màu phù hợp với cửa hàng. Nền luôn sáng để mã dễ quét.</p>
-                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                        <div class="grid grid-cols-2 gap-2">
                             <button
                                 v-for="theme in VIET_QR_THEMES"
                                 :key="theme.value"
@@ -737,10 +851,11 @@ const unitDisplayName = (unit) =>
                             </button>
                         </div>
                         <p v-if="form.errors.bank_qr_theme" class="mt-1 text-xs text-rose-600">{{ form.errors.bank_qr_theme }}</p>
+                    </section>
                     </div>
 
                 </div>
-            </DataPanel>
+            </section>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">

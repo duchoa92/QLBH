@@ -61,6 +61,8 @@ class AppServiceProvider extends ServiceProvider
                 })->values()->all(),
                 'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
                 'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
+                'payment_voice_language' => setting('payment_voice_language', 'vi-VN'),
+                'payment_voice_enabled' => filter_var(setting('payment_voice_enabled', true), FILTER_VALIDATE_BOOLEAN),
             ]
         ]);
     }

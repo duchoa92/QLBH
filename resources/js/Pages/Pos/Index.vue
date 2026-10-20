@@ -228,6 +228,23 @@ const invoiceData = ref(null)
 const cartItemCount = computed(() => cart.value.reduce((count, item) => count + Number(item.quantity || 1), 0))
 
 const showInvoice = ref(false)
+const paymentOutcome = ref(null)
+const showPaymentOutcome = ref(false)
+const presentPaymentOutcome = (saleResponse, expectedAmount = null) => {
+    const sale = saleResponse?.data || saleResponse || {}
+    const received = Number(sale.paid ?? sale.received_amount ?? 0)
+    const change = Number(sale.change ?? 0)
+    const expected = expectedAmount === null ? Math.max(0, received - change) : Number(expectedAmount)
+    const difference = received - expected
+    paymentOutcome.value = {
+        code: sale.code || '',
+        received,
+        expected,
+        difference,
+        status: difference > 0 ? 'excess' : difference < 0 ? 'short' : 'exact',
+    }
+    showPaymentOutcome.value = true
+}
 
 // loading khi nhấn checkout để tránh việc click nhiều lần vào nút checkout
 const loading = ref(false)
@@ -319,6 +336,8 @@ const handleCheckout = async (data) => {
 
         loading.value = true
 
+        const expectedAmount = Number(grandTotal.value || 0)
+            + (data.pay_old_debt ? Number(selectedCustomer.value?.debt_balance || 0) : 0)
         const res = await confirmCheckout({
             ...data,
             cart: cart.value
@@ -332,6 +351,7 @@ const handleCheckout = async (data) => {
 
         invoiceData.value = res
         showInvoice.value = true
+        presentPaymentOutcome(res?.data, expectedAmount)
         await refreshShiftSummary()
         // sau khi TT thành công chuyển về tab có DL
         switchToNextTab()
@@ -353,13 +373,22 @@ const handleBankCheckoutCompleted = async (saleResponse) => {
     showCheckoutModal.value = false
     invoiceData.value = saleResponse
     showInvoice.value = true
-    const excess = Number(saleResponse?.data?.change || 0)
-    toast.success(excess > 0
-        ? `Đã nhận đủ tiền và tự hoàn tất hóa đơn. Khách chuyển thừa ${formatMoney(excess)}.`
-        : 'Đã nhận đủ tiền chuyển khoản, hóa đơn đã tự hoàn tất.')
+    presentPaymentOutcome(saleResponse)
     await refreshShiftSummary()
     switchToNextTab()
     cleanupEmptyTabs()
+}
+
+const handleBackgroundBankCheckoutCompleted = async (saleResponse, cartSnapshot) => {
+    // A cashier may start editing a new cart after hiding the QR modal.
+    // Only clear the cart if it is still exactly the one used for this intent.
+    if (cartSnapshot && JSON.stringify(cart.value) === cartSnapshot) clearCart()
+    presentPaymentOutcome(saleResponse)
+    await refreshShiftSummary()
+}
+
+const handlePartialBankTransfer = () => {
+    // Partial transfers remain visible in the checkout status while polling continues.
 }
 
 
@@ -476,7 +505,27 @@ useBarcodeScanner(
         @close="showCheckoutModal = false"
         @confirm="checkout($event)"
         @bank-completed="handleBankCheckoutCompleted"
+        @bank-completed-background="handleBackgroundBankCheckoutCompleted"
+        @bank-transfer-partial="handlePartialBankTransfer"
     />
+
+    <div v-if="showPaymentOutcome && paymentOutcome" class="fixed inset-0 z-[10050] flex min-h-screen items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+        <section role="dialog" aria-modal="true" aria-labelledby="payment-outcome-title" class="w-full max-w-xl rounded-3xl bg-white p-7 text-center shadow-2xl sm:p-10">
+            <div class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full" :class="paymentOutcome.status === 'exact' ? 'bg-emerald-100 text-emerald-600' : paymentOutcome.status === 'excess' ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'">
+                <span class="text-4xl font-black">{{ paymentOutcome.status === 'exact' ? '✓' : paymentOutcome.status === 'excess' ? '+' : '−' }}</span>
+            </div>
+            <h2 id="payment-outcome-title" class="text-2xl font-black text-slate-900 sm:text-3xl">
+                {{ paymentOutcome.status === 'exact' ? 'Đã nhận đủ tiền' : paymentOutcome.status === 'excess' ? 'Khách đã trả thừa' : 'Khách còn thiếu tiền' }}
+            </h2>
+            <p v-if="paymentOutcome.code" class="mt-2 text-sm font-semibold text-slate-500">Hóa đơn {{ paymentOutcome.code }}</p>
+            <div class="mt-7 space-y-3 rounded-2xl bg-slate-50 p-5 text-left">
+                <div class="flex items-center justify-between gap-4 text-sm"><span class="text-slate-600">Tổng cần thanh toán</span><strong class="text-slate-900">{{ formatMoney(paymentOutcome.expected) }}</strong></div>
+                <div class="flex items-center justify-between gap-4 text-sm"><span class="text-slate-600">Đã nhận</span><strong class="text-slate-900">{{ formatMoney(paymentOutcome.received) }}</strong></div>
+                <div class="flex items-center justify-between gap-4 border-t border-slate-200 pt-3"><span class="font-bold text-slate-700">{{ paymentOutcome.status === 'excess' ? 'Tiền thừa' : paymentOutcome.status === 'short' ? 'Còn thiếu' : 'Trạng thái' }}</span><strong :class="paymentOutcome.status === 'short' ? 'text-rose-600' : paymentOutcome.status === 'excess' ? 'text-amber-600' : 'text-emerald-700'">{{ paymentOutcome.status === 'exact' ? 'Đã thanh toán đủ' : formatMoney(Math.abs(paymentOutcome.difference)) }}</strong></div>
+            </div>
+            <button type="button" autofocus class="mt-7 w-full rounded-xl bg-indigo-600 px-6 py-4 text-base font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700" @click="showPaymentOutcome = false">OK</button>
+        </section>
+    </div>
 
     <SelectProductModal
         v-if="selectedProduct"

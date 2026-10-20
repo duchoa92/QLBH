@@ -17,6 +17,34 @@ use Illuminate\Support\Facades\Notification;
 
 class PosController extends Controller
 {
+    public function paymentSettings()
+    {
+        $accounts = collect(json_decode((string) setting('bank_accounts', '[]'), true) ?: [])
+            ->map(function (array $account): array {
+                $apiKey = (string) ($account['payment_api_key'] ?? '');
+                $apiAccessKey = (string) ($account['payment_api_access_key'] ?? '');
+                $apiSecretKey = (string) ($account['payment_api_secret_key'] ?? '');
+                $webhookSecret = (string) ($account['payment_webhook_secret'] ?? '');
+                unset($account['payment_api_key'], $account['payment_api_access_key'], $account['payment_api_secret_key'], $account['payment_webhook_secret']);
+                $provider = strtolower((string) ($account['payment_provider'] ?? ''));
+                $account['payment_auto_enabled'] = $provider === 'apipay'
+                    ? (filled($webhookSecret) && filled($apiAccessKey) && filled($apiSecretKey) && filled($account['payment_provider_account_id'] ?? null))
+                    : ($provider === 'sepay' && (filled($apiKey) || filled($webhookSecret)));
+                return $account;
+            })->values()->all();
+
+        return response()->json(['settings' => [
+            'bank_bin' => setting('bank_bin', ''),
+            'bank_account' => setting('bank_account', ''),
+            'bank_account_name' => setting('bank_account_name', ''),
+            'bank_accounts' => $accounts,
+            'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
+            'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
+            'payment_voice_language' => setting('payment_voice_language', 'vi-VN'),
+            'payment_voice_enabled' => filter_var(setting('payment_voice_enabled', true), FILTER_VALIDATE_BOOLEAN),
+        ]]);
+    }
+
     public function startBankPayment(Request $request)
     {
         $data = $request->validate([
@@ -101,23 +129,44 @@ class PosController extends Controller
         $providerPayment = [];
         if ($provider === 'apipay') {
             $auth = base64_encode($apiAccessKey . ':' . $apiSecretKey);
-            $response = \Illuminate\Support\Facades\Http::timeout(12)
-                ->withHeaders(['Authorization' => 'Bearer ' . $auth])
-                ->post('https://app.apipay.vn/v1/client/payment-requests', [
-                    'bankPublicId' => $bankAccountConfig['payment_provider_account_id'],
-                    'amount' => (string) $expected,
-                    'content' => $intent->invoice_code,
-                ]);
-            $providerPayment = $response->json('data') ?? [];
-            if (! $response->successful() || ! filled($providerPayment['payUrl'] ?? null)) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::timeout(15)
+                    ->acceptJson()
+                    ->withHeaders(['Authorization' => 'Bearer ' . $auth])
+                    ->post('https://app.apipay.vn/v1/client/payment-requests', [
+                        'bankPublicId' => $bankAccountConfig['payment_provider_account_id'],
+                        'amount' => (string) $expected,
+                        // Keep the QLBH invoice code as the transfer memo so
+                        // the signed transaction.in webhook maps to this intent.
+                        'content' => $intent->invoice_code,
+                    ]);
+            } catch (\Illuminate\Http\Client\ConnectionException $exception) {
                 $intent->delete();
-                \Illuminate\Support\Facades\Log::warning('ApiPay payment request failed.', ['status' => $response->status()]);
-                abort(502, 'ApiPay không tạo được yêu cầu thanh toán. Kiểm tra API Key và Bank Account Public ID.');
+                \Illuminate\Support\Facades\Log::warning('ApiPay payment request connection failed.', ['message' => $exception->getMessage()]);
+                abort(502, 'Không kết nối được ApiPay để tạo mã thanh toán. Vui lòng thử lại.');
             }
-            $intent->update(['checkout_payload' => [...$intent->checkout_payload, 'provider_payment_url' => $providerPayment['payUrl'], 'provider_qr_url' => $providerPayment['qrUrl'] ?? null]]);
+
+            $providerPayment = $response->json('data') ?? [];
+            if (! $response->successful() || ! filled($providerPayment['payUrl'] ?? null) || ! filled($providerPayment['qrUrl'] ?? null)) {
+                $intent->delete();
+                \Illuminate\Support\Facades\Log::warning('ApiPay payment request failed.', ['status' => $response->status(), 'response' => $response->json()]);
+                abort(502, 'ApiPay không tạo được mã QR. Kiểm tra API keys và Bank Account Public ID.');
+            }
+
+            $checkoutPayload = $intent->checkout_payload;
+            $checkoutPayload['provider_payment_url'] = $providerPayment['payUrl'];
+            $checkoutPayload['provider_qr_url'] = $providerPayment['qrUrl'];
+            $intent->update(['checkout_payload' => $checkoutPayload]);
         }
 
-        return response()->json(['success' => true, 'data' => ['id' => $intent->id, 'invoice_code' => $intent->invoice_code, 'expected_amount' => $expected, 'expires_at' => $intent->expires_at, 'provider_payment_url' => $providerPayment['payUrl'] ?? null, 'provider_qr_url' => $providerPayment['qrUrl'] ?? null]]);
+        return response()->json(['success' => true, 'data' => [
+            'id' => $intent->id,
+            'invoice_code' => $intent->invoice_code,
+            'expected_amount' => $expected,
+            'expires_at' => $intent->expires_at,
+            'provider_payment_url' => $providerPayment['payUrl'] ?? null,
+            'provider_qr_url' => $providerPayment['qrUrl'] ?? null,
+        ]]);
     }
 
     public function bankPaymentStatus(Request $request, BankPaymentIntent $intent)

@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\BankPaymentIntent;
 use App\Models\BankPaymentTransaction;
 use App\Models\Sale;
+use App\Models\User;
+use App\Notifications\SystemNotification;
 use App\Services\PosCheckoutService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 class BankTransferWebhookController extends Controller
@@ -54,8 +57,14 @@ class BankTransferWebhookController extends Controller
 
         if ($provider === 'apipay') {
             $payload = $request->json()->all();
-            if (! empty($payload['sandbox'])) {
-                return response()->json(['received' => true, 'success' => true, 'sandbox' => true]);
+            // ApiPay test keys and Live Test both deliver real, signed webhooks.
+            // Acknowledge them, but never let simulated transfers settle a POS sale.
+            if (! empty($payload['sandbox']) || ! empty($payload['liveTest'])) {
+                return response()->json([
+                    'received' => true,
+                    'sandbox' => ! empty($payload['sandbox']),
+                    'liveTest' => ! empty($payload['liveTest']),
+                ]);
             }
             if (($payload['event'] ?? null) !== 'transaction.in') {
                 return response()->json(['received' => true, 'matched' => false]);
@@ -98,11 +107,14 @@ class BankTransferWebhookController extends Controller
             'direction' => ['required', 'in:in,credit,received'],
         ])->validate();
 
-        if (! preg_match('/INV-[0-9]{14}/', strtoupper((string) ($data['description'] ?? '')), $match)) {
+        if (! preg_match('/INV-?([0-9]{14})/', strtoupper((string) ($data['description'] ?? '')), $match)) {
             return response()->json(['received' => true, 'success' => true, 'matched' => false, 'message' => 'Không tìm thấy mã hóa đơn trong nội dung giao dịch.']);
         }
 
-        $intent = BankPaymentIntent::query()->where('invoice_code', $match[0])->first();
+        // ApiPay/bank payloads may strip punctuation from the transfer content.
+        // Normalize both INV123... and INV-123... to our stored invoice format.
+        $invoiceCode = 'INV-' . $match[1];
+        $intent = BankPaymentIntent::query()->where('invoice_code', $invoiceCode)->first();
         $accountMatches = $intent && $intent->bank_account === (string) ($matchedAccount['bank_account'] ?? '')
             && ($data['account_number'] === '' || $intent->bank_account === (string) $data['account_number']);
         $publicId = (string) ($matchedAccount['payment_provider_account_id'] ?? '');
@@ -135,6 +147,16 @@ class BankTransferWebhookController extends Controller
                 $received = (int) $locked->received_amount + (int) $data['amount'];
                 $locked->update(['received_amount' => $received]);
                 if ($received < (int) $locked->expected_amount) {
+                    $remaining = (int) $locked->expected_amount - $received;
+                    Notification::send(
+                        User::query()->get(),
+                        new SystemNotification(
+                            'Đã nhận một phần tiền chuyển khoản',
+                            'Hóa đơn ' . $locked->invoice_code . ': vừa nhận ' . number_format((int) $data['amount'], 0, ',', '.') . ' ₫; tổng đã nhận ' . number_format($received, 0, ',', '.') . '/' . number_format((int) $locked->expected_amount, 0, ',', '.') . ' ₫, còn thiếu ' . number_format($remaining, 0, ',', '.') . ' ₫.',
+                            'warning',
+                            route('pos.index')
+                        )
+                    );
                     return ['matched' => true, 'status' => 'waiting', 'received_amount' => $received];
                 }
 
@@ -152,6 +174,19 @@ class BankTransferWebhookController extends Controller
                 $sale->load(['items.product', 'items.variant', 'items.productImei', 'customer']);
                 $saleResponse = $this->saleResponse($sale);
                 $locked->update(['status' => 'paid', 'sale_id' => $sale->id, 'sale_response' => $saleResponse]);
+
+                $excess = max(0, $received - (int) $locked->expected_amount);
+                Notification::send(
+                    User::query()->get(),
+                    new SystemNotification(
+                        $excess > 0 ? 'Khách chuyển khoản thừa' : 'Đã nhận đủ tiền chuyển khoản',
+                        $excess > 0
+                            ? 'Hóa đơn ' . $locked->invoice_code . ' đã hoàn tất. Đã nhận ' . number_format($received, 0, ',', '.') . ' ₫, thừa ' . number_format($excess, 0, ',', '.') . ' ₫.'
+                            : 'Hóa đơn ' . $locked->invoice_code . ' đã nhận đủ ' . number_format($received, 0, ',', '.') . ' ₫ và tự hoàn tất.',
+                        $excess > 0 ? 'warning' : 'sale',
+                        route('sales.index')
+                    )
+                );
 
                 return ['matched' => true, 'status' => 'paid', 'received_amount' => $received];
             });

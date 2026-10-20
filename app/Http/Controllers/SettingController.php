@@ -20,6 +20,8 @@ class SettingController extends Controller
         'bank_accounts',
         'bank_transfer_content',
         'bank_qr_theme',
+        'payment_voice_language',
+        'payment_voice_enabled',
     ];
 
     public function index(Request $request, BackupController $backupController, CloudBackupStorage $cloudStorage)
@@ -61,6 +63,8 @@ class SettingController extends Controller
                 })->values()->all(),
                 'bank_transfer_content' => setting('bank_transfer_content', 'Thanh toan don hang'),
                 'bank_qr_theme' => setting('bank_qr_theme', 'classic'),
+                'payment_voice_language' => setting('payment_voice_language', 'vi-VN'),
+                'payment_voice_enabled' => filter_var(setting('payment_voice_enabled', true), FILTER_VALIDATE_BOOLEAN),
             ],
             'can_update_bank_settings' => $this->canUpdateBankSettings($request),
             'can_edit_settings' => $user?->can('settings.edit') ?? false,
@@ -114,6 +118,8 @@ class SettingController extends Controller
             'bank_accounts.*.payment_webhook_secret' => ['nullable', 'string', 'max:2000'],
             'bank_transfer_content' => ['sometimes', 'nullable', 'string', 'max:255'],
             'bank_qr_theme' => ['sometimes', 'in:classic,emerald,indigo,blue,rose'],
+            'payment_voice_language' => ['sometimes', 'in:vi-VN,en-US'],
+            'payment_voice_enabled' => ['sometimes', 'boolean'],
         ]);
 
         if ($user->can('settings.edit')) {

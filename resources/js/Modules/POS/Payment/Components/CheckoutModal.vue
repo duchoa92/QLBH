@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import QrPayment from './QrPayment.vue'
 import { X, CreditCard, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
 import { formatCurrency, formatNumber } from '@/utils/format'
+import { announceBankPayment, armBankPaymentAudio } from '@/Modules/POS/Payment/Utils/paymentAlerts'
 import axios from 'axios'
 
 const props = defineProps({
@@ -20,7 +21,7 @@ const props = defineProps({
     },
 })
 
-const emit = defineEmits(['close', 'confirm', 'bank-completed'])
+const emit = defineEmits(['close', 'confirm', 'bank-completed', 'bank-completed-background', 'bank-transfer-partial'])
 
 const paymentMethod = ref('cash')
 const paidAmount = ref('')
@@ -30,12 +31,27 @@ const bankIntent = ref(null)
 const bankStatus = ref(null)
 const bankError = ref('')
 const bankStarting = ref(false)
+const bankCartSnapshot = ref('')
 let bankPollTimer = null
 
 const page = usePage()
+const refreshedPaymentSettings = ref(null)
+const refreshPaymentSettings = async () => {
+    try {
+        const { data } = await axios.get(route('pos.payment-settings'))
+        refreshedPaymentSettings.value = data.settings
+    } catch (error) {
+        console.error('Không thể cập nhật cài đặt thanh toán POS.', error)
+    }
+}
+const onPaymentSettingsStorage = event => {
+    if (event.key === 'pos-payment-settings-updated') refreshPaymentSettings()
+}
+window.addEventListener('storage', onPaymentSettingsStorage)
+onBeforeUnmount(() => window.removeEventListener('storage', onPaymentSettingsStorage))
 
 const bankSettings = computed(() =>
-    page.props.settings || {}
+    ({ ...(page.props.settings || {}), ...(refreshedPaymentSettings.value || {}) })
 )
 
 const bankAccounts = computed(() => {
@@ -153,13 +169,31 @@ const paymentStatusLabel = computed(() => {
 })
 
 const pollBankPayment = async () => {
-    if (!bankIntent.value || !props.show) return
+    // Keep polling while the modal is hidden. The bank webhook can complete
+    // after the cashier closes the QR dialog; the POS page still needs to
+    // receive the completion event and show the sale/notification.
+    if (!bankIntent.value) return
     try {
         const { data } = await axios.get(route('pos.bank-payments.status', bankIntent.value.id))
+        const previousReceived = Number(bankStatus.value?.received_amount || 0)
         bankStatus.value = data.data
+        const received = Number(data.data.received_amount || 0)
+        const expected = Number(data.data.expected_amount || 0)
+        if (received > previousReceived) {
+            if (received < expected) {
+                const remaining = expected - received
+                announceBankPayment({ kind: 'partial', amount: remaining, language: bankSettings.value.payment_voice_language || 'vi-VN', speak: bankSettings.value.payment_voice_enabled !== false })
+                emit('bank-transfer-partial', { received, expected, remaining })
+            } else if (received > expected) {
+                announceBankPayment({ kind: 'excess', amount: received - expected, language: bankSettings.value.payment_voice_language || 'vi-VN', speak: bankSettings.value.payment_voice_enabled !== false })
+            } else {
+                announceBankPayment({ kind: 'exact', language: bankSettings.value.payment_voice_language || 'vi-VN', speak: bankSettings.value.payment_voice_enabled !== false })
+            }
+        }
         if (data.data.status === 'paid' && data.data.sale) {
             bankIntent.value = null
-            emit('bank-completed', data.data.sale)
+            if (props.show) emit('bank-completed', data.data.sale)
+            else emit('bank-completed-background', data.data.sale, bankCartSnapshot.value)
             return
         }
         if (data.data.status === 'waiting') bankPollTimer = setTimeout(pollBankPayment, 1500)
@@ -171,6 +205,7 @@ const pollBankPayment = async () => {
 
 const startBankPayment = async () => {
     if (bankStarting.value) return
+    armBankPaymentAudio()
     bankStarting.value = true
     bankError.value = ''
     try {
@@ -200,6 +235,7 @@ const startBankPayment = async () => {
             bank_account: selectedBankAccount.value?.bank_account,
         })
         bankIntent.value = data.data
+        bankCartSnapshot.value = JSON.stringify(props.cart)
         bankStatus.value = { status: 'waiting', expected_amount: data.data.expected_amount, received_amount: 0, difference: -data.data.expected_amount }
         bankPollTimer = setTimeout(pollBankPayment, 1200)
     } catch (error) {
@@ -209,26 +245,7 @@ const startBankPayment = async () => {
     }
 }
 
-const stopBankPayment = async () => {
-    if (bankPollTimer) clearTimeout(bankPollTimer)
-    if (bankIntent.value) {
-        try { await axios.delete(route('pos.bank-payments.cancel', bankIntent.value.id)) }
-        catch (error) {
-            bankError.value = error.response?.data?.message || 'Không thể dừng chờ sau khi đã có tiền vào.'
-            bankPollTimer = setTimeout(pollBankPayment, 1500)
-            return false
-        }
-    }
-    bankIntent.value = null
-    bankStatus.value = null
-    return true
-}
-
-const closeModal = async () => {
-    const stopped = await stopBankPayment()
-    if (!stopped) return
-    emit('close')
-}
+const closeModal = () => emit('close')
 
 const submit = () => {
     if (autoBankEnabled.value) {
@@ -245,9 +262,6 @@ const submit = () => {
     })
 }
 
-watch(() => props.show, shown => {
-    if (!shown) stopBankPayment()
-})
 </script>
 
 <template>
@@ -330,9 +344,16 @@ watch(() => props.show, shown => {
 
                     <div
                         v-else
-                        class="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs font-semibold text-amber-700 text-center"
+                        class="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center text-xs font-semibold text-amber-800"
                     >
-                        Chưa cấu hình tài khoản ngân hàng trong Cài đặt.
+                        <template v-if="!hasBankSettings">Chưa cấu hình tài khoản ngân hàng trong Cài đặt.</template>
+                        <template v-else-if="selectedBankAccount?.payment_provider === 'apipay'">
+                            ApiPay chưa đủ cấu hình. Hãy kiểm tra Bank Account Public ID, API keys và Webhook signing secret trong Cài đặt.
+                        </template>
+                        <template v-else-if="selectedBankAccount?.payment_provider === 'sepay'">
+                            Tự đối soát SePay chưa bật. Hãy nhập API Key hoặc webhook secret cho tài khoản này trong Cài đặt.
+                        </template>
+                        <template v-else>Chưa chọn dịch vụ tự đối soát cho tài khoản này trong Cài đặt.</template>
                     </div>
                 </div>
 
@@ -388,7 +409,7 @@ watch(() => props.show, shown => {
                     class="flex-1 rounded-xl border border-slate-200/80 bg-white py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
                     @click="closeModal"
                 >
-                    Hủy bỏ
+                    {{ bankIntent ? 'Ẩn, tiếp tục theo dõi' : 'Hủy bỏ' }}
                 </button>
 
                 <button
