@@ -4,6 +4,7 @@ import { router, usePage } from '@inertiajs/vue3';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
 import DetailModal from '@/Components/UI/DetailModal.vue';
+import PaginationBar from '@/Components/UI/PaginationBar.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
 import PatternLock from '@/Components/PatternLock.vue';
@@ -146,6 +147,7 @@ const applyFilters = () => {
                 date_to: dateTo.value || undefined,
                 sort_by: sortBy.value,
                 sort_order: sortOrder.value,
+                per_page: props.filters?.per_page,
             },
             { 
                 preserveState: true,
@@ -209,7 +211,7 @@ const confirmPayment = async (payment) => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-slate-50/50 text-slate-800 p-2 sm:p-3 space-y-2">
+    <div class="space-y-3 text-slate-800">
         <!-- HEADER & THỐNG KÊ + NÚT TẠO MỚI -->
         <div class="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-sm">
             <div class="flex items-center gap-3">
@@ -304,38 +306,38 @@ const confirmPayment = async (payment) => {
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50 border-b border-slate-200/80 text-xs font-bold text-slate-600 uppercase tracking-wider select-none">
-                            <th @click="toggleSort('code')" class="py-2.5 px-3 cursor-pointer hover:bg-slate-100 hover:text-blue-600 transition">
+                            <th @click="toggleSort('code')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
                                 <div class="flex items-center gap-1">
                                     <span>Mã phiếu</span>
-                                    <span v-if="sortBy === 'code'" class="text-blue-600 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                                    <span v-if="sortBy === 'code'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
                                 </div>
                             </th>
                             <th class="py-2.5 px-3">Khách hàng</th>
-                            <th @click="toggleSort('device_name')" class="py-2.5 px-3 cursor-pointer hover:bg-slate-100 hover:text-blue-600 transition">
+                            <th @click="toggleSort('device_name')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
                                 <div class="flex items-center gap-1">
                                     <span>Thiết bị / IMEI</span>
-                                    <span v-if="sortBy === 'device_name'" class="text-blue-600 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                                    <span v-if="sortBy === 'device_name'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
                                 </div>
                             </th>
-                            <th @click="toggleSort('status')" class="py-2.5 px-3 cursor-pointer hover:bg-slate-100 hover:text-blue-600 transition">
+                            <th @click="toggleSort('status')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
                                 <div class="flex items-center gap-1">
                                     <span>Trạng thái</span>
-                                    <span v-if="sortBy === 'status'" class="text-blue-600 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                                    <span v-if="sortBy === 'status'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
                                 </div>
                             </th>
-                            <th @click="toggleSort('created_at')" class="py-2.5 px-3 cursor-pointer hover:bg-slate-100 hover:text-blue-600 transition">
+                            <th @click="toggleSort('created_at')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
                                 <div class="flex items-center gap-1">
                                     <span>Ngày nhận</span>
-                                    <span v-if="sortBy === 'created_at'" class="text-blue-600 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                                    <span v-if="sortBy === 'created_at'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
                                 </div>
                             </th>
                             <th class="py-2.5 px-3 text-right">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 text-sm">
-                        <tr v-for="repair in props.repairs?.data" :key="repair.id" class="hover:bg-slate-50/80 transition">
-                            <td class="py-2.5 px-3 font-bold text-blue-600">
-                                    <button type="button" class="font-bold text-blue-600 hover:underline" @click="detailRepair = repair">{{ repair.code }}</button>
+                        <tr v-for="repair in props.repairs?.data" :key="repair.id" tabindex="0" class="cursor-pointer transition hover:bg-emerald-50/70" title="Bấm vào dòng để xem chi tiết" @click="detailRepair = repair" @keydown.enter.self="detailRepair = repair">
+                            <td class="py-2.5 px-3 font-bold text-emerald-700">
+                                    <span class="font-bold text-emerald-700">{{ repair.code }}</span>
                             </td>
                             <td class="py-2.5 px-3">
                                 <div class="font-semibold text-slate-900">{{ repair.customer?.name || 'Khách lẻ' }}</div>
@@ -360,22 +362,15 @@ const confirmPayment = async (payment) => {
                                 <div class="inline-flex items-center gap-1">
                                     <button
                                         type="button"
-                                        @click="detailRepair = repair"
-                                        class="px-2.5 py-1 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition"
-                                    >
-                                        Xem
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click="openRepairWorkflow(repair, 'intake')"
+                                        @click.stop="openRepairWorkflow(repair, 'intake')"
                                         v-if="can('repairs.edit')"
-                                        class="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition"
+                                        class="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition"
                                     >
                                         Sửa
                                     </button>
                                     <button
                                         type="button"
-                                        @click="openRepairWorkflow(repair)"
+                                        @click.stop="openRepairWorkflow(repair)"
                                         v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)"
                                         class="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition"
                                     >
@@ -392,6 +387,7 @@ const confirmPayment = async (payment) => {
                     </tbody>
                 </table>
             </div>
+            <PaginationBar :data="props.repairs" :filters="props.filters" />
         </div>
 
         <DetailModal
@@ -429,7 +425,7 @@ const confirmPayment = async (payment) => {
             </div>
             <div class="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3">
                 <button v-if="can('repairs.view')" type="button" @click="printPreviewUrl = route('repairs.print', detailRepair.id)" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">In phiếu</button>
-                <button v-if="can('repairs.edit')" type="button" class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100" @click="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null">Sửa phiếu</button>
+                <button v-if="can('repairs.edit')" type="button" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100" @click="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null">Sửa phiếu</button>
                 <button v-if="['pending', 'repairing', 'done'].includes(detailRepair.status) && canProgress(detailRepair)" type="button" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100" @click="openRepairWorkflow(detailRepair); detailRepair = null">{{ detailRepair.status === 'done' ? 'Thanh toán / trả máy' : detailRepair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa' }}</button>
             </div>
         </DetailModal>

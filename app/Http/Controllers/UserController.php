@@ -22,13 +22,23 @@ class UserController extends Controller
     public function index(Request $request): Response
     {
         $search = trim((string) $request->query('search', ''));
+        $perPage = in_array((int) $request->query('per_page', 10), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 10) : 10;
+        $sortBy = in_array($request->query('sort_by'), ['id', 'name', 'username', 'phone'], true)
+            ? $request->query('sort_by') : 'created_at';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
         $request->merge(['search' => $search]);
 
         return Inertia::render(
             'Users/Index',
             [
                 'users' => $this->service->paginate(),
-                'filters' => ['search' => $search],
+                'filters' => [
+                    'search' => $search,
+                    'sort_by' => $sortBy,
+                    'sort_order' => $sortOrder,
+                    'per_page' => $perPage,
+                ],
                 'roles' => $this->roleData(),
                 'permissions' => Permission::query()->where('guard_name', 'web')->orderBy('name')->pluck('name'),
                 'can_assign_super_admin' => auth()->user()?->username === 'admin' && auth()->user()?->hasRole('Super Admin'),

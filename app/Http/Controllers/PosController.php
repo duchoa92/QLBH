@@ -339,7 +339,7 @@ class PosController extends Controller
                     'Đơn hàng mới',
                     'Hóa đơn ' . $sale->code . ' đã được tạo cho ' . ($sale->customer?->full_name ?? 'khách lẻ') . '.',
                     'sale',
-                    route('sales.index')
+                    route('records.show', ['type' => 'sale', 'id' => $sale->id], false)
                 )
             );
 

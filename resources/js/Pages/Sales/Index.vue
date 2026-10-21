@@ -16,8 +16,6 @@ import {
     ArrowUp,
     ArrowDown,
     Pencil,
-    ChevronLeft,
-    ChevronRight,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -28,6 +26,8 @@ import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import PaginationBar from '@/Components/UI/PaginationBar.vue'
+import PageHeader from '@/Components/UI/PageHeader.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
 
 defineOptions({
@@ -227,7 +227,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
 <template>
     <!-- THU NHỎ MARGIN / PADDING NGOÀI (p-2.5 sm:p-3 space-y-3) -->
-    <div class="space-y-3 p-2.5 sm:p-3 font-sans text-slate-800">
+    <div class="space-y-3 font-sans text-slate-800">
+        <PageHeader title="Hóa đơn bán hàng" />
         
         <!-- 1. THỐNG KÊ TÀI CHÍNH NHANH (TĂNG CỠ CHỮ CHÚT ÍT) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -344,8 +345,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <th class="px-3.5 py-2.5 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('code')">
                                 <div class="flex items-center gap-1">
                                     <span>Mã HD</span>
-                                    <ArrowUp v-if="sortKey === 'code' && sortOrder === 'asc'" :size="13" class="text-indigo-600" />
-                                    <ArrowDown v-else-if="sortKey === 'code' && sortOrder === 'desc'" :size="13" class="text-indigo-600" />
+                                    <ArrowUp v-if="sortKey === 'code' && sortOrder === 'asc'" :size="13" class="text-emerald-700" />
+                                    <ArrowDown v-else-if="sortKey === 'code' && sortOrder === 'desc'" :size="13" class="text-emerald-700" />
                                     <ArrowUpDown v-else :size="13" class="text-slate-300" />
                                 </div>
                             </th>
@@ -354,8 +355,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <th class="px-3.5 py-2.5 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('customer')">
                                 <div class="flex items-center gap-1">
                                     <span>Khách Hàng</span>
-                                    <ArrowUp v-if="sortKey === 'customer' && sortOrder === 'asc'" :size="13" class="text-indigo-600" />
-                                    <ArrowDown v-else-if="sortKey === 'customer' && sortOrder === 'desc'" :size="13" class="text-indigo-600" />
+                                    <ArrowUp v-if="sortKey === 'customer' && sortOrder === 'asc'" :size="13" class="text-emerald-700" />
+                                    <ArrowDown v-else-if="sortKey === 'customer' && sortOrder === 'desc'" :size="13" class="text-emerald-700" />
                                     <ArrowUpDown v-else :size="13" class="text-slate-300" />
                                 </div>
                             </th>
@@ -364,8 +365,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <th class="px-3.5 py-2.5 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('user')">
                                 <div class="flex items-center gap-1">
                                     <span>Thu Ngân</span>
-                                    <ArrowUp v-if="sortKey === 'user' && sortOrder === 'asc'" :size="13" class="text-indigo-600" />
-                                    <ArrowDown v-else-if="sortKey === 'user' && sortOrder === 'desc'" :size="13" class="text-indigo-600" />
+                                    <ArrowUp v-if="sortKey === 'user' && sortOrder === 'asc'" :size="13" class="text-emerald-700" />
+                                    <ArrowDown v-else-if="sortKey === 'user' && sortOrder === 'desc'" :size="13" class="text-emerald-700" />
                                     <ArrowUpDown v-else :size="13" class="text-slate-300" />
                                 </div>
                             </th>
@@ -374,8 +375,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <th class="px-3.5 py-2.5 text-right cursor-pointer hover:bg-slate-100 transition" @click="handleSort('total_amount')">
                                 <div class="flex items-center justify-end gap-1">
                                     <span>Tổng Tiền</span>
-                                    <ArrowUp v-if="sortKey === 'total_amount' && sortOrder === 'asc'" :size="13" class="text-indigo-600" />
-                                    <ArrowDown v-else-if="sortKey === 'total_amount' && sortOrder === 'desc'" :size="13" class="text-indigo-600" />
+                                    <ArrowUp v-if="sortKey === 'total_amount' && sortOrder === 'asc'" :size="13" class="text-emerald-700" />
+                                    <ArrowDown v-else-if="sortKey === 'total_amount' && sortOrder === 'desc'" :size="13" class="text-emerald-700" />
                                     <ArrowUpDown v-else :size="13" class="text-slate-300" />
                                 </div>
                             </th>
@@ -386,8 +387,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <th class="px-3.5 py-2.5 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('created_at')">
                                 <div class="flex items-center gap-1">
                                     <span>Ngày Tạo</span>
-                                    <ArrowUp v-if="sortKey === 'created_at' && sortOrder === 'asc'" :size="13" class="text-indigo-600" />
-                                    <ArrowDown v-else-if="sortKey === 'created_at' && sortOrder === 'desc'" :size="13" class="text-indigo-600" />
+                                    <ArrowUp v-if="sortKey === 'created_at' && sortOrder === 'asc'" :size="13" class="text-emerald-700" />
+                                    <ArrowDown v-else-if="sortKey === 'created_at' && sortOrder === 'desc'" :size="13" class="text-emerald-700" />
                                     <ArrowUpDown v-else :size="13" class="text-slate-300" />
                                 </div>
                             </th>
@@ -400,7 +401,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                         <tr
                             v-for="sale in sortedSalesData"
                             :key="sale.id"
-                            class="cursor-pointer hover:bg-blue-50/60 transition-colors"
+                            class="cursor-pointer transition-colors hover:bg-emerald-50/70"
                             title="Bấm vào dòng để xem thông tin hóa đơn"
                             @click="detailSale = sale"
                         >
@@ -408,7 +409,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <td class="px-3.5 py-2.5">
                                 <button
                                     type="button"
-                                    class="font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-xs"
+                                    class="cursor-pointer text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline"
                                     title="Bấm vào dòng để xem hóa đơn"
                                 >
                                     #{{ sale.code }}
@@ -418,7 +419,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <!-- 2. Khách Hàng (CLICK ĐỂ LỌC KH) -->
                             <td class="px-3.5 py-2.5">
                                 <span
-                                    class="font-bold text-slate-900 cursor-pointer hover:text-indigo-600 hover:underline"
+                                    class="cursor-pointer font-bold text-slate-900 hover:text-emerald-700 hover:underline"
                                     title="Bấm để lọc theo khách hàng này"
                                     @click.stop="filterByCustomer(getCustomerName(sale))"
                                 >
@@ -429,7 +430,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             <!-- 3. Thu ngân (CLICK ĐỂ LỌC THU NGÂN) -->
                             <td class="px-3.5 py-2.5 text-slate-600">
                                 <span
-                                    class="cursor-pointer hover:text-indigo-600 hover:underline"
+                                    class="cursor-pointer hover:text-emerald-700 hover:underline"
                                     title="Bấm để lọc theo thu ngân này"
                                     @click.stop="filterByCashier(sale.user?.name)"
                                 >
@@ -481,7 +482,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-md p-1.5 text-indigo-600 hover:bg-indigo-50"
+                                        class="rounded-md p-1.5 text-emerald-700 hover:bg-emerald-50"
                                         title="In hóa đơn"
                                         @click.stop="openPrintWindow(sale.id)"
                                     >
@@ -517,21 +518,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
             <!-- FOOTER BẢNG PHÂN TRANG -->
             <template #footer>
-                <div class="flex flex-wrap items-center justify-between gap-3 py-1 text-xs font-medium text-slate-500">
-                    <div class="flex items-center gap-2">
-                        Hiển thị <span class="text-slate-900 font-bold">{{ sales.data?.length || 0 }}</span> / <span class="text-slate-900 font-bold">{{ sales.total || 0 }}</span> hóa đơn
-                        <label class="ml-2 flex items-center gap-1.5">Mỗi trang
-                            <select v-model.number="perPage" @change="requestSales" class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none">
-                                <option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option>
-                            </select>
-                        </label>
-                    </div>
-                    <nav v-if="sales.links?.length > 3" class="flex items-center gap-1" aria-label="Phân trang hóa đơn">
-                        <button type="button" :disabled="!sales.links[0]?.url" @click="sales.links[0]?.url && router.visit(sales.links[0].url, { preserveState: true, preserveScroll: true })" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white disabled:opacity-40" aria-label="Trang trước"><ChevronLeft :size="15" /></button>
-                        <button v-for="link in sales.links.slice(1, -1)" :key="link.label" type="button" @click="link.url && router.visit(link.url, { preserveState: true, preserveScroll: true })" :disabled="!link.url" :class="['h-8 min-w-8 rounded-md border px-2', link.active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white hover:bg-slate-50', !link.url && 'opacity-40']">{{ link.label }}</button>
-                        <button type="button" :disabled="!sales.links[sales.links.length - 1]?.url" @click="sales.links[sales.links.length - 1]?.url && router.visit(sales.links[sales.links.length - 1].url, { preserveState: true, preserveScroll: true })" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white disabled:opacity-40" aria-label="Trang sau"><ChevronRight :size="15" /></button>
-                    </nav>
-                </div>
+                <PaginationBar :data="sales" :filters="filters" />
             </template>
         </DataPanel>
 

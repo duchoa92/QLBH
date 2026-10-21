@@ -1,14 +1,14 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
-import { Eye, Plus, Search, SquarePen } from 'lucide-vue-next'
+import { Plus, Search, SquarePen } from 'lucide-vue-next'
 import { openModal } from '@/Stores/modal'
 import { formatMoney } from '@/utils/format'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
-import DetailModal from '@/Components/UI/DetailModal.vue'
 import CustomerFormModal from './CustomerFormModal.vue'
+import BaseTable from '@/Components/UI/BaseTable.vue'
 
 const props = defineProps({
     customers: Object,
@@ -16,7 +16,14 @@ const props = defineProps({
 })
 
 const search = ref(props.filters.search || '')
-const detailCustomer = ref(null)
+const columns = [
+    { key: 'code', label: 'Mã KH', sortable: true },
+    { key: 'full_name', label: 'Họ tên', sortable: true },
+    { key: 'phone', label: 'SĐT', sortable: true },
+    { key: 'point_balance', label: 'Điểm', sortable: true, class: 'text-center' },
+    { key: 'debt_balance', label: 'Công nợ', sortable: true, class: 'text-right' },
+    { key: 'customer_type', label: 'Loại', sortable: true, class: 'text-center' },
+]
 let searchTimeout = null
 
 watch(search, (value) => {
@@ -25,7 +32,7 @@ watch(search, (value) => {
     searchTimeout = setTimeout(() => {
         router.get(
             route('customers.index'),
-            { search: value },
+            { search: value, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page },
             {
                 preserveState: true,
                 replace: true,
@@ -33,6 +40,10 @@ watch(search, (value) => {
         )
     }, 250)
 })
+
+const sort = ({ field, order }) => router.get(route('customers.index'), {
+    search: search.value, sort_by: field, sort_order: order, per_page: props.filters?.per_page,
+}, { preserveState: true, preserveScroll: true, replace: true })
 
 const reload = () => {
     router.reload({
@@ -60,25 +71,12 @@ const openEdit = (customer) => {
     })
 }
 
-const customerRows = (customer) => [
-    { label: 'Mã KH', value: customer.code },
-    { label: 'Họ tên', value: customer.full_name },
-    { label: 'Số điện thoại', value: customer.phone },
-    { label: 'CCCD', value: customer.cccd },
-    { label: 'Ngày sinh', value: customer.birthday },
-    { label: 'Giới tính', value: customer.gender },
-    { label: 'Điểm', value: customer.point_balance },
-    { label: 'Công nợ', value: formatMoney(customer.debt_balance) },
-    { label: 'Địa chỉ', value: customer.address, full: true },
-    { label: 'Ghi chú', value: customer.note, full: true },
-]
 </script>
 
 <template>
-    <div class="space-y-4 p-6">
+    <div class="space-y-3">
         <PageHeader
             title="Khách hàng"
-            description="Thông tin liên hệ, điểm tích lũy và công nợ"
         >
             <template #actions>
                 <ActionButton @click="openCreate">
@@ -101,76 +99,20 @@ const customerRows = (customer) => [
                 </div>
             </template>
 
-            <div class="overflow-x-auto">
-                <table class="w-full min-w-[860px] text-sm">
-                    <thead>
-                        <tr class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                            <th class="px-4 py-3 text-left">Mã KH</th>
-                            <th class="px-4 py-3 text-left">Họ tên</th>
-                            <th class="px-4 py-3 text-left">SĐT</th>
-                            <th class="px-4 py-3 text-center">Điểm</th>
-                            <th class="px-4 py-3 text-right">Công nợ</th>
-                            <th class="px-4 py-3 text-center">Loại</th>
-                            <th class="w-28 px-4 py-3 text-center">Thao tác</th>
-                        </tr>
-                    </thead>
-
-                    <tbody class="divide-y divide-slate-100">
-                        <tr
-                            v-for="item in customers.data"
-                            :key="item.id"
-                            class="hover:bg-slate-50"
-                        >
-                            <td class="px-4 py-3 font-medium text-slate-700">{{ item.code }}</td>
-                            <td class="px-4 py-3 font-semibold text-slate-900">{{ item.full_name }}</td>
-                            <td class="px-4 py-3 text-slate-600">{{ item.phone || '-' }}</td>
-                            <td class="px-4 py-3 text-center font-semibold text-blue-600">{{ item.point_balance }}</td>
-                            <td
-                                class="px-4 py-3 text-right font-semibold"
-                                :class="item.debt_balance > 0 ? 'text-red-600' : 'text-green-600'"
-                            >
-                                {{ formatMoney(item.debt_balance) }}
-                            </td>
-                            <td class="px-4 py-3 text-center text-slate-600">{{ item.customer_type }}</td>
-                            <td class="px-4 py-3">
-                                <div class="flex justify-center gap-1">
-                                    <ActionButton
-                                        variant="ghost"
-                                        title="Xem chi tiết"
-                                        @click="detailCustomer = item"
-                                    >
-                                        <Eye class="h-4 w-4" />
-                                    </ActionButton>
-
-                                    <ActionButton
-                                        variant="ghost"
-                                        title="Sửa"
-                                        @click="openEdit(item)"
-                                    >
-                                        <SquarePen class="h-4 w-4 text-blue-600" />
-                                    </ActionButton>
-                                </div>
-                            </td>
-                        </tr>
-
-                        <tr v-if="!customers.data.length">
-                            <td
-                                colspan="7"
-                                class="px-4 py-12 text-center text-slate-400"
-                            >
-                                Không có dữ liệu
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <BaseTable :data="customers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="router.visit(`/records/customer/${$event.id}`)">
+                <template #row="{ row }">
+                    <td class="border-r p-2 font-medium text-slate-700">{{ row.code }}</td>
+                    <td class="border-r p-2 font-semibold text-slate-900">{{ row.full_name }}</td>
+                    <td class="border-r p-2 text-slate-600">{{ row.phone || '—' }}</td>
+                    <td class="border-r p-2 text-center font-semibold text-emerald-700">{{ row.point_balance }}</td>
+                    <td class="border-r p-2 text-right font-semibold" :class="row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500'">{{ formatMoney(row.debt_balance) }}</td>
+                    <td class="border-r p-2 text-center text-slate-600">{{ row.customer_type }}</td>
+                    <td class="p-2 text-center" @click.stop>
+                        <ActionButton variant="ghost" title="Sửa" @click="openEdit(row)"><SquarePen class="h-4 w-4 text-emerald-700" /></ActionButton>
+                    </td>
+                </template>
+            </BaseTable>
         </DataPanel>
 
-        <DetailModal
-            v-if="detailCustomer"
-            title="Chi tiết khách hàng"
-            :rows="customerRows(detailCustomer)"
-            @close="detailCustomer = null"
-        />
     </div>
 </template>

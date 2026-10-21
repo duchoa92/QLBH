@@ -96,8 +96,8 @@ const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount)
 </script>
 
 <template>
-    <div class="space-y-4 p-2 sm:p-3">
-        <PageHeader title="Lịch sử kiểm kê" description="Chi tiết kiểm kê tiền theo từng ca trong 30 ngày gần nhất.">
+    <div class="space-y-3">
+        <PageHeader title="Lịch sử kiểm kê">
             <template #actions><div class="flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700"><History :size="16" />30 ngày gần nhất</div></template>
         </PageHeader>
 

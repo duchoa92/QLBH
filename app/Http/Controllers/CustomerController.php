@@ -18,6 +18,11 @@ class CustomerController extends Controller
     public function index(Request $request): Response
     {
         $search = (string) $request->get('search', '');
+        $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 20) : 20;
+        $sortBy = in_array($request->query('sort_by'), ['code', 'full_name', 'phone', 'point_balance', 'debt_balance', 'customer_type'], true)
+            ? $request->query('sort_by') : 'created_at';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
 
         $customers = Customer::query()
             ->select([
@@ -48,14 +53,17 @@ class CustomerController extends Controller
 
                 });
             })
-            ->latest()
-            ->paginate(20)
+            ->orderBy($sortBy, $sortOrder)
+            ->paginate($perPage)
             ->withQueryString();
 
         return Inertia::render('Customers/Index', [
             'customers' => $customers,
             'filters' => [
                 'search' => $search,
+                'sort_by' => $sortBy,
+                'sort_order' => $sortOrder,
+                'per_page' => $perPage,
             ],
         ]);
     }

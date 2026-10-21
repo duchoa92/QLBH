@@ -16,6 +16,8 @@ class CategoryController extends Controller
 {
     public function index(Request $request)
     {
+        $perPage = in_array((int) $request->query('per_page', 10), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 10) : 10;
         $categories = Category::query()
             ->with('categoryAttributes.values')
             ->when($request->filled('search'), fn ($q) =>
@@ -25,15 +27,15 @@ class CategoryController extends Controller
                 $q->where('is_active', $request->status)
             )
 
-            ->when($request->filled('sort_by'), function ($q) use ($request) {
-                $order = $request->get('sort_order', 'asc');
+            ->when(in_array($request->query('sort_by'), ['id', 'name', 'is_active'], true), function ($q) use ($request) {
+                $order = $request->query('sort_order') === 'desc' ? 'desc' : 'asc';
 
                 $q->orderBy($request->sort_by, $order);
             }, function ($q) {
                 $q->latest();
             })
 
-            ->paginate(10)
+            ->paginate($perPage)
             ->through(function ($cat) {
                 return [
                     'id' => $cat->id,
@@ -64,12 +66,13 @@ class CategoryController extends Controller
 
         return Inertia::render('Categories/Index', [
             'categories' => $categories,
-            'filters' => $request->only(
+            'filters' => [...$request->only(
                 'search',
                 'status',
                 'sort_by',
-                'sort_order'
-            ),
+                'sort_order',
+                'per_page'
+            ), 'per_page' => $perPage],
         ]);
     }
 

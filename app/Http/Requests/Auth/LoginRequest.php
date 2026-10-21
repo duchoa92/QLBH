@@ -44,9 +44,14 @@ class LoginRequest extends FormRequest
 
         $login = $this->input('login');
 
-        $field = filter_var($login, FILTER_VALIDATE_EMAIL)
-            ? 'email'
-            : (is_numeric($login) ? 'phone' : 'username');
+        if (filter_var($login, FILTER_VALIDATE_EMAIL)) {
+            $field = 'email';
+        } elseif (preg_match('/^\+?[0-9\s().-]+$/D', $login) && preg_match('/[0-9]/', $login)) {
+            $field = 'phone';
+            $login = preg_replace('/\D+/', '', $login);
+        } else {
+            $field = 'username';
+        }
 
         if (! Auth::attempt([
             $field => $login,

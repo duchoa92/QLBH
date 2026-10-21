@@ -20,6 +20,11 @@ class SupplierController extends Controller
         $search = $request->string(
             'search'
         )->toString();
+        $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 20) : 20;
+        $sortBy = in_array($request->query('sort_by'), ['code', 'name', 'phone', 'debt_balance'], true)
+            ? $request->query('sort_by') : 'created_at';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
 
         $suppliers = Supplier::query()
 
@@ -65,9 +70,9 @@ class SupplierController extends Controller
                 }
             )
 
-            ->latest()
-
-            ->get();
+            ->orderBy($sortBy, $sortOrder)
+            ->paginate($perPage)
+            ->withQueryString();
 
         return Inertia::render(
             'Suppliers/Index',
@@ -76,6 +81,9 @@ class SupplierController extends Controller
 
                 'filters' => [
                     'search' => $search,
+                    'sort_by' => $sortBy,
+                    'sort_order' => $sortOrder,
+                    'per_page' => $perPage,
                 ],
             ]
         );

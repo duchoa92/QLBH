@@ -50,7 +50,7 @@ const submit = () => {
                     required
                     autofocus
                     autocomplete="username"
-                    label="Tên đăng nhập hoặc số điện thoại"
+                    label="Tên đăng nhập, email hoặc số điện thoại"
                     :error="form.errors.login"
                 />
 

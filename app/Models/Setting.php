@@ -10,10 +10,21 @@ class Setting extends Model
 {
     protected $fillable = ['key', 'value'];
 
+    /** Cache the schema check so an unavailable database is only probed once per request. */
+    protected static ?bool $settingsTableAvailable = null;
+
     // Lấy setting
     public static function get($key, $default = null)
     {
-        if (!Schema::hasTable('settings')) {
+        if (static::$settingsTableAvailable === null) {
+            try {
+                static::$settingsTableAvailable = Schema::hasTable('settings');
+            } catch (\Throwable $exception) {
+                static::$settingsTableAvailable = false;
+            }
+        }
+
+        if (! static::$settingsTableAvailable) {
             return $default;
         }
 

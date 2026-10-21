@@ -184,7 +184,7 @@ class BankTransferWebhookController extends Controller
                             ? 'Hóa đơn ' . $locked->invoice_code . ' đã hoàn tất. Đã nhận ' . number_format($received, 0, ',', '.') . ' ₫, thừa ' . number_format($excess, 0, ',', '.') . ' ₫.'
                             : 'Hóa đơn ' . $locked->invoice_code . ' đã nhận đủ ' . number_format($received, 0, ',', '.') . ' ₫ và tự hoàn tất.',
                         $excess > 0 ? 'warning' : 'sale',
-                        route('sales.index')
+                        route('records.show', ['type' => 'sale', 'id' => $sale->id], false)
                     )
                 );
 

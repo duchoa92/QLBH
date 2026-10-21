@@ -10,6 +10,7 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
+import PaginationBar from '@/Components/UI/PaginationBar.vue'
 
 import {
     ref,
@@ -25,7 +26,6 @@ import {
     Plus,
     Search,
     Truck,
-    Eye,
     ClipboardList,
     Printer,
     SlidersHorizontal,
@@ -132,11 +132,23 @@ const submitSearch = () => {
         status: statusFilter.value,
         date_from: dateFrom.value,
         date_to: dateTo.value,
+        per_page: props.filters?.per_page,
+        sort_by: props.filters?.sort_by,
+        sort_order: props.filters?.sort_order,
     }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
     })
+}
+
+const sortImports = (field) => {
+    const sortOrder = props.filters?.sort_by === field && props.filters?.sort_order === 'asc' ? 'desc' : 'asc'
+    router.get('/stock-import', {
+        search: search.value.trim(), party_type: partyTypeFilter.value, status: statusFilter.value,
+        date_from: dateFrom.value, date_to: dateTo.value, per_page: props.filters?.per_page,
+        sort_by: field, sort_order: sortOrder,
+    }, { preserveState: true, preserveScroll: true, replace: true })
 }
 
 watch([search, partyTypeFilter, statusFilter, dateFrom, dateTo], () => {
@@ -239,13 +251,14 @@ const showImport = (id) => {
 
 <template>
 
-<div class="min-h-screen bg-slate-50">
+    <div class="text-slate-800">
 
     <!-- HEADER -->
 
     <!-- CONTENT -->
 
-    <div class="mx-auto max-w-[1600px] space-y-4 p-4 sm:p-6">
+    <div class="space-y-3">
+        <PageHeader title="Phiếu nhập hàng" />
 
         <DataPanel>
 
@@ -348,32 +361,19 @@ const showImport = (id) => {
 
                         <tr>
 
-                            <th class="px-5 py-3 text-left">
-                                Mã đơn
-                            </th>
+                            <th class="px-5 py-3 text-left"><button type="button" class="hover:text-emerald-700" @click="sortImports('code')">Mã đơn ↕</button></th>
 
                             <th class="px-3 py-3 text-left">
                                 Nhà cung cấp / khách lẻ
                             </th>
 
-                            <th class="px-3 py-3 text-center">
-                                Ngày nhập
-                            </th>
+                            <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('import_date')">Ngày nhập ↕</button></th>
 
-                            <th class="px-3 py-3 text-center">
-                                Số dòng
-                            </th>
+                            <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('items_count')">Số dòng ↕</button></th>
 
-                            <th class="px-3 py-3 text-right">
-                                Tổng tiền
-                            </th>
+                            <th class="px-3 py-3 text-right"><button type="button" class="hover:text-emerald-700" @click="sortImports('grand_total')">Tổng tiền ↕</button></th>
 
-                            <th class="px-3 py-3 text-center">
-                                Trạng thái
-                            </th>
-
-                            <th class="w-20 px-3 py-3">
-                            </th>
+                            <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('status')">Trạng thái ↕</button></th>
 
                         </tr>
 
@@ -385,7 +385,11 @@ const showImport = (id) => {
                         <tr
                             v-for="item in props.imports.data"
                             :key="item.id"
-                            class="border-t border-slate-100 transition-colors hover:bg-emerald-50/40"
+                            tabindex="0"
+                            class="cursor-pointer border-t border-slate-100 transition-colors hover:bg-emerald-50/70"
+                            title="Bấm vào dòng để xem chi tiết"
+                            @click="showImport(item.id)"
+                            @keydown.enter.self="showImport(item.id)"
                         >
 
                             <!-- CODE -->
@@ -488,32 +492,6 @@ const showImport = (id) => {
                             </td>
 
 
-                            <!-- ACTION -->
-
-                            <td class="px-3 py-4 text-center">
-
-                                <button
-                                    type="button"
-                                    title="Xem chi tiết"
-                                    @click="showImport(item.id)"
-                                    class="
-                                        inline-flex
-                                        h-8
-                                        w-8
-                                        items-center
-                                        justify-center
-                                        rounded-lg
-                                        text-slate-400
-                                        hover:bg-slate-100
-                                        hover:text-slate-700
-                                    "
-                                >
-
-                                    <Eye :size="17" />
-
-                                </button>
-
-                            </td>
 
                         </tr>
 
@@ -525,7 +503,7 @@ const showImport = (id) => {
                         >
 
                             <td
-                                colspan="7"
+                                colspan="6"
                                 class="
                                     px-5
                                     py-16
@@ -547,6 +525,8 @@ const showImport = (id) => {
                 </table>
 
             </div>
+
+            <PaginationBar :data="props.imports" :filters="props.filters" />
 
         </DataPanel>
 

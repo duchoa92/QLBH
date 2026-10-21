@@ -8,5 +8,9 @@
         </div>
 
         <slot />
+
+        <div v-if="$slots.footer" class="border-t border-slate-200">
+            <slot name="footer" />
+        </div>
     </section>
 </template>

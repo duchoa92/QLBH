@@ -23,16 +23,21 @@ class ExpenseController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
         ]);
         $month = $filters['month'] ?? now()->format('Y-m');
+        $perPage = in_array((int) $request->query('per_page', 15), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 15) : 15;
+        $sortBy = in_array($request->query('sort_by'), ['expense_date', 'category', 'description', 'recipient', 'amount'], true)
+            ? $request->query('sort_by') : 'expense_date';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
         $expenses = Expense::query()
             ->with('user:id,name')
             ->whereBetween('expense_date', [$month . '-01', now()->parse($month . '-01')->endOfMonth()->toDateString()])
             ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($q) => $q->where('description', 'like', "%{$search}%")->orWhere('recipient', 'like', "%{$search}%")))
-            ->orderByDesc('expense_date')->orderByDesc('id')->paginate(15)->withQueryString();
+            ->orderBy($sortBy, $sortOrder)->orderByDesc('id')->paginate($perPage)->withQueryString();
 
         return Inertia::render('Expenses/Index', [
             'expenses' => $expenses,
-            'filters' => ['month' => $month, 'category' => $filters['category'] ?? '', 'search' => $filters['search'] ?? ''],
+            'filters' => ['month' => $month, 'category' => $filters['category'] ?? '', 'search' => $filters['search'] ?? '', 'sort_by' => $sortBy, 'sort_order' => $sortOrder, 'per_page' => $perPage],
             'summary' => ['total' => (float) Expense::whereBetween('expense_date', [$month . '-01', now()->parse($month . '-01')->endOfMonth()->toDateString()])->sum('amount'), 'count' => (int) Expense::whereBetween('expense_date', [$month . '-01', now()->parse($month . '-01')->endOfMonth()->toDateString()])->count()],
             'categories' => self::CATEGORIES,
             'canManage' => $request->user()->can('expenses.manage'),

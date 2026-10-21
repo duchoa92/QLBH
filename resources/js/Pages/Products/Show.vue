@@ -8,13 +8,13 @@ defineProps({
 
 <template>
 
-    <div class="p-6">
+    <div class="space-y-4">
 
         <div
-            class="flex items-center justify-between mb-6"
+            class="mb-3 flex items-center justify-between"
         >
 
-            <h1 class="text-2xl font-bold">
+            <h1 class="text-lg font-bold">
                 Chi tiết sản phẩm
             </h1>
 
@@ -28,7 +28,7 @@ defineProps({
         </div>
 
         <div
-            class="bg-white rounded shadow p-6 mb-6"
+            class="mb-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
         >
 
             <div class="grid grid-cols-2 gap-4">
@@ -84,7 +84,7 @@ defineProps({
         </div>
 
         <div
-            class="bg-white rounded shadow p-6"
+            class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
         >
 
             <h2 class="text-xl font-bold mb-4">

@@ -1,13 +1,14 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
-import { Plus, Search, Receipt, Pencil, Trash2, X, BellRing, CalendarClock } from 'lucide-vue-next'
+import { Plus, Search, Pencil, Trash2, X, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 import { formatMoney } from '@/utils/format'
+import BaseTable from '@/Components/UI/BaseTable.vue'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({ expenses: Object, filters: Object, summary: Object, categories: Array, canManage: Boolean, recurringExpenses: { type: Array, default: () => [] } })
@@ -25,7 +26,7 @@ const scheduleForm = useForm({ category: 'utilities', description: '', amount: '
 let timer
 watch([month, search, category], () => {
     clearTimeout(timer)
-    timer = setTimeout(() => router.get(route('expenses.index'), { month: month.value, search: search.value || undefined, category: category.value || undefined }, { preserveState: true, preserveScroll: true, replace: true }), 250)
+    timer = setTimeout(() => router.get(route('expenses.index'), { month: month.value, search: search.value || undefined, category: category.value || undefined, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page }, { preserveState: true, preserveScroll: true, replace: true }), 250)
 })
 const openCreate = () => { editing.value = null; form.reset(); form.category = 'utilities'; form.expense_date = new Date().toISOString().slice(0, 10); form.payment_method = 'cash'; modal.value = true }
 const openEdit = row => { editing.value = row; form.category = row.category; form.description = row.description; form.amount = row.amount; form.expense_date = row.expense_date; form.payment_method = row.payment_method; form.recipient = row.recipient || ''; form.note = row.note || ''; modal.value = true }
@@ -42,12 +43,23 @@ const markPaid = row => {
     if (!Number.isFinite(amount) || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ.')
     router.post(route('expenses.recurring.paid', row.id), { period: props.filters.month, paid_date: new Date().toISOString().slice(0, 10), amount, payment_method: row.payment_method }, { preserveScroll: true })
 }
-const pageTotal = computed(() => props.expenses?.data?.length || 0)
+const columns = [
+    { key: 'expense_date', label: 'Ngày', sortable: true },
+    { key: 'category', label: 'Loại', sortable: true },
+    { key: 'description', label: 'Nội dung', sortable: true },
+    { key: 'recipient', label: 'Người nhận', sortable: true },
+    { key: 'payment_method', label: 'Thanh toán' },
+    { key: 'amount', label: 'Số tiền', sortable: true, class: 'text-right' },
+]
+const applySort = ({ field, order }) => router.get(route('expenses.index'), {
+    month: month.value, category: category.value || undefined, search: search.value || undefined,
+    sort_by: field, sort_order: order, per_page: props.filters?.per_page,
+}, { preserveState: true, preserveScroll: true, replace: true })
 </script>
 
 <template>
-    <div class="space-y-4 p-2 sm:p-3">
-        <PageHeader title="Chi phí cửa hàng" description="Theo dõi tiền điện nước, internet, thuê nhà, thuế và các khoản chi khác.">
+    <div class="space-y-3">
+        <PageHeader title="Chi phí cửa hàng">
             <template #actions><ActionButton v-if="canManage" @click="openCreate"><Plus :size="16" class="mr-1" /> Thêm chi phí</ActionButton></template>
         </PageHeader>
         <div class="grid gap-3 sm:grid-cols-2">
@@ -60,16 +72,17 @@ const pageTotal = computed(() => props.expenses?.data?.length || 0)
                 <select v-model="category" class="rounded-xl border-slate-200 text-sm"><option value="">Tất cả loại chi</option><option v-for="item in categories" :key="item" :value="item">{{ categoryLabels[item] || item }}</option></select>
                 <div class="relative min-w-48 flex-1"><Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input v-model="search" placeholder="Tìm nội dung hoặc người nhận" class="w-full rounded-xl border-slate-200 pl-9 text-sm" /></div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full min-w-[760px] text-left text-sm">
-                    <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="p-3">Ngày</th><th class="p-3">Loại</th><th class="p-3">Nội dung</th><th class="p-3">Người nhận</th><th class="p-3">Thanh toán</th><th class="p-3 text-right">Số tiền</th><th v-if="canManage" class="p-3 text-right">Thao tác</th></tr></thead>
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-for="row in expenses.data" :key="row.id" class="hover:bg-slate-50"><td class="p-3">{{ row.expense_date }}</td><td class="p-3"><span class="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{{ categoryLabels[row.category] || row.category }}</span></td><td class="p-3"><div class="font-semibold text-slate-800">{{ row.description }}</div><div v-if="row.note" class="mt-0.5 text-xs text-slate-500">{{ row.note }}</div></td><td class="p-3 text-slate-600">{{ row.recipient || '—' }}</td><td class="p-3 text-slate-600">{{ paymentLabels[row.payment_method] || row.payment_method }}</td><td class="p-3 text-right font-bold text-rose-700">{{ formatMoney(row.amount) }}</td><td v-if="canManage" class="p-3 text-right"><button class="mr-2 rounded-lg p-2 text-blue-700 hover:bg-blue-50" aria-label="Sửa" @click="openEdit(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa" @click="remove(row)"><Trash2 :size="15" /></button></td></tr>
-                        <tr v-if="!pageTotal"><td :colspan="canManage ? 7 : 6" class="p-10 text-center text-slate-500"><Receipt :size="28" class="mx-auto mb-2 text-slate-300" />Chưa có khoản chi phù hợp.</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            <div v-if="expenses.links?.length > 3" class="flex flex-wrap justify-end gap-1 border-t border-slate-100 p-3"><button v-for="link in expenses.links" :key="link.label" :disabled="!link.url" class="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40" :class="link.active ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200'" @click="router.get(link.url, {}, { preserveScroll: true })"><span v-html="link.label" /></button></div>
+            <BaseTable :data="expenses" :columns="columns" :filters="filters" :row-clickable="canManage" @sort="applySort" @row-click="openEdit($event)">
+                <template #row="{ row }">
+                    <td class="border-r p-2 text-slate-700">{{ row.expense_date }}</td>
+                    <td class="border-r p-2"><span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ categoryLabels[row.category] || row.category }}</span></td>
+                    <td class="border-r p-2"><div class="font-semibold text-slate-800">{{ row.description }}</div><div v-if="row.note" class="mt-0.5 text-xs text-slate-500">{{ row.note }}</div></td>
+                    <td class="border-r p-2 text-slate-600">{{ row.recipient || '—' }}</td>
+                    <td class="border-r p-2 text-slate-600">{{ paymentLabels[row.payment_method] || row.payment_method }}</td>
+                    <td class="border-r p-2 text-right font-bold text-emerald-700">{{ formatMoney(row.amount) }}</td>
+                    <td class="p-2 text-right" @click.stop><template v-if="canManage"><button class="mr-1 rounded-lg p-2 text-emerald-700 hover:bg-emerald-50" aria-label="Sửa" @click="openEdit(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa" @click="remove(row)"><Trash2 :size="15" /></button></template></td>
+                </template>
+            </BaseTable>
         </section>
         <section class="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 bg-blue-50/70 p-4">

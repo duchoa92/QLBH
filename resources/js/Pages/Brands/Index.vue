@@ -71,7 +71,8 @@ const handleFilter = () => {
         search: search.value,
         category_id: category_id.value,
         sort_by: props.filters?.sort_by,
-        sort_order: props.filters?.sort_order
+        sort_order: props.filters?.sort_order,
+        per_page: props.filters?.per_page
     })
 }
 
@@ -179,7 +180,8 @@ const sort = ({ field, order }) => {
         search: search.value,
         category_id: category_id.value,
         sort_by: field,
-        sort_order: order
+        sort_order: order,
+        per_page: props.filters?.per_page
     }, {
         preserveState: true,
         replace: true
@@ -189,10 +191,9 @@ const sort = ({ field, order }) => {
 </script>
 
 <template>
-<div class="space-y-5">
+<div class="space-y-3">
     <PageHeader
         title="Danh mục & Thương hiệu"
-        description="Quản lý thương hiệu và liên kết danh mục sản phẩm."
     />
 
     <CatalogTabs>
@@ -235,7 +236,9 @@ const sort = ({ field, order }) => {
             :data="brands"
             :columns="columns"
             :filters="filters"
+            row-clickable
             @sort="sort"
+            @row-click="openEdit($event)"
         >
             <template #row="{ row }">
 
@@ -251,7 +254,7 @@ const sort = ({ field, order }) => {
 
                 <td class="border-r p-2 text-center">
                     <button
-                        @click="toggleStatus(row.id)"
+                        @click.stop="toggleStatus(row.id)"
                         :disabled="loadingStatus === row.id"
                         class="relative inline-flex h-6 w-11 items-center rounded-full transition"
                         :class="row.is_active ? 'bg-green-500 ' : 'bg-gray-300'"
@@ -263,7 +266,7 @@ const sort = ({ field, order }) => {
                     </button>
                 </td>
 
-                <td class="text-center p-2">
+                <td class="text-center p-2" @click.stop>
                     <div class="flex justify-center gap-1">
                         <Tooltip text="Sửa">
                             <button @click="openEdit(row)" title="Sửa" class="rounded p-1 text-blue-600 hover:bg-blue-50">

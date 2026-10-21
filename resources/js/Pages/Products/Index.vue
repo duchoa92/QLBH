@@ -3,12 +3,13 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
-import ProductDetailModal from './ProductDetailModal.vue'
-import { ArrowDownUp, ArrowUpDown, FileDown, FileInput, FileOutput, FilePlus, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
+import { ArrowUpDown, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
+import PageHeader from '@/Components/UI/PageHeader.vue'
+import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -151,9 +152,7 @@ const openEdit = (item) => {
 }
 
 const openProductDetail = (item) => {
-    openModal(ProductDetailModal, {
-        props: { product: item },
-    })
+    router.visit(`/records/product/${item.id}`)
 }
 
 
@@ -365,36 +364,18 @@ const productStockDisplay = (row) => {
 </script>
 
 <template>
-<div class="space-y-4">
+<div class="space-y-3">
 
-    <!-- HEADER -->
-    <div class="flex justify-between items-center">
-        <div>
-            <h1 class="text-2xl font-bold">Sản phẩm</h1>
-            <p class="text-sm text-gray-500">Quản lý các sản phẩm</p>
-        </div>
-
-        <div class="flex gap-2">
-            <button @click="openCreate"
-                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
-                <FilePlus /> Thêm
-            </button>
-
-            <button 
-                @click="openImportExport"
-                class="flex items-center gap-1 p-2 bg-green-600 text-white rounded hover:bg-green-700">
-                Nhập <ArrowUpDown /> Xuất
-            </button>
-
-            <button @click="openTrash"
-                class="flex items-center gap-1 border border-red-500 text-red-500 p-2 rounded hover:bg-red-500 hover:text-white">
-                <Trash2 /> ({{ trashCount }})
-            </button>
-        </div>
-    </div>
+    <PageHeader title="Sản phẩm">
+        <template #actions>
+            <ActionButton @click="openCreate"><Plus :size="16" />Thêm sản phẩm</ActionButton>
+            <ActionButton variant="secondary" @click="openImportExport"><ArrowUpDown :size="16" />Nhập / xuất</ActionButton>
+            <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
+        </template>
+    </PageHeader>
 
    <!-- FILTER -->
-    <div class="grid grid-cols-1 gap-3 my-5 lg:grid-cols-[minmax(260px,1.2fr)_minmax(200px,1fr)_minmax(200px,1fr)]">
+    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.2fr)_minmax(200px,1fr)_minmax(200px,1fr)]">
 
         <!-- SEARCH -->
         <div class="relative min-w-0">
@@ -459,7 +440,6 @@ const productStockDisplay = (row) => {
         :columns="columns"
         :filters="{ ...filters, per_page }"
         @sort="sort"
-        @changePerPage="changePerPage" 
         :selectedIds="selectedIds"
         selectable
         row-clickable

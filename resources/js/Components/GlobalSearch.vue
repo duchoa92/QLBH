@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
                     :href="result.url"
                     class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition hover:bg-blue-50/80"
                     :class="{ 'bg-blue-50/80': activeIndex === index }"
-                    @click="handleSelect(result.url)"
+                    @click.prevent="handleSelect(result.url)"
                     @mouseenter="activeIndex = index"
                 >
                     <span class="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-center text-[10px] font-bold text-slate-600">

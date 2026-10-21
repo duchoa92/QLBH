@@ -25,20 +25,18 @@ const handleSort = () => {
 </script>
 
 <template>
-<th
+<button
+    type="button"
     @click="handleSort"
-    class="cursor-pointer select-none px-3 py-2 whitespace-nowrap"
+    class="inline-flex cursor-pointer select-none items-center gap-1 whitespace-nowrap text-left transition-colors hover:text-emerald-700"
 >
-    <div class="flex items-center gap-1">
-        <span>{{ label }}</span>
+    <span>{{ label }}</span>
 
-        <!-- ICON -->
-        <template v-if="currentSort === field">
-            <ArrowUp v-if="currentOrder === 'asc'" size="14" />
-            <ArrowDown v-else size="14" />
-        </template>
+    <template v-if="currentSort === field">
+        <ArrowUp v-if="currentOrder === 'asc'" size="14" />
+        <ArrowDown v-else size="14" />
+    </template>
 
-        <ArrowUpDown v-else size="14" class="opacity-40" />
-    </div>
-</th>
+    <ArrowUpDown v-else size="14" class="opacity-40" />
+</button>
 </template>

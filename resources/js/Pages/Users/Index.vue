@@ -1,16 +1,16 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router } from '@inertiajs/vue3'
-import { Eye, Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
+import { Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
-import DetailModal from '@/Components/UI/DetailModal.vue'
 import UserFormModal from './FormModal.vue'
 import RoleManagementDialog from './RoleManagementDialog.vue'
+import BaseTable from '@/Components/UI/BaseTable.vue'
 
 const props = defineProps({
     users: Object,
@@ -28,10 +28,16 @@ const props = defineProps({
 })
 
 const confirmBox = useConfirm()
-const detailUser = ref(null)
 const showRoleManager = ref(false)
 let searchTimeout = null
 const searchValue = ref(props.filters?.search ?? '')
+const columns = [
+    { key: 'id', label: 'ID', sortable: true, width: '64px' },
+    { key: 'name', label: 'Tên', sortable: true },
+    { key: 'username', label: 'Tên đăng nhập', sortable: true },
+    { key: 'phone', label: 'Điện thoại', sortable: true },
+    { key: 'roles', label: 'Vai trò' },
+]
 
 const search = (value) => {
     clearTimeout(searchTimeout)
@@ -39,7 +45,7 @@ const search = (value) => {
     searchTimeout = setTimeout(() => {
         router.get(
             route('users.index'),
-            { search: value || undefined },
+            { search: value || undefined, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -48,6 +54,10 @@ const search = (value) => {
         )
     }, 250)
 }
+
+const sort = ({ field, order }) => router.get(route('users.index'), {
+    search: searchValue.value || undefined, sort_by: field, sort_order: order, per_page: props.filters?.per_page,
+}, { preserveState: true, preserveScroll: true, replace: true })
 
 watch(searchValue, search)
 onBeforeUnmount(() => clearTimeout(searchTimeout))
@@ -107,24 +117,15 @@ const destroy = (user) => {
     })
 }
 
-const userRows = (user) => [
-    { label: 'ID', value: user.id },
-    { label: 'Họ tên', value: user.name },
-    { label: 'Tên đăng nhập', value: user.username },
-    { label: 'Điện thoại', value: user.phone },
-    { label: 'Email', value: user.email },
-    { label: 'Vai trò', value: (user.roles || []).map(role => role.name || role).join(', ') },
-]
 </script>
 
 <template>
     <Head title="Quản lý người dùng" />
 
     <AdminLayout>
-        <div class="space-y-4 p-6">
+        <div class="space-y-3">
             <PageHeader
                 title="Quản lý người dùng"
-                description="Tài khoản, vai trò và thông tin liên hệ"
             />
 
             <DataPanel>
@@ -152,88 +153,25 @@ const userRows = (user) => [
                     </div>
                 </template>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full min-w-[860px] text-sm">
-                        <thead>
-                            <tr class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                                <th class="px-4 py-3 text-left">ID</th>
-                                <th class="px-4 py-3 text-left">Tên</th>
-                                <th class="px-4 py-3 text-left">Tên đăng nhập</th>
-                                <th class="px-4 py-3 text-left">Điện thoại</th>
-                                <th class="px-4 py-3 text-left">Vai trò</th>
-                                <th class="w-32 px-4 py-3 text-center">Thao tác</th>
-                            </tr>
-                        </thead>
-
-                        <tbody class="divide-y divide-slate-100">
-                            <tr
-                                v-for="user in users.data"
-                                :key="user.id"
-                                class="hover:bg-slate-50"
-                            >
-                                <td class="px-4 py-3 font-medium text-slate-700">{{ user.id }}</td>
-                                <td class="px-4 py-3 font-semibold text-slate-900">{{ user.name }}</td>
-                                <td class="px-4 py-3 text-slate-600">{{ user.username }}</td>
-                                <td class="px-4 py-3 text-slate-600">{{ user.phone || '-' }}</td>
-                                <td class="px-4 py-3">
-                                    <span
-                                        v-for="role in user.roles"
-                                        :key="role.id || role"
-                                        class="mr-1 inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700"
-                                    >
-                                        {{ role.name || role }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex justify-center gap-1">
-                                        <ActionButton
-                                            v-if="can_edit_users && user.username !== 'admin'"
-                                            variant="ghost"
-                                            title="Xem chi tiết"
-                                            @click="detailUser = user"
-                                        >
-                                            <Eye class="h-4 w-4" />
-                                        </ActionButton>
-
-                                        <ActionButton
-                                            v-if="can_delete_users && user.username !== 'admin'"
-                                            variant="ghost"
-                                            title="Sửa"
-                                            @click="openEdit(user)"
-                                        >
-                                            <SquarePen class="h-4 w-4 text-blue-600" />
-                                        </ActionButton>
-
-                                        <ActionButton
-                                            variant="ghost"
-                                            title="Xóa"
-                                            @click="destroy(user)"
-                                        >
-                                            <Trash2 class="h-4 w-4 text-red-500" />
-                                        </ActionButton>
-                                    </div>
-                                </td>
-                            </tr>
-
-                            <tr v-if="!users.data.length">
-                                <td
-                                    colspan="6"
-                                    class="px-4 py-12 text-center text-slate-400"
-                                >
-                                    Không có dữ liệu
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <BaseTable :data="users" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="router.visit(`/records/user/${$event.id}`)">
+                    <template #row="{ row }">
+                        <td class="border-r p-2 font-medium text-slate-700">{{ row.id }}</td>
+                        <td class="border-r p-2 font-semibold text-slate-900">{{ row.name }}</td>
+                        <td class="border-r p-2 text-slate-600">{{ row.username }}</td>
+                        <td class="border-r p-2 text-slate-600">{{ row.phone || '—' }}</td>
+                        <td class="border-r p-2">
+                            <span v-for="role in row.roles" :key="role.id || role" class="mr-1 inline-flex rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ role.name || role }}</span>
+                        </td>
+                        <td class="p-2 text-center" @click.stop>
+                            <div class="flex justify-center gap-1">
+                                <ActionButton v-if="can_edit_users && row.username !== 'admin'" variant="ghost" title="Sửa" @click="openEdit(row)"><SquarePen class="h-4 w-4 text-emerald-700" /></ActionButton>
+                                <ActionButton v-if="can_delete_users && row.username !== 'admin'" variant="ghost" title="Xóa" @click="destroy(row)"><Trash2 class="h-4 w-4 text-rose-600" /></ActionButton>
+                            </div>
+                        </td>
+                    </template>
+                </BaseTable>
             </DataPanel>
 
-            <DetailModal
-                v-if="detailUser"
-                title="Chi tiết người dùng"
-                :rows="userRows(detailUser)"
-                @close="detailUser = null"
-            />
 
             <RoleManagementDialog
                 v-if="showRoleManager"

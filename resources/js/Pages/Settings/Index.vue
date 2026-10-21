@@ -365,8 +365,8 @@ const unitDisplayName = (unit) =>
 </script>
 
 <template>
-    <div class="space-y-5">
-        <PageHeader title="Thiết lập" description="Chọn nội dung bạn muốn cấu hình cho cửa hàng.">
+    <div class="space-y-3">
+        <PageHeader title="Thiết lập">
             <template #actions>
                 <span class="text-xs font-medium text-slate-500">Cài đặt được lưu riêng theo từng mục</span>
             </template>

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Link } from '@inertiajs/vue3'
+import { router } from '@inertiajs/vue3'
 import axios from 'axios'
 import { toast } from 'vue-sonner'
 import { Bell, Trash2, CheckCheck, ExternalLink, AlertTriangle, Package, FileText, Wrench } from 'lucide-vue-next'
@@ -10,24 +10,32 @@ const bellRef = ref(null)
 const notifications = ref([])
 const unreadCount = ref(0)
 const loading = ref(false)
+const loadFailed = ref(false)
 let refreshTimer
+let requestPending = false
 
-const loadNotifications = async () => {
+const loadNotifications = async ({ notifyError = false } = {}) => {
+    if (requestPending) return
+    requestPending = true
     loading.value = true
     try {
-        const { data } = await axios.get(route('notifications.index'))
-        notifications.value = data.notifications || []
+        const { data } = await axios.get('/notifications')
+        if (!Array.isArray(data.notifications)) throw new Error('Invalid notifications response')
+        notifications.value = data.notifications
         unreadCount.value = Number(data.unread_count || 0)
+        loadFailed.value = false
     } catch {
-        toast.error('Không thể tải thông báo hệ thống')
+        loadFailed.value = true
+        if (notifyError) toast.error('Không thể tải thông báo hệ thống')
     } finally {
+        requestPending = false
         loading.value = false
     }
 }
 
 const toggleDropdown = () => {
     isOpen.value = !isOpen.value
-    if (isOpen.value) loadNotifications()
+    if (isOpen.value) loadNotifications({ notifyError: true })
 }
 
 const markAsRead = async (item) => {
@@ -35,7 +43,7 @@ const markAsRead = async (item) => {
         item.read = true
         unreadCount.value = Math.max(0, unreadCount.value - 1)
         try {
-            await axios.patch(route('notifications.read', item.id))
+            await axios.patch(`/notifications/${encodeURIComponent(item.id)}/read`)
         } catch {
             item.read = false
             unreadCount.value += 1
@@ -46,7 +54,7 @@ const markAsRead = async (item) => {
 
 const markAllAsRead = async () => {
     try {
-        await axios.patch(route('notifications.read-all'))
+        await axios.patch('/notifications/read-all')
         notifications.value.forEach((item) => { item.read = true })
         unreadCount.value = 0
     } catch {
@@ -54,10 +62,16 @@ const markAllAsRead = async () => {
     }
 }
 
+const openNotification = (item) => {
+    isOpen.value = false
+    markAsRead(item)
+    if (item.url) router.visit(item.url)
+}
+
 const removeNotification = async (id) => {
     const item = notifications.value.find((notification) => notification.id === id)
     try {
-        await axios.delete(route('notifications.destroy', id))
+        await axios.delete(`/notifications/${encodeURIComponent(id)}`)
         notifications.value = notifications.value.filter((notification) => notification.id !== id)
         if (item && !item.read) unreadCount.value = Math.max(0, unreadCount.value - 1)
     } catch {
@@ -146,7 +160,7 @@ onBeforeUnmount(() => {
                 <div
                     v-for="item in notifications"
                     :key="item.id"
-                    @click="markAsRead(item)"
+                    @click="openNotification(item)"
                     class="group relative flex items-start gap-3 rounded-xl p-2.5 transition-all cursor-pointer"
                     :class="item.read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50/50 hover:bg-blue-50'"
                 >
@@ -174,15 +188,9 @@ onBeforeUnmount(() => {
                         </p>
 
                         <!-- LINK CHI TIẾT -->
-                        <div v-if="item.url" class="mt-1.5 flex items-center gap-1">
-                            <Link
-                                :href="item.url"
-                                @click="isOpen = false"
-                                class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
-                            >
+                        <div v-if="item.url" class="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-blue-600">
                                 <span>Xem chi tiết</span>
                                 <ExternalLink :size="12" />
-                            </Link>
                         </div>
                     </div>
 
@@ -199,6 +207,10 @@ onBeforeUnmount(() => {
 
                 <div v-if="loading && !notifications.length" class="py-8 text-center text-slate-400 font-medium">
                     Đang tải thông báo...
+                </div>
+                <div v-else-if="loadFailed && !notifications.length" class="py-6 text-center text-slate-500">
+                    <p>Chưa tải được thông báo.</p>
+                    <button type="button" class="mt-2 font-semibold text-emerald-700 hover:underline" @click.stop="loadNotifications({ notifyError: true })">Thử lại</button>
                 </div>
                 <div v-else-if="!notifications.length" class="py-8 text-center text-slate-400 font-medium">
                     Không có thông báo nào

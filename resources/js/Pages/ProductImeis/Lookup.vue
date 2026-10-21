@@ -124,7 +124,7 @@ const lookupScannedCode = (code) => {
 </script>
 
 <template>
-    <div class="space-y-5 p-6">
+    <div class="space-y-3">
         <PageHeader
             title="Tra cứu IMEI"
             description="Kiểm tra thông tin máy, lịch sử nhập bán, sửa chữa và bảo hành"

@@ -282,8 +282,8 @@ onBeforeUnmount(() => {
             </header>
 
             <!-- MAIN CONTENT AREA -->
-            <main class="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6">
-                <div class="mx-auto max-w-[1600px] space-y-5">
+            <main class="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4">
+                <div class="mx-auto w-full max-w-[1760px] space-y-3">
                     <slot :key="page.url" />
                 </div>
             </main>

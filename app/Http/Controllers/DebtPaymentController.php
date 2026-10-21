@@ -33,14 +33,19 @@ class DebtPaymentController extends Controller
         $isCustomer = $entity === 'customer';
         $model = $isCustomer ? Customer::query() : Supplier::query();
         $nameColumn = $isCustomer ? 'full_name' : 'name';
+        $perPage = in_array((int) $request->query('per_page', 15), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 15) : 15;
+        $sortBy = in_array($request->query('sort_by'), ['debt_balance', 'code', $nameColumn], true)
+            ? $request->query('sort_by') : 'debt_balance';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
 
         $rows = $model->where('debt_balance', '>', 0)
             ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                 ->where($nameColumn, 'like', "%{$search}%")
                 ->orWhere('code', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")))
-            ->orderByDesc('debt_balance')
-            ->paginate(15)->withQueryString();
+            ->orderBy($sortBy, $sortOrder)
+            ->paginate($perPage)->withQueryString();
 
         $partyIds = collect($rows->items())->pluck('id');
         $orders = $isCustomer
@@ -119,7 +124,7 @@ class DebtPaymentController extends Controller
         return Inertia::render('Debts/Index', [
             'entity' => $entity,
             'rows' => $rows,
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'per_page' => $perPage, 'sort_by' => $sortBy, 'sort_order' => $sortOrder],
             'summary' => [
                 'total' => (float) ($isCustomer ? Customer::sum('debt_balance') : Supplier::sum('debt_balance')),
                 'count' => (int) ($isCustomer ? Customer::where('debt_balance', '>', 0)->count() : Supplier::where('debt_balance', '>', 0)->count()),

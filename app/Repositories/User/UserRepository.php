@@ -16,6 +16,11 @@ class UserRepository extends BaseRepository
     public function paginate(
         int $perPage = 10
     ): LengthAwarePaginator {
+        $perPage = in_array((int) request()->query('per_page', $perPage), [10, 20, 50, 100], true)
+            ? (int) request()->query('per_page', $perPage) : $perPage;
+        $sortBy = in_array(request()->query('sort_by'), ['id', 'name', 'username', 'phone'], true)
+            ? request()->query('sort_by') : 'created_at';
+        $sortOrder = request()->query('sort_order') === 'asc' ? 'asc' : 'desc';
 
         return $this->model
             ->query()
@@ -49,7 +54,7 @@ class UserRepository extends BaseRepository
                 }
             )
 
-            ->latest()
+            ->orderBy($sortBy, $sortOrder)
 
             ->paginate($perPage)
 

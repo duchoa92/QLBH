@@ -41,6 +41,11 @@ class StockImportController extends Controller
             : '';
         $dateFrom = $request->date('date_from')?->toDateString() ?? '';
         $dateTo = $request->date('date_to')?->toDateString() ?? '';
+        $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 20) : 20;
+        $sortBy = in_array($request->query('sort_by'), ['code', 'import_date', 'items_count', 'grand_total', 'status'], true)
+            ? $request->query('sort_by') : 'id';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
 
         $imports = StockImport::query()
             ->with([
@@ -72,8 +77,8 @@ class StockImportController extends Controller
                         ->orWhere('party_phone', 'like', "%{$search}%");
                 });
             })
-            ->latest('id')
-            ->paginate(20)
+            ->when($sortBy === 'items_count', fn ($query) => $query->orderBy('items_count', $sortOrder), fn ($query) => $query->orderBy($sortBy, $sortOrder))
+            ->paginate($perPage)
             ->withQueryString();
 
         return Inertia::render('StockImports/List', [
@@ -85,6 +90,9 @@ class StockImportController extends Controller
                 'status' => $status,
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
+                'per_page' => $perPage,
+                'sort_by' => $sortBy,
+                'sort_order' => $sortOrder,
             ],
 
             'categories' => Category::query()

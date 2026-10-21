@@ -252,14 +252,14 @@ const submit = () => {
 
 <template>
 
-<div class="min-h-screen bg-slate-100">
+<div class="space-y-3">
 
     <!-- ========================================================= -->
     <!-- HEADER -->
     <!-- ========================================================= -->
 
     <div class="border-b border-slate-200 bg-white">
-        <div class="flex items-center justify-between px-6 py-4">
+        <div class="flex items-center justify-between gap-3 px-3 py-2.5">
             <!-- LEFT -->
 
             <div>
@@ -354,7 +354,7 @@ const submit = () => {
     <!-- CONTENT -->
     <!-- ========================================================= -->
 
-    <div class="p-6">
+    <div>
 
         <div
             class="

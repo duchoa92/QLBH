@@ -8,6 +8,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { formatMoney } from '@/utils/format'
 import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
+import PaginationBar from '@/Components/UI/PaginationBar.vue'
 
 defineOptions({ layout: AdminLayout })
 
@@ -36,12 +37,18 @@ watch(search, value => {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => router.get(
         isCustomer.value ? route('debts.customers') : route('debts.suppliers'),
-        { search: value || undefined },
+        { search: value || undefined, per_page: props.filters?.per_page, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order },
         { preserveState: true, preserveScroll: true, replace: true },
     ), 250)
 })
 
 const nameOf = row => isCustomer.value ? row.full_name : row.name
+const sort = field => {
+    const order = props.filters?.sort_by === field && props.filters?.sort_order === 'asc' ? 'desc' : 'asc'
+    router.get(isCustomer.value ? route('debts.customers') : route('debts.suppliers'), {
+        search: search.value || undefined, per_page: props.filters?.per_page, sort_by: field, sort_order: order,
+    }, { preserveState: true, preserveScroll: true, replace: true })
+}
 const pay = (row, order = null) => {
     selected.value = row
     error.value = ''
@@ -77,7 +84,8 @@ const submit = () => {
 </script>
 
 <template>
-    <div class="space-y-2 p-2 sm:p-2">
+    <div class="space-y-3">
+        <PageHeader :title="title" />
        
         <div class="grid gap-3 sm:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -101,7 +109,7 @@ const submit = () => {
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full min-w-[720px] text-left text-sm">
-                    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Mã</th><th class="px-4 py-3">Điện thoại</th><th class="px-4 py-3 text-right">Còn nợ</th><th class="px-4 py-3 text-right">Thao tác</th></tr></thead>
+                    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600"><tr><th class="px-4 py-3"><button type="button" class="hover:text-emerald-700" @click="sort(isCustomer ? 'full_name' : 'name')">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }} ↕</button></th><th class="px-4 py-3"><button type="button" class="hover:text-emerald-700" @click="sort('code')">Mã ↕</button></th><th class="px-4 py-3">Điện thoại</th><th class="px-4 py-3 text-right"><button type="button" class="hover:text-emerald-700" @click="sort('debt_balance')">Còn nợ ↕</button></th><th class="px-4 py-3 text-right">Thao tác</th></tr></thead>
                     <tbody class="divide-y divide-slate-100">
                         <template v-for="row in rows.data" :key="row.id">
                             <tr
@@ -117,9 +125,7 @@ const submit = () => {
                     </tbody>
                 </table>
             </div>
-            <div v-if="rows.links?.length > 3" class="flex flex-wrap justify-end gap-1 border-t border-slate-100 p-3">
-                <button v-for="link in rows.links" :key="`${link.label}-${link.url}`" :disabled="!link.url" @click="link.url && router.visit(link.url, { preserveScroll: true })" class="rounded-lg border px-3 py-1.5 text-xs" :class="link.active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-600 disabled:opacity-40'" v-html="link.label" />
-            </div>
+            <PaginationBar :data="rows" :filters="filters" />
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

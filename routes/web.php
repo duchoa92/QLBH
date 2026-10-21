@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\Setup\InstallerController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\BackupCloudOAuthController;
 use App\Http\Controllers\CategoryAttributeController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RepairController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RecordDetailController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SettingController;
@@ -34,6 +36,10 @@ use Illuminate\Support\Facades\Route;
 | Trang gốc: điều hướng thẳng, không dùng trang Welcome mặc định của Laravel
 |--------------------------------------------------------------------------
 */
+Route::get('/setup', [InstallerController::class, 'index'])->name('setup.index');
+Route::post('/setup/test', [InstallerController::class, 'test'])->name('setup.test');
+Route::post('/setup/install', [InstallerController::class, 'install'])->name('setup.install');
+
 Route::get('/', function () {
     return auth()->check()
         ? redirect(auth()->user()->landingPath())
@@ -50,6 +56,10 @@ Route::get('/product-images/{filename}', [ProductImageController::class, 'show']
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth'])->group(function () {
+
+    Route::get('/records/{type}/{id}', [RecordDetailController::class, 'show'])
+        ->where('type', 'product|imei|customer|supplier|sale|stock-import|repair|category|brand|unit|user')
+        ->whereNumber('id')->name('records.show');
 
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');

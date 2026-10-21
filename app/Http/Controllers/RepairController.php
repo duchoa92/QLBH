@@ -53,6 +53,8 @@ class RepairController extends Controller
         $sortBy = in_array($request->input('sort_by'), ['code', 'device_name', 'status', 'created_at'], true)
             ? $request->input('sort_by') : 'created_at';
         $sortOrder = $request->input('sort_order') === 'asc' ? 'asc' : 'desc';
+        $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 20) : 20;
         $createdRepairId = (int) $request->query('created_repair_id', 0);
         $statusCounts = Repair::query()
             ->selectRaw('status, COUNT(*) as total')
@@ -144,7 +146,7 @@ class RepairController extends Controller
             ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
             ->orderBy($sortBy, $sortOrder)
 
-            ->paginate(20)
+            ->paginate($perPage)
 
             ->through(fn ($repair) => [
 
@@ -290,6 +292,7 @@ class RepairController extends Controller
                     'date_to' => $dateTo,
                     'sort_by' => $sortBy,
                     'sort_order' => $sortOrder,
+                    'per_page' => $perPage,
                 ],
             ]
         );
@@ -1526,7 +1529,7 @@ class RepairController extends Controller
     {
         Notification::send(
             User::query()->get(),
-            new SystemNotification($title, $message, $type, route('repairs.index'))
+            new SystemNotification($title, $message, $type, route('records.show', ['type' => 'repair', 'id' => $repair->id], false))
         );
     }
 

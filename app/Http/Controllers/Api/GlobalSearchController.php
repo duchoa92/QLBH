@@ -46,7 +46,7 @@ class GlobalSearchController extends Controller
                 ->map(fn (Product $product) => $this->result(
                     'Sản phẩm', $product->name,
                     collect([$product->sku, $product->barcode, $product->brand?->name])->filter()->join(' · '),
-                    '/products/' . $product->id
+                    route('records.show', ['type' => 'product', 'id' => $product->id], false)
                 )));
 
             $imeis = ProductImei::query()
@@ -55,32 +55,32 @@ class GlobalSearchController extends Controller
                 ->limit(4)->get()
                 ->map(fn (ProductImei $imei) => $this->result(
                     'IMEI / Serial', $imei->imei ?: $imei->serial,
-                    $imei->product?->name ?: 'Sản phẩm', '/imeis/' . $imei->id
+                    $imei->product?->name ?: 'Sản phẩm', route('records.show', ['type' => 'imei', 'id' => $imei->id], false)
                 ));
             $results = $results->concat($imeis);
         }
 
-        $results = $results->concat(Customer::query()
+        if ($user->can('customers.view')) $results = $results->concat(Customer::query()
             ->where(fn ($query) => $query->where('full_name', 'like', $like)
                 ->orWhere('phone', 'like', $like)->orWhere('email', 'like', $like)->orWhere('code', 'like', $like))
             ->limit(5)->get()
             ->map(fn (Customer $customer) => $this->result(
                 'Khách hàng', $customer->full_name,
                 collect([$customer->phone, $customer->code])->filter()->join(' · '),
-                '/customers/' . $customer->id
+                route('records.show', ['type' => 'customer', 'id' => $customer->id], false)
             )));
 
-        $results = $results->concat(Supplier::query()
+        if ($user->can('suppliers.view')) $results = $results->concat(Supplier::query()
             ->where(fn ($query) => $query->where('name', 'like', $like)
                 ->orWhere('phone', 'like', $like)->orWhere('email', 'like', $like)->orWhere('code', 'like', $like))
             ->limit(5)->get()
             ->map(fn (Supplier $supplier) => $this->result(
                 'Nhà cung cấp', $supplier->name,
                 collect([$supplier->phone, $supplier->code])->filter()->join(' · '),
-                '/suppliers/' . $supplier->id
+                route('records.show', ['type' => 'supplier', 'id' => $supplier->id], false)
             )));
 
-        $results = $results->concat(Sale::query()
+        if ($user->can('sales.view')) $results = $results->concat(Sale::query()
             ->with('customer:id,full_name,phone')
             ->where(fn ($query) => $query->where('code', 'like', $like)->orWhereHas('customer', fn ($customer) => $customer
                 ->where('full_name', 'like', $like)->orWhere('phone', 'like', $like)))
@@ -88,20 +88,20 @@ class GlobalSearchController extends Controller
             ->map(fn (Sale $sale) => $this->result(
                 'Hóa đơn', $sale->code,
                 collect([$sale->customer?->full_name, number_format((float) $sale->grand_total, 0, ',', '.') . ' đ'])->filter()->join(' · '),
-                '/sales/' . $sale->id
+                route('records.show', ['type' => 'sale', 'id' => $sale->id], false)
             )));
 
-        $results = $results->concat(StockImport::query()
+        if ($user->can('stock_imports.view')) $results = $results->concat(StockImport::query()
             ->with('supplier:id,name')
             ->where(fn ($query) => $query->where('code', 'like', $like)->orWhereHas('supplier', fn ($supplier) => $supplier->where('name', 'like', $like)))
             ->latest('id')->limit(5)->get()
             ->map(fn (StockImport $import) => $this->result(
                 'Phiếu nhập', $import->code,
                 collect([$import->supplier?->name, $import->import_date?->format('d/m/Y')])->filter()->join(' · '),
-                '/stock-import/' . $import->id
+                route('records.show', ['type' => 'stock-import', 'id' => $import->id], false)
             )));
 
-        $results = $results->concat(Repair::query()
+        if ($user->can('repairs.view')) $results = $results->concat(Repair::query()
             ->where(fn ($query) => $query->where('code', 'like', $like)
                 ->orWhere('contact_phone', 'like', $like)
                 ->orWhere('device_name', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
@@ -109,27 +109,27 @@ class GlobalSearchController extends Controller
             ->map(fn (Repair $repair) => $this->result(
                 'Phiếu sửa chữa', $repair->code ?: $repair->device_name,
                 collect([$repair->contact_phone, $repair->device_name])->filter()->join(' · '),
-                '/repairs/' . $repair->id
+                route('records.show', ['type' => 'repair', 'id' => $repair->id], false)
             )));
 
         if ($user->can('categories.view')) {
             $results = $results->concat(Category::query()->where('name', 'like', $like)->limit(4)->get()
-                ->map(fn (Category $category) => $this->result('Danh mục', $category->name, 'Danh mục sản phẩm', '/categories')));
+                ->map(fn (Category $category) => $this->result('Danh mục', $category->name, 'Danh mục sản phẩm', route('records.show', ['type' => 'category', 'id' => $category->id], false))));
         }
 
         if ($user->can('brands.view')) {
             $results = $results->concat(Brand::query()->with('category:id,name')->where('name', 'like', $like)->limit(4)->get()
-                ->map(fn (Brand $brand) => $this->result('Thương hiệu', $brand->name, $brand->category?->name, '/brands')));
+                ->map(fn (Brand $brand) => $this->result('Thương hiệu', $brand->name, $brand->category?->name, route('records.show', ['type' => 'brand', 'id' => $brand->id], false))));
         }
 
-        $results = $results->concat(Unit::query()->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('short_name', 'like', $like))
-            ->limit(4)->get()->map(fn (Unit $unit) => $this->result('Đơn vị tính', $unit->name, $unit->short_name, '/settings')));
+        if ($user->can('settings.view')) $results = $results->concat(Unit::query()->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('short_name', 'like', $like))
+            ->limit(4)->get()->map(fn (Unit $unit) => $this->result('Đơn vị tính', $unit->name, $unit->short_name, route('records.show', ['type' => 'unit', 'id' => $unit->id], false))));
 
         if ($user->can('users.view')) {
             $results = $results->concat(User::query()
                 ->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('email', 'like', $like))
                 ->limit(4)->get()
-                ->map(fn (User $foundUser) => $this->result('Nhân viên', $foundUser->name, $foundUser->email, '/users')));
+                ->map(fn (User $foundUser) => $this->result('Nhân viên', $foundUser->name, $foundUser->email, route('records.show', ['type' => 'user', 'id' => $foundUser->id], false))));
         }
 
         return response()->json(['results' => $results->take(40)->values()]);

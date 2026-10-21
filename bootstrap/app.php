@@ -20,12 +20,13 @@ return Application::configure(basePath: dirname(__DIR__))
 
     // Đăng ký middleware
     ->withMiddleware(function (Middleware $middleware): void {
-
         // Đăng ký middleware cho Sanctum
         $middleware->statefulApi();
 
         // Đăng ký middleware cho Inertia
         $middleware->web(append: [
+
+            \App\Http\Middleware\EnsureInstalled::class,
 
             \App\Http\Middleware\HandleInertiaRequests::class,
 

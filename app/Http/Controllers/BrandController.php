@@ -19,6 +19,8 @@ class BrandController extends Controller
 
     public function index(Request $request)
     {
+       $perPage = in_array((int) $request->query('per_page', 10), [10, 20, 50, 100], true)
+           ? (int) $request->query('per_page', 10) : 10;
         
        $brands = Brand::with('category')
         ->when($request->filled('search'), fn ($q) =>
@@ -27,9 +29,9 @@ class BrandController extends Controller
         ->when($request->category_id !== null && $request->category_id !== '', fn ($q) =>
             $q->where('category_id', $request->category_id)
         )
-        ->when($request->filled('sort_by'), function ($q) use ($request) {
+        ->when(in_array($request->query('sort_by'), ['id', 'name', 'category_name', 'is_active'], true), function ($q) use ($request) {
 
-            $order = $request->get('sort_order', 'asc');
+            $order = $request->query('sort_order') === 'desc' ? 'desc' : 'asc';
 
             if ($request->sort_by === 'category_name') {
                 $q->leftJoin('categories', 'brands.category_id', '=', 'categories.id')
@@ -42,7 +44,7 @@ class BrandController extends Controller
         }, function ($q) {
             $q->latest();
         })
-        ->paginate(10)
+        ->paginate($perPage)
         ->withQueryString();
 
 
@@ -50,12 +52,13 @@ class BrandController extends Controller
 
         return Inertia::render('Brands/Index', [
             'brands'     => $brands,
-            'filters' => $request->only(
+            'filters' => [...$request->only(
                 'search',
                 'category_id',
                 'sort_by',
-                'sort_order'
-            ),
+                'sort_order',
+                'per_page'
+            ), 'per_page' => $perPage],
             'categories' => $categories,
         ]);
     }
