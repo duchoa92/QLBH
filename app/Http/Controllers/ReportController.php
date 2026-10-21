@@ -129,10 +129,24 @@ class ReportController extends Controller
     */
     public function inventory(): JsonResponse
     {
+        $alertsEnabled = filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN);
+        $defaultThreshold = max(0, (int) setting('inventory_alert_threshold', 5));
+        $lowStock = function ($query) use ($defaultThreshold) {
+            $query->where(function ($conditions) use ($defaultThreshold) {
+                $conditions->where(function ($explicit) {
+                    $explicit->where('alert_stock', '>', 0)->whereColumn('stock', '<=', 'alert_stock');
+                });
+                if ($defaultThreshold > 0) {
+                    $conditions->orWhere(function ($fallback) use ($defaultThreshold) {
+                        $fallback->where('alert_stock', 0)->where('stock', '<=', $defaultThreshold);
+                    });
+                }
+            });
+        };
         $query = Product::query()->where('is_active', true);
 
         if (request()->boolean('low_stock')) {
-            $query->whereColumn('stock', '<=', 'alert_stock');
+            $alertsEnabled ? $query->where($lowStock) : $query->whereRaw('1 = 0');
         }
 
         if (request('search')) {
@@ -165,7 +179,7 @@ class ReportController extends Controller
             'total_products' => (clone $activeProducts)->count(),
             'total_stock_qty' => (int) (clone $activeProducts)->sum('stock'),
             'total_stock_value' => (float) (clone $activeProducts)->selectRaw('COALESCE(SUM(stock * cost_price), 0) as v')->value('v'),
-            'low_stock_count' => (clone $activeProducts)->whereColumn('stock', '<=', 'alert_stock')->count(),
+            'low_stock_count' => $alertsEnabled ? (clone $activeProducts)->where($lowStock)->count() : 0,
         ];
 
         return response()->json([

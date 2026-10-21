@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Customer;
 use App\Models\CustomerDebt;
 use App\Models\SaleItemGift;
+use App\Services\Stock\ImeiStockSynchronizer;
 
 class PosCheckoutService
 {
@@ -361,39 +362,7 @@ class PosCheckoutService
                         'customer_warranty_voided_by' => null,
                     ]);
 
-                    /*
-                    * Đồng bộ tồn Variant theo số IMEI thực tế còn trong kho.
-                    */
-                    if ($variant) {
-
-                        $variantStock = ProductImei::query()
-                            ->where('product_id', $product->id)
-                            ->where('variant_id', $variant->id)
-                            ->where(
-                                'status',
-                                ProductImei::STATUS_IN_STOCK
-                            )
-                            ->count();
-
-                        $variant->update([
-                            'stock' => $variantStock,
-                        ]);
-                    }
-
-                    /*
-                    * Đồng bộ tồn Product theo tổng IMEI còn trong kho.
-                    */
-                    $productStock = ProductImei::query()
-                        ->where('product_id', $product->id)
-                        ->where(
-                            'status',
-                            ProductImei::STATUS_IN_STOCK
-                        )
-                        ->count();
-
-                    $product->update([
-                        'stock' => $productStock,
-                    ]);
+                    app(ImeiStockSynchronizer::class)->sync($product);
 
                 } elseif ($variant) {
 
@@ -482,12 +451,7 @@ class PosCheckoutService
                                 'customer_warranty_voided_by' => null,
                             ]);
 
-                            $giftProduct->update([
-                                'stock' => ProductImei::query()
-                                    ->where('product_id', $giftProduct->id)
-                                    ->where('status', ProductImei::STATUS_IN_STOCK)
-                                    ->count(),
-                            ]);
+                            app(ImeiStockSynchronizer::class)->sync($giftProduct);
 
                             $giftProduct->increment('sold_count');
 

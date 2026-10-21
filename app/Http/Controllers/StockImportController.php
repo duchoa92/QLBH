@@ -98,29 +98,51 @@ class StockImportController extends Controller
         ]);
     }
 
-    /** Products that are at or below their configured stock alert level. */
+    /** Active products with stock normalized across standard, variant, and IMEI inventory. */
     public function replenishmentProducts(): JsonResponse
     {
+        $alertsEnabled = filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN);
+        $defaultThreshold = max(0, (int) setting('inventory_alert_threshold', 5));
         $products = Product::query()
             ->where('is_active', true)
-            ->whereColumn('stock', '<=', 'alert_stock')
+            ->select('id', 'name', 'sku', 'barcode', 'stock', 'alert_stock', 'cost_price', 'unit_id', 'product_type', 'manage_stock_by_serial')
             ->with('unit:id,name,short_name')
-            ->select('id', 'name', 'sku', 'barcode', 'stock', 'alert_stock', 'cost_price', 'unit_id')
+            ->with(['variants' => fn ($query) => $query
+                ->where('is_active', true)
+                ->select('id', 'product_id', 'stock')])
+            ->withCount(['imeis as in_stock_imeis_count' => fn ($query) =>
+                $query->where('status', \App\Models\ProductImei::STATUS_IN_STOCK)])
             ->orderBy('stock')
             ->orderBy('name')
             ->get()
-            ->map(fn (Product $product) => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'barcode' => $product->barcode,
-                'stock' => (float) $product->stock,
-                'alert_stock' => (float) $product->alert_stock,
-                'cost_price' => (float) $product->cost_price,
-                'unit_name' => $product->unit?->short_name ?: ($product->unit?->name ?: 'Cái'),
-            ]);
+            ->map(function (Product $product) use ($alertsEnabled, $defaultThreshold) {
+                $stock = $product->manage_stock_by_serial || $product->product_type === 'imei'
+                    ? (int) $product->in_stock_imeis_count
+                    : ($product->variants->isNotEmpty()
+                        ? (float) $product->variants->sum('stock')
+                        : (float) $product->stock);
 
-        return response()->json(['products' => $products]);
+                $productThreshold = (float) $product->alert_stock > 0
+                    ? (float) $product->alert_stock
+                    : $defaultThreshold;
+
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'barcode' => $product->barcode,
+                    'stock' => $stock,
+                    'alert_stock' => $alertsEnabled ? $productThreshold : 0,
+                    'cost_price' => (float) $product->cost_price,
+                    'unit_name' => $product->unit?->short_name ?: ($product->unit?->name ?: 'Cái'),
+                ];
+            });
+
+        return response()->json([
+            'products' => $products,
+            'alerts_enabled' => $alertsEnabled,
+            'default_alert_threshold' => $defaultThreshold,
+        ]);
     }
 
     /**

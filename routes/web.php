@@ -13,6 +13,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\WorkShiftController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RepairController;
@@ -39,6 +40,10 @@ Route::get('/', function () {
         : redirect()->route('login');
 });
 
+Route::get('/product-images/{filename}', [ProductImageController::class, 'show'])
+    ->where('filename', '[A-Za-z0-9._-]+')
+    ->name('product-images.show');
+
 /*
 |--------------------------------------------------------------------------
 | Authenticated Routes (Yêu cầu đăng nhập)
@@ -59,7 +64,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Settings
     Route::get('/settings', [SettingController::class, 'index'])->middleware('permission:settings.view')->name('settings.index');
-    Route::post('/settings', [SettingController::class, 'update'])->middleware('permission:settings.edit|payment_accounts.manage')->name('settings.update');
+    Route::post('/settings', [SettingController::class, 'update'])->middleware('permission:settings.edit|payment_accounts.manage|units.manage')->name('settings.update');
     Route::get('/backups', [BackupController::class, 'index'])->middleware('permission:backups.manage')->name('backups.index');
     Route::post('/backups', [BackupController::class, 'store'])->middleware('permission:backups.manage')->name('backups.store');
     Route::post('/backups/cloud-connections', [BackupController::class, 'storeCloudConnection'])->middleware('permission:backups.manage')->name('backups.cloud-connections.store');

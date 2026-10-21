@@ -66,6 +66,5 @@
     @if($import->note)<p>Ghi chú: {{ $import->note }}</p>@endif
     <p>Hai bên xác nhận hàng hóa và giá trị nêu trên, cùng ký tên dưới đây.</p>
     <div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>{{ $import->party_name ?: ($import->customer?->full_name ?: ($import->supplier?->name ?: '')) }}</div></div>
-    <script>window.addEventListener('load', () => window.print())</script>
 </body>
 </html>

@@ -1,15 +1,14 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import {
     AlertTriangle,
     Check,
     CheckSquare,
-    ClipboardList,
     Copy,
     LoaderCircle,
-    PackageSearch,
     Search,
+    Save,
     ShoppingBasket,
     X,
 } from 'lucide-vue-next'
@@ -32,25 +31,32 @@ const search = ref('')
 const stockFilter = ref('all')
 const supplierId = ref('')
 const copied = ref(false)
+const draftSaved = ref(false)
+const draftStorageKey = 'stock-import-replenishment-draft-v1'
 
 const selectedSupplier = computed(() =>
     props.suppliers.find(supplier => String(supplier.id) === String(supplierId.value)) || null
 )
+
+const stockStatus = product => {
+    const stock = Number(product.stock || 0)
+    if (stock <= 0) return 'out'
+    return stock <= Number(product.alert_stock || 0) ? 'low' : 'available'
+}
 
 const filteredProducts = computed(() => {
     const keyword = search.value.trim().toLocaleLowerCase()
     return products.value.filter(product => {
         const matchesSearch = !keyword || [product.name, product.sku, product.barcode]
             .some(value => String(value || '').toLocaleLowerCase().includes(keyword))
-        const matchesFilter = stockFilter.value === 'all'
-            || (stockFilter.value === 'out' && Number(product.stock) <= 0)
-            || (stockFilter.value === 'low' && Number(product.stock) > 0)
+        const matchesFilter = stockFilter.value === 'all' || stockStatus(product) === stockFilter.value
         return matchesSearch && matchesFilter
     })
 })
 
 const outOfStockCount = computed(() => products.value.filter(product => Number(product.stock) <= 0).length)
-const lowStockCount = computed(() => products.value.length - outOfStockCount.value)
+const lowStockCount = computed(() => products.value.filter(product => stockStatus(product) === 'low').length)
+const availableCount = computed(() => products.value.filter(product => stockStatus(product) === 'available').length)
 const selectedIds = computed(() => new Set(selectedItems.value.map(item => Number(item.id))))
 const totalEstimate = computed(() => selectedItems.value.reduce(
     (total, item) => total + Math.max(0, Number(item.quantity) || 0) * Math.max(0, Number(item.cost_price) || 0),
@@ -105,6 +111,25 @@ const removeItem = id => {
     selectedItems.value = selectedItems.value.filter(item => Number(item.id) !== Number(id))
 }
 
+const saveDraft = () => {
+    try {
+        localStorage.setItem(draftStorageKey, JSON.stringify({
+            selectedItems: selectedItems.value,
+            supplierId: supplierId.value,
+            savedAt: new Date().toISOString(),
+        }))
+        draftSaved.value = true
+        toast.success('Đã lưu danh sách lấy hàng trên thiết bị này')
+    } catch (error) {
+        console.error('Không thể lưu danh sách lấy hàng:', error)
+        toast.error('Không thể lưu danh sách trên thiết bị này')
+    }
+}
+
+watch([selectedItems, supplierId], () => {
+    draftSaved.value = false
+}, { deep: true })
+
 const shareText = computed(() => {
     const greeting = selectedSupplier.value?.name
         ? `Kính gửi ${selectedSupplier.value.name},\nBên em cần lấy các mặt hàng sau:\n`
@@ -125,33 +150,37 @@ const copyList = async () => {
     }
 }
 
-onMounted(loadProducts)
+onMounted(() => {
+    try {
+        const draft = JSON.parse(localStorage.getItem(draftStorageKey) || 'null')
+        if (Array.isArray(draft?.selectedItems)) selectedItems.value = draft.selectedItems
+        if (draft?.supplierId) supplierId.value = String(draft.supplierId)
+        draftSaved.value = Boolean(draft)
+    } catch (error) {
+        console.warn('Bản nháp danh sách lấy hàng không đọc được:', error)
+    }
+
+    loadProducts()
+})
 </script>
 
 <template>
     <BaseModal title="Lập danh sách cần lấy hàng" size="2xl" body-class="p-0" @close="emit('close')">
         <div class="grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.85fr)]">
             <section class="min-w-0 border-b border-slate-200 lg:border-b-0 lg:border-r">
-                <div class="space-y-4 border-b border-slate-100 bg-slate-50/70 p-4 sm:p-5">
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                            <PackageSearch class="h-5 w-5" />
-                        </div>
-                        <div>
-                            <h3 class="text-sm font-bold text-slate-900">Sản phẩm hết hoặc gần hết</h3>
-                            <p class="mt-1 text-xs leading-5 text-slate-600">Gợi ý lấy hàng dựa trên mức tồn cảnh báo. Có thể sửa số lượng và giá ước tính cho từng mặt hàng.</p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div class="space-y-4 border-b border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <button type="button" class="rounded-lg border px-3 py-2 text-left transition" :class="stockFilter === 'all' ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'" @click="stockFilter = 'all'">
-                            <span class="block text-lg font-bold leading-5">{{ products.length }}</span><span class="mt-1 block text-[11px]">Cần chú ý</span>
+                            <span class="block text-lg font-bold leading-5">{{ products.length }}</span><span class="mt-1 block text-[11px]">Tất cả</span>
                         </button>
                         <button type="button" class="rounded-lg border px-3 py-2 text-left transition" :class="stockFilter === 'out' ? 'border-red-600 bg-red-600 text-white' : 'border-red-100 bg-white text-red-700 hover:bg-red-50'" @click="stockFilter = 'out'">
                             <span class="block text-lg font-bold leading-5">{{ outOfStockCount }}</span><span class="mt-1 block text-[11px]">Hết hàng</span>
                         </button>
-                        <button type="button" class="col-span-2 rounded-lg border px-3 py-2 text-left transition sm:col-span-1" :class="stockFilter === 'low' ? 'border-amber-500 bg-amber-500 text-white' : 'border-amber-100 bg-white text-amber-700 hover:bg-amber-50'" @click="stockFilter = 'low'">
+                        <button type="button" class="rounded-lg border px-3 py-2 text-left transition" :class="stockFilter === 'low' ? 'border-amber-500 bg-amber-500 text-white' : 'border-amber-100 bg-white text-amber-700 hover:bg-amber-50'" @click="stockFilter = 'low'">
                             <span class="block text-lg font-bold leading-5">{{ lowStockCount }}</span><span class="mt-1 block text-[11px]">Gần hết hàng</span>
+                        </button>
+                        <button type="button" class="col-span-2 rounded-lg border px-3 py-2 text-left transition sm:col-span-1" :class="stockFilter === 'available' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-emerald-100 bg-white text-emerald-700 hover:bg-emerald-50'" @click="stockFilter = 'available'">
+                            <span class="block text-lg font-bold leading-5">{{ availableCount }}</span><span class="mt-1 block text-[11px]">Còn hàng</span>
                         </button>
                     </div>
 
@@ -181,7 +210,7 @@ onMounted(loadProducts)
                     <div v-else-if="!filteredProducts.length" class="flex min-h-48 flex-col items-center justify-center px-6 text-center">
                         <Check class="h-8 w-8 rounded-full bg-emerald-50 p-1.5 text-emerald-600" />
                         <p class="mt-3 text-sm font-semibold text-slate-800">{{ products.length ? 'Không tìm thấy mặt hàng phù hợp' : 'Kho chưa có mặt hàng cần bổ sung' }}</p>
-                        <p class="mt-1 text-xs text-slate-500">Danh sách lấy hàng dựa trên mức tồn cảnh báo của từng sản phẩm.</p>
+                        <p class="mt-1 text-xs text-slate-500">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc tồn kho.</p>
                     </div>
                     <div v-else class="divide-y divide-slate-100">
                         <label v-for="product in filteredProducts" :key="product.id" class="flex cursor-pointer items-start gap-3 px-4 py-3 transition hover:bg-blue-50/50 sm:px-5">
@@ -189,11 +218,11 @@ onMounted(loadProducts)
                             <span class="min-w-0 flex-1">
                                 <span class="flex flex-wrap items-center gap-2">
                                     <span class="truncate text-sm font-semibold text-slate-900">{{ product.name }}</span>
-                                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="Number(product.stock) <= 0 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'">{{ Number(product.stock) <= 0 ? 'Hết hàng' : 'Gần hết' }}</span>
+                                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="stockStatus(product) === 'out' ? 'bg-red-50 text-red-700' : stockStatus(product) === 'low' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">{{ stockStatus(product) === 'out' ? 'Hết hàng' : stockStatus(product) === 'low' ? 'Gần hết' : 'Còn hàng' }}</span>
                                 </span>
                                 <span class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
                                     <span>SKU: {{ product.sku || '—' }}</span>
-                                    <span>Tồn: <b :class="Number(product.stock) <= 0 ? 'text-red-600' : 'text-amber-700'">{{ product.stock }} {{ product.unit_name }}</b></span>
+                                    <span>Tồn: <b :class="stockStatus(product) === 'out' ? 'text-red-600' : stockStatus(product) === 'low' ? 'text-amber-700' : 'text-emerald-700'">{{ product.stock }} {{ product.unit_name }}</b></span>
                                     <span>Mức báo: {{ product.alert_stock }}</span>
                                 </span>
                             </span>
@@ -204,11 +233,6 @@ onMounted(loadProducts)
             </section>
 
             <aside class="flex min-h-0 flex-col bg-white">
-                <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5">
-                    <div class="flex items-center gap-2 font-bold text-slate-900"><ClipboardList class="h-4 w-4 text-blue-600" /> Danh sách gửi nhà cung cấp</div>
-                    <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{{ selectedItems.length }} món</span>
-                </div>
-
                 <div class="space-y-3 border-b border-slate-100 p-4 sm:p-5">
                     <label class="block text-xs font-semibold text-slate-600">Nhà cung cấp <span class="font-normal text-slate-400">(không bắt buộc)</span>
                         <select v-model="supplierId" class="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
@@ -251,8 +275,11 @@ onMounted(loadProducts)
 
                 <div class="border-t border-slate-100 bg-slate-50/70 p-4 sm:p-5">
                     <div class="mb-3 flex items-center gap-2 text-[11px] leading-4 text-slate-500"><CheckSquare class="h-4 w-4 shrink-0 text-emerald-600" /> Nội dung gửi chỉ gồm tên sản phẩm và số lượng cần lấy.</div>
-                    <div class="grid grid-cols-[1fr_auto] gap-2">
-                        <button type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedItems.length || selectedItems.some(item => Number(item.quantity) < 1)" @click="copyList">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-[auto_1fr_auto]">
+                        <button type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100" @click="saveDraft">
+                            <Save class="h-4 w-4" /> {{ draftSaved ? 'Đã lưu' : 'Lưu danh sách' }}
+                        </button>
+                        <button type="button" class="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-1" :disabled="!selectedItems.length || selectedItems.some(item => Number(item.quantity) < 1)" @click="copyList">
                             <Check v-if="copied" class="h-4 w-4" /><Copy v-else class="h-4 w-4" /> {{ copied ? 'Đã sao chép' : 'Sao chép nội dung' }}
                         </button>
                         <button type="button" class="min-h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100" @click="emit('close')">Đóng</button>

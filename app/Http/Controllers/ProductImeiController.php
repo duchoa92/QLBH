@@ -7,6 +7,7 @@ use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
 use App\Models\Repair;
 use App\Models\SaleItem;
+use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,7 +62,7 @@ class ProductImeiController extends Controller
                     ProductImei::STATUS_AVAILABLE,
             ]);
 
-        $product->increment('stock');
+        app(ImeiStockSynchronizer::class)->sync($product);
 
         return back();
     }

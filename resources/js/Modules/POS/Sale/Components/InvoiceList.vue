@@ -7,6 +7,7 @@ import { Pencil, Undo2 } from 'lucide-vue-next'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import { useSaleHistory } from '../Composables/useSaleHistory'
 
 const {
@@ -25,6 +26,7 @@ const showCancelModal = ref(false)
 const saleToCancel = ref(null)
 const cancelReason = ref('')
 const cancelError = ref('')
+const printPreviewUrl = ref('')
 
 onMounted(() => {
     loadInvoices()
@@ -32,8 +34,7 @@ onMounted(() => {
 
 const openPrintWindow = (invoice) => {
     if (!invoice?.id) return
-
-    window.open(route('sales.receipt', invoice.id), '_blank', 'width=400,height=650')
+    printPreviewUrl.value = route('sales.receipt', invoice.id)
 }
 
 const openEdit = async (invoice) => {
@@ -157,4 +158,5 @@ const refreshInvoices = () => {
             </div>
         </div>
     </BaseModal>
+    <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hóa đơn" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
 </template>

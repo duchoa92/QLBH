@@ -16,12 +16,15 @@ import {
     ArrowUp,
     ArrowDown,
     Pencil,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
+import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -61,6 +64,7 @@ watch(
             dateTo.value = newFilters.date_to ?? newFilters.end_date ?? ''
             sortKey.value = newFilters.sort_by ?? 'created_at'
             sortOrder.value = newFilters.sort_order ?? 'desc'
+            perPage.value = Number(newFilters.per_page ?? 10)
         }
     },
     { deep: true }
@@ -71,12 +75,14 @@ const search = ref(props.filters?.search ?? '')
 const status = ref(props.filters?.status ?? '')
 const dateFrom = ref(props.filters?.date_from ?? '')
 const dateTo = ref(props.filters?.date_to ?? '')
+const perPage = ref(Number(props.filters?.per_page ?? 10))
 
 const detailSale = ref(null)
 const editSale = ref(null)
 const cancelReason = ref('')
 const showCancelModal = ref(false)
 const selectedSaleForCancel = ref(null)
+const printPreviewUrl = ref('')
 
 // --- QUẢN LÝ SORTING (SẮP XẾP BẢNG) ---
 const sortKey = ref(props.filters?.sort_by ?? 'created_at')
@@ -91,6 +97,8 @@ const requestSales = () => router.get(
         date_to: dateTo.value || undefined,
         sort_by: sortKey.value,
         sort_order: sortOrder.value,
+        per_page: perPage.value,
+        page: 1,
     },
     { preserveState: true, preserveScroll: true, replace: true }
 )
@@ -162,7 +170,7 @@ const getCustomerName = (sale) => {
 
 // In hóa đơn
 const openPrintWindow = (saleId) => {
-    window.open(route('sales.receipt', saleId), '_blank', 'width=400,height=650')
+    printPreviewUrl.value = route('sales.receipt', saleId)
 }
 
 // Xác nhận Hủy
@@ -225,9 +233,9 @@ const sortedSalesData = computed(() => props.sales?.data || [])
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
                 <div>
-                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Doanh thu kỳ này</div>
+                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Doanh thu theo bộ lọc</div>
                     <div class="text-xl font-black text-slate-900 mt-0.5">
-                        {{ formatMoney(stats.totalRevenue || sales.data.reduce((acc, s) => s.status !== 'cancelled' ? acc + saleTotal(s) : acc, 0)) }}
+                        {{ formatMoney(Number(stats?.totalRevenue ?? 0)) }}
                     </div>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
@@ -239,7 +247,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng số đơn hàng</div>
                     <div class="text-xl font-black text-slate-900 mt-0.5">
-                        {{ stats.totalOrders || sales.total || sales.data.length }} <span class="text-xs font-semibold text-slate-500">hóa đơn</span>
+                        {{ Number(stats?.totalOrders ?? 0) }} <span class="text-xs font-semibold text-slate-500">hóa đơn</span>
                     </div>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -251,7 +259,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng công nợ gối đầu</div>
                     <div class="text-xl font-black text-rose-600 mt-0.5">
-                        {{ formatMoney(stats.totalDebt || 0) }}
+                        {{ formatMoney(Number(stats?.totalDebt ?? 0)) }}
                     </div>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
@@ -283,6 +291,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                 label="Trạng thái"
                                 name="status"
                                 :options="statusOptions"
+                                :show-placeholder="false"
                                 option-label="label"
                                 option-value="value"
                                 @update:modelValue="handleFilterChange"
@@ -508,10 +517,20 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
             <!-- FOOTER BẢNG PHÂN TRANG -->
             <template #footer>
-                <div class="flex items-center justify-between text-xs font-medium text-slate-500 py-1">
-                    <div>
-                        Hiển thị <span class="text-slate-900 font-bold">{{ sales.data?.length || 0 }}</span> / <span class="text-slate-900 font-bold">{{ sales.total || sales.data?.length || 0 }}</span> hóa đơn
+                <div class="flex flex-wrap items-center justify-between gap-3 py-1 text-xs font-medium text-slate-500">
+                    <div class="flex items-center gap-2">
+                        Hiển thị <span class="text-slate-900 font-bold">{{ sales.data?.length || 0 }}</span> / <span class="text-slate-900 font-bold">{{ sales.total || 0 }}</span> hóa đơn
+                        <label class="ml-2 flex items-center gap-1.5">Mỗi trang
+                            <select v-model.number="perPage" @change="requestSales" class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none">
+                                <option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option>
+                            </select>
+                        </label>
                     </div>
+                    <nav v-if="sales.links?.length > 3" class="flex items-center gap-1" aria-label="Phân trang hóa đơn">
+                        <button type="button" :disabled="!sales.links[0]?.url" @click="sales.links[0]?.url && router.visit(sales.links[0].url, { preserveState: true, preserveScroll: true })" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white disabled:opacity-40" aria-label="Trang trước"><ChevronLeft :size="15" /></button>
+                        <button v-for="link in sales.links.slice(1, -1)" :key="link.label" type="button" @click="link.url && router.visit(link.url, { preserveState: true, preserveScroll: true })" :disabled="!link.url" :class="['h-8 min-w-8 rounded-md border px-2', link.active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white hover:bg-slate-50', !link.url && 'opacity-40']">{{ link.label }}</button>
+                        <button type="button" :disabled="!sales.links[sales.links.length - 1]?.url" @click="sales.links[sales.links.length - 1]?.url && router.visit(sales.links[sales.links.length - 1].url, { preserveState: true, preserveScroll: true })" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white disabled:opacity-40" aria-label="Trang sau"><ChevronRight :size="15" /></button>
+                    </nav>
                 </div>
             </template>
         </DataPanel>
@@ -526,6 +545,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
             @cancel="confirmCancel"
             @print="openPrintWindow($event.id)"
         />
+        <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hóa đơn" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
 
         <SaleEditModal
             v-if="editSale"

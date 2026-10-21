@@ -9,6 +9,7 @@ use App\Models\ProductImei;
 use App\Models\ProductVariant;
 use App\Repositories\Product\ProductRepository;
 use App\Services\Base\BaseService;
+use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -381,19 +382,8 @@ class ProductService extends BaseService
             $addedCount++;
         }
 
-        // Đồng bộ cột "stock" (product/variant) với số IMEI thực sự vừa
-        // thêm mới, để khớp với available_imei_count - giống cách
-        // StockImportService cộng tồn kho khi nhập hàng qua phiếu nhập.
         if ($addedCount > 0) {
-
-            if ($variant) {
-
-                $variant->increment('stock', $addedCount);
-
-            } else {
-
-                $product->increment('stock', $addedCount);
-            }
+            app(ImeiStockSynchronizer::class)->sync($product);
         }
     }
 

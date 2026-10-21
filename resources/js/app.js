@@ -116,7 +116,7 @@ createInertiaApp({
 
 
             if (
-                !page.default.layout &&
+                page.default.layout === undefined &&
                 adminModules.some(
                     (module) =>
                         name.startsWith(module)
@@ -192,13 +192,13 @@ createInertiaApp({
             }
 
             const paper = settings.print_paper_size || 'a4'
-            const sizes = { a4: 'A4', a5: 'A5', '80mm': '80mm auto', '58mm': '58mm auto' }
+            const sizes = { a4: 'A4', a5: 'A5', '80mm': '80mm 200mm', '58mm': '58mm 150mm' }
             const thermal = paper === '80mm' || paper === '58mm'
             const orientation = thermal ? '' : ` ${settings.print_orientation === 'landscape' ? 'landscape' : 'portrait'}`
             const pageSize = `${sizes[paper] || sizes.a4}${orientation}`
             const pageMargin = thermal ? '0' : '10mm'
             const receiptWidth = paper === '58mm' ? '54mm' : paper === '80mm' ? '76mm' : '100%'
-            printStyle.textContent = `@media print { @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: ${receiptWidth} !important; } }`
+            printStyle.textContent = `@media print { :root { --configured-receipt-width: ${receiptWidth}; } @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: var(--configured-receipt-width) !important; } }`
         }
         applyPageSettings(props.initialPage)
         router.on('navigate', (event) => applyPageSettings(event.detail.page))

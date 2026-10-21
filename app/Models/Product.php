@@ -121,9 +121,7 @@ class Product extends Model
             return null;
         }
 
-        return asset(
-            'storage/' . $this->image
-        );
+        return '/product-images/' . rawurlencode(basename((string) $this->image));
     }
 
     protected static function booted()

@@ -31,11 +31,7 @@ const baseQuantityText = (item) => {
     return ` = ${item.base_quantity} ${unit}`
 }
 
-onMounted(() => {
-    setTimeout(() => {
-        window.print()
-    }, 300)
-})
+// Trang được nhúng trong modal xem trước; chỉ in khi người dùng bấm nút In ở modal.
 </script>
 
 <!-- Receipt.vue -->
@@ -237,14 +233,16 @@ onMounted(() => {
 
     .receipt-wrapper {
         padding: 0 !important;
+        min-height: 0 !important;
         background: transparent !important;
     }
 
     .receipt-container {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: 100% !important;
+        position: relative !important;
+        left: auto !important;
+        top: auto !important;
+        width: var(--configured-receipt-width, 80mm) !important;
+        margin: 0 auto !important;
         box-shadow: none !important;
         padding: 0 !important;
     }

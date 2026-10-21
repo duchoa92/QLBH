@@ -16,6 +16,7 @@ import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import { formatNumber } from '@/utils/format'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { imageUrl } from '@/utils/imageUrl'
 
@@ -253,6 +254,7 @@ const formErrorMessages = computed(() =>
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
 })[character])
+const printPreviewHtml = ref('')
 
 const printPurchaseContract = () => {
     const party = partyType.value === 'supplier'
@@ -274,13 +276,7 @@ const printPurchaseContract = () => {
     }).filter(row => Number(row.quantity || 0) > 0)
     const totalAmount = rows.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.price || 0), 0)
     const tableRows = rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.name)}${row.variant ? `<br><small>${escapeHtml(row.variant)}</small>` : ''}${row.imei ? `<br><small>IMEI/Serial: ${escapeHtml(row.imei)}</small>` : ''}</td><td>${escapeHtml(row.unit || '')}</td><td class="num">${Number(row.quantity || 0).toLocaleString('vi-VN')}</td><td class="num">${Number(row.price || 0).toLocaleString('vi-VN')} đ</td><td class="num">${(Number(row.price || 0) * Number(row.quantity || 0)).toLocaleString('vi-VN')} đ</td></tr>`).join('')
-    const printWindow = window.open('', '_blank', 'width=920,height=720')
-    if (!printWindow) {
-        window.alert('Trình duyệt đang chặn cửa sổ in. Hãy cho phép cửa sổ bật lên để in hợp đồng.')
-        return
-    }
-    printWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Hợp đồng mua bán hàng hóa</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font:13px/1.55 Arial,sans-serif;color:#111;margin:0}h1{text-align:center;font-size:20px;margin:0 0 4px;text-transform:uppercase}h2{text-align:center;font-size:14px;margin:0 0 20px;font-weight:400}p{margin:5px 0}.parties{margin:18px 0}.party{margin:10px 0}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{border:1px solid #555;padding:7px;vertical-align:top}th{background:#f3f4f6;text-align:center}.num{text-align:right;white-space:nowrap}.total{text-align:right;font-size:15px;font-weight:bold}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:55px;text-align:center}.signatures strong{display:block}.signatures span{font-size:11px;font-style:italic}@media print{button{display:none}}</style></head><body><h1>Hợp đồng mua bán hàng hóa</h1><h2>Số: ${escapeHtml(`IMP-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`)}</h2><p>Hôm nay, ngày ${escapeHtml(new Date().toLocaleDateString('vi-VN'))}, các bên gồm:</p><div class="parties"><div class="party"><strong>BÊN MUA (CỬA HÀNG):</strong> ${escapeHtml(page.props.auth?.user?.name || 'Cửa hàng')}<br>Đại diện: ${escapeHtml(page.props.auth?.user?.name || '')}</div><div class="party"><strong>BÊN BÁN:</strong> ${escapeHtml(party.name)}<br>Số điện thoại: ${escapeHtml(party.phone || '—')}<br>CCCD: ${escapeHtml(party.cccd || '—')}<br>Địa chỉ: ${escapeHtml(party.address || '—')}</div></div><p>Hai bên thống nhất việc mua bán hàng hóa với nội dung sau:</p><table><thead><tr><th>STT</th><th>Tên hàng / thông tin</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${tableRows}</tbody></table><p class="total">Tổng tiền hàng: ${totalAmount.toLocaleString('vi-VN')} đ</p><p>Giảm giá: ${Number(form.discount || 0).toLocaleString('vi-VN')} đ</p><p>Phí khác: ${Number(form.extra_fee || 0).toLocaleString('vi-VN')} đ</p><p class="total">Tổng thanh toán: ${Math.max(0, totalAmount - Number(form.discount || 0) + Number(form.extra_fee || 0)).toLocaleString('vi-VN')} đ</p><p>Ngày giao nhận hàng: ${escapeHtml(form.import_date)}.</p><p>Hai bên xác nhận hàng hóa và giá trị nêu trên, cùng ký tên dưới đây.</p><div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>${escapeHtml(party.name)}</div></div><script>window.onload=()=>window.print()<\/script></body></html>`)
-    printWindow.document.close()
+    printPreviewHtml.value = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Hợp đồng mua bán hàng hóa</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font:13px/1.55 Arial,sans-serif;color:#111;margin:0}h1{text-align:center;font-size:20px;margin:0 0 4px;text-transform:uppercase}h2{text-align:center;font-size:14px;margin:0 0 20px;font-weight:400}p{margin:5px 0}.parties{margin:18px 0}.party{margin:10px 0}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{border:1px solid #555;padding:7px;vertical-align:top}th{background:#f3f4f6;text-align:center}.num{text-align:right;white-space:nowrap}.total{text-align:right;font-size:15px;font-weight:bold}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:55px;text-align:center}.signatures strong{display:block}.signatures span{font-size:11px;font-style:italic}</style></head><body><h1>Hợp đồng mua bán hàng hóa</h1><h2>Số: ${escapeHtml(`IMP-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`)}</h2><p>Hôm nay, ngày ${escapeHtml(new Date().toLocaleDateString('vi-VN'))}, các bên gồm:</p><div class="parties"><div class="party"><strong>BÊN MUA (CỬA HÀNG):</strong> ${escapeHtml(page.props.auth?.user?.name || 'Cửa hàng')}<br>Đại diện: ${escapeHtml(page.props.auth?.user?.name || '')}</div><div class="party"><strong>BÊN BÁN:</strong> ${escapeHtml(party.name)}<br>Số điện thoại: ${escapeHtml(party.phone || '—')}<br>CCCD: ${escapeHtml(party.cccd || '—')}<br>Địa chỉ: ${escapeHtml(party.address || '—')}</div></div><p>Hai bên thống nhất việc mua bán hàng hóa với nội dung sau:</p><table><thead><tr><th>STT</th><th>Tên hàng / thông tin</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${tableRows}</tbody></table><p class="total">Tổng tiền hàng: ${totalAmount.toLocaleString('vi-VN')} đ</p><p>Giảm giá: ${Number(form.discount || 0).toLocaleString('vi-VN')} đ</p><p>Phí khác: ${Number(form.extra_fee || 0).toLocaleString('vi-VN')} đ</p><p class="total">Tổng thanh toán: ${Math.max(0, totalAmount - Number(form.discount || 0) + Number(form.extra_fee || 0)).toLocaleString('vi-VN')} đ</p><p>Ngày giao nhận hàng: ${escapeHtml(form.import_date)}.</p><p>Hai bên xác nhận hàng hóa và giá trị nêu trên, cùng ký tên dưới đây.</p><div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>${escapeHtml(party.name)}</div></div></body></html>`
 }
 
 /*
@@ -1427,5 +1423,6 @@ const confirm = () => {
                 handleProductCompleted
             "
         />
+        <PrintPreviewModal :show="Boolean(printPreviewHtml)" title="Xem trước hợp đồng mua bán" :html="printPreviewHtml" @close="printPreviewHtml = ''" />
     </BaseModal>
 </template>

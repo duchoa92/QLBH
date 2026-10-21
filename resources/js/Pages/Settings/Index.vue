@@ -78,6 +78,10 @@ const form = useForm({
     app_timezone: props.settings.app_timezone || 'Asia/Ho_Chi_Minh',
     date_format: props.settings.date_format || 'd/m/Y',
     allow_negative_stock: props.settings.allow_negative_stock || false,
+    inventory_alert_enabled: props.settings.inventory_alert_enabled !== false
+        && props.settings.inventory_alert_enabled !== 0
+        && props.settings.inventory_alert_enabled !== '0',
+    inventory_alert_threshold: Number(props.settings.inventory_alert_threshold ?? 5),
     print_paper_size: props.settings.print_paper_size || 'a4',
     print_orientation: props.settings.print_orientation || 'portrait',
     bank_bin: props.settings.bank_bin || '',
@@ -379,7 +383,7 @@ const unitDisplayName = (unit) =>
             </button>
             <button v-if="can_manage_inventory_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md" @click="openModal('inventory')">
                 <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Boxes :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Hàng hóa và kho hàng</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-amber-600" :size="19" /></span>
-                <span class="col-span-3 text-sm leading-5 text-slate-500">Quy tắc tồn kho và danh sách đơn vị tính.</span>
+                <span class="col-span-3 text-sm leading-5 text-slate-500">Quy tắc tồn kho, cảnh báo hàng sắp hết và đơn vị tính.</span>
             </button>
             <button v-if="can_edit_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md" @click="openModal('printing')">
                 <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700"><Printer :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Bản in và khổ giấy</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-sky-600" :size="19" /></span>
@@ -478,6 +482,33 @@ const unitDisplayName = (unit) =>
                                 class="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                             >
                         </label>
+                    </div>
+                </DataPanel>
+
+                <DataPanel v-if="activeModal === 'inventory'">
+                    <template #header>
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Cảnh báo tồn kho</h2>
+                            <p class="mt-0.5 text-xs font-medium text-slate-500">Dùng ngưỡng này cho sản phẩm chưa cài ngưỡng cảnh báo riêng.</p>
+                        </div>
+                    </template>
+                    <div class="space-y-4 p-4">
+                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-amber-50 p-3">
+                            <span>
+                                <span class="block text-sm font-bold text-slate-800">Bật cảnh báo hàng sắp hết</span>
+                                <span class="mt-0.5 block text-xs font-medium text-slate-500">Hiển thị trong bộ lọc và thống kê tồn kho.</span>
+                            </span>
+                            <input v-model="form.inventory_alert_enabled" type="checkbox" class="h-5 w-5 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                        </label>
+                        <FloatingInput
+                            v-model.number="form.inventory_alert_threshold"
+                            name="inventory_alert_threshold"
+                            label="Ngưỡng cảnh báo mặc định (số lượng)"
+                            type="number"
+                            min="0"
+                            :error="form.errors.inventory_alert_threshold"
+                            :disabled="!form.inventory_alert_enabled"
+                        />
                     </div>
                 </DataPanel>
 

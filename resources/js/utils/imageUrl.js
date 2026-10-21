@@ -13,5 +13,9 @@ export const imageUrl = (value) => {
         return normalized
     }
 
+    if (normalized.startsWith('/')) {
+        return normalized
+    }
+
     return `/storage/${normalized.replace(/^\/?(?:storage\/)?/, '')}`
 }

@@ -289,6 +289,10 @@ class StockImportService
                         'happened_at' => $import->import_date,
                     ]);
                 }
+
+                if ($product->manage_stock_by_serial) {
+                    app(ImeiStockSynchronizer::class)->sync($productId);
+                }
             }
 
             return $import;

@@ -9,6 +9,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 
 import {
     ref,
@@ -79,6 +80,7 @@ const showCreateModal = ref(false)
 const importPartyType = ref('supplier')
 const showReplenishmentModal = ref(false)
 const detailImport = ref(null)
+const printPreviewUrl = ref('')
 const loadingDetail = ref(false)
 
 
@@ -578,9 +580,9 @@ const showImport = (id) => {
     >
         <div class="space-y-4">
             <div class="flex justify-end">
-                <a :href="`/stock-import/${detailImport.id}/contract`" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                <button type="button" @click="printPreviewUrl = `/stock-import/${detailImport.id}/contract`" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                     <Printer class="h-4 w-4" /> In hợp đồng mua bán
-                </a>
+                </button>
             </div>
             <div class="grid gap-3 md:grid-cols-5">
                 <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -763,6 +765,7 @@ const showImport = (id) => {
             </div>
         </div>
     </BaseModal>
+    <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hợp đồng mua bán" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
 
     <div
         v-if="loadingDetail"

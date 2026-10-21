@@ -101,13 +101,6 @@ const menuGroups = [
                 permission: 'sales.view',
             },
             {
-                label: 'Thu công nợ khách hàng',
-                icon: HandCoins,
-                href: '/debts/customers',
-                paths: ['/debts/customers'],
-                permission: 'customer_debts.view',
-            },
-            {
                 label: 'Dịch vụ sửa chữa',
                 icon: Wrench,
                 href: '/repairs',
@@ -127,13 +120,6 @@ const menuGroups = [
                 href: '/stock-import',
                 paths: ['/stock-import', '/stock-import/*'],
                 permission: 'stock_imports.view',
-            },
-            {
-                label: 'Thanh toán NCC',
-                icon: HandCoins,
-                href: '/debts/suppliers',
-                paths: ['/debts/suppliers'],
-                permission: 'supplier_debts.view',
             },
             {
                 label: 'Sản phẩm & IMEI',
@@ -180,10 +166,24 @@ const menuGroups = [
         ],
     },
     {
-        key: 'reports',
-        title: 'Báo cáo & Tài chính',
-        icon: BarChart3,
+        key: 'finance',
+        title: 'Tài chính',
+        icon: HandCoins,
         items: [
+            {
+                label: 'Thu công nợ khách hàng',
+                icon: HandCoins,
+                href: '/debts/customers',
+                paths: ['/debts/customers'],
+                permission: 'customer_debts.view',
+            },
+            {
+                label: 'Thanh toán NCC',
+                icon: HandCoins,
+                href: '/debts/suppliers',
+                paths: ['/debts/suppliers'],
+                permission: 'supplier_debts.view',
+            },
             {
                 label: 'Chi phí cửa hàng',
                 icon: Receipt,
@@ -191,6 +191,13 @@ const menuGroups = [
                 paths: ['/expenses'],
                 permission: 'expenses.view',
             },
+        ],
+    },
+    {
+        key: 'reports',
+        title: 'Báo cáo',
+        icon: BarChart3,
+        items: [
             {
                 label: 'Báo cáo bán hàng',
                 icon: BarChart3,

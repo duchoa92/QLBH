@@ -10,6 +10,7 @@ import PatternLock from '@/Components/PatternLock.vue';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
+import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/format';
 
 const props = defineProps({
@@ -35,6 +36,7 @@ const sortBy = ref(props.filters?.sort_by ?? 'created_at');
 const sortOrder = ref(props.filters?.sort_order ?? 'desc');
 
 const detailRepair = ref(null);
+const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
 
@@ -426,7 +428,7 @@ const confirmPayment = async (payment) => {
                 <PatternLock :model-value="detailRepair.screen_pattern" readonly />
             </div>
             <div class="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3">
-                <a v-if="can('repairs.view')" :href="route('repairs.print', detailRepair.id)" target="_blank" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">In phiếu</a>
+                <button v-if="can('repairs.view')" type="button" @click="printPreviewUrl = route('repairs.print', detailRepair.id)" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">In phiếu</button>
                 <button v-if="can('repairs.edit')" type="button" class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100" @click="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null">Sửa phiếu</button>
                 <button v-if="['pending', 'repairing', 'done'].includes(detailRepair.status) && canProgress(detailRepair)" type="button" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100" @click="openRepairWorkflow(detailRepair); detailRepair = null">{{ detailRepair.status === 'done' ? 'Thanh toán / trả máy' : detailRepair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa' }}</button>
             </div>
@@ -442,5 +444,6 @@ const confirmPayment = async (payment) => {
             @close="paymentRepair = null"
             @confirm="confirmPayment"
         />
+        <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước phiếu sửa chữa" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
     </div>
 </template>

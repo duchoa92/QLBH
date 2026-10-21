@@ -42,6 +42,8 @@ class SettingController extends Controller
                 'print_paper_size' => setting('print_paper_size', 'a4'),
                 'print_orientation' => setting('print_orientation', 'portrait'),
                 'allow_negative_stock' => filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN),
+                'inventory_alert_enabled' => filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN),
+                'inventory_alert_threshold' => (int) setting('inventory_alert_threshold', 5),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),
@@ -87,7 +89,7 @@ class SettingController extends Controller
     public function update(Request $request)
     {
         $user = $request->user();
-        abort_unless($user?->can('settings.edit') || $user?->can('payment_accounts.manage'), 403);
+        abort_unless($user?->can('settings.edit') || $user?->can('payment_accounts.manage') || $user?->can('units.manage'), 403);
 
         $data = $request->validate([
             'shop_name' => ['sometimes', 'string', 'max:150'],
@@ -97,6 +99,8 @@ class SettingController extends Controller
             'app_timezone' => ['sometimes', 'in:Asia/Ho_Chi_Minh,Asia/Bangkok,UTC'],
             'date_format' => ['sometimes', 'in:d/m/Y,Y-m-d,m/d/Y'],
             'allow_negative_stock' => ['sometimes', 'boolean'],
+            'inventory_alert_enabled' => ['sometimes', 'boolean'],
+            'inventory_alert_threshold' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'print_paper_size' => ['sometimes', 'in:a4,a5,80mm,58mm'],
             'print_orientation' => ['sometimes', 'in:portrait,landscape'],
             'bank_bin' => ['sometimes', 'nullable', 'string', 'max:20'],
@@ -128,6 +132,8 @@ class SettingController extends Controller
                     unset($data[$key]);
                 }
             }
+        } elseif ($user->can('units.manage')) {
+            $data = array_intersect_key($data, array_flip(['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold']));
         } else {
             $data = array_intersect_key($data, array_flip($this->bankSettingKeys));
         }

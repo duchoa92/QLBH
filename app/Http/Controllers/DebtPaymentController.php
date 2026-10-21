@@ -61,6 +61,55 @@ class DebtPaymentController extends Controller
                     'due' => max(0, (float) $import->grand_total - (float) $import->paid_amount), 'href' => route('stock.show', $import),
                 ])->values();
 
+        // Chỉ phân bổ tối đa bằng dư nợ hiện tại của từng khách/NCC. Khoản
+        // còn lại được hiển thị thành một dòng công nợ khác để tổng danh sách
+        // luôn khớp số dư công nợ đang quản lý.
+        $orders = $orders->groupBy('party_id')->flatMap(function ($partyOrders, $partyId) use ($rows) {
+            $party = collect($rows->items())->firstWhere('id', (int) $partyId);
+            $remaining = (float) ($party?->debt_balance ?? 0);
+            $reconciled = $partyOrders->map(function (array $order) use (&$remaining) {
+                $due = min((float) $order['due'], max(0, $remaining));
+                $remaining -= $due;
+                return [...$order, 'due' => $due];
+            })->filter(fn (array $order) => $order['due'] > 0)->values();
+
+            if ($remaining > 0) {
+                $reconciled->push([
+                    'id' => null,
+                    'code' => 'Công nợ khác',
+                    'party_id' => (int) $partyId,
+                    'party_name' => null,
+                    'date' => null,
+                    'total' => $remaining,
+                    'paid' => 0,
+                    'due' => $remaining,
+                    'href' => null,
+                    'unallocated' => true,
+                ]);
+            }
+
+            return $reconciled;
+        })->values();
+
+        foreach ($rows->items() as $party) {
+            if ($orders->contains(fn (array $order) => (int) $order['party_id'] === (int) $party->id)) {
+                continue;
+            }
+
+            $orders->push([
+                'id' => null,
+                'code' => 'Công nợ khác',
+                'party_id' => (int) $party->id,
+                'party_name' => null,
+                'date' => null,
+                'total' => (float) $party->debt_balance,
+                'paid' => 0,
+                'due' => (float) $party->debt_balance,
+                'href' => null,
+                'unallocated' => true,
+            ]);
+        }
+
         $history = $isCustomer
             ? CustomerDebt::query()->with('customer:id,full_name,code')->where('type', 'decrease')->whereNotNull('payment_method')->latest()->limit(100)->get()
                 ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof Sale ? route('sales.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
@@ -124,6 +173,7 @@ class DebtPaymentController extends Controller
             'amount' => ['required', 'numeric', 'gt:0'],
             'payment_method' => ['required', 'in:cash,bank,card'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'order_id' => ['nullable', 'integer'],
         ]);
 
         DB::transaction(function () use ($supplier, $data): void {

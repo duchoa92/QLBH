@@ -10,6 +10,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\User;
 use App\Models\CustomerDebt;
+use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -233,6 +234,8 @@ class SaleController extends Controller
             ? $request->query('sort_by')
             : 'created_at';
         $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
+        $perPage = (int) $request->query('per_page', 10);
+        if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 10;
 
         $query = Sale::query()
             ->with([
@@ -242,6 +245,7 @@ class SaleController extends Controller
                 'items.variant',
                 'items.productImei',
                 'items.gifts.product',
+                'items.gifts.productImei',
             ])
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($saleQuery) use ($search): void {
@@ -261,6 +265,13 @@ class SaleController extends Controller
             ->when($dateFrom !== '', fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($query) => $query->whereDate('created_at', '<=', $dateTo));
 
+        $completedQuery = (clone $query)->where('status', 'completed');
+        $stats = [
+            'totalRevenue' => (float) (clone $completedQuery)->sum('grand_total'),
+            'totalOrders' => (clone $query)->count(),
+            'totalDebt' => (float) ((clone $completedQuery)->selectRaw('COALESCE(SUM(CASE WHEN grand_total > paid_amount THEN grand_total - paid_amount ELSE 0 END), 0) as total_debt')->value('total_debt') ?? 0),
+        ];
+
         match ($sortBy) {
             'code' => $query->orderBy('code', $sortOrder),
             'customer' => $query->orderBy(
@@ -276,13 +287,14 @@ class SaleController extends Controller
         };
 
         $sales = $query
-            ->paginate(10)
+            ->paginate($perPage)
             ->withQueryString();
 
         return Inertia::render(
             'Sales/Index',
             [
                 'sales' => $sales,
+                'stats' => $stats,
                 'filters' => [
                     'search' => $search,
                     'status' => $status,
@@ -290,6 +302,7 @@ class SaleController extends Controller
                     'date_to' => $dateTo,
                     'sort_by' => $sortBy,
                     'sort_order' => $sortOrder,
+                    'per_page' => $perPage,
                 ],
             ]
         );
@@ -340,6 +353,8 @@ class SaleController extends Controller
         // 1. Kiểm tra nếu đơn hàng đã hủy trước đó
         if ($sale->status === 'cancelled') {
             DB::transaction(function () use ($sale): void {
+                $lockedSale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
+                $this->reverseCancelledSaleDebt($lockedSale);
                 $this->restoreCancelledSaleImeis($sale);
             });
 
@@ -356,6 +371,7 @@ class SaleController extends Controller
                 ->findOrFail($sale->id);
 
             if ($sale->status === 'cancelled') {
+                $this->reverseCancelledSaleDebt($sale);
                 return;
             }
 
@@ -365,6 +381,8 @@ class SaleController extends Controller
                 'cancel_reason' => $reason,
                 'cancelled_at' => now(),
             ]);
+
+            $this->reverseCancelledSaleDebt($sale);
 
             // Nạp sản phẩm và IMEI
             $sale->load([
@@ -382,6 +400,57 @@ class SaleController extends Controller
         return redirect()->route('sales.index')->with('success', 'Đã hủy hóa đơn thành công!');
     }
 
+    private function reverseCancelledSaleDebt(Sale $sale): void
+    {
+        if (! $sale->customer_id) {
+            return;
+        }
+
+        $note = 'Hoàn tác công nợ do hủy hóa đơn ' . $sale->code;
+        if (CustomerDebt::query()
+            ->where('source_type', Sale::class)
+            ->where('source_id', $sale->id)
+            ->where('type', 'decrease')
+            ->where('note', $note)
+            ->exists()) {
+            return;
+        }
+
+        $increased = (float) CustomerDebt::query()
+            ->where('source_type', Sale::class)
+            ->where('source_id', $sale->id)
+            ->where('type', 'increase')
+            ->sum('amount');
+        $decreasedForInvoice = (float) CustomerDebt::query()
+            ->where('source_type', Sale::class)
+            ->where('source_id', $sale->id)
+            ->where('type', 'decrease')
+            ->where(function ($query): void {
+                $query->whereNull('note')->orWhere('note', 'not like', 'Trích tiền thừa hóa đơn%');
+            })
+            ->sum('amount');
+        $remainingInvoiceDebt = max(0, $increased - $decreasedForInvoice);
+
+        $customer = Customer::query()->lockForUpdate()->find($sale->customer_id);
+        if (! $customer) {
+            return;
+        }
+
+        $amount = min($remainingInvoiceDebt, max(0, (float) $customer->debt_balance));
+
+        CustomerDebt::query()->create([
+            'customer_id' => $customer->id,
+            'type' => 'decrease',
+            'amount' => $amount,
+            'source_type' => Sale::class,
+            'source_id' => $sale->id,
+            'note' => $note,
+        ]);
+        if ($amount > 0) {
+            $customer->decrement('debt_balance', $amount);
+        }
+    }
+
     private function restoreSaleItemStock(SaleItem $item): void
     {
         $quantity = max(1, (int) $item->quantity);
@@ -392,7 +461,7 @@ class SaleController extends Controller
                 ->lockForUpdate()
                 ->find($item->productImei->id);
 
-            if ($imei) {
+            if ($imei && ! $this->imeiBelongsToActiveSale($imei, $item->sale)) {
                 $imei->update([
                     'status' => ProductImei::STATUS_IN_STOCK,
                     'sold_at' => null,
@@ -426,9 +495,23 @@ class SaleController extends Controller
                 continue;
             }
 
-            Product::query()
-                ->whereKey($gift->product->id)
-                ->increment('stock', $giftBaseQuantity);
+            if ($gift->product_imei_id) {
+                $giftImei = ProductImei::query()
+                    ->lockForUpdate()
+                    ->find($gift->product_imei_id);
+
+                if ($giftImei && ! $this->imeiBelongsToActiveSale($giftImei, $item->sale)) {
+                    $giftImei->update([
+                        'status' => ProductImei::STATUS_IN_STOCK,
+                        'sold_at' => null,
+                    ]);
+                    app(ImeiStockSynchronizer::class)->sync($gift->product);
+                }
+            } else {
+                Product::query()
+                    ->whereKey($gift->product->id)
+                    ->increment('stock', $giftBaseQuantity);
+            }
 
             $this->decrementSoldCount($gift->product, $giftQuantity);
         }
@@ -456,7 +539,21 @@ class SaleController extends Controller
                 'sold_at' => null,
             ]);
 
-            $this->syncImeiStock($imei);
+            app(ImeiStockSynchronizer::class)->sync($imei->product_id);
+        }
+
+        foreach ($sale->items->flatMap(fn (SaleItem $item) => $item->gifts) as $gift) {
+            if (! $gift->product_imei_id) {
+                continue;
+            }
+
+            $imei = ProductImei::query()->lockForUpdate()->find($gift->product_imei_id);
+            if (! $imei || $this->imeiBelongsToActiveSale($imei, $sale)) {
+                continue;
+            }
+
+            $imei->update(['status' => ProductImei::STATUS_IN_STOCK, 'sold_at' => null]);
+            app(ImeiStockSynchronizer::class)->sync($imei->product_id);
         }
     }
 
@@ -473,26 +570,7 @@ class SaleController extends Controller
 
     private function syncImeiStock(ProductImei $imei): void
     {
-        if ($imei->variant_id) {
-            $variantStock = ProductImei::query()
-                ->where('product_id', $imei->product_id)
-                ->where('variant_id', $imei->variant_id)
-                ->where('status', ProductImei::STATUS_IN_STOCK)
-                ->count();
-
-            ProductVariant::query()
-                ->whereKey($imei->variant_id)
-                ->update(['stock' => $variantStock]);
-        }
-
-        $productStock = ProductImei::query()
-            ->where('product_id', $imei->product_id)
-            ->where('status', ProductImei::STATUS_IN_STOCK)
-            ->count();
-
-        Product::query()
-            ->whereKey($imei->product_id)
-            ->update(['stock' => $productStock]);
+        app(ImeiStockSynchronizer::class)->sync($imei->product_id);
     }
 
     private function decrementSoldCount(Product $product, int $quantity): void
