@@ -6,15 +6,33 @@ use Illuminate\Support\Facades\File;
 
 class BackupOperationProgress
 {
-    public function update(int $userId, string $id, int $percent, string $message, string $state = 'running'): void
+    public function update(int $userId, string $id, int $percent, string $message, string $state = 'running', ?array $report = null): void
     {
         if (! preg_match('/^[a-f0-9-]{36}$/i', $id)) return;
         $directory = storage_path('app/backup-progress');
         File::ensureDirectoryExists($directory);
-        File::put($this->path($directory, $userId, $id), json_encode([
+        $path = $this->path($directory, $userId, $id);
+        $previous = is_file($path) ? (json_decode(File::get($path), true) ?: []) : [];
+        $steps = $previous['steps'] ?? [];
+        $lastStep = $steps === [] ? null : $steps[count($steps) - 1];
+        preg_match('/^(?:Bản cứu hộ: )?((?:Đang|Đã|Bắt đầu|Tạo|Khôi phục|Tải lên)[^:.(]+)/u', $message, $stageMatch);
+        $stage = trim($stageMatch[1] ?? $message);
+        $stage = preg_replace('/^Đang (?:đối chiếu bảng|so sánh dữ liệu bảng)\b.*/u', 'Đang đối chiếu dữ liệu từng bảng', $stage);
+        $stage = preg_replace('/^(Đang (?:làm sạch bảng|xóa tệp đã tải lên))\b.*/u', '$1', $stage);
+        $isMilestone = $lastStep === null
+            || $state !== 'running'
+            || ($lastStep['stage'] ?? null) !== $stage
+            || ($percent - (int) ($lastStep['percent'] ?? 0)) >= 8;
+        if ($isMilestone && ($lastStep['message'] ?? null) !== $message && $message !== '') {
+            $steps[] = ['percent' => max(0, min(100, $percent)), 'message' => $message, 'stage' => $stage, 'at' => now()->format('H:i:s')];
+            $steps = array_slice($steps, -100);
+        }
+        File::put($path, json_encode([
             'percent' => max(0, min(100, $percent)),
             'message' => $message,
             'state' => $state,
+            'steps' => $steps,
+            'report' => $report ?? ($previous['report'] ?? null),
             'updated_at' => now()->toIso8601String(),
         ], JSON_THROW_ON_ERROR), true);
     }

@@ -24,7 +24,7 @@ class EnsureInstalled
             return redirect('/setup');
         }
         if ($alreadyInstalled && $isSetupRoute) {
-            return redirect('/');
+            return redirect()->route('login');
         }
 
         return $next($request);

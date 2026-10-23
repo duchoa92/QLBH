@@ -22,7 +22,7 @@ class BackupService
         try {
             $databaseFile = $working.DIRECTORY_SEPARATOR.'database.sql';
             $progress(3, 'Đang sao lưu cấu trúc và dữ liệu cơ sở dữ liệu.');
-            $this->dumpDatabase($databaseFile, fn ($percent, $message) => $progress(3 + (int) ($percent * 0.42), $message));
+            $databaseReport = $this->dumpDatabase($databaseFile, fn ($percent, $message) => $progress(3 + (int) ($percent * 0.42), $message));
 
             $filesDirectory = $working.DIRECTORY_SEPARATOR.'files';
             File::ensureDirectoryExists($filesDirectory);
@@ -30,12 +30,21 @@ class BackupService
             $sources = array_values(array_filter([storage_path('app/public'), storage_path('app/private')], 'is_dir'));
             $copyList = [];
             foreach ($sources as $source) foreach (File::allFiles($source) as $file) $copyList[] = [$source, $file];
+            $filesByDisk = ['public' => 0, 'private' => 0];
+            $uploadedBytes = 0;
+            $uploadedFileDetails = [];
             $copyTotal = max(1, count($copyList));
             foreach ($copyList as $index => [$source, $file]) {
                 $relative = substr($file->getPathname(), strlen($source) + 1);
                 $destination = $filesDirectory.DIRECTORY_SEPARATOR.basename($source).DIRECTORY_SEPARATOR.$relative;
                 File::ensureDirectoryExists(dirname($destination));
-                File::copy($file->getPathname(), $destination);
+                if (! File::copy($file->getPathname(), $destination)) throw new RuntimeException('Không sao chép được tệp '.$relative.' vào vùng tạo bản sao lưu.');
+                $diskName = basename($source);
+                $filesByDisk[$diskName] = ($filesByDisk[$diskName] ?? 0) + 1;
+                $uploadedBytes += $file->getSize();
+                if (count($uploadedFileDetails) < 200) {
+                    $uploadedFileDetails[] = ['disk' => $diskName, 'path' => str_replace('\\', '/', $relative), 'size' => $file->getSize()];
+                }
                 $progress(47 + (int) floor(($index + 1) / $copyTotal * 25), 'Đang sao lưu tệp tải lên ('.($index + 1).' / '.count($copyList).').');
             }
             $progress(72, 'Đã sao lưu các tệp; đang đóng gói bản sao lưu.');
@@ -44,6 +53,14 @@ class BackupService
                 'created_at' => now()->toIso8601String(),
                 'database' => config('database.default'),
                 'includes' => ['database', 'storage/app/public', 'storage/app/private'],
+                'contents' => [
+                    ...$databaseReport,
+                    'uploaded_files' => array_sum($filesByDisk),
+                    'uploaded_bytes' => $uploadedBytes,
+                    'files_by_disk' => $filesByDisk,
+                    'uploaded_file_details' => $uploadedFileDetails,
+                    'uploaded_file_details_omitted' => max(0, array_sum($filesByDisk) - count($uploadedFileDetails)),
+                ],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
 
             $archivePath = $directory.DIRECTORY_SEPARATOR.'backup_'.$stamp.'.zip';
@@ -54,8 +71,22 @@ class BackupService
             $zip->addEmptyDir('files/public');
             $zip->addEmptyDir('files/private');
             $this->addDirectoryToZip($zip, $working, '', fn ($percent) => $progress(72 + (int) ($percent * 0.27), 'Đang đóng gói bản sao lưu.'));
-            $zip->close();
-            $progress(100, 'Bản sao lưu đã được tạo.');
+            if (! $zip->close()) {
+                File::delete($archivePath);
+                throw new RuntimeException('Không thể hoàn tất ghi tệp ZIP sao lưu.');
+            }
+            $progress(98, 'Đang kiểm tra tính toàn vẹn và thành phần của tệp ZIP.');
+            try {
+                $manifest = $this->verifyArchive($archivePath, $progress);
+            } catch (\Throwable $exception) {
+                File::delete($archivePath);
+                throw $exception;
+            }
+            if (empty($manifest['created_at']) || empty($manifest['database'])) {
+                File::delete($archivePath);
+                throw new RuntimeException('Manifest của bản sao lưu không hợp lệ.');
+            }
+            $progress(100, 'Bản sao lưu đã tạo và vượt qua kiểm tra tính toàn vẹn.');
 
             return $archivePath;
         } finally {
@@ -63,7 +94,7 @@ class BackupService
         }
     }
 
-    private function dumpDatabase(string $path, ?callable $progress = null): void
+    private function dumpDatabase(string $path, ?callable $progress = null): array
     {
         $connection = DB::connection();
         $pdo = $connection->getPdo();
@@ -125,6 +156,78 @@ class BackupService
             fwrite($stream, "\nSET FOREIGN_KEY_CHECKS=1;\n");
         }
         fclose($stream);
+        return ['table_count' => count($tables), 'row_count' => $totalRows, 'tables' => $rowCounts];
+    }
+
+    public function manifest(string $archivePath): array
+    {
+        $zip = new ZipArchive();
+        if ($zip->open($archivePath, ZipArchive::CHECKCONS) !== true) throw new RuntimeException('Không đọc được báo cáo trong bản sao lưu.');
+        try {
+            $manifest = json_decode($zip->getFromName('manifest.json') ?: '', true, 512, JSON_THROW_ON_ERROR);
+            return is_array($manifest) ? $manifest : [];
+        } finally {
+            $zip->close();
+        }
+    }
+
+    private function verifyArchive(string $archivePath, callable $progress): array
+    {
+        $zip = new ZipArchive();
+        if ($zip->open($archivePath, ZipArchive::CHECKCONS) !== true) throw new RuntimeException('Tệp ZIP vừa tạo không vượt qua kiểm tra cấu trúc.');
+        try {
+            if ($zip->locateName('manifest.json') === false || $zip->locateName('database.sql') === false) {
+                throw new RuntimeException('Bản sao lưu thiếu manifest.json hoặc database.sql.');
+            }
+            $manifest = json_decode($zip->getFromName('manifest.json') ?: '', true, 512, JSON_THROW_ON_ERROR);
+            $dump = $zip->getFromName('database.sql');
+            if (! is_array($manifest) || ! is_string($dump) || $dump === '') throw new RuntimeException('Manifest hoặc database.sql không hợp lệ.');
+            preg_match_all('/^\s*CREATE\s+TABLE\b/im', $dump, $createMatches);
+            preg_match_all('/^\s*INSERT\s+INTO\b/im', $dump, $insertMatches);
+            $actualFiles = 0;
+            $actualFileBytes = 0;
+
+            for ($index = 0; $index < $zip->numFiles; $index++) {
+                $entry = $zip->getNameIndex($index);
+                if (! is_string($entry) || str_ends_with($entry, '/')) continue;
+                $isUploadedFile = str_starts_with($entry, 'files/public/') || str_starts_with($entry, 'files/private/');
+                if ($isUploadedFile) { $actualFiles++; $actualFileBytes += (int) ($zip->statIndex($index)['size'] ?? 0); }
+                $stat = $zip->statIndex($index);
+                $stream = $zip->getStream($entry);
+                if ($stream === false) throw new RuntimeException('Không thể đọc mục '.$entry.' trong ZIP.');
+                $checksum = hash_init('crc32b');
+                $bytes = 0;
+                while (! feof($stream)) {
+                    $chunk = fread($stream, 1024 * 1024);
+                    if ($chunk === false) { fclose($stream); throw new RuntimeException('Không thể đọc hết mục '.$entry.' trong ZIP.'); }
+                    $bytes += strlen($chunk);
+                    hash_update($checksum, $chunk);
+                }
+                fclose($stream);
+                $actualCrc = strtolower(hash_final($checksum));
+                $expectedCrc = sprintf('%08x', $stat['crc'] ?? 0);
+                if ($bytes !== (int) ($stat['size'] ?? -1) || $actualCrc !== $expectedCrc) {
+                    throw new RuntimeException('Dữ liệu hoặc checksum không khớp tại '.$entry.'.');
+                }
+                $progress(98 + (int) floor(($index + 1) / max(1, $zip->numFiles) * 1), 'Đang xác minh nội dung ZIP ('.($index + 1).' / '.$zip->numFiles.' mục).');
+            }
+            $contents = $manifest['contents'] ?? [];
+            if (isset($contents['table_count']) && (int) $contents['table_count'] !== count($createMatches[0])) {
+                throw new RuntimeException('Số bảng trong database.sql không khớp manifest.');
+            }
+            if (isset($contents['row_count']) && (int) $contents['row_count'] !== count($insertMatches[0])) {
+                throw new RuntimeException('Số dòng trong database.sql không khớp manifest.');
+            }
+            if (isset($contents['uploaded_files']) && (int) $contents['uploaded_files'] !== $actualFiles) {
+                throw new RuntimeException('Số tệp đính kèm trong ZIP không khớp manifest.');
+            }
+            if (isset($contents['uploaded_bytes']) && (int) $contents['uploaded_bytes'] !== $actualFileBytes) {
+                throw new RuntimeException('Dung lượng tệp đính kèm trong ZIP không khớp manifest.');
+            }
+            return $manifest;
+        } finally {
+            $zip->close();
+        }
     }
 
     private function addDirectoryToZip(ZipArchive $zip, string $directory, string $prefix, ?callable $progress = null): void
@@ -133,7 +236,9 @@ class BackupService
         $total = count($files);
         foreach ($files as $index => $file) {
             $relative = str_replace('\\', '/', ltrim(substr($file->getPathname(), strlen($directory)), DIRECTORY_SEPARATOR));
-            $zip->addFile($file->getPathname(), ltrim($prefix.'/'.$relative, '/'));
+            if (! $zip->addFile($file->getPathname(), ltrim($prefix.'/'.$relative, '/'))) {
+                throw new RuntimeException('Không thể thêm tệp '.$relative.' vào ZIP sao lưu.');
+            }
             if ($progress) $progress($total === 0 ? 100 : (int) floor(($index + 1) / $total * 100));
         }
     }

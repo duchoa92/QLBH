@@ -105,8 +105,9 @@ class InstallerController extends Controller
                 throw new RuntimeException('Không thể tạo khóa hoàn tất cài đặt trong storage/app.');
             }
 
-            Auth::login($admin);
-            $request->session()->regenerate();
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
         } catch (Throwable $exception) {
             report($exception);
             return back()->withErrors([
@@ -114,7 +115,7 @@ class InstallerController extends Controller
             ]);
         }
 
-        return redirect($admin->landingPath())->with('success', 'Thiết lập hoàn tất. Chào mừng bạn đến với hệ thống!');
+        return redirect()->route('login')->with('success', 'Thiết lập hoàn tất. Hãy đăng nhập bằng tài khoản quản trị vừa tạo.');
     }
 
     private function databaseRules(): array

@@ -10,6 +10,7 @@ use App\Services\BackupOperationProgress;
 use App\Services\CloudBackupStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Throwable;
 
@@ -71,22 +72,133 @@ class BackupController extends Controller
     {
         $operation = $request->validate(['operation_id' => ['required', 'uuid']])['operation_id'];
         $userId = (int) $request->user()->id;
-        $update = fn ($percent, $message) => $progress->update($userId, $operation, $percent, $message);
+        $request->session()->save();
+        $update = fn ($percent, $message, $state = 'running', $report = null) => $progress->update($userId, $operation, $percent, $message, $state, $report);
         $progress->update($userId, $operation, 1, 'Bắt đầu tạo bản sao lưu.');
+        $path = null;
+        $uploadedCloudDestinations = [];
 
         try {
             $connections = BackupCloudConnection::where('enabled', true)->get();
             $path = $service->create(fn ($percent, $message) => $update($connections->isEmpty() ? $percent : (int) ($percent * 0.6), $message));
             foreach ($connections as $index => $connection) {
                 $cloudStorage->upload($connection, $path, basename($path), fn ($percent, $message) => $update(60 + (int) ((($index + $percent / 100) / max(1, $connections->count())) * 39), $message));
+                $uploadedCloudDestinations[] = $connection->name;
             }
+            $contents = $service->manifest($path)['contents'] ?? [];
             Setting::set('backup_last_run', now()->toDateTimeString());
             Setting::set('backup_last_error', null);
-            $progress->update($userId, $operation, 100, 'Tạo bản sao lưu hoàn tất.', 'completed');
+            $progress->update($userId, $operation, 100, 'Tạo bản sao lưu hoàn tất và đã kiểm tra tính toàn vẹn.', 'completed', [
+                'title' => 'Báo cáo sao lưu',
+                'file' => basename($path),
+                'size' => File::size($path),
+                'integrity' => 'ZIP hợp lệ; manifest.json và database.sql đã được xác nhận.',
+                'database_tables' => $contents['table_count'] ?? 0,
+                'database_rows' => $contents['row_count'] ?? 0,
+                'table_details' => $contents['tables'] ?? [],
+                'uploaded_files' => $contents['uploaded_files'] ?? 0,
+                'uploaded_bytes' => $contents['uploaded_bytes'] ?? 0,
+                'files_by_disk' => $contents['files_by_disk'] ?? [],
+                'uploaded_file_details' => $contents['uploaded_file_details'] ?? [],
+                'uploaded_file_details_omitted' => $contents['uploaded_file_details_omitted'] ?? 0,
+                'cloud_destinations' => $connections->pluck('name')->values()->all(),
+            ]);
             return $this->backupSettingsRedirect()->with('success', 'Đã tạo bản sao lưu thành công.');
         } catch (Throwable $exception) {
-            $progress->update($userId, $operation, 100, 'Tạo bản sao lưu thất bại.', 'failed');
-            throw $exception;
+            $report = ['title' => 'Báo cáo sao lưu chưa hoàn tất', 'error' => $exception->getMessage(), 'cloud_destinations' => $uploadedCloudDestinations];
+            if ($path && is_file($path)) {
+                $contents = $service->manifest($path)['contents'] ?? [];
+                $report += [
+                    'file' => basename($path), 'size' => File::size($path), 'integrity' => 'Bản backup cục bộ đã được tạo và kiểm tra.',
+                    'database_tables' => $contents['table_count'] ?? 0, 'database_rows' => $contents['row_count'] ?? 0,
+                    'table_details' => $contents['tables'] ?? [], 'uploaded_files' => $contents['uploaded_files'] ?? 0,
+                    'uploaded_bytes' => $contents['uploaded_bytes'] ?? 0, 'files_by_disk' => $contents['files_by_disk'] ?? [],
+                    'uploaded_file_details' => $contents['uploaded_file_details'] ?? [],
+                    'uploaded_file_details_omitted' => $contents['uploaded_file_details_omitted'] ?? 0,
+                ];
+            }
+            $progress->update($userId, $operation, 100, 'Sao lưu chưa hoàn tất: '.$exception->getMessage(), 'failed', $report);
+            return $this->backupSettingsRedirect()->with('error', 'Sao lưu chưa hoàn tất: '.$exception->getMessage());
+        }
+    }
+
+    public function clearData(Request $request, BackupService $backupService, BackupOperationProgress $progress)
+    {
+        $data = $request->validate([
+            'confirmation' => ['required', 'in:XOA DU LIEU'],
+            'operation_id' => ['required', 'uuid'],
+        ]);
+        $userId = (int) $request->user()->id;
+        $operation = $data['operation_id'];
+        $request->session()->save();
+        $update = fn ($percent, $message, $state = 'running', $report = null) => $progress->update($userId, $operation, $percent, $message, $state, $report);
+        $recovery = null;
+
+        try {
+            if (DB::connection()->getDriverName() !== 'mysql') {
+                throw new \RuntimeException('Chức năng xóa dữ liệu hiện chỉ hỗ trợ MySQL/MariaDB.');
+            }
+            $update(1, 'Bắt đầu tạo bản sao lưu cứu hộ trước khi xóa.');
+            $recovery = $backupService->create(fn ($percent, $message) => $update(2 + (int) ($percent * 0.23), 'Bản cứu hộ: '.$message));
+
+            $preservedTables = [
+                'users', 'migrations', 'settings', 'backup_cloud_connections',
+                'roles', 'permissions', 'model_has_permissions', 'model_has_roles', 'role_has_permissions',
+                'cache', 'cache_locks', 'sessions', 'jobs', 'job_batches', 'failed_jobs',
+            ];
+            $tables = array_map(fn ($row) => array_values((array) $row)[0], DB::select("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'"));
+            $tables = array_values(array_diff($tables, $preservedTables));
+            $tableRows = [];
+            $totalRows = 0;
+            foreach ($tables as $table) {
+                $count = (int) DB::table($table)->count();
+                $tableRows[$table] = $count;
+                $totalRows += $count;
+            }
+
+            $update(27, 'Đã tạo bản cứu hộ; bắt đầu xóa dữ liệu nghiệp vụ.');
+            DB::statement('SET FOREIGN_KEY_CHECKS=0');
+            try {
+                $tableCount = max(1, count($tables));
+                foreach ($tables as $index => $table) {
+                    $quoted = '`'.str_replace('`', '``', $table).'`';
+                    DB::statement('TRUNCATE TABLE '.$quoted);
+                    $update(27 + (int) floor(($index + 1) / $tableCount * 58), 'Đang làm sạch bảng '.$table.' ('.($index + 1).' / '.count($tables).').');
+                }
+            } finally {
+                DB::statement('SET FOREIGN_KEY_CHECKS=1');
+            }
+
+            $filesToDelete = [];
+            foreach (['public', 'private'] as $disk) {
+                $directory = storage_path('app/'.$disk);
+                if (! is_dir($directory)) continue;
+                foreach (File::allFiles($directory) as $file) $filesToDelete[] = $file;
+            }
+            $deletedFiles = 0;
+            foreach ($filesToDelete as $file) {
+                File::delete($file->getPathname());
+                $deletedFiles++;
+                $update(85 + (int) floor(($deletedFiles / max(1, count($filesToDelete))) * 13), 'Đang xóa tệp đã tải lên ('.$deletedFiles.' / '.count($filesToDelete).').');
+            }
+
+            $update(100, 'Đã xóa dữ liệu nghiệp vụ; tài khoản, quyền và cấu hình được giữ nguyên.', 'completed', [
+                'title' => 'Báo cáo xóa dữ liệu',
+                'recovery_backup' => basename($recovery),
+                'tables_cleared' => count($tables),
+                'rows_cleared' => $totalRows,
+                'files_cleared' => $deletedFiles,
+                'preserved' => 'Tài khoản đăng nhập, phân quyền, cấu hình hệ thống và bản sao lưu.',
+            ]);
+
+            return $this->backupSettingsRedirect()->with('success', 'Đã xóa dữ liệu nghiệp vụ. Có thể dùng bản cứu hộ để khôi phục.');
+        } catch (Throwable $exception) {
+            $update(100, 'Không thể hoàn tất việc xóa dữ liệu: '.$exception->getMessage(), 'failed', [
+                'title' => 'Xóa dữ liệu thất bại',
+                'recovery_backup' => $recovery ? basename($recovery) : null,
+                'error' => $exception->getMessage(),
+            ]);
+            return $this->backupSettingsRedirect()->with('error', 'Không thể hoàn tất việc xóa dữ liệu: '.$exception->getMessage());
         }
     }
 
@@ -111,6 +223,7 @@ class BackupController extends Controller
     {
         $operation = $request->validate(['operation_id' => ['required', 'uuid']])['operation_id'];
         $userId = (int) $request->user()->id;
+        $request->session()->save();
         $update = fn ($percent, $message) => $progress->update($userId, $operation, $percent, $message);
         try {
             $progress->update($userId, $operation, 1, 'Đang kiểm tra tệp sao lưu.');
@@ -131,6 +244,7 @@ class BackupController extends Controller
         ]);
         $operation = $data['operation_id'];
         $userId = (int) $request->user()->id;
+        $request->session()->save();
         $progress->update($userId, $operation, 1, 'Đang nhận tệp sao lưu.');
 
         $filename = 'backup_'.now()->format('Y-m-d_H-i-s-u').'.zip';
@@ -160,7 +274,8 @@ class BackupController extends Controller
         ]);
         $operation = $data['operation_id'];
         $userId = (int) $request->user()->id;
-        $update = fn ($percent, $message) => $progress->update($userId, $operation, $percent, $message);
+        $request->session()->save();
+        $update = fn ($percent, $message, $state = 'running', $report = null) => $progress->update($userId, $operation, $percent, $message, $state, $report);
 
         try {
             $update(1, 'Bắt đầu kiểm tra dữ liệu để khôi phục.');
@@ -170,10 +285,37 @@ class BackupController extends Controller
             $message = $result['mode'] === 'replace'
                 ? 'Đã khôi phục toàn bộ cơ sở dữ liệu. Bản dữ liệu trước đó được lưu làm điểm phục hồi.'
                 : 'Đã gộp dữ liệu từ bản sao lưu theo lựa chọn xử lý xung đột.';
-            $update(100, 'Khôi phục hoàn tất.', 'completed');
+            $update(100, 'Khôi phục hoàn tất.', 'completed', [
+                'title' => 'Báo cáo khôi phục',
+                'mode' => $result['mode'] === 'replace' ? 'Thay toàn bộ dữ liệu' : 'Gộp dữ liệu',
+                'conflict_policy' => $result['mode'] === 'merge' ? ($data['conflict_policy'] === 'keep_current' ? 'Giữ dữ liệu hiện tại khi trùng' : 'Dùng dữ liệu từ bản sao lưu khi trùng') : null,
+                'backup' => $backup,
+                'recovery_backup' => $result['recovery_backup'] ?? null,
+                'tables' => $result['summary']['backup_tables'],
+                'backup_rows' => $result['summary']['backup_rows'],
+                'current_rows_before' => $result['summary']['current_rows'],
+                'restored_rows' => $result['restored_rows'] ?? null,
+                'table_results' => collect($result['merge_report']['tables'] ?? $result['table_report'] ?? [])->map(fn ($counts, $table) => is_int($table) ? $counts : ['table' => $table] + $counts)->values()->all(),
+                'files_report' => $result['files'] ?? ($result['merge_report']['files'] ?? ['added' => 0, 'overwritten' => 0, 'skipped' => 0, 'deleted' => 0]),
+                'backup_files' => $result['files_count'] ?? 0,
+                'backup_files_bytes' => $result['files_total_bytes'] ?? 0,
+                'backup_files_omitted' => $result['files_omitted'] ?? 0,
+                'backup_file_details' => $result['backup_file_details'] ?? [],
+                'tables_missing_from_backup' => $result['summary']['tables_missing_from_backup'] ?? [],
+                'tables_missing_from_current' => $result['summary']['tables_missing_from_current'] ?? [],
+                'database' => 'Cơ sở dữ liệu đã được xử lý và kiểm tra khóa ngoại.',
+                'files' => $result['has_files'] ? 'Tệp đính kèm đã được khôi phục theo chế độ đã chọn.' : 'Bản sao lưu không có tệp đính kèm.',
+            ]);
             return $this->backupSettingsRedirect()->with('success', $message)->with('restore_preview', null);
         } catch (Throwable $exception) {
-            $update(100, 'Khôi phục thất bại; kiểm tra thông báo để biết chi tiết.', 'failed');
+            preg_match('/(backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d{6})?\.zip)/', $exception->getMessage(), $recoveryMatch);
+            $update(100, 'Khôi phục thất bại: '.$exception->getMessage(), 'failed', [
+                'title' => 'Báo cáo khôi phục thất bại',
+                'backup' => $backup,
+                'recovery_backup' => $recoveryMatch[1] ?? null,
+                'rollback_status' => isset($recoveryMatch[1]) ? 'Đã thử phục hồi từ bản cứu hộ được ghi bên trên.' : 'Chưa có bản cứu hộ; lỗi xảy ra trước bước xử lý dữ liệu.',
+                'error' => $exception->getMessage(),
+            ]);
             return $this->backupSettingsRedirect()->with('error', 'Khôi phục chưa hoàn tất: '.$exception->getMessage());
         }
     }
@@ -239,6 +381,7 @@ class BackupController extends Controller
         $data = $request->validate(['name' => ['required', 'string'], 'operation_id' => ['required', 'uuid']]);
         $userId = (int) $request->user()->id;
         $operation = $data['operation_id'];
+        $request->session()->save();
         $localName = 'backup_'.now()->format('Y-m-d_H-i-s-u').'.zip';
         $localPath = storage_path('app/backups/'.$localName);
         File::ensureDirectoryExists(dirname($localPath));

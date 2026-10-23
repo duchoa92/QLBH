@@ -56,18 +56,25 @@ const scheduleForm = useForm({
 
 const restoreForm = useForm({ mode: 'merge', conflict_policy: 'keep_current', confirmed: false, operation_id: null })
 const uploadForm = useForm({ backup_file: null, operation_id: null })
+const clearDataForm = useForm({ confirmation: '', operation_id: null })
 const cloudForm = useForm({ provider: 's3', name: '', key: '', secret: '', region: 'us-east-1', bucket: '', endpoint: '', base_path: 'backups', path_style: false, url: '', username: '', token: '' })
 const confirmBox = useConfirm()
 const selectedFileName = ref('')
 const restorePreview = ref(props.restore_preview)
 const showRestorePreview = ref(Boolean(restorePreview.value))
+const lastPreviewKey = ref(restorePreview.value?.backup || null)
+const dismissedPreviewKey = ref(null)
 const showCloudStorage = ref(false)
-const operationProgress = ref({ active: false, percent: 0, message: '', state: 'running' })
+const showClearDataDialog = ref(false)
+const clearDataPhrase = ref('')
+const operationProgress = ref({ active: false, percent: 0, message: '', state: 'running', steps: [], report: null })
+const showOperationReportDetails = ref(false)
 let progressTimer = null
 let activeOperation = null
 
 const progressPercent = computed(() => uploadForm.progress?.percentage ?? operationProgress.value.percent)
 const progressVisible = computed(() => operationProgress.value.active || operationProgress.value.state !== 'running' || Boolean(uploadForm.progress))
+const previewFileBytes = computed(() => Number(restorePreview.value?.files_total_bytes || 0))
 const backupMonth = ref('')
 const backupPage = ref(1)
 const selectedBackupNames = ref([])
@@ -117,15 +124,18 @@ const createOperationId = () => {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-const startProgress = () => {
-    activeOperation = createOperationId()
-    operationProgress.value = { active: true, percent: 1, message: 'Đang khởi chạy thao tác…', state: 'running' }
+const startProgress = (title = 'Đang xử lý sao lưu') => {
+    const operationId = createOperationId()
+    activeOperation = operationId
+    operationProgress.value = { active: true, title, percent: 1, message: 'Đang khởi chạy…', state: 'running', steps: [], report: null }
+    showOperationReportDetails.value = false
     clearInterval(progressTimer)
     progressTimer = setInterval(async () => {
         try {
-            const response = await fetch(`/backups/progress/${activeOperation}`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+            const response = await fetch(`/backups/progress/${operationId}`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
             if (!response.ok) return
             const result = await response.json()
+            if (activeOperation !== operationId) return
             if (result) {
                 operationProgress.value = { ...operationProgress.value, ...result, active: result.state === 'running' }
                 if (result.state !== 'running') {
@@ -134,14 +144,14 @@ const startProgress = () => {
             }
         } catch (_) { /* Polling retries on the next interval. */ }
     }, 500)
-    return activeOperation
+    return operationId
 }
 
 onUnmounted(() => clearInterval(progressTimer))
 
 const dismissProgress = () => {
     if (operationProgress.value.active) return
-    operationProgress.value = { active: false, percent: 0, message: '', state: 'running' }
+    operationProgress.value = { active: false, percent: 0, message: '', state: 'running', steps: [], report: null }
 }
 
 const backupPath = (name) => `/backups/${encodeURIComponent(name)}`
@@ -152,7 +162,7 @@ const runBackup = () => {
         message: 'Tạo bản sao lưu cơ sở dữ liệu và các tệp người dùng đã tải lên?',
         confirmText: 'Sao lưu',
         onConfirm: () => {
-            router.post('/backups', { operation_id: startProgress() }, { preserveScroll: true })
+            router.post('/backups', { operation_id: startProgress('Đang sao lưu') }, { preserveScroll: true })
         },
     })
 }
@@ -163,7 +173,7 @@ const removeBackup = (backup) => {
         message: `Xóa tệp sao lưu ${backup.name}?`,
         confirmText: 'Xóa',
         onConfirm: () => {
-            router.delete(backupPath(backup.name), { data: { operation_id: startProgress() }, preserveScroll: true })
+            router.delete(backupPath(backup.name), { data: { operation_id: startProgress('Đang xóa bản sao lưu') }, preserveScroll: true })
         },
     })
 }
@@ -190,7 +200,7 @@ const removeSelectedBackups = () => {
         confirmText: `Xóa ${names.length} tệp`,
         onConfirm: () => {
             router.delete('/backups/bulk', {
-                data: { names, operation_id: startProgress() },
+                data: { names, operation_id: startProgress('Đang xóa các bản sao lưu') },
                 preserveScroll: true,
                 onSuccess: () => { selectedBackupNames.value = [] },
             })
@@ -199,22 +209,44 @@ const removeSelectedBackups = () => {
 }
 
 const saveSchedule = () => scheduleForm.put('/backups/schedule', { preserveScroll: true })
-const openRestorePreview = (preview) => {
+const openRestorePreview = (preview, force = false) => {
     if (!preview?.summary || !preview?.tables) return
+    const key = preview.backup || JSON.stringify(preview.summary)
     restorePreview.value = preview
-    showRestorePreview.value = true
+    if (force || key !== lastPreviewKey.value) {
+        lastPreviewKey.value = key
+        dismissedPreviewKey.value = null
+        showRestorePreview.value = true
+    } else if (dismissedPreviewKey.value !== key) {
+        showRestorePreview.value = true
+    }
     restoreForm.mode = preview.summary.schema_compatible && preview.summary.new_tables === 0 ? 'merge' : 'replace'
 }
 
-const applyPreviewFromPage = (page) => openRestorePreview(page?.props?.restore_preview)
+const closeRestorePreview = () => {
+    dismissedPreviewKey.value = restorePreview.value?.backup || null
+    showRestorePreview.value = false
+}
+
+const applyPreviewFromPage = (page) => {
+    const preview = page?.props?.restore_preview
+    openRestorePreview(preview, true)
+    if (preview?.summary) {
+        // The comparison modal is the result of inspection; close the completed
+        // progress overlay so it cannot cover or intermittently hide the table.
+        clearInterval(progressTimer)
+        activeOperation = null
+        operationProgress.value = { active: false, percent: 0, message: '', state: 'running', steps: [], report: null }
+    }
+}
 
 watch(() => props.restore_preview, openRestorePreview, { immediate: true })
 
-const inspectBackup = (backup) => router.post(`${backupPath(backup.name)}/inspect`, { operation_id: startProgress() }, {
+const inspectBackup = (backup) => router.post(`${backupPath(backup.name)}/inspect`, { operation_id: startProgress('Đang kiểm tra bản sao lưu') }, {
     preserveScroll: true,
     onSuccess: applyPreviewFromPage,
 })
-const inspectCloudBackup = (connection, backup) => router.post(`/backups/cloud/${connection.id}/inspect`, { name: backup.name, operation_id: startProgress() }, {
+const inspectCloudBackup = (connection, backup) => router.post(`/backups/cloud/${connection.id}/inspect`, { name: backup.name, operation_id: startProgress('Đang tải và kiểm tra bản sao lưu') }, {
     preserveScroll: true,
     onSuccess: applyPreviewFromPage,
 })
@@ -243,7 +275,7 @@ const selectBackupFile = (event) => {
 
 const inspectUploadedFile = () => {
     if (!uploadForm.backup_file) return
-    uploadForm.operation_id = startProgress()
+    uploadForm.operation_id = startProgress('Đang kiểm tra bản sao lưu tải lên')
     uploadForm.post('/backups/import', {
         forceFormData: true,
         preserveScroll: true,
@@ -270,11 +302,25 @@ const restoreBackup = () => {
         confirmText: restoreForm.mode === 'replace' ? 'Thay và khôi phục' : 'Gộp dữ liệu',
         onConfirm: () => {
             restoreForm.confirmed = true
-            restoreForm.operation_id = startProgress()
+            restoreForm.operation_id = startProgress('Đang khôi phục')
+            closeRestorePreview()
             restoreForm.post(`${backupPath(preview.backup)}/restore`, {
                 preserveScroll: true,
                 onFinish: () => { restoreForm.confirmed = false },
             })
+        },
+    })
+}
+
+const clearSystemData = () => {
+    if (clearDataPhrase.value !== 'XOA DU LIEU') return
+    clearDataForm.confirmation = 'XOA DU LIEU'
+    clearDataForm.operation_id = startProgress('Đang xóa dữ liệu')
+    clearDataForm.post('/backups/clear-data', {
+        preserveScroll: true,
+        onFinish: () => {
+            clearDataForm.confirmation = ''
+            showClearDataDialog.value = false
         },
     })
 }
@@ -305,10 +351,10 @@ const monthdayOptions = Array.from({ length: 31 }, (_, i) => ({
     label: `Ngày ${i + 1}`
 }))
 
-const restoreModeOptions = [
-    { value: 'merge', label: 'Gộp dữ liệu, giữ các dòng hiện có' },
+const restoreModeOptions = computed(() => [
+    { value: 'merge', label: 'Gộp dữ liệu vào hệ thống hiện tại' },
     { value: 'replace', label: 'Thay toàn bộ cơ sở dữ liệu bằng bản sao lưu' },
-]
+].filter((option) => option.value !== 'merge' || (restorePreview.value?.summary?.schema_compatible && restorePreview.value?.summary?.new_tables === 0)))
 
 const conflictPolicyOptions = [
     { value: 'keep_current', label: 'Giữ nguyên dữ liệu hiện tại' },
@@ -323,13 +369,56 @@ const conflictPolicyOptions = [
                 <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
                     <div class="mb-3 flex items-start justify-between gap-3">
                         <div>
-                            <p class="text-sm font-bold text-slate-800">{{ operationProgress.active ? 'Đang xử lý' : operationProgress.state === 'failed' ? 'Thao tác thất bại' : 'Đã hoàn tất' }}</p>
+                            <p class="text-sm font-bold text-slate-800">{{ operationProgress.active ? operationProgress.title : operationProgress.state === 'failed' ? 'Thao tác thất bại' : 'Đã hoàn tất' }}</p>
                             <p class="mt-1 text-sm text-slate-600">{{ operationProgress.message || 'Đang xử lý bản sao lưu…' }}</p>
                         </div>
                         <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-sm font-bold tabular-nums text-emerald-700">{{ Math.round(progressPercent) }}%</span>
                     </div>
                     <div class="h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100" aria-label="Tiến trình xử lý">
                         <div class="h-full rounded-full bg-emerald-500 transition-[width] duration-300" :style="{ width: `${Math.max(3, progressPercent)}%` }"></div>
+                    </div>
+                    <div v-if="operationProgress.steps?.length" class="mt-4 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-3">
+                        <div v-for="(step, index) in [...operationProgress.steps].reverse().filter((step) => step.message !== operationProgress.message)" :key="`${index}-${step.message}`" class="flex gap-2 text-xs" :class="index === 0 ? 'font-semibold text-slate-800' : 'text-slate-500'">
+                            <span class="w-10 shrink-0 tabular-nums text-slate-400">{{ step.percent }}%</span>
+                            <span>{{ step.message }}</span>
+                            <span class="ml-auto shrink-0 text-[10px] text-slate-400">{{ step.at }}</span>
+                        </div>
+                    </div>
+                    <div v-if="operationProgress.report" class="mt-4 rounded-xl border p-3" :class="operationProgress.state === 'failed' ? 'border-red-200 bg-red-50/70' : 'border-emerald-200 bg-emerald-50/70'">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm font-bold text-emerald-900">{{ operationProgress.report.title }}</p>
+                            <button type="button" class="shrink-0 text-xs font-bold text-emerald-800 underline underline-offset-2" @click="showOperationReportDetails = !showOperationReportDetails">{{ showOperationReportDetails ? 'Ẩn chi tiết' : 'Xem chi tiết' }}</button>
+                        </div>
+                        <p v-if="operationProgress.report.database_tables !== undefined" class="mt-1 text-xs text-emerald-900">{{ operationProgress.report.database_tables }} bảng · {{ Number(operationProgress.report.database_rows || 0).toLocaleString() }} dòng · {{ operationProgress.report.uploaded_files }} tệp đính kèm</p>
+                        <p v-else-if="operationProgress.report.tables_cleared !== undefined" class="mt-1 text-xs text-emerald-900">Đã làm sạch {{ operationProgress.report.tables_cleared }} bảng, {{ Number(operationProgress.report.rows_cleared || 0).toLocaleString() }} dòng và {{ operationProgress.report.files_cleared }} tệp.</p>
+                        <p v-else-if="operationProgress.report.mode" class="mt-1 text-xs text-emerald-900">{{ operationProgress.report.mode }} · {{ operationProgress.report.tables }} bảng · {{ Number(operationProgress.report.backup_rows || 0).toLocaleString() }} dòng trong bản sao lưu</p>
+                        <dl v-if="showOperationReportDetails" class="mt-2 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+                            <template v-for="(value, key) in operationProgress.report" :key="key">
+                                <template v-if="key !== 'title' && value !== null && !['table_details', 'table_results', 'files_report', 'uploaded_file_details', 'backup_file_details'].includes(key)">
+                                    <dt class="font-semibold text-emerald-800">{{ ({ mode: 'Phương thức', conflict_policy: 'Khi trùng', backup: 'Bản sao lưu', recovery_backup: 'Điểm phục hồi', rollback_status: 'Phục hồi khi lỗi', tables: 'Số bảng trong backup', backup_rows: 'Số dòng trong backup', current_rows_before: 'Số dòng hiện tại trước khi chạy', restored_rows: 'Số dòng sau khôi phục', database_tables: 'Số bảng', database_rows: 'Số dòng', uploaded_files: 'Tệp đính kèm', backup_files: 'Tệp trong bản sao lưu', backup_files_bytes: 'Dung lượng tệp trong backup', backup_files_omitted: 'Tệp chưa liệt kê do giới hạn', uploaded_file_details_omitted: 'Tệp backup chưa liệt kê', uploaded_bytes: 'Dung lượng tệp', files_by_disk: 'Phân loại tệp', database: 'Cơ sở dữ liệu', files: 'Tệp', file: 'Tệp backup', size: 'Dung lượng backup', integrity: 'Kiểm tra', cloud_destinations: 'Đích đám mây', error: 'Lỗi', tables_cleared: 'Bảng đã làm sạch', rows_cleared: 'Bản ghi đã xóa', files_cleared: 'Tệp đã xóa', preserved: 'Được giữ lại', tables_missing_from_backup: 'Bảng hiện tại thiếu trong backup', tables_missing_from_current: 'Bảng backup không có hiện tại' })[key] || key }}</dt>
+                                    <dd class="break-all text-emerald-950">{{ Array.isArray(value) ? (value.length ? value.join(', ') : 'Không có') : typeof value === 'object' ? Object.entries(value).map(([name, count]) => `${name}: ${count}`).join(' · ') : key === 'size' || key === 'uploaded_bytes' ? formatSize(value) : value }}</dd>
+                                </template>
+                            </template>
+                        </dl>
+                        <div v-if="showOperationReportDetails && operationProgress.report.table_details" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
+                            <p class="mb-1 font-bold text-emerald-900">Dữ liệu trong backup theo bảng</p>
+                            <div v-for="(rows, table) in operationProgress.report.table_details" :key="table" class="flex justify-between gap-3 py-0.5 text-emerald-900"><span>{{ table }}</span><span class="tabular-nums">{{ Number(rows).toLocaleString() }} dòng</span></div>
+                        </div>
+                        <div v-if="showOperationReportDetails && operationProgress.report.uploaded_file_details?.length" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
+                            <p class="mb-1 font-bold text-emerald-900">Tệp đã đưa vào backup ({{ operationProgress.report.uploaded_files }})</p>
+                            <div v-for="file in operationProgress.report.uploaded_file_details" :key="`${file.disk}/${file.path}`" class="flex justify-between gap-3 py-0.5 text-emerald-900"><span class="break-all">{{ file.disk }}/{{ file.path }}</span><span class="shrink-0">{{ formatSize(file.size) }}</span></div>
+                            <p v-if="operationProgress.report.uploaded_file_details_omitted" class="mt-1 text-slate-500">Còn {{ operationProgress.report.uploaded_file_details_omitted }} tệp khác; tổng số và dung lượng đã được tính trong báo cáo.</p>
+                        </div>
+                        <div v-if="showOperationReportDetails && operationProgress.report.backup_file_details?.length" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
+                            <p class="mb-1 font-bold text-emerald-900">Tệp có trong bản sao lưu</p>
+                            <div v-for="file in operationProgress.report.backup_file_details" :key="file.path" class="flex justify-between gap-3 py-0.5 text-emerald-900"><span class="break-all">{{ file.path }}</span><span class="shrink-0">{{ formatSize(file.size) }}</span></div>
+                            <p v-if="operationProgress.report.backup_files_omitted" class="mt-1 text-slate-500">Còn {{ operationProgress.report.backup_files_omitted }} tệp khác chưa liệt kê.</p>
+                        </div>
+                        <div v-if="showOperationReportDetails && operationProgress.report.table_results?.length" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
+                            <p class="mb-1 font-bold text-emerald-900">Kết quả theo bảng</p>
+                            <div v-for="item in operationProgress.report.table_results" :key="item.table" class="py-1 text-emerald-900"><strong>{{ item.table }}</strong><template v-if="item.rows_restored !== undefined"> · đã khôi phục {{ item.rows_restored }} dòng</template><template v-else> · thêm {{ item.added }} · ghi đè {{ item.overwritten }} · giữ/không đổi {{ item.kept_or_unchanged }}</template></div>
+                        </div>
+                        <div v-if="showOperationReportDetails && operationProgress.report.files_report" class="mt-2 text-xs text-emerald-900">Tệp: thêm {{ operationProgress.report.files_report.added }}, ghi đè {{ operationProgress.report.files_report.overwritten }}, bỏ qua {{ operationProgress.report.files_report.skipped }}, xóa tệp cũ {{ operationProgress.report.files_report.deleted }}.</div>
                     </div>
                     <div v-if="!operationProgress.active" class="mt-5 flex justify-end">
                         <button type="button" class="h-10 min-w-24 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700" @click="dismissProgress">OK</button>
@@ -618,9 +707,46 @@ const conflictPolicyOptions = [
             <p class="mt-3 text-[11px] text-slate-400">Tệp sao lưu gốc được lưu trữ an toàn tại thư mục <code class="rounded bg-slate-100 px-1 py-0.5 text-slate-600 font-mono">storage/app/backups</code>.</p>
         </DataPanel>
 
+        <DataPanel class="border border-red-200 bg-red-50/40 p-3.5 sm:p-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><AlertTriangle :size="20" /></div>
+                    <div>
+                        <h2 class="text-sm font-bold text-red-900">Xóa sạch dữ liệu nghiệp vụ</h2>
+                        <p class="mt-1 max-w-3xl text-xs leading-5 text-red-800">Xóa dữ liệu bán hàng, kho, khách hàng, sửa chữa, chi phí và tệp đã tải lên. Hệ thống tự tạo bản sao lưu cứu hộ trước khi xóa. Tài khoản đăng nhập, phân quyền, cấu hình và các bản sao lưu được giữ lại.</p>
+                    </div>
+                </div>
+                <button type="button" class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-red-700 px-4 text-xs font-bold text-white shadow-sm hover:bg-red-800 disabled:opacity-50" :disabled="operationProgress.active" @click="clearDataPhrase = ''; showClearDataDialog = true">
+                    <Trash2 :size="15" /> Xóa dữ liệu hệ thống
+                </button>
+            </div>
+        </DataPanel>
+
+        <Teleport to="body">
+            <div v-if="showClearDataDialog" class="fixed inset-0 z-[10010] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="clear-data-title">
+                <section class="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-5 shadow-2xl sm:p-6">
+                    <div class="flex items-start gap-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><AlertTriangle :size="21" /></div>
+                        <div>
+                            <h2 id="clear-data-title" class="text-base font-bold text-red-900">Xác nhận xóa sạch dữ liệu nghiệp vụ</h2>
+                            <p class="mt-2 text-sm leading-6 text-slate-600">Thao tác này không thể hoàn tác trực tiếp. Hệ thống sẽ tạo bản sao lưu cứu hộ trước, sau đó xóa dữ liệu nghiệp vụ và tệp tải lên. Tài khoản và cấu hình vẫn được giữ.</p>
+                        </div>
+                    </div>
+                    <label class="mt-5 block text-xs font-semibold text-slate-700">Nhập chính xác <code class="rounded bg-red-50 px-1.5 py-0.5 text-red-700">XOA DU LIEU</code> để xác nhận</label>
+                    <input v-model="clearDataPhrase" type="text" autocomplete="off" class="mt-1.5 h-11 w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500" placeholder="XOA DU LIEU">
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button type="button" class="h-10 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="showClearDataDialog = false">Hủy</button>
+                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-xl bg-red-700 px-4 text-xs font-bold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40" :disabled="clearDataPhrase !== 'XOA DU LIEU' || operationProgress.active" @click="clearSystemData">
+                            <Trash2 :size="14" /> Tạo backup và xóa dữ liệu
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </Teleport>
+
         <!-- Modal Đối chiếu & Khôi phục -->
         <Teleport to="body">
-        <div v-if="showRestorePreview && restorePreview" class="fixed inset-0 z-[9990] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6" @click.self="showRestorePreview = false">
+        <div v-if="showRestorePreview && restorePreview" class="fixed inset-0 z-[9990] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6">
             <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
                 <!-- Modal Header -->
                 <header class="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50 px-4 py-3 sm:px-6">
@@ -633,7 +759,7 @@ const conflictPolicyOptions = [
                             <p class="text-xs font-medium text-slate-500 break-all">{{ restorePreview.backup }} · {{ restorePreview.created_at || 'Không xác định ngày tạo' }}</p>
                         </div>
                     </div>
-                    <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors" aria-label="Đóng" @click="showRestorePreview = false">
+                    <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors" aria-label="Đóng" @click="closeRestorePreview">
                         <X :size="20" />
                     </button>
                 </header>
@@ -641,7 +767,7 @@ const conflictPolicyOptions = [
                 <!-- Modal Body -->
                 <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6 text-xs sm:text-sm">
                     <!-- Thẻ thống kê tổng quan -->
-                    <div class="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                    <div class="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
                         <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
                             <span class="block text-[11px] font-semibold text-slate-500 uppercase">Tổng số bảng</span>
                             <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.backup_tables }} sao lưu / {{ restorePreview.summary.current_tables }} hiện tại</span>
@@ -654,16 +780,43 @@ const conflictPolicyOptions = [
                             </span>
                         </div>
                         <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
-                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng đã mất</span>
+                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng hiện tại thiếu trong backup</span>
                             <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.missing_tables }}</span>
                         </div>
                         <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
-                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng mới</span>
+                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng backup không có hiện tại</span>
                             <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.new_tables }}</span>
                         </div>
                         <div class="rounded-xl bg-amber-50 p-2.5 border border-amber-200 col-span-2 sm:col-span-1">
                             <span class="block text-[11px] font-semibold text-amber-700 uppercase">Dữ liệu bị lệch</span>
                             <span class="text-sm font-bold text-amber-800 mt-0.5 block">{{ restorePreview.summary.mismatched_data_tables }} bảng</span>
+                        </div>
+                        <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
+                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Tệp trong backup</span>
+                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.files_count }} tệp · {{ formatSize(previewFileBytes) }}</span>
+                        </div>
+                        <div class="rounded-xl p-2.5 border" :class="restorePreview.summary.primary_key_conflicts ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200/70 text-slate-800'">
+                            <span class="block text-[11px] font-semibold uppercase opacity-75">Khóa chính trùng</span>
+                            <span class="text-sm font-bold mt-0.5 block">{{ restorePreview.summary.primary_key_conflicts ?? '—' }} dòng</span>
+                        </div>
+                    </div>
+
+                    <details v-if="restorePreview.files?.length" class="rounded-lg border border-slate-200 bg-white p-2.5">
+                            <summary class="cursor-pointer text-xs font-bold text-slate-700">Xem danh sách tệp đính kèm</summary>
+                        <div class="mt-2 max-h-32 space-y-1 overflow-y-auto text-[11px] text-slate-600">
+                            <div v-for="file in restorePreview.files" :key="file.path" class="flex justify-between gap-3"><span class="break-all">{{ file.path }}</span><span class="shrink-0">{{ formatSize(file.size) }}</span></div>
+                                <p v-if="restorePreview.files_omitted" class="text-slate-500">Còn {{ restorePreview.files_omitted }} tệp khác chưa liệt kê.</p>
+                        </div>
+                    </details>
+
+                    <div v-if="restorePreview.summary.tables_missing_from_backup?.length || restorePreview.summary.tables_missing_from_current?.length" class="grid gap-2 sm:grid-cols-2">
+                        <div v-if="restorePreview.summary.tables_missing_from_backup?.length" class="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                            <p class="font-bold">Có trong hệ thống, không có trong backup</p>
+                            <p class="mt-1 break-words">{{ restorePreview.summary.tables_missing_from_backup.join(', ') }}</p>
+                        </div>
+                        <div v-if="restorePreview.summary.tables_missing_from_current?.length" class="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                            <p class="font-bold">Có trong backup, không có trong hệ thống</p>
+                            <p class="mt-1 break-words">{{ restorePreview.summary.tables_missing_from_current.join(', ') }}</p>
                         </div>
                     </div>
 
@@ -678,6 +831,7 @@ const conflictPolicyOptions = [
                                     <th class="py-2.5 px-3">Lệch</th>
                                     <th class="py-2.5 px-3">Cấu trúc Schema</th>
                                     <th class="py-2.5 px-3">Khớp dữ liệu</th>
+                                    <th class="py-2.5 px-3">Khóa chính trùng</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 font-medium">
@@ -690,10 +844,12 @@ const conflictPolicyOptions = [
                                     </td>
                                     <td class="py-2 px-3" :class="table.schema_compatible ? 'text-emerald-600 font-semibold' : 'font-bold text-amber-600'">
                                         {{ table.schema_compatible ? 'Tương thích' : 'Không tương thích' }}
+                                        <span v-if="!table.schema_compatible && (table.columns_missing_from_current?.length || table.columns_missing_from_backup?.length)" class="block max-w-56 whitespace-normal text-[10px] font-normal text-amber-700">{{ table.columns_missing_from_current?.length ? `Thiếu ở hiện tại: ${table.columns_missing_from_current.join(', ')}` : '' }}{{ table.columns_missing_from_backup?.length ? ` · Thiếu ở backup: ${table.columns_missing_from_backup.join(', ')}` : '' }}</span>
                                     </td>
                                     <td class="py-2 px-3" :class="table.data_matches ? 'text-emerald-600 font-semibold' : 'font-bold text-amber-600'">
                                         {{ table.data_matches ? 'Trùng khớp' : 'Có khác biệt' }}
                                     </td>
+                                    <td class="py-2 px-3" :class="table.primary_key_conflicts > 0 ? 'font-bold text-amber-700' : 'text-slate-500'">{{ table.primary_key_conflicts ?? 'Không xác định' }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -722,10 +878,19 @@ const conflictPolicyOptions = [
                     <!-- Cảnh báo & Lưu ý -->
                     <div class="space-y-2 text-xs">
                         <p v-if="restoreForm.mode === 'merge'" class="text-slate-500">
-                            * Chế độ Gộp sẽ thêm các dòng chưa tồn tại; các dòng trùng khóa chính/duy nhất sẽ được xử lý theo lựa chọn cài đặt ở trên.
+                            * Chế độ Gộp thêm dòng chưa tồn tại và giữ các bảng hiện tại không có trong backup; dòng trùng khóa chính/duy nhất xử lý theo lựa chọn ở trên.
+                        </p>
+                        <p v-else class="rounded-xl bg-red-50 p-2.5 text-red-800 border border-red-200">
+                            ⚠️ Thay toàn bộ sẽ xóa các bảng hiện tại không có trong backup và dùng dữ liệu từ backup. Hệ thống đã tạo backup cứu hộ trước khi thực hiện.
                         </p>
                         <p v-if="restorePreview.summary.mismatched_data_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            ⚠️ Dữ liệu hiện tại lệch ở {{ restorePreview.summary.mismatched_data_tables }} bảng. Vui lòng kiểm tra kỹ trước khi bấm xác nhận.
+                            ⚠️ Nội dung dữ liệu khác nhau ở {{ restorePreview.summary.mismatched_data_tables }} bảng. Chọn gộp để thêm/giải quyết dòng trùng theo chính sách; số thêm, ghi đè và giữ nguyên sẽ có trong báo cáo cuối.
+                        </p>
+                        <p v-if="restorePreview.summary.primary_key_conflicts > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
+                            Có {{ restorePreview.summary.primary_key_conflicts }} dòng trùng khóa chính. Nếu gộp, chọn giữ dòng hiện tại hoặc ghi đè bằng bản sao lưu; chi tiết kết quả từng bảng sẽ có sau khi chạy.
+                        </p>
+                        <p v-else-if="restorePreview.summary.primary_key_conflicts === null" class="rounded-xl bg-slate-50 p-2.5 text-slate-700 border border-slate-200">
+                            Một số bảng không thể đếm trước số trùng khóa chính bằng cấu trúc hiện có. Hệ thống vẫn áp dụng chính sách trùng đã chọn và ghi số thêm/ghi đè/giữ nguyên thực tế vào báo cáo.
                         </p>
                         <p v-if="!restorePreview.summary.schema_compatible || restorePreview.summary.new_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
                             ⚠️ Cấu trúc bảng khác nhau hoặc có bảng mới. Chế độ Gộp bị vô hiệu hóa để đảm bảo an toàn dữ liệu; vui lòng chọn "Thay toàn bộ" hoặc Hủy.
@@ -738,7 +903,7 @@ const conflictPolicyOptions = [
 
                 <!-- Modal Footer -->
                 <footer class="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
-                    <button type="button" class="h-9 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors" @click="showRestorePreview = false">
+                    <button type="button" class="h-9 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors" @click="closeRestorePreview">
                         Hủy bỏ
                     </button>
                     <button type="button" :disabled="restoreForm.processing" class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors" @click="restoreBackup">
