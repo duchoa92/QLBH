@@ -1,5 +1,6 @@
 <script setup>
 import { formatCurrency } from '@/utils/format'
+import { imageUrl } from '@/utils/imageUrl'
 import { useForm, Link, router } from '@inertiajs/vue3';
 import { Pencil } from 'lucide-vue-next';
 import { openModal } from '@/Stores/modal';
@@ -47,9 +48,7 @@ const hasExtraInfo = (imei) => {
 };
 
 const extraInfoImageUrl = (imei) =>
-    imei?.extra_info?.image_path
-        ? `/storage/${imei.extra_info.image_path}`
-        : null;
+    imageUrl(imei?.extra_info?.image_path);
 
 const money = formatCurrency;
 

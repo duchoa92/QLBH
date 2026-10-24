@@ -13,7 +13,9 @@ import ModalRoot from '@/Components/ModalRoot.vue'
 import { Ziggy } from './ziggy'
 import { formatMoney, formatCurrency, formatDate, formatDateTime, getCurrencySymbol, setFormatSettings } from '@/utils/format'
 import { notifyReferenceDataChanged } from '@/Stores/referenceData'
+import { installAppPathSupport } from '@/utils/appPaths'
 
+installAppPathSupport(router)
 
 const app = createApp({})
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -208,7 +210,9 @@ createInertiaApp({
         app.config.globalProperties.$date = formatDate
         app.config.globalProperties.$dateTime = formatDateTime
 
-        app.use(ZiggyVue, Ziggy)
+        // `@routes` renders the route table for the current request. Prefer it
+        // over the generated fallback, which may contain another machine's host.
+        app.use(ZiggyVue, window.Ziggy || Ziggy)
 
             
         app.mount(el)

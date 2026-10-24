@@ -38,7 +38,7 @@ class BackupController extends Controller
                 'created_at' => date('Y-m-d H:i:s', $file->getMTime()),
             ])->values();
 
-        $cloudConnections = BackupCloudConnection::query()->orderBy('name')->get()->map(function ($connection) use ($cloudStorage) {
+        $cloudConnections = BackupCloudConnection::query()->whereIn('provider', BackupCloudConnection::SUPPORTED_PROVIDERS)->orderBy('name')->get()->map(function ($connection) use ($cloudStorage) {
             try {
                 return ['id' => $connection->id, 'name' => $connection->name, 'provider' => $connection->provider, 'enabled' => $connection->enabled, 'last_tested_at' => $connection->last_tested_at?->toDateTimeString(), 'backups' => $cloudStorage->backups($connection), 'error' => null];
             } catch (Throwable $exception) {
@@ -46,14 +46,23 @@ class BackupController extends Controller
             }
         })->values();
 
+        $redirectBase = rtrim((string) config('services.backup_cloud.redirect_base_url', config('app.url')), '/');
+        $redirectHost = strtolower((string) parse_url($redirectBase, PHP_URL_HOST));
+        $redirectIsSecure = str_starts_with(strtolower($redirectBase), 'https://')
+            || in_array($redirectHost, ['localhost', '127.0.0.1', '[::1]'], true);
+        $callbackUri = fn (string $provider) => $redirectBase.route('backups.cloud.oauth.callback', ['provider' => $provider], false);
+
         return [
             'backups' => $backups,
             'cloud_connections' => $cloudConnections,
             'cloud_oauth' => [
                 'google_drive' => filled(config('services.google_drive.client_id')) && filled(config('services.google_drive.client_secret')),
                 'onedrive' => filled(config('services.microsoft_onedrive.client_id')) && filled(config('services.microsoft_onedrive.client_secret')),
-                'google_redirect_uri' => route('backups.cloud.oauth.callback', ['provider' => 'google_drive']),
-                'onedrive_redirect_uri' => route('backups.cloud.oauth.callback', ['provider' => 'onedrive']),
+                'redirect_is_secure' => $redirectIsSecure,
+                'redirect_uri' => [
+                    'google_drive' => $callbackUri('google_drive'),
+                    'onedrive' => $callbackUri('onedrive'),
+                ],
             ],
             'restore_preview' => session()->get('restore_preview'),
             'schedule' => [
@@ -77,19 +86,29 @@ class BackupController extends Controller
         $progress->update($userId, $operation, 1, 'Bắt đầu tạo bản sao lưu.');
         $path = null;
         $uploadedCloudDestinations = [];
+        $cloudFailures = [];
 
         try {
-            $connections = BackupCloudConnection::where('enabled', true)->get();
+            $connections = BackupCloudConnection::where('enabled', true)->whereIn('provider', BackupCloudConnection::SUPPORTED_PROVIDERS)->get();
             $path = $service->create(fn ($percent, $message) => $update($connections->isEmpty() ? $percent : (int) ($percent * 0.6), $message));
             foreach ($connections as $index => $connection) {
-                $cloudStorage->upload($connection, $path, basename($path), fn ($percent, $message) => $update(60 + (int) ((($index + $percent / 100) / max(1, $connections->count())) * 39), $message));
-                $uploadedCloudDestinations[] = $connection->name;
+                try {
+                    $cloudStorage->upload($connection, $path, basename($path), fn ($percent, $message) => $update(60 + (int) ((($index + $percent / 100) / max(1, $connections->count())) * 39), $message));
+                    $uploadedCloudDestinations[] = $connection->name;
+                } catch (Throwable $exception) {
+                    $cloudFailures[] = ['name' => $connection->name, 'provider' => $connection->provider, 'error' => $exception->getMessage()];
+                    $update(60 + (int) ((($index + 1) / max(1, $connections->count())) * 39), 'Không đồng bộ được lên '.$connection->name.': '.$exception->getMessage());
+                }
             }
             $contents = $service->manifest($path)['contents'] ?? [];
+            $partial = count($cloudFailures) > 0;
+            $failureSummary = collect($cloudFailures)->map(fn ($failure) => $failure['name'].': '.$failure['error'])->implode(' | ');
             Setting::set('backup_last_run', now()->toDateTimeString());
-            Setting::set('backup_last_error', null);
-            $progress->update($userId, $operation, 100, 'Tạo bản sao lưu hoàn tất và đã kiểm tra tính toàn vẹn.', 'completed', [
-                'title' => 'Báo cáo sao lưu',
+            Setting::set('backup_last_error', $partial ? $failureSummary : null);
+            $progress->update($userId, $operation, 100, $partial
+                ? 'Bản sao lưu cục bộ đã hoàn tất; một số đích đám mây chưa nhận được tệp.'
+                : 'Tạo bản sao lưu hoàn tất và đã kiểm tra tính toàn vẹn.', $partial ? 'partial' : 'completed', [
+                'title' => $partial ? 'Bản sao lưu cục bộ hoàn tất; đồng bộ đám mây chưa hoàn tất' : 'Báo cáo sao lưu',
                 'file' => basename($path),
                 'size' => File::size($path),
                 'integrity' => 'ZIP hợp lệ; manifest.json và database.sql đã được xác nhận.',
@@ -101,9 +120,12 @@ class BackupController extends Controller
                 'files_by_disk' => $contents['files_by_disk'] ?? [],
                 'uploaded_file_details' => $contents['uploaded_file_details'] ?? [],
                 'uploaded_file_details_omitted' => $contents['uploaded_file_details_omitted'] ?? 0,
-                'cloud_destinations' => $connections->pluck('name')->values()->all(),
+                'cloud_destinations' => $uploadedCloudDestinations,
+                'cloud_failures' => $cloudFailures,
             ]);
-            return $this->backupSettingsRedirect()->with('success', 'Đã tạo bản sao lưu thành công.');
+            return $this->backupSettingsRedirect()->with('success', $partial
+                ? 'Đã tạo bản sao lưu cục bộ; hãy xử lý lỗi đồng bộ đám mây trong báo cáo.'
+                : 'Đã tạo bản sao lưu thành công.');
         } catch (Throwable $exception) {
             $report = ['title' => 'Báo cáo sao lưu chưa hoàn tất', 'error' => $exception->getMessage(), 'cloud_destinations' => $uploadedCloudDestinations];
             if ($path && is_file($path)) {
@@ -323,44 +345,6 @@ class BackupController extends Controller
     public function progress(Request $request, string $operation, BackupOperationProgress $progress)
     {
         return response()->json($progress->get((int) $request->user()->id, $operation));
-    }
-
-    public function storeCloudConnection(Request $request, CloudBackupStorage $cloudStorage)
-    {
-        $provider = $request->input('provider');
-        if ($provider === 's3') {
-            $data = $request->validate([
-                'name' => ['required', 'string', 'max:100'], 'provider' => ['required', 'in:s3'],
-                'key' => ['required', 'string', 'max:255'], 'secret' => ['required', 'string', 'max:255'],
-                'region' => ['nullable', 'string', 'max:100'], 'bucket' => ['required', 'string', 'max:255'],
-                'endpoint' => ['nullable', 'url', 'max:500'], 'base_path' => ['nullable', 'string', 'max:255'],
-                'path_style' => ['nullable', 'boolean'],
-            ]);
-            $configuration = [
-                'key' => $data['key'], 'secret' => $data['secret'], 'region' => $data['region'] ?? 'auto',
-                'bucket' => $data['bucket'], 'endpoint' => $data['endpoint'] ?? '', 'base_path' => $data['base_path'] ?? 'backups',
-                'path_style' => $data['path_style'] ?? false,
-            ];
-        } else {
-            $data = $request->validate([
-                'name' => ['required', 'string', 'max:100'], 'provider' => ['required', 'in:webdav'],
-                'url' => ['required', 'url', 'max:500'], 'username' => ['required', 'string', 'max:255'],
-                'token' => ['required', 'string', 'max:1000'], 'base_path' => ['nullable', 'string', 'max:255'],
-            ]);
-            $configuration = ['url' => rtrim($data['url'], '/'), 'username' => $data['username'], 'token' => $data['token'], 'base_path' => $data['base_path'] ?? 'backups'];
-        }
-
-        $connection = new BackupCloudConnection(['name' => $data['name'], 'provider' => $data['provider'], 'configuration' => $configuration]);
-        try {
-            $cloudStorage->test($connection);
-        } catch (Throwable $exception) {
-            return $this->backupSettingsRedirect()->with('error', 'Kết nối chưa thành công: '.$exception->getMessage())->withInput($request->except(['key', 'secret', 'token']));
-        }
-        $connection->enabled = true;
-        $connection->last_tested_at = now();
-        $connection->save();
-
-        return $this->backupSettingsRedirect()->with('success', 'Đã kiểm tra và kết nối thành công với '.$connection->name.'.');
     }
 
     public function destroyCloudConnection(BackupCloudConnection $connection)

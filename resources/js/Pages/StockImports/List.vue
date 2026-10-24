@@ -1,5 +1,6 @@
 <script setup>
 import { formatCurrency, formatDate as formatConfiguredDate } from '@/utils/format'
+import { imageUrl } from '@/utils/imageUrl'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import StockImportFormModal from './StockImportFormModal.vue'
@@ -219,9 +220,7 @@ const hasExtraInfo = (imei) => {
 }
 
 const extraInfoImageUrl = (imei) =>
-    imei?.extra_info?.image_path
-        ? `/storage/${imei.extra_info.image_path}`
-        : null
+    imageUrl(imei?.extra_info?.image_path)
 
 const itemImportImeis = (item) =>
     item.import_imeis || []

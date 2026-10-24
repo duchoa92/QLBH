@@ -21,6 +21,7 @@ import NotificationBell from '@/Components/NotificationBell.vue'
 import WorkShiftAutoOpen from '@/Components/WorkShiftAutoOpen.vue'
 import { openModal } from '@/Stores/modal'
 import { prepareOpenPos } from '@/utils/pos'
+import { imageUrl } from '@/utils/imageUrl'
 
 const sidebarOpen = ref(false)
 const isDesktop = ref(false)
@@ -217,7 +218,7 @@ onBeforeUnmount(() => {
                                 class="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-50 active:bg-slate-100 transition"
                             >
                                 <div class="h-8 w-8 overflow-hidden rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
-                                    <img v-if="user.avatar" :src="`/storage/${user.avatar}`" alt="Ảnh đại diện" class="h-full w-full object-cover">
+                                    <img v-if="user.avatar" :src="imageUrl(user.avatar)" alt="Ảnh đại diện" class="h-full w-full object-cover">
                                     <span v-else>{{ (user.name || 'A').charAt(0).toUpperCase() }}</span>
                                 </div>
                                 <div class="hidden xl:block text-left">
@@ -252,7 +253,7 @@ onBeforeUnmount(() => {
 
                                 <Link
                                     v-if="can('settings.view')"
-                                    href="/settings"
+                                    href="settings"
                                     class="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
                                 >
                                     <Shield :size="15" class="text-slate-400" />

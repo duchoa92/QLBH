@@ -7,6 +7,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue'
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue'
+import { imageUrl } from '@/utils/imageUrl'
 
 defineOptions({ layout: AdminLayout })
 
@@ -18,7 +19,7 @@ const props = defineProps({
 const page = usePage()
 const user = computed(() => page.props.auth?.user || {})
 const roles = computed(() => page.props.auth?.roles || [])
-const avatarUrl = computed(() => user.value.avatar ? `/storage/${user.value.avatar}` : null)
+const avatarUrl = computed(() => user.value.avatar ? imageUrl(user.value.avatar) : null)
 </script>
 
 <template>

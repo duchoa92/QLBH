@@ -1,3 +1,5 @@
+import { withAppBasePath } from '@/utils/appPaths'
+
 export const imageUrl = (value) => {
     if (!value) return null
 
@@ -14,8 +16,8 @@ export const imageUrl = (value) => {
     }
 
     if (normalized.startsWith('/')) {
-        return normalized
+        return withAppBasePath(normalized)
     }
 
-    return `/storage/${normalized.replace(/^\/?(?:storage\/)?/, '')}`
+    return withAppBasePath(`/storage/${normalized.replace(/^\/?(?:storage\/)?/, '')}`)
 }

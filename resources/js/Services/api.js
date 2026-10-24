@@ -1,6 +1,9 @@
 import axios from 'axios'
+import { appBaseUrl } from '@/utils/appPaths'
 
 const api = axios.create({
+
+    baseURL: appBaseUrl,
 
     headers: {
 

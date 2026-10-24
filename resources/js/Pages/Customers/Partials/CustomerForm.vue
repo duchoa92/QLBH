@@ -1,5 +1,6 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3'
+import { imageUrl } from '@/utils/imageUrl'
 
 const props = defineProps({
     customer: {
@@ -277,7 +278,7 @@ const submit = () => {
             >
 
                 <img
-                    :src="`/storage/${image.path}`"
+                    :src="imageUrl(image.path)"
                     class="rounded border"
                 />
 

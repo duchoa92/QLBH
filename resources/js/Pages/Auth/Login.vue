@@ -1,7 +1,6 @@
 <script setup>
 import Checkbox from '@/Components/Checkbox.vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -54,7 +53,6 @@ const submit = () => {
                     :error="form.errors.login"
                 />
 
-                <InputError class="mt-2" :message="form.errors.login" />
             </div>
 
             <div class="mt-4">
@@ -70,7 +68,6 @@ const submit = () => {
                     :error="form.errors.password"
                 />
 
-                <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
             <div class="mt-4 block">

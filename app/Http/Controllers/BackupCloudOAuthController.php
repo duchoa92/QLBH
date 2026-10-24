@@ -20,10 +20,14 @@ class BackupCloudOAuthController extends Controller
             return back()->with('error', 'Chưa cấu hình OAuth client ID/secret trên máy chủ cho dịch vụ này.');
         }
 
+        if (! $this->isSecureCallbackBase()) {
+            return back()->with('error', 'OAuth Google Drive/OneDrive cần callback HTTPS công khai. Hãy cấu hình APP_URL hoặc BACKUP_CLOUD_REDIRECT_BASE_URL trước.');
+        }
+
         $data = $request->validate(['name' => ['required', 'string', 'max:100']]);
         $state = bin2hex(random_bytes(32));
         session()->put('backup_cloud_oauth', ['provider' => $provider, 'name' => $data['name'], 'state' => $state]);
-        $redirectUri = route('backups.cloud.oauth.callback', ['provider' => $provider]);
+        $redirectUri = $this->redirectUri($provider);
 
         if ($provider === 'google_drive') {
             $url = 'https://accounts.google.com/o/oauth2/v2/auth?'.http_build_query([
@@ -35,7 +39,7 @@ class BackupCloudOAuthController extends Controller
             $tenant = config('services.microsoft_onedrive.tenant', 'common');
             $url = 'https://login.microsoftonline.com/'.rawurlencode($tenant).'/oauth2/v2.0/authorize?'.http_build_query([
                 'client_id' => $clientId, 'redirect_uri' => $redirectUri, 'response_type' => 'code',
-                'response_mode' => 'query', 'scope' => 'offline_access Files.ReadWrite', 'state' => $state,
+                'response_mode' => 'query', 'scope' => 'offline_access User.Read Files.ReadWrite', 'state' => $state,
             ]);
         }
 
@@ -55,7 +59,7 @@ class BackupCloudOAuthController extends Controller
         if (! $request->filled('code')) return redirect()->route('backups.index')->with('error', 'Dịch vụ đám mây không trả mã ủy quyền.');
 
         $service = $provider === 'google_drive' ? 'google_drive' : 'microsoft_onedrive';
-        $redirectUri = route('backups.cloud.oauth.callback', ['provider' => $provider]);
+        $redirectUri = $this->redirectUri($provider);
         $tokenUrl = $provider === 'google_drive'
             ? 'https://oauth2.googleapis.com/token'
             : 'https://login.microsoftonline.com/'.rawurlencode(config('services.microsoft_onedrive.tenant', 'common')).'/oauth2/v2.0/token';
@@ -64,9 +68,12 @@ class BackupCloudOAuthController extends Controller
                 'client_id' => config("services.{$service}.client_id"),
                 'client_secret' => config("services.{$service}.client_secret"),
                 'code' => $request->query('code'), 'grant_type' => 'authorization_code', 'redirect_uri' => $redirectUri,
-                ...($provider === 'onedrive' ? ['scope' => 'offline_access Files.ReadWrite'] : []),
+                ...($provider === 'onedrive' ? ['scope' => 'offline_access User.Read Files.ReadWrite'] : []),
             ]);
-            if (! $tokenResponse->successful()) throw new \RuntimeException('Không đổi được OAuth code thành access token (HTTP '.$tokenResponse->status().').');
+            if (! $tokenResponse->successful()) {
+                $details = $tokenResponse->json('error_description') ?: $tokenResponse->json('error') ?: $tokenResponse->body();
+                throw new \RuntimeException('Không đổi được OAuth code thành access token (HTTP '.$tokenResponse->status().'): '.mb_substr((string) $details, 0, 500));
+            }
             $tokens = $tokenResponse->json();
             if (empty($tokens['access_token']) || empty($tokens['refresh_token'])) throw new \RuntimeException('Dịch vụ không trả refresh token. Hãy kiểm tra quyền offline access của OAuth app.');
 
@@ -87,5 +94,19 @@ class BackupCloudOAuthController extends Controller
             report($exception);
             return redirect()->route('backups.index')->with('error', 'Không thể kết nối '.$pending['name'].': '.$exception->getMessage());
         }
+    }
+
+    private function redirectUri(string $provider): string
+    {
+        $baseUrl = rtrim((string) config('services.backup_cloud.redirect_base_url', config('app.url')), '/');
+        return $baseUrl.route('backups.cloud.oauth.callback', ['provider' => $provider], false);
+    }
+
+    private function isSecureCallbackBase(): bool
+    {
+        $baseUrl = (string) config('services.backup_cloud.redirect_base_url', config('app.url'));
+        $host = strtolower((string) parse_url($baseUrl, PHP_URL_HOST));
+        return strtolower((string) parse_url($baseUrl, PHP_URL_SCHEME)) === 'https'
+            || in_array($host, ['localhost', '127.0.0.1', '[::1]'], true);
     }
 }

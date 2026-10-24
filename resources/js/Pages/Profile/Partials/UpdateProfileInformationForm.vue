@@ -4,6 +4,7 @@ import { Link, useForm, usePage } from '@inertiajs/vue3'
 import { Camera, Check, Save, Trash2, UserRound, MailWarning } from 'lucide-vue-next'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import { imageUrl } from '@/utils/imageUrl'
 
 const props = defineProps({
     mustVerifyEmail: { type: Boolean, default: false },
@@ -26,7 +27,7 @@ const form = useForm({
 const avatarUrl = computed(() => {
     if (avatarPreview.value) return avatarPreview.value
     if (form.remove_avatar || !user.value.avatar) return null
-    return `/storage/${user.value.avatar}`
+    return imageUrl(user.value.avatar)
 })
 
 const clearPreview = () => {

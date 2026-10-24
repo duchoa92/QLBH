@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class BackupCloudConnection extends Model
 {
+    public const SUPPORTED_PROVIDERS = ['google_drive', 'onedrive'];
+
     protected $fillable = ['name', 'provider', 'configuration', 'enabled', 'last_tested_at'];
 
     protected $hidden = ['configuration'];

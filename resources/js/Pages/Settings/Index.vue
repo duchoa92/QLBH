@@ -61,13 +61,14 @@ watch(() => props.active_section, (section) => {
 
 const openModal = (section) => {
     activeModal.value = section
-    const url = `/settings?section=${section}`
+    // Keep navigation inside the app's install path (for example /qlbh/public).
+    const url = `settings?section=${encodeURIComponent(section)}`
     router.get(url, {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section'] })
 }
 
 const closeModal = () => {
     activeModal.value = null
-    router.get('/settings', {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section'] })
+    router.get('settings', {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section'] })
 }
 
 const form = useForm({

@@ -1,5 +1,6 @@
 <script setup>
 import { formatCurrency, formatDateTime } from '@/utils/format'
+import { imageUrl } from '@/utils/imageUrl'
 import { computed, ref } from 'vue'
 import {
     AlertTriangle,
@@ -88,7 +89,7 @@ const hasExtraInfo = computed(() => {
 const extraInfoImageUrl = computed(() => {
     const imagePath = result.value?.imei?.extra_info?.image_path
 
-    return imagePath ? `/storage/${imagePath}` : null
+    return imageUrl(imagePath)
 })
 
 const lookup = async () => {

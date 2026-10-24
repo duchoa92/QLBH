@@ -78,7 +78,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/backups', [BackupController::class, 'index'])->middleware('permission:backups.manage')->name('backups.index');
     Route::post('/backups', [BackupController::class, 'store'])->middleware('permission:backups.manage')->name('backups.store');
     Route::post('/backups/clear-data', [BackupController::class, 'clearData'])->middleware('permission:backups.manage')->name('backups.clear-data');
-    Route::post('/backups/cloud-connections', [BackupController::class, 'storeCloudConnection'])->middleware('permission:backups.manage')->name('backups.cloud-connections.store');
     Route::get('/backups/cloud/oauth/{provider}/start', [BackupCloudOAuthController::class, 'start'])->middleware('permission:backups.manage')->name('backups.cloud.oauth.start');
     Route::get('/backups/cloud/oauth/{provider}/callback', [BackupCloudOAuthController::class, 'callback'])->middleware('permission:backups.manage')->name('backups.cloud.oauth.callback');
     Route::delete('/backups/cloud-connections/{connection}', [BackupController::class, 'destroyCloudConnection'])->middleware('permission:backups.manage')->name('backups.cloud-connections.destroy');

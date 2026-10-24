@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 
 import CustomerTabs from './Partials/CustomerTabs.vue'
+import { imageUrl } from '@/utils/imageUrl'
 
 const props = defineProps({
     customer: Object,
@@ -260,7 +261,7 @@ const activeTab = ref('Tổng quan')
                 >
 
                     <img
-                        :src="`/storage/${image.path}`"
+                        :src="imageUrl(image.path)"
                         class="rounded border"
                     />
 

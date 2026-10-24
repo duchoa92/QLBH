@@ -57,14 +57,26 @@ const scheduleForm = useForm({
 const restoreForm = useForm({ mode: 'merge', conflict_policy: 'keep_current', confirmed: false, operation_id: null })
 const uploadForm = useForm({ backup_file: null, operation_id: null })
 const clearDataForm = useForm({ confirmation: '', operation_id: null })
-const cloudForm = useForm({ provider: 's3', name: '', key: '', secret: '', region: 'us-east-1', bucket: '', endpoint: '', base_path: 'backups', path_style: false, url: '', username: '', token: '' })
+const cloudForm = useForm({ provider: 'google_drive', name: '' })
+const cloudOAuthCallbackUri = computed(() => props.cloud_oauth.redirect_uri?.[cloudForm.provider] || '')
+const cloudOAuthOriginMatches = computed(() => {
+    if (!cloudOAuthCallbackUri.value || typeof window === 'undefined') return false
+    try {
+        return new URL(cloudOAuthCallbackUri.value).origin === window.location.origin
+    } catch {
+        return false
+    }
+})
 const confirmBox = useConfirm()
 const selectedFileName = ref('')
 const restorePreview = ref(props.restore_preview)
 const showRestorePreview = ref(Boolean(restorePreview.value))
+const showRestoreTableDetails = ref(false)
+const restoreTableSort = ref({ key: 'name', direction: 'asc' })
 const lastPreviewKey = ref(restorePreview.value?.backup || null)
 const dismissedPreviewKey = ref(null)
-const showCloudStorage = ref(false)
+const showCloudStorage = ref(true)
+const showCloudGuide = ref(false)
 const showClearDataDialog = ref(false)
 const clearDataPhrase = ref('')
 const operationProgress = ref({ active: false, percent: 0, message: '', state: 'running', steps: [], report: null })
@@ -93,6 +105,27 @@ const scheduleDirty = computed(() =>
     || Number(scheduleForm.weekday) !== Number(props.schedule.weekday ?? 1)
     || Number(scheduleForm.monthday) !== Number(props.schedule.monthday ?? 1)
 )
+const sortedRestoreTables = computed(() => {
+    const rows = Object.entries(restorePreview.value?.tables || {}).map(([name, table]) => ({ name, ...table }))
+    const { key, direction } = restoreTableSort.value
+    const multiplier = direction === 'asc' ? 1 : -1
+    return rows.sort((a, b) => {
+        const left = key === 'difference' ? Number(a.backup_rows || 0) - Number(a.current_rows || 0) : key === 'name' ? a.name : a[key]
+        const right = key === 'difference' ? Number(b.backup_rows || 0) - Number(b.current_rows || 0) : key === 'name' ? b.name : b[key]
+        if (left == null && right == null) return 0
+        if (left == null) return 1
+        if (right == null) return -1
+        if (typeof left === 'number' && typeof right === 'number') return (left - right) * multiplier
+        if (typeof left === 'boolean' && typeof right === 'boolean') return (Number(left) - Number(right)) * multiplier
+        return String(left).localeCompare(String(right), 'vi', { numeric: true }) * multiplier
+    })
+})
+const sortRestoreTables = (key) => {
+    restoreTableSort.value = {
+        key,
+        direction: restoreTableSort.value.key === key && restoreTableSort.value.direction === 'asc' ? 'desc' : 'asc',
+    }
+}
 
 watch(backupMonth, () => { backupPage.value = 1 })
 watch(() => props.backups, (backups) => {
@@ -132,7 +165,7 @@ const startProgress = (title = 'Đang xử lý sao lưu') => {
     clearInterval(progressTimer)
     progressTimer = setInterval(async () => {
         try {
-            const response = await fetch(`/backups/progress/${operationId}`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+            const response = await fetch(route('backups.progress', { operation: operationId }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
             if (!response.ok) return
             const result = await response.json()
             if (activeOperation !== operationId) return
@@ -154,7 +187,7 @@ const dismissProgress = () => {
     operationProgress.value = { active: false, percent: 0, message: '', state: 'running', steps: [], report: null }
 }
 
-const backupPath = (name) => `/backups/${encodeURIComponent(name)}`
+const backupRoute = (action, name) => route(`backups.${action}`, { backup: name })
 
 const runBackup = () => {
     confirmBox.show({
@@ -162,7 +195,7 @@ const runBackup = () => {
         message: 'Tạo bản sao lưu cơ sở dữ liệu và các tệp người dùng đã tải lên?',
         confirmText: 'Sao lưu',
         onConfirm: () => {
-            router.post('/backups', { operation_id: startProgress('Đang sao lưu') }, { preserveScroll: true })
+            router.post(route('backups.store'), { operation_id: startProgress('Đang sao lưu') }, { preserveScroll: true })
         },
     })
 }
@@ -173,7 +206,7 @@ const removeBackup = (backup) => {
         message: `Xóa tệp sao lưu ${backup.name}?`,
         confirmText: 'Xóa',
         onConfirm: () => {
-            router.delete(backupPath(backup.name), { data: { operation_id: startProgress('Đang xóa bản sao lưu') }, preserveScroll: true })
+            router.delete(backupRoute('destroy', backup.name), { data: { operation_id: startProgress('Đang xóa bản sao lưu') }, preserveScroll: true })
         },
     })
 }
@@ -199,7 +232,7 @@ const removeSelectedBackups = () => {
         message: `Xóa ${names.length} tệp sao lưu đã chọn? Thao tác này không thể hoàn tác.`,
         confirmText: `Xóa ${names.length} tệp`,
         onConfirm: () => {
-            router.delete('/backups/bulk', {
+            router.delete(route('backups.bulk-destroy'), {
                 data: { names, operation_id: startProgress('Đang xóa các bản sao lưu') },
                 preserveScroll: true,
                 onSuccess: () => { selectedBackupNames.value = [] },
@@ -208,11 +241,13 @@ const removeSelectedBackups = () => {
     })
 }
 
-const saveSchedule = () => scheduleForm.put('/backups/schedule', { preserveScroll: true })
+const saveSchedule = () => scheduleForm.put(route('backups.schedule'), { preserveScroll: true })
 const openRestorePreview = (preview, force = false) => {
     if (!preview?.summary || !preview?.tables) return
     const key = preview.backup || JSON.stringify(preview.summary)
     restorePreview.value = preview
+    showRestoreTableDetails.value = false
+    restoreTableSort.value = { key: 'name', direction: 'asc' }
     if (force || key !== lastPreviewKey.value) {
         lastPreviewKey.value = key
         dismissedPreviewKey.value = null
@@ -242,30 +277,32 @@ const applyPreviewFromPage = (page) => {
 
 watch(() => props.restore_preview, openRestorePreview, { immediate: true })
 
-const inspectBackup = (backup) => router.post(`${backupPath(backup.name)}/inspect`, { operation_id: startProgress('Đang kiểm tra bản sao lưu') }, {
+const inspectBackup = (backup) => router.post(backupRoute('inspect', backup.name), { operation_id: startProgress('Đang kiểm tra bản sao lưu') }, {
     preserveScroll: true,
     onSuccess: applyPreviewFromPage,
 })
-const inspectCloudBackup = (connection, backup) => router.post(`/backups/cloud/${connection.id}/inspect`, { name: backup.name, operation_id: startProgress('Đang tải và kiểm tra bản sao lưu') }, {
+const inspectCloudBackup = (connection, backup) => router.post(route('backups.cloud.inspect', { connection: connection.id }), { name: backup.name, operation_id: startProgress('Đang tải và kiểm tra bản sao lưu') }, {
     preserveScroll: true,
     onSuccess: applyPreviewFromPage,
 })
-const saveCloudConnection = () => {
-    if (['google_drive', 'onedrive'].includes(cloudForm.provider)) {
-        router.get(`/backups/cloud/oauth/${cloudForm.provider}/start`, { name: cloudForm.name }, { preserveScroll: true })
+const saveCloudConnection = (event) => {
+    const inputName = event?.currentTarget?.querySelector('[name="name"]')?.value
+    const connectionName = String(inputName ?? cloudForm.name ?? '').trim()
+    if (!['google_drive', 'onedrive'].includes(cloudForm.provider)) return
+    if (!connectionName) {
+        cloudForm.setError('name', 'Vui lòng nhập tên kết nối.')
+        event?.currentTarget?.querySelector('[name="name"]')?.focus()
         return
     }
-    cloudForm.post('/backups/cloud-connections', {
-        preserveScroll: true,
-        onSuccess: () => { cloudForm.key = ''; cloudForm.secret = ''; cloudForm.token = '' },
-    })
+    cloudForm.clearErrors()
+    router.get(route('backups.cloud.oauth.start', { provider: cloudForm.provider }), { name: connectionName }, { preserveScroll: true })
 }
-const toggleCloudConnection = (connection) => router.patch(`/backups/cloud-connections/${connection.id}/toggle`, {}, { preserveScroll: true })
+const toggleCloudConnection = (connection) => router.patch(route('backups.cloud-connections.toggle', { connection: connection.id }), {}, { preserveScroll: true })
 const removeCloudConnection = (connection) => confirmBox.show({
     title: 'Xóa kết nối đám mây',
     message: `Xóa kết nối “${connection.name}”? Các bản sao lưu đã có trên dịch vụ đám mây sẽ được giữ nguyên.`,
     confirmText: 'Xóa kết nối',
-    onConfirm: () => router.delete(`/backups/cloud-connections/${connection.id}`, { preserveScroll: true }),
+    onConfirm: () => router.delete(route('backups.cloud-connections.destroy', { connection: connection.id }), { preserveScroll: true }),
 })
 
 const selectBackupFile = (event) => {
@@ -276,7 +313,7 @@ const selectBackupFile = (event) => {
 const inspectUploadedFile = () => {
     if (!uploadForm.backup_file) return
     uploadForm.operation_id = startProgress('Đang kiểm tra bản sao lưu tải lên')
-    uploadForm.post('/backups/import', {
+    uploadForm.post(route('backups.import'), {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: (page) => {
@@ -304,7 +341,7 @@ const restoreBackup = () => {
             restoreForm.confirmed = true
             restoreForm.operation_id = startProgress('Đang khôi phục')
             closeRestorePreview()
-            restoreForm.post(`${backupPath(preview.backup)}/restore`, {
+            restoreForm.post(backupRoute('restore', preview.backup), {
                 preserveScroll: true,
                 onFinish: () => { restoreForm.confirmed = false },
             })
@@ -316,7 +353,7 @@ const clearSystemData = () => {
     if (clearDataPhrase.value !== 'XOA DU LIEU') return
     clearDataForm.confirmation = 'XOA DU LIEU'
     clearDataForm.operation_id = startProgress('Đang xóa dữ liệu')
-    clearDataForm.post('/backups/clear-data', {
+    clearDataForm.post(route('backups.clear-data'), {
         preserveScroll: true,
         onFinish: () => {
             clearDataForm.confirmation = ''
@@ -365,18 +402,19 @@ const conflictPolicyOptions = [
 <template>
     <div class="space-y-3">
         <Teleport to="body">
-            <div v-if="progressVisible" class="fixed inset-0 z-[10020] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-live="polite" aria-label="Tiến trình xử lý sao lưu">
-                <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
-                    <div class="mb-3 flex items-start justify-between gap-3">
+            <div v-if="progressVisible" class="fixed inset-0 z-[10020] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-2 backdrop-blur-[2px] sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-live="polite" aria-label="Tiến trình xử lý sao lưu">
+                <div class="flex max-h-[calc(100dvh-1rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
+                    <div class="mb-3 flex shrink-0 items-start justify-between gap-3">
                         <div>
-                            <p class="text-sm font-bold text-slate-800">{{ operationProgress.active ? operationProgress.title : operationProgress.state === 'failed' ? 'Thao tác thất bại' : 'Đã hoàn tất' }}</p>
+                            <p class="text-sm font-bold text-slate-800">{{ operationProgress.active ? operationProgress.title : operationProgress.state === 'failed' ? 'Thao tác thất bại' : operationProgress.state === 'partial' ? 'Hoàn tất một phần' : 'Đã hoàn tất' }}</p>
                             <p class="mt-1 text-sm text-slate-600">{{ operationProgress.message || 'Đang xử lý bản sao lưu…' }}</p>
                         </div>
                         <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-sm font-bold tabular-nums text-emerald-700">{{ Math.round(progressPercent) }}%</span>
                     </div>
-                    <div class="h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100" aria-label="Tiến trình xử lý">
+                    <div class="h-3 shrink-0 overflow-hidden rounded-full bg-slate-100" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100" aria-label="Tiến trình xử lý">
                         <div class="h-full rounded-full bg-emerald-500 transition-[width] duration-300" :style="{ width: `${Math.max(3, progressPercent)}%` }"></div>
                     </div>
+                    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
                     <div v-if="operationProgress.steps?.length" class="mt-4 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-3">
                         <div v-for="(step, index) in [...operationProgress.steps].reverse().filter((step) => step.message !== operationProgress.message)" :key="`${index}-${step.message}`" class="flex gap-2 text-xs" :class="index === 0 ? 'font-semibold text-slate-800' : 'text-slate-500'">
                             <span class="w-10 shrink-0 tabular-nums text-slate-400">{{ step.percent }}%</span>
@@ -384,22 +422,26 @@ const conflictPolicyOptions = [
                             <span class="ml-auto shrink-0 text-[10px] text-slate-400">{{ step.at }}</span>
                         </div>
                     </div>
-                    <div v-if="operationProgress.report" class="mt-4 rounded-xl border p-3" :class="operationProgress.state === 'failed' ? 'border-red-200 bg-red-50/70' : 'border-emerald-200 bg-emerald-50/70'">
+                    <div v-if="operationProgress.report" class="mt-4 rounded-xl border p-3" :class="operationProgress.state === 'failed' ? 'border-red-200 bg-red-50/70' : operationProgress.state === 'partial' ? 'border-amber-200 bg-amber-50/70' : 'border-emerald-200 bg-emerald-50/70'">
                         <div class="flex items-center justify-between gap-2">
-                            <p class="text-sm font-bold text-emerald-900">{{ operationProgress.report.title }}</p>
-                            <button type="button" class="shrink-0 text-xs font-bold text-emerald-800 underline underline-offset-2" @click="showOperationReportDetails = !showOperationReportDetails">{{ showOperationReportDetails ? 'Ẩn chi tiết' : 'Xem chi tiết' }}</button>
+                            <p class="text-sm font-bold" :class="operationProgress.state === 'failed' ? 'text-red-900' : operationProgress.state === 'partial' ? 'text-amber-900' : 'text-emerald-900'">{{ operationProgress.report.title }}</p>
+                            <button type="button" class="shrink-0 text-xs font-bold underline underline-offset-2" :class="operationProgress.state === 'failed' ? 'text-red-800' : operationProgress.state === 'partial' ? 'text-amber-800' : 'text-emerald-800'" @click="showOperationReportDetails = !showOperationReportDetails">{{ showOperationReportDetails ? 'Ẩn chi tiết' : 'Xem chi tiết' }}</button>
                         </div>
-                        <p v-if="operationProgress.report.database_tables !== undefined" class="mt-1 text-xs text-emerald-900">{{ operationProgress.report.database_tables }} bảng · {{ Number(operationProgress.report.database_rows || 0).toLocaleString() }} dòng · {{ operationProgress.report.uploaded_files }} tệp đính kèm</p>
+                        <p v-if="operationProgress.report.database_tables !== undefined" class="mt-1 text-xs" :class="operationProgress.state === 'partial' ? 'text-amber-900' : 'text-emerald-900'">{{ operationProgress.report.database_tables }} bảng · {{ Number(operationProgress.report.database_rows || 0).toLocaleString() }} dòng · {{ operationProgress.report.uploaded_files }} tệp đính kèm <template v-if="operationProgress.report.file">· đã lưu cục bộ</template></p>
                         <p v-else-if="operationProgress.report.tables_cleared !== undefined" class="mt-1 text-xs text-emerald-900">Đã làm sạch {{ operationProgress.report.tables_cleared }} bảng, {{ Number(operationProgress.report.rows_cleared || 0).toLocaleString() }} dòng và {{ operationProgress.report.files_cleared }} tệp.</p>
                         <p v-else-if="operationProgress.report.mode" class="mt-1 text-xs text-emerald-900">{{ operationProgress.report.mode }} · {{ operationProgress.report.tables }} bảng · {{ Number(operationProgress.report.backup_rows || 0).toLocaleString() }} dòng trong bản sao lưu</p>
                         <dl v-if="showOperationReportDetails" class="mt-2 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
                             <template v-for="(value, key) in operationProgress.report" :key="key">
-                                <template v-if="key !== 'title' && value !== null && !['table_details', 'table_results', 'files_report', 'uploaded_file_details', 'backup_file_details'].includes(key)">
+                                <template v-if="key !== 'title' && value !== null && !['table_details', 'table_results', 'files_report', 'uploaded_file_details', 'backup_file_details', 'cloud_failures'].includes(key)">
                                     <dt class="font-semibold text-emerald-800">{{ ({ mode: 'Phương thức', conflict_policy: 'Khi trùng', backup: 'Bản sao lưu', recovery_backup: 'Điểm phục hồi', rollback_status: 'Phục hồi khi lỗi', tables: 'Số bảng trong backup', backup_rows: 'Số dòng trong backup', current_rows_before: 'Số dòng hiện tại trước khi chạy', restored_rows: 'Số dòng sau khôi phục', database_tables: 'Số bảng', database_rows: 'Số dòng', uploaded_files: 'Tệp đính kèm', backup_files: 'Tệp trong bản sao lưu', backup_files_bytes: 'Dung lượng tệp trong backup', backup_files_omitted: 'Tệp chưa liệt kê do giới hạn', uploaded_file_details_omitted: 'Tệp backup chưa liệt kê', uploaded_bytes: 'Dung lượng tệp', files_by_disk: 'Phân loại tệp', database: 'Cơ sở dữ liệu', files: 'Tệp', file: 'Tệp backup', size: 'Dung lượng backup', integrity: 'Kiểm tra', cloud_destinations: 'Đích đám mây', error: 'Lỗi', tables_cleared: 'Bảng đã làm sạch', rows_cleared: 'Bản ghi đã xóa', files_cleared: 'Tệp đã xóa', preserved: 'Được giữ lại', tables_missing_from_backup: 'Bảng hiện tại thiếu trong backup', tables_missing_from_current: 'Bảng backup không có hiện tại' })[key] || key }}</dt>
                                     <dd class="break-all text-emerald-950">{{ Array.isArray(value) ? (value.length ? value.join(', ') : 'Không có') : typeof value === 'object' ? Object.entries(value).map(([name, count]) => `${name}: ${count}`).join(' · ') : key === 'size' || key === 'uploaded_bytes' ? formatSize(value) : value }}</dd>
                                 </template>
                             </template>
                         </dl>
+                        <div v-if="showOperationReportDetails && operationProgress.report.cloud_failures?.length" class="mt-3 space-y-1 rounded-lg border border-amber-200 bg-white p-2 text-xs text-amber-950">
+                            <p class="font-bold">Đích đám mây chưa nhận được bản sao lưu</p>
+                            <p v-for="failure in operationProgress.report.cloud_failures" :key="`${failure.provider}-${failure.name}`"><strong>{{ failure.name }}</strong>: {{ failure.error }}</p>
+                        </div>
                         <div v-if="showOperationReportDetails && operationProgress.report.table_details" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
                             <p class="mb-1 font-bold text-emerald-900">Dữ liệu trong backup theo bảng</p>
                             <div v-for="(rows, table) in operationProgress.report.table_details" :key="table" class="flex justify-between gap-3 py-0.5 text-emerald-900"><span>{{ table }}</span><span class="tabular-nums">{{ Number(rows).toLocaleString() }} dòng</span></div>
@@ -420,7 +462,8 @@ const conflictPolicyOptions = [
                         </div>
                         <div v-if="showOperationReportDetails && operationProgress.report.files_report" class="mt-2 text-xs text-emerald-900">Tệp: thêm {{ operationProgress.report.files_report.added }}, ghi đè {{ operationProgress.report.files_report.overwritten }}, bỏ qua {{ operationProgress.report.files_report.skipped }}, xóa tệp cũ {{ operationProgress.report.files_report.deleted }}.</div>
                     </div>
-                    <div v-if="!operationProgress.active" class="mt-5 flex justify-end">
+                    </div>
+                    <div v-if="!operationProgress.active" class="mt-3 flex shrink-0 justify-end border-t border-slate-100 pt-3">
                         <button type="button" class="h-10 min-w-24 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700" @click="dismissProgress">OK</button>
                     </div>
                 </div>
@@ -528,72 +571,47 @@ const conflictPolicyOptions = [
             </button>
 
             <div v-if="showCloudStorage" id="cloud-backup-storage" class="mt-4 space-y-4 border-t border-slate-100 pt-4">
-            <div class="text-xs text-slate-500">Kết nối S3/R2/Wasabi, WebDAV/Nextcloud, Google Drive hoặc OneDrive. Bản sao lưu mới sẽ được tải lên mọi kết nối đang bật.</div>
+            <div class="text-xs text-slate-500">Kết nối Google Drive hoặc OneDrive. Bản sao lưu mới sẽ được tải lên mọi kết nối đang bật.</div>
             <form class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3" @submit.prevent="saveCloudConnection">
                 <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <label class="text-xs font-semibold text-slate-600">Loại kho
                         <select v-model="cloudForm.provider" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                            <option value="s3">S3 tương thích (AWS / R2 / Wasabi)</option>
-                            <option value="webdav">WebDAV (Nextcloud / ownCloud)</option>
                             <option value="google_drive">Google Drive</option>
                             <option value="onedrive">OneDrive</option>
                         </select>
                     </label>
                     <label class="text-xs font-semibold text-slate-600">Tên kết nối
-                        <input v-model="cloudForm.name" required maxlength="100" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="Ví dụ: Kho dự phòng R2">
-                    </label>
-                    <template v-if="cloudForm.provider === 's3'">
-                        <label class="text-xs font-semibold text-slate-600">Access key
-                            <input v-model="cloudForm.key" required autocomplete="off" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                        </label>
-                        <label class="text-xs font-semibold text-slate-600">Secret key
-                            <input v-model="cloudForm.secret" required type="password" autocomplete="new-password" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                        </label>
-                        <label class="text-xs font-semibold text-slate-600">Bucket
-                            <input v-model="cloudForm.bucket" required class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                        </label>
-                        <label class="text-xs font-semibold text-slate-600">Region
-                            <input v-model="cloudForm.region" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="us-east-1 (R2: auto)">
-                        </label>
-                        <label class="text-xs font-semibold text-slate-600">Endpoint tùy chọn
-                            <input v-model="cloudForm.endpoint" type="url" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="https://… (R2 / S3 compatible)">
-                        </label>
-                    </template>
-                    <template v-else-if="cloudForm.provider === 'webdav'">
-                        <label class="text-xs font-semibold text-slate-600 sm:col-span-2">WebDAV URL
-                            <input v-model="cloudForm.url" type="url" required class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="https://cloud.example.com/remote.php/dav/files/user">
-                        </label>
-                        <label class="text-xs font-semibold text-slate-600">Tên đăng nhập
-                            <input v-model="cloudForm.username" required autocomplete="username" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                        </label>
-                        <label class="text-xs font-semibold text-slate-600">Mật khẩu ứng dụng / token
-                            <input v-model="cloudForm.token" required type="password" autocomplete="new-password" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                        </label>
-                    </template>
-                    <template v-else>
-                        <div class="space-y-1 rounded-lg border border-sky-100 bg-sky-50/70 p-3 text-xs text-slate-600 sm:col-span-2 lg:col-span-4">
-                            <p class="font-semibold text-slate-800">Kết nối an toàn bằng OAuth</p>
-                            <p>Nhập OAuth Client ID/Secret vào cấu hình máy chủ rồi khai báo URI chuyển hướng bên dưới trong ứng dụng Google Cloud hoặc Microsoft Entra. Secret không được nhập hay gửi qua trình duyệt.</p>
-                            <p v-if="cloudForm.provider === 'google_drive'" class="break-all">GOOGLE_DRIVE_CLIENT_ID / GOOGLE_DRIVE_CLIENT_SECRET · Redirect URI: <code>{{ cloud_oauth.google_redirect_uri }}</code></p>
-                            <p v-else class="break-all">MICROSOFT_ONEDRIVE_CLIENT_ID / MICROSOFT_ONEDRIVE_CLIENT_SECRET · Redirect URI: <code>{{ cloud_oauth.onedrive_redirect_uri }}</code></p>
-                            <p v-if="cloudForm.provider === 'onedrive'">Quyền delegated yêu cầu: Files.ReadWrite và offline_access.</p>
-                            <p v-if="!cloud_oauth[cloudForm.provider]" class="font-semibold text-amber-700">Chưa cấu hình OAuth app trên máy chủ.</p>
-                        </div>
-                    </template>
-                    <label v-if="['s3', 'webdav'].includes(cloudForm.provider)" class="text-xs font-semibold text-slate-600">Thư mục lưu
-                        <input v-model="cloudForm.base_path" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="backups">
+                        <input v-model="cloudForm.name" name="name" required maxlength="100" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="Ví dụ: Kho dự phòng R2">
                     </label>
                 </div>
-                <label v-if="cloudForm.provider === 's3'" class="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                    <input v-model="cloudForm.path_style" type="checkbox" class="rounded border-slate-300 text-sky-600 focus:ring-sky-500"> Dùng path-style endpoint (thường dùng với MinIO)
-                </label>
-                <p v-if="cloudForm.errors.provider || cloudForm.errors.name || cloudForm.errors.key || cloudForm.errors.secret || cloudForm.errors.bucket || cloudForm.errors.endpoint || cloudForm.errors.url || cloudForm.errors.username || cloudForm.errors.token" class="text-xs font-medium text-red-600">
-                    {{ cloudForm.errors.provider || cloudForm.errors.name || cloudForm.errors.key || cloudForm.errors.secret || cloudForm.errors.bucket || cloudForm.errors.endpoint || cloudForm.errors.url || cloudForm.errors.username || cloudForm.errors.token }}
+                <p v-if="cloudForm.errors.name" class="text-xs font-medium text-red-600">
+                    {{ cloudForm.errors.name }}
                 </p>
-                <div class="flex justify-end">
-                    <ActionButton type="submit" :disabled="cloudForm.processing || (['google_drive', 'onedrive'].includes(cloudForm.provider) && !cloud_oauth[cloudForm.provider])" class="h-10 !bg-sky-700 px-4 text-xs font-semibold !text-white hover:!bg-sky-800">
+                <div v-if="!cloud_oauth[cloudForm.provider] || !cloud_oauth.redirect_is_secure || (cloud_oauth.redirect_is_secure && !cloudOAuthOriginMatches)" class="space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
+                    <p v-if="!cloud_oauth[cloudForm.provider]" class="font-semibold">Chưa cấu hình OAuth cho {{ cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }} trên máy chủ.</p>
+                    <p v-if="!cloud_oauth.redirect_is_secure" class="font-semibold">Địa chỉ chuyển hướng chưa an toàn. Hãy cấu hình HTTPS công khai hoặc dùng localhost.</p>
+                    <p v-else-if="!cloudOAuthOriginMatches" class="font-semibold">Địa chỉ đang mở không khớp với địa chỉ OAuth. Hãy mở hệ thống bằng đúng địa chỉ gốc của callback.</p>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <button type="button" class="text-xs font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900" :aria-expanded="showCloudGuide" @click="showCloudGuide = !showCloudGuide">{{ showCloudGuide ? 'Ẩn hướng dẫn' : 'Hướng dẫn kết nối' }}</button>
+                    <ActionButton type="submit" :disabled="cloudForm.processing || !cloud_oauth[cloudForm.provider] || !cloud_oauth.redirect_is_secure || !cloudOAuthOriginMatches" class="h-10 !bg-sky-700 px-4 text-xs font-semibold !text-white hover:!bg-sky-800 disabled:!opacity-70">
                         <Link2 :size="15" /> {{ cloudForm.processing ? 'Đang kiểm tra kết nối…' : ['google_drive', 'onedrive'].includes(cloudForm.provider) ? `Kết nối ${cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive'}` : 'Kiểm tra & kết nối' }}
                     </ActionButton>
+                </div>
+                <div v-if="showCloudGuide" class="space-y-2 rounded-lg border border-sky-100 bg-sky-50/70 p-3 text-xs text-slate-700">
+                    <p class="font-bold text-slate-900">Hướng dẫn kết nối {{ cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }}</p>
+                    <ol class="list-inside list-decimal space-y-1.5">
+                        <li>Tạo ứng dụng OAuth trong Google Cloud Console hoặc Microsoft Entra.</li>
+                        <li>Thêm chính xác địa chỉ chuyển hướng này vào ứng dụng:
+                            <code class="mt-1 block break-all rounded bg-white px-2 py-1 text-[11px]">{{ cloud_oauth.redirect_uri?.[cloudForm.provider] || 'Chưa tạo được địa chỉ chuyển hướng' }}</code>
+                        </li>
+                        <li>Đặt Client ID và Client Secret vào cấu hình máy chủ:
+                            <strong class="block">{{ cloudForm.provider === 'google_drive' ? 'GOOGLE_DRIVE_CLIENT_ID và GOOGLE_DRIVE_CLIENT_SECRET' : 'MICROSOFT_ONEDRIVE_CLIENT_ID và MICROSOFT_ONEDRIVE_CLIENT_SECRET' }}</strong>
+                            Sau đó chạy <code>php artisan config:clear</code>.
+                        </li>
+                        <li>Mở hệ thống bằng đúng địa chỉ gốc ở trên, nhập tên kết nối, nhấn <strong>Kết nối</strong> và cấp quyền.</li>
+                    </ol>
+                    <p v-if="cloudForm.provider === 'onedrive'" class="text-slate-600">OneDrive cần quyền Files.ReadWrite, User.Read và offline_access.</p>
                 </div>
             </form>
 
@@ -601,7 +619,7 @@ const conflictPolicyOptions = [
                 <div v-for="connection in cloud_connections" :key="connection.id" class="overflow-hidden rounded-xl border border-slate-200">
                     <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3">
                         <div>
-                            <div class="flex items-center gap-2 text-sm font-bold text-slate-800"><Cloud :size="15" class="text-sky-700" />{{ connection.name }} <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">{{ connection.provider }}</span></div>
+                            <div class="flex items-center gap-2 text-sm font-bold text-slate-800"><Cloud :size="15" class="text-sky-700" />{{ connection.name }} <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{{ connection.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }}</span></div>
                             <p class="mt-1 text-[11px]" :class="connection.error ? 'text-red-600' : 'text-slate-500'">{{ connection.error || (connection.enabled ? 'Đang đồng bộ bản sao lưu mới' : 'Đã tạm dừng đồng bộ') }}</p>
                         </div>
                         <div class="flex items-center gap-2">
@@ -681,7 +699,7 @@ const conflictPolicyOptions = [
                         <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors" @click="inspectBackup(backup)">
                             <ScanSearch :size="14" /> Kiểm tra & Khôi phục
                         </button>
-                        <a :href="`${backupPath(backup.name)}/download`" class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+                        <a :href="backupRoute('download', backup.name)" class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
                             <Download :size="14" /> Tải về
                         </a>
                         <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50/50 px-2.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors" @click="removeBackup(backup)">
@@ -820,41 +838,6 @@ const conflictPolicyOptions = [
                         </div>
                     </div>
 
-                    <!-- Bảng chi tiết từng Table -->
-                    <div class="overflow-x-auto rounded-xl border border-slate-200">
-                        <table class="w-full text-left text-xs">
-                            <thead class="bg-slate-50 uppercase text-[10px] font-bold tracking-wider text-slate-500 border-b border-slate-200">
-                                <tr>
-                                    <th class="py-2.5 px-3">Tên Bảng</th>
-                                    <th class="py-2.5 px-3">Dòng (Sao lưu)</th>
-                                    <th class="py-2.5 px-3">Dòng (Hiện tại)</th>
-                                    <th class="py-2.5 px-3">Lệch</th>
-                                    <th class="py-2.5 px-3">Cấu trúc Schema</th>
-                                    <th class="py-2.5 px-3">Khớp dữ liệu</th>
-                                    <th class="py-2.5 px-3">Khóa chính trùng</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 font-medium">
-                                <tr v-for="(table, name) in restorePreview.tables" :key="name" class="hover:bg-slate-50/50">
-                                    <td class="py-2 px-3 font-semibold text-slate-800">{{ name }}</td>
-                                    <td class="py-2 px-3 text-slate-600">{{ table.backup_rows }}</td>
-                                    <td class="py-2 px-3 text-slate-600">{{ table.current_rows }}</td>
-                                    <td class="py-2 px-3" :class="table.backup_rows !== table.current_rows ? 'font-bold text-amber-600' : 'text-slate-400'">
-                                        {{ table.backup_rows - table.current_rows }}
-                                    </td>
-                                    <td class="py-2 px-3" :class="table.schema_compatible ? 'text-emerald-600 font-semibold' : 'font-bold text-amber-600'">
-                                        {{ table.schema_compatible ? 'Tương thích' : 'Không tương thích' }}
-                                        <span v-if="!table.schema_compatible && (table.columns_missing_from_current?.length || table.columns_missing_from_backup?.length)" class="block max-w-56 whitespace-normal text-[10px] font-normal text-amber-700">{{ table.columns_missing_from_current?.length ? `Thiếu ở hiện tại: ${table.columns_missing_from_current.join(', ')}` : '' }}{{ table.columns_missing_from_backup?.length ? ` · Thiếu ở backup: ${table.columns_missing_from_backup.join(', ')}` : '' }}</span>
-                                    </td>
-                                    <td class="py-2 px-3" :class="table.data_matches ? 'text-emerald-600 font-semibold' : 'font-bold text-amber-600'">
-                                        {{ table.data_matches ? 'Trùng khớp' : 'Có khác biệt' }}
-                                    </td>
-                                    <td class="py-2 px-3" :class="table.primary_key_conflicts > 0 ? 'font-bold text-amber-700' : 'text-slate-500'">{{ table.primary_key_conflicts ?? 'Không xác định' }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
                     <!-- Cấu hình khôi phục -->
                     <div class="grid gap-3 sm:grid-cols-2 pt-2 border-t border-slate-100">
                         <!-- Mode -->
@@ -878,27 +861,62 @@ const conflictPolicyOptions = [
                     <!-- Cảnh báo & Lưu ý -->
                     <div class="space-y-2 text-xs">
                         <p v-if="restoreForm.mode === 'merge'" class="text-slate-500">
-                            * Chế độ Gộp thêm dòng chưa tồn tại và giữ các bảng hiện tại không có trong backup; dòng trùng khóa chính/duy nhất xử lý theo lựa chọn ở trên.
+                            * Gộp: thêm dòng mới, giữ bảng chỉ có ở hệ thống; dòng trùng xử lý theo lựa chọn bên trên.
                         </p>
                         <p v-else class="rounded-xl bg-red-50 p-2.5 text-red-800 border border-red-200">
-                            ⚠️ Thay toàn bộ sẽ xóa các bảng hiện tại không có trong backup và dùng dữ liệu từ backup. Hệ thống đã tạo backup cứu hộ trước khi thực hiện.
+                            ⚠️ Thay toàn bộ dữ liệu bằng backup; bảng không có trong backup sẽ bị xóa. Hệ thống tạo backup cứu hộ trước.
                         </p>
                         <p v-if="restorePreview.summary.mismatched_data_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            ⚠️ Nội dung dữ liệu khác nhau ở {{ restorePreview.summary.mismatched_data_tables }} bảng. Chọn gộp để thêm/giải quyết dòng trùng theo chính sách; số thêm, ghi đè và giữ nguyên sẽ có trong báo cáo cuối.
+                            ⚠️ {{ restorePreview.summary.mismatched_data_tables }} bảng có dữ liệu khác. Kết quả thêm, ghi đè và giữ nguyên sẽ có trong báo cáo.
                         </p>
                         <p v-if="restorePreview.summary.primary_key_conflicts > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            Có {{ restorePreview.summary.primary_key_conflicts }} dòng trùng khóa chính. Nếu gộp, chọn giữ dòng hiện tại hoặc ghi đè bằng bản sao lưu; chi tiết kết quả từng bảng sẽ có sau khi chạy.
+                            Có {{ restorePreview.summary.primary_key_conflicts }} dòng trùng khóa. Chọn giữ dữ liệu hiện tại hoặc ghi đè từ backup.
                         </p>
                         <p v-else-if="restorePreview.summary.primary_key_conflicts === null" class="rounded-xl bg-slate-50 p-2.5 text-slate-700 border border-slate-200">
-                            Một số bảng không thể đếm trước số trùng khóa chính bằng cấu trúc hiện có. Hệ thống vẫn áp dụng chính sách trùng đã chọn và ghi số thêm/ghi đè/giữ nguyên thực tế vào báo cáo.
+                            Không thể đếm trước số dòng trùng ở một số bảng; kết quả thực tế sẽ có trong báo cáo.
                         </p>
                         <p v-if="!restorePreview.summary.schema_compatible || restorePreview.summary.new_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            ⚠️ Cấu trúc bảng khác nhau hoặc có bảng mới. Chế độ Gộp bị vô hiệu hóa để đảm bảo an toàn dữ liệu; vui lòng chọn "Thay toàn bộ" hoặc Hủy.
+                            ⚠️ Cấu trúc không khớp hoặc có bảng mới; chỉ cho phép Thay toàn bộ.
                         </p>
                         <p v-if="restorePreview.has_files" class="text-slate-500">
-                            * Bản sao lưu bao gồm tệp đính kèm. Khôi phục sẽ áp dụng quy tắc tương ứng đối với thư mục tệp tin public/private.
+                            * Backup có {{ restorePreview.files_count }} tệp đính kèm; quy tắc tệp sẽ áp dụng khi khôi phục.
                         </p>
                     </div>
+
+                    <section class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <button type="button" class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50" :aria-expanded="showRestoreTableDetails" @click="showRestoreTableDetails = !showRestoreTableDetails">
+                            <span>
+                                <span class="block text-xs font-bold text-slate-800">{{ showRestoreTableDetails ? 'Ẩn bảng đối chiếu' : 'Xem chi tiết bảng đối chiếu' }}</span>
+                                <span class="mt-0.5 block text-[11px] text-slate-500">{{ Object.keys(restorePreview.tables || {}).length }} bảng · Nhấn tiêu đề cột để sắp xếp</span>
+                            </span>
+                            <ChevronDown :size="16" class="shrink-0 text-slate-500 transition-transform" :class="showRestoreTableDetails && 'rotate-180'" />
+                        </button>
+                        <div v-if="showRestoreTableDetails" class="max-h-64 overflow-auto border-t border-slate-200">
+                            <table class="w-full min-w-[680px] text-left text-[11px]">
+                                <thead class="sticky top-0 bg-slate-50 uppercase text-[9px] font-bold tracking-wide text-slate-500">
+                                    <tr>
+                                        <th v-for="column in [{ key: 'name', label: 'Bảng' }, { key: 'backup_rows', label: 'Dòng backup' }, { key: 'current_rows', label: 'Dòng hiện tại' }, { key: 'difference', label: 'Chênh lệch' }, { key: 'schema_compatible', label: 'Cấu trúc' }, { key: 'data_matches', label: 'Dữ liệu' }, { key: 'primary_key_conflicts', label: 'Khóa trùng' }]" :key="column.key" class="whitespace-nowrap px-2.5 py-2">
+                                            <button type="button" class="inline-flex items-center gap-1 hover:text-slate-900" @click="sortRestoreTables(column.key)">{{ column.label }}<span aria-hidden="true">{{ restoreTableSort.key === column.key ? (restoreTableSort.direction === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 font-medium">
+                                    <tr v-for="table in sortedRestoreTables" :key="table.name" class="hover:bg-slate-50/50">
+                                        <td class="px-2.5 py-1.5 font-semibold text-slate-800">{{ table.name }}</td>
+                                        <td class="px-2.5 py-1.5 text-slate-600">{{ table.backup_rows }}</td>
+                                        <td class="px-2.5 py-1.5 text-slate-600">{{ table.current_rows }}</td>
+                                        <td class="px-2.5 py-1.5" :class="table.backup_rows !== table.current_rows ? 'font-bold text-amber-600' : 'text-slate-400'">{{ Number(table.backup_rows || 0) - Number(table.current_rows || 0) }}</td>
+                                        <td class="px-2.5 py-1.5" :class="table.schema_compatible ? 'font-semibold text-emerald-600' : 'font-bold text-amber-600'">
+                                            {{ table.schema_compatible ? 'Tương thích' : 'Khác cấu trúc' }}
+                                            <span v-if="!table.schema_compatible && (table.columns_missing_from_current?.length || table.columns_missing_from_backup?.length)" class="block max-w-56 whitespace-normal text-[10px] font-normal text-amber-700">{{ table.columns_missing_from_current?.length ? `Thiếu ở hiện tại: ${table.columns_missing_from_current.join(', ')}` : '' }}{{ table.columns_missing_from_backup?.length ? ` · Thiếu ở backup: ${table.columns_missing_from_backup.join(', ')}` : '' }}</span>
+                                        </td>
+                                        <td class="px-2.5 py-1.5" :class="table.data_matches ? 'font-semibold text-emerald-600' : 'font-bold text-amber-600'">{{ table.data_matches ? 'Khớp' : 'Khác' }}</td>
+                                        <td class="px-2.5 py-1.5" :class="table.primary_key_conflicts > 0 ? 'font-bold text-amber-700' : 'text-slate-500'">{{ table.primary_key_conflicts ?? 'Không xác định' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
                 </div>
 
                 <!-- Modal Footer -->

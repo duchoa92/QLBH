@@ -34,7 +34,7 @@ class RunScheduledBackup extends Command
 
         try {
             $path = $service->create();
-            foreach (BackupCloudConnection::where('enabled', true)->get() as $connection) {
+            foreach (BackupCloudConnection::where('enabled', true)->whereIn('provider', BackupCloudConnection::SUPPORTED_PROVIDERS)->get() as $connection) {
                 $cloudStorage->upload($connection, $path, basename($path));
             }
             Setting::set('backup_last_slot', $frequency.':'.$slot);

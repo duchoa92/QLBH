@@ -46,4 +46,8 @@ return [
         'tenant' => env('MICROSOFT_ONEDRIVE_TENANT', 'common'),
     ],
 
+    'backup_cloud' => [
+        'redirect_base_url' => env('BACKUP_CLOUD_REDIRECT_BASE_URL', env('APP_URL')),
+    ],
+
 ];
