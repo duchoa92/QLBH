@@ -10,10 +10,6 @@ const props = defineProps({
 
     <div class="p-4">
 
-        <h1 class="text-2xl font-bold mb-4">
-            Cập nhật khách hàng
-        </h1>
-
         <CustomerForm
             :customer="customer"
             :submit-url="route('customers.update', customer.id)"

@@ -4,7 +4,7 @@ import { usePage } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { History, Wallet } from 'lucide-vue-next'
+import { Wallet } from 'lucide-vue-next'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({ shifts: { type: Array, default: () => [] } })
@@ -97,9 +97,7 @@ const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount)
 
 <template>
     <div class="space-y-3">
-        <PageHeader title="Lịch sử kiểm kê">
-            <template #actions><div class="flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700"><History :size="16" />30 ngày gần nhất</div></template>
-        </PageHeader>
+        <PageHeader title="Lịch sử kiểm kê" />
 
         <section class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-[1.2fr_1.3fr_auto] lg:items-end">
             <FloatingSelect v-model="employeeId" label="Nhân viên" :options="employees" option-label="name" option-value="id" placeholder-text="Tất cả nhân viên" />
@@ -124,7 +122,6 @@ const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount)
         </section>
 
         <section class="min-w-0 space-y-3">
-            <h2 class="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-bold capitalize text-slate-700">{{ dateLabel(selectedDate) }}<span v-if="selectedDateSummary" class="ml-2 font-medium text-slate-500">· {{ selectedDateSummary.shifts.length }} ca</span></h2>
             <div v-if="!selectedShifts.length" class="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center text-sm text-slate-500">
                 <Wallet :size="28" class="mx-auto mb-2 text-slate-300" />Không có ca kiểm kê khớp ngày và bộ lọc đã chọn.
             </div>
@@ -139,22 +136,22 @@ const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount)
                     <div>
                         <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Tóm tắt tiền</h3>
                         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                            <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"><p class="text-[11px] text-slate-500">Tiền mặt đầu ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ money(shift.opening_amount) }}</strong></div>
-                            <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"><p class="text-[11px] text-slate-500">Tiền mặt cuối ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ money(shift.closing_amount) }}</strong></div>
+                            <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"><p class="text-[11px] text-slate-500">Tiền mặt đầu ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ shift.opening_denominations === null ? 'Không kiểm kê' : money(shift.opening_amount) }}</strong></div>
+                            <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"><p class="text-[11px] text-slate-500">Tiền mặt cuối ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ shift.closing_amount === null ? 'Không kiểm kê' : money(shift.closing_amount) }}</strong></div>
                             <div class="rounded-lg border border-blue-200/70 bg-blue-50 px-3 py-2"><p class="text-[11px] text-blue-700">Tiền tài khoản đầu ca</p><strong class="mt-0.5 block text-sm text-blue-800">{{ money(bankTotal(shift.opening_bank_balances)) }}</strong></div>
                             <div class="rounded-lg border border-blue-200/70 bg-blue-50 px-3 py-2"><p class="text-[11px] text-blue-700">Tiền tài khoản cuối ca</p><strong class="mt-0.5 block text-sm text-blue-800">{{ money(bankTotal(shift.closing_bank_balances)) }}</strong></div>
                             <div class="rounded-lg border border-emerald-200/70 bg-emerald-50 px-3 py-2"><p class="text-[11px] text-emerald-700">Tiền thu thực tế</p><strong class="mt-0.5 block text-sm text-emerald-800">{{ money(shift.cash_collected) }}</strong></div>
                             <div class="rounded-lg border border-amber-200/70 bg-amber-50 px-3 py-2"><p class="text-[11px] text-amber-700">Khách còn nợ</p><strong class="mt-0.5 block text-sm text-amber-800">{{ money(shift.customer_debt_amount) }}</strong></div>
-                            <div class="rounded-lg border border-rose-200/70 bg-rose-50 px-3 py-2"><p class="text-[11px] text-rose-700">Số tiền chênh lệch</p><strong class="mt-0.5 block text-sm" :class="shift.difference < 0 ? 'text-rose-700' : 'text-emerald-700'">{{ money(shift.difference) }}</strong></div>
+                            <div v-if="shift.difference !== null" class="rounded-lg border border-rose-200/70 bg-rose-50 px-3 py-2"><p class="text-[11px] text-rose-700">Số tiền chênh lệch</p><strong class="mt-0.5 block text-sm" :class="shift.difference < 0 ? 'text-rose-700' : 'text-emerald-700'">{{ money(shift.difference) }}</strong></div>
                         </div>
                     </div>
                 </div>
                 <div class="border-t border-slate-100 px-4 py-2.5">
-                    <button type="button" class="text-sm font-semibold text-indigo-700 hover:text-indigo-900" @click="expandedShiftId = expandedShiftId === shift.id ? null : shift.id">{{ expandedShiftId === shift.id ? 'Ẩn chi tiết kiểm đếm' : 'Xem chi tiết số lượng tiền' }}</button>
+                    <button type="button" class="text-sm font-semibold text-indigo-700 hover:text-indigo-900" @click="expandedShiftId = expandedShiftId === shift.id ? null : shift.id">{{ expandedShiftId === shift.id ? 'Ẩn chi tiết ca' : shift.closing_amount === null ? 'Xem chi tiết ca' : 'Xem chi tiết số lượng tiền' }}</button>
                 </div>
 
                 <div v-if="expandedShiftId === shift.id" class="grid gap-4 border-t border-slate-100 bg-slate-50/50 p-4 xl:grid-cols-2">
-                    <div>
+                    <div v-if="shift.closing_amount !== null">
                         <h3 class="mb-2 text-sm font-bold text-slate-800">Chi tiết số lượng tiền mặt</h3>
                         <div class="overflow-x-auto rounded-xl border border-slate-200 custom-scrollbar">
                             <table class="w-full min-w-[400px] table-fixed text-xs">
@@ -164,6 +161,7 @@ const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount)
                             </table>
                         </div>
                     </div>
+                    <p v-else class="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">Ca này không kiểm kê tiền mặt.</p>
 
                     <div>
                         <h3 class="mb-2 text-sm font-bold text-slate-800">Số dư tài khoản ngân hàng</h3>

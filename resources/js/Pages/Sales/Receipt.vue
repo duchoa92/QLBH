@@ -1,7 +1,6 @@
 <script setup>
-import { onMounted } from 'vue'
 import { usePage } from '@inertiajs/vue3'
-import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
+import { formatCurrency, formatNumber } from '@/utils/format'
 
 defineOptions({
     // BẮT BUỘC: Báo cho Inertia biết trang này KHÔNG sử dụng bất kỳ Layout nào (Kể cả AdminLayout mặc định)
@@ -31,6 +30,26 @@ const baseQuantityText = (item) => {
     return ` = ${item.base_quantity} ${unit}`
 }
 
+const variantLabel = (variant) => {
+    const attributes = variant?.attributes
+    if (Array.isArray(attributes)) return attributes.map(value => typeof value === 'object' ? value?.value || value?.label || value?.name : value).filter(Boolean).join(' / ')
+    if (attributes && typeof attributes === 'object') {
+        return Object.values(attributes).map(value => typeof value === 'object' ? value?.value || value?.label || value?.name : value).filter(Boolean).join(' / ')
+    }
+    return String(variant?.name || variant?.sku || '')
+}
+
+const balanceLabel = () => {
+    const total = Number(saleTotal())
+    const paid = Number(props.sale?.paid_amount || 0)
+    const difference = paid - total
+    return difference > 0
+        ? { label: 'Tiền thừa:', amount: difference }
+        : { label: 'Nợ lại:', amount: Math.abs(difference) }
+}
+
+const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? props.sale?.subtotal ?? 0
+
 // Trang được nhúng trong modal xem trước; chỉ in khi người dùng bấm nút In ở modal.
 </script>
 
@@ -48,12 +67,7 @@ const baseQuantityText = (item) => {
             </div>
 
             <!-- Nút bấm thủ công (Tự động ẩn khi in) -->
-            <div class="no-print print-bar">
-                <span>Xem trước hóa đơn</span>
-                <button type="button" onclick="window.print()" class="btn-print">
-                    🖨️ In Hóa Đơn
-                </button>
-            </div>
+            <div class="no-print print-bar"><span>Xem trước hóa đơn</span></div>
 
             <!-- Header Cửa hàng -->
             <div class="header">
@@ -83,18 +97,13 @@ const baseQuantityText = (item) => {
                 <div v-for="item in sale.items" :key="item.id" class="item">
                     <div class="item-name">
                         {{ item.product?.name || 'Sản phẩm' }}
-                        <span v-if="item.variant?.attributes" class="item-variant">
-                            ({{ Object.values(item.variant.attributes).filter(Boolean).join(' / ') }})
+                        <span v-if="variantLabel(item.variant)" class="item-variant">
+                            ({{ variantLabel(item.variant) }})
                         </span>
                     </div>
 
                     <div v-if="item.product_imei?.imei" class="item-imei">
                         IMEI: {{ item.product_imei.imei }}
-                    </div>
-                    <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="item-imei">
-                        {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
-                            ? `Bảo hành khách đến ${formatDate(item.product_imei.customer_warranty_expires_at)}`
-                            : 'Không áp dụng bảo hành khách' }}
                     </div>
 
                     <div class="item-calc">
@@ -116,13 +125,13 @@ const baseQuantityText = (item) => {
                     <span>TỔNG CỘNG:</span>
                     <span>{{ formatMoney(sale.grand_total || sale.total_amount || sale.subtotal) }}</span>
                 </div>
-                <div class="row" v-if="sale.paid_amount">
+                <div class="row">
                     <span>Khách đưa:</span>
-                    <span>{{ formatMoney(sale.paid_amount) }}</span>
+                    <span>{{ formatMoney(sale.paid_amount || 0) }}</span>
                 </div>
-                <div class="row" v-if="sale.change_amount">
-                    <span>Tiền thừa:</span>
-                    <span>{{ formatMoney(sale.change_amount) }}</span>
+                <div class="row">
+                    <span>{{ balanceLabel().label }}</span>
+                    <span>{{ formatMoney(balanceLabel().amount) }}</span>
                 </div>
             </div>
 

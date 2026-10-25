@@ -113,7 +113,8 @@ class StockImportController extends Controller
         $defaultThreshold = max(0, (int) setting('inventory_alert_threshold', 5));
         $products = Product::query()
             ->where('is_active', true)
-            ->select('id', 'name', 'sku', 'barcode', 'stock', 'alert_stock', 'cost_price', 'unit_id', 'product_type', 'manage_stock_by_serial')
+            ->select('id', 'category_id', 'name', 'sku', 'barcode', 'stock', 'alert_stock', 'cost_price', 'unit_id', 'product_type', 'manage_stock_by_serial')
+            ->with('category:id,name')
             ->with('unit:id,name,short_name')
             ->with(['variants' => fn ($query) => $query
                 ->where('is_active', true)
@@ -136,6 +137,7 @@ class StockImportController extends Controller
 
                 return [
                     'id' => $product->id,
+                    'category_id' => $product->category_id,
                     'name' => $product->name,
                     'sku' => $product->sku,
                     'barcode' => $product->barcode,
@@ -148,6 +150,10 @@ class StockImportController extends Controller
 
         return response()->json([
             'products' => $products,
+            'categories' => Category::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name']),
             'alerts_enabled' => $alertsEnabled,
             'default_alert_threshold' => $defaultThreshold,
         ]);

@@ -7,6 +7,9 @@ import WorkShiftOpenModal from '@/Components/WorkShiftOpenModal.vue'
 import { formatMoney } from '@/utils/format'
 
 const page = usePage()
+const autoOpenEnabled = computed(() => page.props.settings?.work_shift_auto_open_enabled !== false
+    && page.props.settings?.work_shift_auto_open_enabled !== 0
+    && page.props.settings?.work_shift_auto_open_enabled !== '0')
 const denominations = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 const visible = ref(false)
 const counts = ref({})
@@ -22,7 +25,7 @@ const values = computed(() => {
 const money = formatMoney
 
 const openIfNeeded = async () => {
-    if (!(page.props.auth?.permissions || []).includes('pos.access')) return
+    if (!autoOpenEnabled.value || !(page.props.auth?.permissions || []).includes('pos.access')) return
     try {
         const { data } = await axios.get(route('pos.shifts.current'))
         if (!data.shift && !data.prompt_dismissed) {

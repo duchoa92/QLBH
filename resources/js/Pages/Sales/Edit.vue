@@ -73,7 +73,7 @@ const submit = () => form.put(route('sales.update', props.sale.id))
 <template>
     <div class="mx-auto max-w-5xl space-y-4 p-3 text-slate-800">
         <div class="flex items-center justify-between rounded-xl border bg-white p-4">
-            <div><Link :href="route('sales.show', sale.id)" class="mb-1 inline-flex items-center gap-1 text-xs text-slate-500"><ArrowLeft :size="14" />Quay lại hóa đơn</Link><h1 class="text-lg font-black">Sửa hóa đơn #{{ sale.code }}</h1></div>
+            <div><Link :href="route('sales.show', sale.id)" class="inline-flex items-center gap-1 text-xs text-slate-500"><ArrowLeft :size="14" />Quay lại hóa đơn</Link></div>
             <button v-if="!blockedReason" :disabled="form.processing" @click="submit" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save :size="16" />Lưu thay đổi</button>
         </div>
 

@@ -77,6 +77,9 @@ const shiftHistory = ref([])
 const shiftHistoryLoading = ref(false)
 let shiftRefreshTimer = null
 const formatMoney = formatConfiguredMoney
+const autoOpenShiftEnabled = computed(() => page.props.settings?.work_shift_auto_open_enabled !== false
+    && page.props.settings?.work_shift_auto_open_enabled !== 0
+    && page.props.settings?.work_shift_auto_open_enabled !== '0')
 const denominationRows = counts => denominationValues.filter(value => Number(counts?.[value] || 0) > 0).map(value => ({ value, count: Number(counts[value]) }))
 const denominationComparison = computed(() => denominationValues.map(value => {
     const openingCount = Number(shiftResult.value?.opening_denominations?.[value] || 0)
@@ -117,7 +120,7 @@ const bankBalanceRows = balances => bankAccounts.value.map(account => ({ ...acco
 const loadShift = async () => {
     const { data } = await axios.get(route('pos.shifts.current'))
     shift.value = data.shift
-    if (!data.shift && !data.prompt_dismissed) {
+    if (!data.shift && !data.prompt_dismissed && autoOpenShiftEnabled.value) {
         shiftMode.value = 'open'
         shiftDenominations.value = Object.fromEntries(denominationValues.map(value => [value, 0]))
         shiftCashAmount.value = 0
@@ -542,7 +545,7 @@ useBarcodeScanner(
         <section class="flex h-[92vh] max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <template v-if="!shiftResult">
                 <h2 class="text-lg font-bold text-slate-900">{{ shiftMode === 'open' ? 'Mở ca làm' : 'Kết thúc ca làm' }}</h2>
-                <p class="mt-0.5 text-xs text-slate-500">{{ shiftMode === 'open' ? 'Nhập số lượng tiền mặt đầu ca và số dư các tài khoản.' : 'Kiểm đếm tiền mặt và cập nhật số dư các tài khoản cuối ca.' }}</p>
+                <p class="mt-0.5 text-xs text-slate-500">{{ shiftMode === 'open' ? 'Nhập tiền mặt đầu ca và số dư tài khoản.' : 'Kiểm đếm tiền mặt và cập nhật số dư tài khoản cuối ca.' }}</p>
                 <div class="mt-3 min-h-0 flex-1 overflow-y-auto">
                     <WorkShiftCountForm :denominations="denominationValues" :counts="shiftDenominations" :cash-amount="shiftCashAmount" :cash-detail="shiftCashDetail" :balances="shiftBankBalances" :accounts="bankAccounts" :money="formatMoney" :mode="shiftMode" @update:cash-amount="shiftCashAmount = $event" @update:cash-detail="shiftCashDetail = $event" />
                     <div v-if="shiftMode === 'close' && shift" class="mt-4 space-y-3 rounded-xl bg-slate-50 p-3 text-sm sm:p-4">
@@ -550,7 +553,7 @@ useBarcodeScanner(
                             <span class="text-left">Khoản mục</span><span>Đầu ca</span><span>Cuối ca</span>
                         </div>
                         <div class="space-y-2 px-1">
-                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền mặt</span><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(shift.opening_amount) }}</strong><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(countedCashTotal) }}</strong></div>
+                            <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền mặt kiểm đếm</span><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(shift.opening_amount) }}</strong><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(countedCashTotal) }}</strong></div>
                             <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền tài khoản</span><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(openingBankTotal) }}</strong><strong class="whitespace-nowrap tabular-nums">{{ formatMoney(countedBankTotal) }}</strong></div>
                             <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs text-slate-600 sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền mặt bán hàng thu</span><span>—</span><span class="whitespace-nowrap tabular-nums">{{ formatMoney(shift.cash_collected) }}</span></div>
                             <div class="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)_minmax(84px,auto)] gap-x-2 text-right text-xs text-slate-600 sm:grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(120px,auto)] sm:gap-x-3 sm:text-sm"><span class="text-left">Tiền chuyển khoản thu</span><span>—</span><span class="whitespace-nowrap tabular-nums">{{ formatMoney(bankTransferTotal) }}</span></div>
@@ -574,14 +577,15 @@ useBarcodeScanner(
                 <h2 class="shrink-0 text-lg font-bold text-slate-900">Tổng kết ca làm</h2>
                 <div class="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 text-sm">
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                        <div class="rounded-xl bg-slate-50 px-3 py-2"><span class="text-xs text-slate-500">Tiền đầu ca</span><strong class="mt-0.5 block">{{ formatMoney(shiftResult.opening_amount) }}</strong></div>
+                        <div class="rounded-xl bg-slate-50 px-3 py-2"><span class="text-xs text-slate-500">Tiền đầu ca</span><strong class="mt-0.5 block">{{ shiftResult.opening_denominations === null ? 'Không kiểm kê' : formatMoney(shiftResult.opening_amount) }}</strong></div>
                         <div class="rounded-xl bg-emerald-50 px-3 py-2"><span class="text-xs text-emerald-700">Tiền mặt bán hàng thu</span><strong class="mt-0.5 block text-emerald-800">{{ formatMoney(shiftResult.cash_collected) }}</strong></div>
                         <div class="rounded-xl bg-amber-50 px-3 py-2"><span class="text-xs text-amber-700">Nợ khách trong ca</span><strong class="mt-0.5 block text-amber-800">{{ formatMoney(shiftResult.customer_debt_amount) }}</strong></div>
-                        <div class="rounded-xl bg-indigo-50 px-3 py-2"><span class="text-xs text-indigo-700">Tiền mặt cuối ca</span><strong class="mt-0.5 block text-indigo-800">{{ formatMoney(shiftResult.expected_cash) }}</strong></div>
+                        <div class="rounded-xl bg-indigo-50 px-3 py-2"><span class="text-xs text-indigo-700">Tiền mặt cuối ca dự kiến</span><strong class="mt-0.5 block text-indigo-800">{{ formatMoney(shiftResult.expected_cash) }}</strong></div>
                         <div class="rounded-xl bg-blue-50 px-3 py-2"><span class="text-xs text-blue-700">Tiền chuyển khoản trong ca</span><strong class="mt-0.5 block text-blue-800">{{ formatMoney(resultBankTransferTotal) }}</strong></div>
                         <div class="rounded-xl bg-cyan-50 px-3 py-2"><span class="text-xs text-cyan-700">Tài khoản cuối ca</span><strong class="mt-0.5 block text-cyan-800">{{ formatMoney(closingBankTotal) }}</strong></div>
                         <div class="rounded-xl bg-emerald-100 px-3 py-2"><span class="text-xs text-emerald-800">Tổng tiền mặt + tài khoản</span><strong class="mt-0.5 block text-emerald-900">{{ formatMoney(combinedClosingTotal) }}</strong></div>
                     </div>
+
 
                     <details v-if="shiftResult.bank_sales?.length" class="overflow-hidden rounded-xl border border-slate-200">
                         <summary class="cursor-pointer bg-slate-50 px-3 py-2 text-sm font-bold text-indigo-700">Chi tiết {{ shiftResult.bank_sales.length }} đơn chuyển khoản</summary>
@@ -626,12 +630,12 @@ useBarcodeScanner(
                     <article v-for="item in day.shifts" :key="item.id" class="rounded-xl border border-slate-200 p-3">
                         <div class="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                             <p><span class="block text-xs text-slate-500">Thời gian đóng ca</span><strong>{{ item.closed_at }}</strong></p>
-                            <p><span class="block text-xs text-slate-500">Tiền đầu ca</span><strong>{{ formatMoney(item.opening_amount) }}</strong></p>
-                            <p><span class="block text-xs text-slate-500">Tiền mặt cuối ca</span><strong>{{ formatMoney(item.expected_cash) }}</strong></p>
-                            <p><span class="block text-xs text-slate-500">Tiền thực tế kiểm đếm</span><strong>{{ formatMoney(item.closing_amount) }}</strong></p>
+                            <p><span class="block text-xs text-slate-500">Tiền đầu ca</span><strong>{{ item.opening_denominations === null ? 'Không kiểm kê' : formatMoney(item.opening_amount) }}</strong></p>
+                            <p><span class="block text-xs text-slate-500">Tiền mặt cuối ca dự kiến</span><strong>{{ formatMoney(item.expected_cash) }}</strong></p>
+                            <p><span class="block text-xs text-slate-500">Tiền thực tế kiểm đếm</span><strong>{{ item.closing_amount === null ? 'Không kiểm kê' : formatMoney(item.closing_amount) }}</strong></p>
                             <p><span class="block text-xs text-slate-500">Tiền mặt bán hàng thu</span><strong>{{ formatMoney(item.cash_collected) }}</strong></p>
                             <p><span class="block text-xs text-slate-500">Nợ khách phát sinh</span><strong>{{ formatMoney(item.customer_debt_amount) }}</strong></p>
-                            <p><span class="block text-xs text-slate-500">Chênh lệch</span><strong :class="item.difference < 0 ? 'text-rose-600' : 'text-emerald-700'">{{ formatMoney(item.difference) }}</strong></p>
+                            <p v-if="item.difference !== null"><span class="block text-xs text-slate-500">Chênh lệch</span><strong :class="item.difference < 0 ? 'text-rose-600' : 'text-emerald-700'">{{ formatMoney(item.difference) }}</strong></p>
                             <p><span class="block text-xs text-slate-500">Hóa đơn trong ca</span><strong>{{ item.sale_count }}</strong></p>
                         </div>
                         <details class="mt-2 border-t border-slate-100 pt-2 text-xs">

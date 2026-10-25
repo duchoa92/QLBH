@@ -14,10 +14,6 @@ defineProps({
 <template>
     <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="min-w-0">
-            <h1 class="text-lg font-bold leading-6 text-slate-900">
-                {{ title }}
-            </h1>
-
             <p
                 v-if="description"
                 class="mt-0.5 text-xs text-slate-500"

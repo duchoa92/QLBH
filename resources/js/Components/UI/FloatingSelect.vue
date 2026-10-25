@@ -30,6 +30,7 @@ const props = defineProps({
     name: String,
     error: String,
     disabled: { type: Boolean, default: false },
+    inputClass: { type: String, default: '' },
     placeholderText: { type: String, default: 'Chọn...' },
     showPlaceholder: { type: Boolean, default: true },
     createLabel: { type: String, default: '' },
@@ -107,6 +108,7 @@ const handleChange = (event) => {
                 disabled:cursor-not-allowed
                 disabled:bg-gray-100
             "
+            :class="inputClass"
         >
 
             <option v-if="showPlaceholder" value="">{{ placeholderText }}</option>

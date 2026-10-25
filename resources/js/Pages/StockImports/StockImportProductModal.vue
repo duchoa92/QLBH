@@ -233,8 +233,8 @@ const buildExtraInfo = (modal) => {
         note: String(modal.info_text_input || '').trim(),
         account: String(modal.account_input || '').trim(),
         password: String(modal.password_input || '').trim(),
-        customer_warranty_duration_value: props.customerImport && customerWarrantyValue > 0 ? customerWarrantyValue : '',
-        customer_warranty_duration_unit: props.customerImport && customerWarrantyValue > 0 ? modal.customer_warranty_duration_unit_input : '',
+        customer_warranty_duration_value: customerWarrantyValue > 0 ? customerWarrantyValue : '',
+        customer_warranty_duration_unit: customerWarrantyValue > 0 ? modal.customer_warranty_duration_unit_input : '',
     }
     const cleaned = Object.fromEntries(Object.entries(extraInfo).filter(([, value]) => value !== ''))
     return Object.keys(cleaned).length ? cleaned : null
@@ -760,7 +760,10 @@ onBeforeUnmount(() => {
                         {{ priceBasisLabel(basis, entryModal.item) }}
                     </label>
                 </div>
-                <div class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]">
+                <div
+                    class="grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]"
+                    :class="entryModal.item?.type === 'imei_variant' ? 'md:grid-cols-5' : ''"
+                >
 
                     <!-- INPUT: SẢN PHẨM THƯỜNG -->
                     <div v-if="entryModal.mode === 'normal'" class="min-w-0">
@@ -773,7 +776,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- IMEI / SERIAL -->
-                    <div v-if="entryModal.mode === 'imei'" class="min-w-0">
+                    <div v-if="entryModal.mode === 'imei'" class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-1' : ''">
                         <div class="relative">
                             <input
                                 id="stock-import-imei-input"
@@ -802,14 +805,14 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- INPUT: BIẾN THỂ -->
-                    <div v-if="entryModal.mode === 'variant' || entryModal.item?.type === 'imei_variant'" class="min-w-0">
+                    <div v-if="entryModal.mode === 'variant' || entryModal.item?.type === 'imei_variant'" class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
                         <div ref="dropdownVariantRef" class="relative w-full">
                             <FloatingInput
                                 v-model="variantSearch"
                                 type="text"
                                 label="Gõ để tìm biến thể..."
-                                class="pr-12"
                                 @focus="showVariantDropdown = true"
+                                @click="$event.target.select()"
                                 @keydown.enter.prevent="selectScannedVariant"
                             />
                             <div
@@ -842,13 +845,14 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- GIÁ NHẬP -->
-                    <div class="min-w-0">
+                    <div class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-1' : ''">
                         <FloatingInput
                             v-if="entryModal.mode !== 'normal'"
                             :model-value="formatPrice(entryModal.cost_price_input)"
                             type="text"
                             inputmode="numeric"
                             :label="costPriceLabel(entryModal.item)"
+                            @click="$event.target.select()"
                             @update:model-value="entryModal.cost_price_input = parseMoneyInput($event)"
                         />
                         <FloatingInput
@@ -862,13 +866,14 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- GIÁ BÁN -->
-                    <div class="min-w-0">
+                    <div class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-1' : ''">
                         <FloatingInput
                             v-if="entryModal.mode !== 'normal'"
                             :model-value="formatPrice(entryModal.sell_price_input)"
                             type="text"
                             inputmode="numeric"
                             :label="sellPriceLabel(entryModal.item)"
+                            @click="$event.target.select()"
                             @update:model-value="entryModal.sell_price_input = parseMoneyInput($event)"
                         />
                         <FloatingInput
@@ -908,32 +913,44 @@ onBeforeUnmount(() => {
                             />
                         </div>
 
-                        <div class="grid min-w-0 grid-cols-1 gap-2" :class="props.customerImport ? 'sm:grid-cols-2' : ''">
-                            <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(92px,0.72fr)] items-end gap-2">
-                                <FloatingInput
-                                    v-model.number="entryModal.warranty_duration_value_input"
-                                    type="number"
-                                    min="0"
-                                    label="BH nhà cung cấp"
-                                />
-                                <FloatingSelect
-                                    v-model="entryModal.warranty_duration_unit_input"
-                                    label="ĐV BH NCC"
-                                    :options="warrantyUnitOptions"
-                                />
+                        <div class="grid min-w-0 grid-cols-1 gap-2" :class="props.customerImport || entryModal.mode === 'imei' ? 'sm:grid-cols-2' : ''">
+                            <div class="min-w-0">
+                                <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(64px,0.3fr)] items-end gap-0">
+                                    <input
+                                        v-model.number="entryModal.warranty_duration_value_input"
+                                        type="number"
+                                        min="0"
+                                        placeholder="BH nhà cung cấp"
+                                        aria-label="Thời hạn bảo hành nhà cung cấp"
+                                        class="h-9 min-w-0 w-full rounded-l-lg rounded-r-none border border-gray-300 px-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-0"
+                                    />
+                                    <select
+                                        v-model="entryModal.warranty_duration_unit_input"
+                                        aria-label="Đơn vị bảo hành nhà cung cấp"
+                                        class="h-9 min-w-0 w-full rounded-l-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-0"
+                                    >
+                                        <option v-for="option in warrantyUnitOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div v-if="props.customerImport" class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(92px,0.72fr)] items-end gap-2">
-                                <FloatingInput
-                                    v-model.number="entryModal.customer_warranty_duration_value_input"
-                                    type="number"
-                                    min="0"
-                                    label="BH cho khách hàng"
-                                />
-                                <FloatingSelect
-                                    v-model="entryModal.customer_warranty_duration_unit_input"
-                                    label="ĐV BH khách"
-                                    :options="warrantyUnitOptions"
-                                />
+                            <div v-if="props.customerImport || entryModal.mode === 'imei'" class="min-w-0">
+                                <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(64px,0.3fr)] items-end gap-0">
+                                    <input
+                                        v-model.number="entryModal.customer_warranty_duration_value_input"
+                                        type="number"
+                                        min="0"
+                                        placeholder="BH khách"
+                                        aria-label="Thời hạn bảo hành khách hàng"
+                                        class="h-9 min-w-0 w-full rounded-l-lg rounded-r-none border border-gray-300 px-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-0"
+                                    />
+                                    <select
+                                        v-model="entryModal.customer_warranty_duration_unit_input"
+                                        aria-label="Đơn vị bảo hành khách hàng"
+                                        class="h-9 min-w-0 w-full rounded-l-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-0"
+                                    >
+                                        <option v-for="option in warrantyUnitOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>

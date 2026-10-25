@@ -83,6 +83,9 @@ const form = useForm({
         && props.settings.inventory_alert_enabled !== 0
         && props.settings.inventory_alert_enabled !== '0',
     inventory_alert_threshold: Number(props.settings.inventory_alert_threshold ?? 5),
+    work_shift_auto_open_enabled: props.settings.work_shift_auto_open_enabled !== false
+        && props.settings.work_shift_auto_open_enabled !== 0
+        && props.settings.work_shift_auto_open_enabled !== '0',
     print_paper_size: props.settings.print_paper_size || 'a4',
     print_orientation: props.settings.print_orientation || 'portrait',
     bank_bin: props.settings.bank_bin || '',
@@ -464,6 +467,24 @@ const unitDisplayName = (unit) =>
                     </div>
                 </DataPanel>
 
+                <DataPanel v-if="activeModal === 'system'">
+                    <template #header>
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Bảng kê đầu ca</h2>
+                            <p class="mt-0.5 text-xs font-medium text-slate-500">Cài đặt cách bảng kê xuất hiện khi vào POS.</p>
+                        </div>
+                    </template>
+                    <div class="p-4">
+                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <span>
+                                <span class="block text-sm font-bold text-slate-800">Tự động mở bảng kê khi vào POS</span>
+                                <span class="mt-0.5 block text-xs text-slate-500">Tắt mục này chỉ tắt tự mở; bạn vẫn có thể mở ca và kiểm kê thủ công.</span>
+                            </span>
+                            <input v-model="form.work_shift_auto_open_enabled" type="checkbox" class="h-5 w-5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                        </label>
+                    </div>
+                </DataPanel>
+
                 <DataPanel v-if="activeModal === 'inventory'">
                 
                     <div class="p-4  bg-slate-50">
@@ -817,6 +838,31 @@ const unitDisplayName = (unit) =>
                                 <p v-if="account.payment_provider === 'apipay'" class="mt-1">Trong ApiPay, đăng ký URL này tại Cài đặt → Webhooks (URL phải HTTPS và truy cập được từ Internet), rồi nhập secret trả về. QLBH gửi mã hóa đơn hiện tại làm nội dung khi tạo payment request; QR ApiPay trả về sẽ được hiển thị và webhook dùng chính nội dung đó để ghép giao dịch với hóa đơn.</p>
                                 <p v-else class="mt-1">Dán URL này vào cấu hình webhook của dịch vụ. URL cần truy cập được từ Internet; POS gửi mã hóa đơn trong nội dung thanh toán để tự đối soát.</p>
                             </div>
+                            <section class="rounded-lg border border-slate-200 bg-white/80 p-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-700">Âm báo bằng giọng nói</p>
+                                        <p class="mt-0.5 text-xs text-slate-500">Đọc thông báo khi đối soát nhận được tiền.</p>
+                                    </div>
+                                    <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                                        <input v-model="form.payment_voice_enabled" type="checkbox" :disabled="!can_update_bank_settings" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                        {{ form.payment_voice_enabled ? 'Bật' : 'Tắt' }}
+                                    </label>
+                                </div>
+                                <div v-if="form.payment_voice_enabled" class="mt-3 grid gap-2">
+                                    <FloatingSelect
+                                        v-model="form.payment_voice_language"
+                                        name="payment_voice_language"
+                                        label="Ngôn ngữ đọc"
+                                        :options="paymentVoiceOptions"
+                                        :disabled="!can_update_bank_settings"
+                                        :show-placeholder="false"
+                                    />
+                                    <button type="button" :disabled="!paymentVoiceAvailable" class="w-fit rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice">Thử giọng đọc</button>
+                                    <p v-if="paymentVoiceTestMessage" class="text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
+                                    <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="text-xs text-amber-700">Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.</p>
+                                </div>
+                            </section>
                             </div>
                         </div>
                         </div>
@@ -828,35 +874,7 @@ const unitDisplayName = (unit) =>
 
                     </div>
 
-                    <div class="grid gap-4 md:grid-cols-2">
-                    <section class="rounded-lg bg-slate-50 p-3">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <p class="text-sm font-semibold text-slate-700">Âm báo bằng giọng nói</p>
-                                <p class="mt-0.5 text-xs text-slate-500">Đọc thông báo khi tiền vào.</p>
-                            </div>
-                            <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                                <input v-model="form.payment_voice_enabled" type="checkbox" :disabled="!can_update_bank_settings" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                                {{ form.payment_voice_enabled ? 'Bật' : 'Tắt' }}
-                            </label>
-                        </div>
-                        <div v-if="form.payment_voice_enabled" class="mt-3 grid gap-2">
-                            <FloatingSelect
-                                v-model="form.payment_voice_language"
-                                name="payment_voice_language"
-                                label="Ngôn ngữ đọc"
-                                :options="paymentVoiceOptions"
-                                :disabled="!can_update_bank_settings"
-                                :show-placeholder="false"
-                            />
-                            <button type="button" :disabled="!paymentVoiceAvailable" class="w-fit rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice">Thử giọng đọc</button>
-                            <p v-if="paymentVoiceTestMessage" class="text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
-                            <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="text-xs text-amber-700">
-                                Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.
-                            </p>
-                        </div>
-                    </section>
-
+                    <div class="grid gap-4">
                     <section class="rounded-lg bg-slate-50 p-3">
                         <p class="mb-1.5 text-sm font-semibold text-slate-700">Kiểu màu mã QR</p>
                         <p class="mb-3 text-xs text-slate-500">Chọn màu phù hợp với cửa hàng. Nền luôn sáng để mã dễ quét.</p>

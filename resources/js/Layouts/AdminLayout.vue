@@ -22,6 +22,7 @@ import WorkShiftAutoOpen from '@/Components/WorkShiftAutoOpen.vue'
 import { openModal } from '@/Stores/modal'
 import { prepareOpenPos } from '@/utils/pos'
 import { imageUrl } from '@/utils/imageUrl'
+import { appBasePath } from '@/utils/appPaths'
 
 const sidebarOpen = ref(false)
 const isDesktop = ref(false)
@@ -46,9 +47,54 @@ const permissions = computed(() => page.props.auth?.permissions || [])
 const can = (permission) => permissions.value.includes(permission)
 
 const currentTitle = computed(() => {
-    const path = page.url.split('?')[0]
+    const rawPath = page.url.split('?')[0].replace(/\/+$/, '') || '/'
+    const path = appBasePath && rawPath.startsWith(`${appBasePath}/`)
+        ? rawPath.slice(appBasePath.length)
+        : rawPath
 
-    if (path.startsWith('/pos')) return 'POS bán hàng'
+    const componentTitles = {
+        'Dashboard': 'Dashboard',
+        'Products/Index': 'Sản phẩm',
+        'Products/Form': 'Thông tin sản phẩm',
+        'Products/Show': 'Chi tiết sản phẩm',
+        'ProductImeis/Index': 'IMEI',
+        'ProductImeis/Lookup': 'Tra cứu IMEI',
+        'ProductImeis/Show': 'Chi tiết IMEI',
+        'Categories/Index': 'Danh mục',
+        'Brands/Index': 'Thương hiệu',
+        'Customers/Index': 'Khách hàng',
+        'Customers/Create': 'Thêm khách hàng',
+        'Customers/Edit': 'Sửa khách hàng',
+        'Customers/Show': 'Chi tiết khách hàng',
+        'Sales/Index': 'Hóa đơn bán hàng',
+        'Sales/Show': 'Chi tiết hóa đơn',
+        'Sales/Edit': 'Sửa hóa đơn',
+        'StockImports/Index': 'Nhập hàng',
+        'StockImports/List': 'Phiếu nhập hàng',
+        'Suppliers/Index': 'Nhà cung cấp',
+        'Suppliers/Create': 'Thêm nhà cung cấp',
+        'Suppliers/Edit': 'Sửa nhà cung cấp',
+        'Repairs/Index': 'Sửa chữa thiết bị',
+        'Users/Index': 'Nhân viên',
+        'Users/Create': 'Thêm nhân viên',
+        'Users/Edit': 'Sửa nhân viên',
+        'Users/RoleManagement': 'Phân quyền',
+        'Debts/Index': 'Quản lý công nợ',
+        'Expenses/Index': 'Chi phí cửa hàng',
+        'Reports/Index': 'Báo cáo & Thống kê',
+        'WorkShifts/History': 'Lịch sử kiểm kê',
+        'Settings/Index': 'Thiết lập',
+        'Backups/Index': 'Sao lưu dữ liệu',
+        'Profile/Edit': 'Tài khoản cá nhân',
+    }
+
+    const componentTitle = componentTitles[page.component]
+
+    if (path.startsWith('/settings')) return page.props.active_section === 'backups' ? 'Sao lưu dữ liệu' : 'Thiết lập'
+    if (page.component === 'Records/Show' && page.props.title) return page.props.title
+    if (componentTitle) return componentTitle
+
+    if (path.startsWith('/pos')) return path.includes('payment-settings') ? 'Thiết lập thanh toán POS' : 'POS bán hàng'
     if (path.startsWith('/products')) return 'Sản phẩm'
     if (path.startsWith('/product-imeis') || path.startsWith('/imeis')) return 'IMEI'
     if (path.startsWith('/categories') || path.startsWith('/brands')) return 'Danh mục & Thương hiệu'
@@ -59,10 +105,14 @@ const currentTitle = computed(() => {
     if (path.startsWith('/debts/suppliers')) return 'Thanh toán công nợ nhà cung cấp'
     if (path.startsWith('/repairs')) return 'Sửa chữa thiết bị'
     if (path.startsWith('/users')) return 'Nhân viên'
+    if (path.startsWith('/stock-import')) return 'Nhập hàng'
+    if (path.startsWith('/suppliers')) return 'Nhà cung cấp'
+    if (path.startsWith('/expenses')) return 'Chi phí cửa hàng'
+    if (path.startsWith('/reports')) return 'Báo cáo & Thống kê'
     if (path.startsWith('/backups')) return 'Sao lưu dữ liệu'
     if (path.startsWith('/profile')) return 'Tài khoản'
 
-    return 'Dashboard'
+    return page.component?.split('/').at(-1)?.replace(/([a-z0-9])([A-Z])/g, '$1 $2') || 'Dashboard'
 })
 
 watch([shopName, currentTitle], ([name, title]) => {

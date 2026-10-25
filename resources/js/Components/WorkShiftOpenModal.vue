@@ -47,7 +47,7 @@ const startShift = async () => {
     <div class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-4">
         <section class="flex max-h-[84vh] w-full max-w-4xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <div class="flex items-start justify-between gap-3">
-                <div><h2 class="text-lg font-bold text-slate-900">Bảng kê tiền đầu ca</h2><p class="mt-0.5 text-xs text-slate-500">Nhập số lượng tiền mặt và số dư tài khoản để bắt đầu ca.</p></div>
+                <div><h2 class="text-lg font-bold text-slate-900">Bảng kê tiền đầu ca</h2><p class="mt-0.5 text-xs text-slate-500">Nhập tiền mặt đầu ca và số dư tài khoản.</p></div>
                 <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100" @click="dismiss">Đóng</button>
             </div>
             <div class="custom-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto px-1">

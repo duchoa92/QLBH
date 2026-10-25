@@ -250,7 +250,6 @@ const useNewCustomer = () => {
 */
 const lockType = ref(form.screen_pattern ? 'pattern' : (form.screen_password ? 'password' : ''));
 const lockTypeOptions = [
-    { value: '', label: '-- Chọn kiểu khóa --' },
     { value: 'pin', label: 'Mã PIN' },
     { value: 'password', label: 'Mật khẩu' },
     { value: 'pattern', label: 'Mẫu hình' },
@@ -667,7 +666,6 @@ const handleDeviceSearchEnter = () => {
 const filteredIssues = ref([]);
 
 const accountTypeOptions = [
-    { value: '', label: '-- Chọn loại tài khoản --' },
     { value: 'icloud', label: 'iCloud' },
     { value: 'google', label: 'Google' },
     { value: 'samsung', label: 'Samsung Account' },
@@ -888,11 +886,10 @@ const selectWorkflowStep = (status) => {
             <!-- Tra cứu nhanh gọn, dùng lại được sau khi đã chọn kết quả -->
             <div ref="searchLookupRef" class="relative px-1">
                 <div class="space-y-2">
-                    <div class="relative">
-                        <div class="relative min-w-0 flex-1">
-                            <FloatingInput v-model="deviceSearchQuery" label="Tra cứu khách hàng, tên máy, IMEI / Serial" id="repair_unified_search" autocomplete="off" class="pr-14" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" />
-                            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="handleScannedImei" />
-                        </div>
+                    <div class="relative w-full">
+                        <input v-model="deviceSearchQuery" id="repair_unified_search" type="text" autocomplete="off" placeholder="Tra cứu khách hàng, tên máy, IMEI / Serial" class="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 pr-12 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-100" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" />
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-7 !w-7" @scanned="handleScannedImei" />
+                    </div>
                             <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 flex max-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-slate-900/5">
                                 <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
                                 <p v-if="customerSuggestions.length" class="sticky top-0 z-10 flex items-center gap-2 border-b border-blue-100 bg-blue-50/95 px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-blue-800"><span class="h-1.5 w-1.5 rounded-full bg-blue-600"></span>Khách hàng<span class="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-blue-700">{{ customerSuggestions.length }}</span></p>
@@ -935,7 +932,6 @@ const selectWorkflowStep = (status) => {
                                     <button type="button" class="rounded-xl border border-violet-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-violet-800 shadow-sm transition hover:border-violet-400 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(deviceSearchQuery)" @pointerdown.prevent="addDeviceByImei"><span class="block text-[9px] font-semibold uppercase tracking-wide text-violet-500">{{ isImeiBlocked(deviceSearchQuery) ? 'Đang có phiếu' : 'Tạo mới' }}</span><span class="mt-0.5 block truncate">+ IMEI “{{ deviceSearchQuery }}”</span></button>
                                 </div>
                             </div>
-                        </div>
                     <div v-if="isImeiBlocked(deviceSearchQuery)" class="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-800">
                         IMEI này đang được xử lý trong phiếu {{ activeRepairForImei(deviceSearchQuery)?.code }}. Không thể tạo phiếu mới.
                     </div>

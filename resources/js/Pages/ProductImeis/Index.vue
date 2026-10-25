@@ -67,10 +67,6 @@ const openPriceEditor = (imei) => {
 
             <div>
 
-                <h1 class="text-lg font-bold text-slate-900">
-                    Quản lý IMEI
-                </h1>
-
                 <p class="text-xs text-slate-500">
                     {{ product.name }}
                 </p>

@@ -30,10 +30,6 @@ const activeTab = ref('Tổng quan')
 
                 <div>
 
-                    <h1 class="text-2xl font-bold">
-                        {{ customer.full_name }}
-                    </h1>
-
                     <div class="text-gray-500 mt-1">
                         {{ customer.phone }}
                     </div>

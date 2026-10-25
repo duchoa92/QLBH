@@ -366,6 +366,46 @@ const formatSize = (size) => size < 1024 * 1024
     ? `${(size / 1024).toFixed(1)} KB`
     : `${(size / (1024 * 1024)).toFixed(2)} MB`
 
+const formatCloudError = (error, provider = 'google_drive') => {
+    const raw = String(error || '').trim()
+    const message = raw.toLowerCase()
+    const service = provider === 'onedrive' ? 'OneDrive' : 'Google Drive'
+    const status = Number(raw.match(/(?:HTTP|status code)\s*[:=]?\s*(\d{3})/i)?.[1] || 0)
+
+    if (/project.{0,80}(has been deleted|deleted)|has been deleted.{0,80}project/.test(message)) {
+        return `Dự án Google Cloud đang cấp quyền cho kết nối này đã bị xóa. Hãy chọn hoặc tạo dự án còn hoạt động, bật Google Drive API, cập nhật OAuth Client ID/Secret trên máy chủ, rồi xóa kết nối cũ và kết nối lại.`
+    }
+    if (/storagequotaexceeded|quota.{0,30}(exceed|full)|storage quota/.test(message)) {
+        return 'Google Drive đã hết dung lượng. Hãy giải phóng dung lượng hoặc kết nối tài khoản Drive khác.'
+    }
+    if (/redirect_uri_mismatch/.test(message)) {
+        return 'Địa chỉ chuyển hướng OAuth chưa khớp. Hãy khai báo đúng Redirect URI trong ứng dụng OAuth.'
+    }
+    if (/invalid_client|unauthorized_client/.test(message)) {
+        return 'Thông tin OAuth của ứng dụng không hợp lệ. Hãy kiểm tra Client ID và Client Secret trên máy chủ.'
+    }
+    if (/invalid_grant|token has been expired|refresh token|interaction_required/.test(message)) {
+        return `Quyền truy cập ${service} đã hết hạn hoặc bị thu hồi. Hãy xóa kết nối cũ rồi kết nối lại.`
+    }
+    if (/access_denied|user denied|consent_required/.test(message)) {
+        return `Bạn chưa cấp quyền cho ứng dụng truy cập ${service}. Hãy kết nối lại và chấp thuận các quyền được yêu cầu.`
+    }
+    if (/insufficientpermissions|insufficient permission|accessdenied|forbidden/.test(message) || status === 403) {
+        return `Ứng dụng chưa được cấp đủ quyền với ${service}. Hãy kiểm tra quyền OAuth và quyền truy cập kho, sau đó kết nối lại.`
+    }
+    if (/invalid credentials|invalidauthenticationtoken|unauthenticated/.test(message) || status === 401) {
+        return `Phiên kết nối ${service} không còn hợp lệ. Hãy xóa kết nối cũ rồi đăng nhập và kết nối lại.`
+    }
+    if (/rate limit|ratelimit|userratelimitexceeded/.test(message) || status === 429) {
+        return `${service} đang giới hạn số yêu cầu. Hãy chờ ít phút rồi thử lại.`
+    }
+    if (/timed out|timeout|could not resolve|connection refused|network error/.test(message)) {
+        return `Không thể liên lạc với ${service}. Kiểm tra kết nối mạng rồi thử lại.`
+    }
+    if (status >= 500) return `${service} đang gặp sự cố tạm thời. Hãy thử lại sau.`
+    return `Không thể truy cập ${service}. Hãy kiểm tra quyền của ứng dụng và thử kết nối lại.`
+}
+
 // Dữ liệu options cho FloatingSelect
 const frequencyOptions = [
     { value: 'daily', label: 'Mỗi ngày' },
@@ -440,7 +480,7 @@ const conflictPolicyOptions = [
                         </dl>
                         <div v-if="showOperationReportDetails && operationProgress.report.cloud_failures?.length" class="mt-3 space-y-1 rounded-lg border border-amber-200 bg-white p-2 text-xs text-amber-950">
                             <p class="font-bold">Đích đám mây chưa nhận được bản sao lưu</p>
-                            <p v-for="failure in operationProgress.report.cloud_failures" :key="`${failure.provider}-${failure.name}`"><strong>{{ failure.name }}</strong>: {{ failure.error }}</p>
+                            <p v-for="failure in operationProgress.report.cloud_failures" :key="`${failure.provider}-${failure.name}`"><strong>{{ failure.name }}</strong>: {{ formatCloudError(failure.error, failure.provider) }}</p>
                         </div>
                         <div v-if="showOperationReportDetails && operationProgress.report.table_details" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
                             <p class="mb-1 font-bold text-emerald-900">Dữ liệu trong backup theo bảng</p>
@@ -564,7 +604,7 @@ const conflictPolicyOptions = [
             >
                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-600/15"><Cloud :size="20" /></span>
                 <span class="min-w-0 flex-1">
-                    <span class="flex items-center gap-2 text-base font-bold text-slate-800">Kho sao lưu đám mây <span v-if="cloud_connections.length" class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{{ cloud_connections.length }} kết nối</span></span>
+                    <span class="flex items-center gap-2 text-base font-bold text-slate-800">Kho sao lưu đám mây <span v-if="props.cloud_connections.length" class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{{ props.cloud_connections.length }} kết nối</span></span>
                     <span class="mt-0.5 block text-xs text-slate-500">Nhấn để {{ showCloudStorage ? 'thu gọn' : 'quản lý kết nối và bản sao lưu' }}.</span>
                 </span>
                 <ChevronDown :size="18" class="shrink-0 text-slate-500 transition-transform duration-200" :class="showCloudStorage && 'rotate-180'" />
@@ -587,14 +627,14 @@ const conflictPolicyOptions = [
                 <p v-if="cloudForm.errors.name" class="text-xs font-medium text-red-600">
                     {{ cloudForm.errors.name }}
                 </p>
-                <div v-if="!cloud_oauth[cloudForm.provider] || !cloud_oauth.redirect_is_secure || (cloud_oauth.redirect_is_secure && !cloudOAuthOriginMatches)" class="space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
-                    <p v-if="!cloud_oauth[cloudForm.provider]" class="font-semibold">Chưa cấu hình OAuth cho {{ cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }} trên máy chủ.</p>
-                    <p v-if="!cloud_oauth.redirect_is_secure" class="font-semibold">Địa chỉ chuyển hướng chưa an toàn. Hãy cấu hình HTTPS công khai hoặc dùng localhost.</p>
+                <div v-if="!props.cloud_oauth[cloudForm.provider] || !props.cloud_oauth.redirect_is_secure || (props.cloud_oauth.redirect_is_secure && !cloudOAuthOriginMatches)" class="space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
+                    <p v-if="!props.cloud_oauth[cloudForm.provider]" class="font-semibold">Chưa cấu hình OAuth cho {{ cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }} trên máy chủ.</p>
+                    <p v-if="!props.cloud_oauth.redirect_is_secure" class="font-semibold">Địa chỉ chuyển hướng chưa an toàn. Hãy cấu hình HTTPS công khai hoặc dùng localhost.</p>
                     <p v-else-if="!cloudOAuthOriginMatches" class="font-semibold">Địa chỉ đang mở không khớp với địa chỉ OAuth. Hãy mở hệ thống bằng đúng địa chỉ gốc của callback.</p>
                 </div>
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <button type="button" class="text-xs font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900" :aria-expanded="showCloudGuide" @click="showCloudGuide = !showCloudGuide">{{ showCloudGuide ? 'Ẩn hướng dẫn' : 'Hướng dẫn kết nối' }}</button>
-                    <ActionButton type="submit" :disabled="cloudForm.processing || !cloud_oauth[cloudForm.provider] || !cloud_oauth.redirect_is_secure || !cloudOAuthOriginMatches" class="h-10 !bg-sky-700 px-4 text-xs font-semibold !text-white hover:!bg-sky-800 disabled:!opacity-70">
+                    <ActionButton type="submit" :disabled="cloudForm.processing || !props.cloud_oauth[cloudForm.provider] || !props.cloud_oauth.redirect_is_secure || !cloudOAuthOriginMatches" class="h-10 !bg-sky-700 px-4 text-xs font-semibold !text-white hover:!bg-sky-800 disabled:!opacity-70">
                         <Link2 :size="15" /> {{ cloudForm.processing ? 'Đang kiểm tra kết nối…' : ['google_drive', 'onedrive'].includes(cloudForm.provider) ? `Kết nối ${cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive'}` : 'Kiểm tra & kết nối' }}
                     </ActionButton>
                 </div>
@@ -603,7 +643,7 @@ const conflictPolicyOptions = [
                     <ol class="list-inside list-decimal space-y-1.5">
                         <li>Tạo ứng dụng OAuth trong Google Cloud Console hoặc Microsoft Entra.</li>
                         <li>Thêm chính xác địa chỉ chuyển hướng này vào ứng dụng:
-                            <code class="mt-1 block break-all rounded bg-white px-2 py-1 text-[11px]">{{ cloud_oauth.redirect_uri?.[cloudForm.provider] || 'Chưa tạo được địa chỉ chuyển hướng' }}</code>
+                            <code class="mt-1 block break-all rounded bg-white px-2 py-1 text-[11px]">{{ props.cloud_oauth.redirect_uri?.[cloudForm.provider] || 'Chưa tạo được địa chỉ chuyển hướng' }}</code>
                         </li>
                         <li>Đặt Client ID và Client Secret vào cấu hình máy chủ:
                             <strong class="block">{{ cloudForm.provider === 'google_drive' ? 'GOOGLE_DRIVE_CLIENT_ID và GOOGLE_DRIVE_CLIENT_SECRET' : 'MICROSOFT_ONEDRIVE_CLIENT_ID và MICROSOFT_ONEDRIVE_CLIENT_SECRET' }}</strong>
@@ -615,12 +655,12 @@ const conflictPolicyOptions = [
                 </div>
             </form>
 
-            <div v-if="cloud_connections.length" class="mt-4 space-y-3">
-                <div v-for="connection in cloud_connections" :key="connection.id" class="overflow-hidden rounded-xl border border-slate-200">
+            <div v-if="props.cloud_connections.length" class="mt-4 space-y-3">
+                <div v-for="connection in props.cloud_connections" :key="connection.id" class="overflow-hidden rounded-xl border border-slate-200">
                     <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3">
                         <div>
                             <div class="flex items-center gap-2 text-sm font-bold text-slate-800"><Cloud :size="15" class="text-sky-700" />{{ connection.name }} <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{{ connection.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }}</span></div>
-                            <p class="mt-1 text-[11px]" :class="connection.error ? 'text-red-600' : 'text-slate-500'">{{ connection.error || (connection.enabled ? 'Đang đồng bộ bản sao lưu mới' : 'Đã tạm dừng đồng bộ') }}</p>
+                            <p class="mt-1 text-[11px]" :class="connection.error ? 'text-red-600' : 'text-slate-500'">{{ connection.error ? formatCloudError(connection.error, connection.provider) : connection.enabled ? 'Đang đồng bộ bản sao lưu mới' : 'Đã tạm dừng đồng bộ' }}</p>
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button" class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" @click="toggleCloudConnection(connection)">{{ connection.enabled ? 'Tạm dừng' : 'Bật đồng bộ' }}</button>

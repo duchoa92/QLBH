@@ -42,12 +42,6 @@ const saleCustomerName = (saleItem) =>
 
     <div>
 
-        <h1 class="mb-3 text-lg font-bold text-slate-900">
-
-            Chi tiết IMEI
-
-        </h1>
-
         <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
 
             <div class="space-y-3">

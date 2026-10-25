@@ -29,7 +29,7 @@ const applyPrintSettings = (event) => {
     const orientation = thermal ? '' : ` ${page.props.settings?.print_orientation === 'landscape' ? 'landscape' : 'portrait'}`
     const margin = thermal ? '0' : '10mm'
     const width = paper.value === '58mm' ? '54mm' : paper.value === '80mm' ? '76mm' : '100%'
-    style.textContent = `:root{--configured-receipt-width:${width}} @page{size:${sizes[paper.value] || 'A4'}${orientation};margin:${margin}} .receipt-container{width:var(--configured-receipt-width)!important;margin-left:auto!important;margin-right:auto!important}`
+    style.textContent = `.no-print,.print-bar,.btn-print{display:none!important} :root{--configured-receipt-width:${width}} @page{size:${sizes[paper.value] || 'A4'}${orientation};margin:${margin}} .receipt-container{width:var(--configured-receipt-width)!important;margin-left:auto!important;margin-right:auto!important}`
 }
 const print = () => document.querySelector('#print-preview-frame')?.contentWindow?.print()
 </script>

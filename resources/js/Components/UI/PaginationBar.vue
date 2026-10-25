@@ -26,11 +26,16 @@ const changePerPage = (value) => {
         <nav v-if="data.links?.length" class="flex items-center gap-1" aria-label="Phân trang">
             <button v-for="link in data.links" :key="`${link.label}-${link.url}`" type="button" v-html="link.label" :disabled="!link.url" @click="visit(link.url)" class="min-w-9 rounded-md border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-40" :class="link.active ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50'" />
         </nav>
-        <div class="flex items-center gap-2 text-slate-500">
+        <div class="flex shrink-0 items-center gap-2 text-slate-500">
             <label :for="`page-size-${data.current_page || 1}`">Số dòng</label>
-            <select :id="`page-size-${data.current_page || 1}`" :value="filters?.per_page || 10" @change="changePerPage(Number($event.target.value))" class="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+            <span class="relative inline-flex shrink-0">
+                <select :id="`page-size-${data.current_page || 1}`" :value="filters?.per_page || 10" @change="changePerPage(Number($event.target.value))" class="h-9 w-[4.5rem] appearance-none rounded-md border border-slate-200 bg-white py-1 pl-2.5 pr-7 text-sm font-medium tabular-nums text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100">
                 <option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option>
-            </select>
+                </select>
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" class="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500">
+                    <path fill-rule="evenodd" d="M5.22 7.47a.75.75 0 0 1 1.06 0L10 11.19l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                </svg>
+            </span>
         </div>
     </div>
 </template>

@@ -65,17 +65,16 @@ class WorkShiftController extends Controller
     {
         $data = $request->validate([
             'denominations' => ['required', 'array'],
-            'denominations.*' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'denominations.*' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'cash_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_balances' => ['nullable', 'array', 'max:10'],
             'bank_balances.*' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
-        $this->validateDenominations($data['denominations']);
-        $openingAmount = isset($data['cash_amount'])
-            ? (float) $data['cash_amount']
-            : $this->totalFromDenominations($data['denominations']);
+        $denominations = $data['denominations'] ?? [];
+        $this->validateDenominations($denominations);
+        $openingAmount = isset($data['cash_amount']) ? (float) $data['cash_amount'] : $this->totalFromDenominations($denominations);
 
-        $shift = DB::transaction(function () use ($data, $openingAmount): WorkShift {
+        $shift = DB::transaction(function () use ($data, $denominations, $openingAmount): WorkShift {
             WorkShift::query()
                 ->where('user_id', auth()->id())
                 ->whereNull('closed_at')
@@ -89,7 +88,7 @@ class WorkShiftController extends Controller
             return WorkShift::create([
                 'user_id' => auth()->id(),
                 'opening_amount' => $openingAmount,
-                'opening_denominations' => $data['denominations'],
+                'opening_denominations' => $denominations,
                 'opening_bank_balances' => $data['bank_balances'] ?? [],
                 'opened_at' => now(),
             ]);
@@ -104,17 +103,16 @@ class WorkShiftController extends Controller
     {
         $data = $request->validate([
             'denominations' => ['required', 'array'],
-            'denominations.*' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'denominations.*' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'cash_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_balances' => ['nullable', 'array', 'max:10'],
             'bank_balances.*' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
-        $this->validateDenominations($data['denominations']);
-        $closingAmount = isset($data['cash_amount'])
-            ? (float) $data['cash_amount']
-            : $this->totalFromDenominations($data['denominations']);
+        $denominations = $data['denominations'] ?? [];
+        $this->validateDenominations($denominations);
+        $closingAmount = isset($data['cash_amount']) ? (float) $data['cash_amount'] : $this->totalFromDenominations($denominations);
 
-        $shift = DB::transaction(function () use ($data, $closingAmount): WorkShift {
+        $shift = DB::transaction(function () use ($data, $denominations, $closingAmount): WorkShift {
             $shift = WorkShift::query()
                 ->where('user_id', auth()->id())
                 ->whereNull('closed_at')
@@ -133,7 +131,7 @@ class WorkShiftController extends Controller
                 'customer_debt_amount' => $customerDebt,
                 'expected_cash' => (float) $shift->opening_amount + $cashCollected,
                 'closing_amount' => $closingAmount,
-                'closing_denominations' => $data['denominations'],
+                'closing_denominations' => $denominations,
                 'closing_bank_balances' => $data['bank_balances'] ?? [],
                 'closed_at' => now(),
             ]);

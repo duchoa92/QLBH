@@ -42,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
                 'allow_negative_stock' => filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_enabled' => filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_threshold' => (int) setting('inventory_alert_threshold', 5),
+                'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),

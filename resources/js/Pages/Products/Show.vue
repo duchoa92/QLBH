@@ -14,10 +14,6 @@ defineProps({
             class="mb-3 flex items-center justify-between"
         >
 
-            <h1 class="text-lg font-bold">
-                Chi tiết sản phẩm
-            </h1>
-
             <Link
                 :href="route('products.index')"
                 class="px-4 py-2 bg-gray-200 rounded"

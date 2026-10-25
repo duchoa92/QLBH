@@ -325,22 +325,21 @@ const handleCustomerOutsideClick = event => {
         <!-- NCC + NGÀY NHẬP HÀNG -->
         <!-- ===================================================== -->
 
-        <div v-if="!props.partyTypeLocked" class="mb-3 inline-flex rounded-xl bg-slate-100 p-1">
-            <button type="button" :class="props.partyType === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'supplier')">
-                <Truck class="h-4 w-4" /> Nhà cung cấp
-            </button>
-            <button type="button" :class="props.partyType === 'customer' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'customer')">
-                <UserRound class="h-4 w-4" /> Khách lẻ
-            </button>
-        </div>
-
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,0.42fr)] lg:items-center">
+            <div v-if="!props.partyTypeLocked" class="col-span-full inline-flex w-fit rounded-xl bg-slate-100 p-1 lg:col-span-1">
+                <button type="button" :class="props.partyType === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'supplier')">
+                    <Truck class="h-4 w-4" /> Nhà cung cấp
+                </button>
+                <button type="button" :class="props.partyType === 'customer' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'customer')">
+                    <UserRound class="h-4 w-4" /> Khách lẻ
+                </button>
+            </div>
 
             <!-- ================================================= -->
             <!-- NHÀ CUNG CẤP -->
             <!-- ================================================= -->
 
-            <div v-if="props.partyType === 'supplier'">
+            <div v-if="props.partyType === 'supplier'" class="min-w-0">
 
                 <!-- ĐÃ CHỌN NCC -->
                 <div
@@ -586,7 +585,7 @@ const handleCustomerOutsideClick = event => {
 
             </div>
 
-            <div v-else ref="customerSearchRef" class="relative">
+            <div v-else ref="customerSearchRef" class="relative min-w-0">
                 <div v-if="props.customer" class="flex h-10 items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 shadow-sm">
                     <div class="flex min-w-0 items-center gap-2">
                         <UserRound class="h-4 w-4 shrink-0 text-blue-700" />
@@ -615,7 +614,7 @@ const handleCustomerOutsideClick = event => {
             <!-- NGÀY NHẬP HÀNG -->
             <!-- ================================================= -->
 
-            <div class="relative">
+            <div class="relative min-w-0">
 
                 <FloatingInput
                     v-model="importDate"

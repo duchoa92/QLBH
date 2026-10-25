@@ -215,10 +215,6 @@ const confirmPayment = async (payment) => {
         <!-- HEADER & THỐNG KÊ + NÚT TẠO MỚI -->
         <div class="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-sm">
             <div class="flex items-center gap-3">
-                <div>
-                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">Quản lý sửa chữa</h1>
-                </div>
-
                 <!-- THỐNG KÊ NHANH (Chữ to & sát lề) -->
                 <div class="hidden md:flex items-center gap-2 pl-3 border-l border-slate-200 text-xs">
                     <div class="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/60 text-amber-800">

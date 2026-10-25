@@ -271,10 +271,6 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <h1 class=" text-lg font-bold text-slate-900">
-                            Thêm đơn nhập hàng
-                        </h1>
-
                         <div class="mt-0.5 text-xs text-slate-500" >
                             Tạo phiếu nhập kho mới
                         </div>
