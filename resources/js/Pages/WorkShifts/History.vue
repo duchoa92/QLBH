@@ -5,12 +5,13 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { Wallet } from 'lucide-vue-next'
+import { formatMoney as formatConfiguredMoney } from '@/utils/format'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({ shifts: { type: Array, default: () => [] } })
 const page = usePage()
 const denominations = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
-const money = value => `${Number(value || 0).toLocaleString('vi-VN')} ₫`
+const money = formatConfiguredMoney
 const keyOf = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const today = new Date()
 const cutoff = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)
@@ -93,6 +94,11 @@ const bankLabel = key => {
 }
 const balanceEntries = balances => Object.entries(balances || {})
 const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount) => sum + Number(amount || 0), 0)
+const cashDifferenceClass = difference => difference < 0
+    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    : difference > 0
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : 'border-slate-200 bg-slate-50 text-slate-700'
 </script>
 
 <template>
@@ -135,14 +141,25 @@ const bankTotal = balances => Object.values(balances || {}).reduce((sum, amount)
                     </div>
                     <div>
                         <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Tóm tắt tiền</h3>
-                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                            <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"><p class="text-[11px] text-slate-500">Tiền mặt đầu ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ shift.opening_denominations === null ? 'Không kiểm kê' : money(shift.opening_amount) }}</strong></div>
-                            <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"><p class="text-[11px] text-slate-500">Tiền mặt cuối ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ shift.closing_amount === null ? 'Không kiểm kê' : money(shift.closing_amount) }}</strong></div>
-                            <div class="rounded-lg border border-blue-200/70 bg-blue-50 px-3 py-2"><p class="text-[11px] text-blue-700">Tiền tài khoản đầu ca</p><strong class="mt-0.5 block text-sm text-blue-800">{{ money(bankTotal(shift.opening_bank_balances)) }}</strong></div>
-                            <div class="rounded-lg border border-blue-200/70 bg-blue-50 px-3 py-2"><p class="text-[11px] text-blue-700">Tiền tài khoản cuối ca</p><strong class="mt-0.5 block text-sm text-blue-800">{{ money(bankTotal(shift.closing_bank_balances)) }}</strong></div>
-                            <div class="rounded-lg border border-emerald-200/70 bg-emerald-50 px-3 py-2"><p class="text-[11px] text-emerald-700">Tiền thu thực tế</p><strong class="mt-0.5 block text-sm text-emerald-800">{{ money(shift.cash_collected) }}</strong></div>
-                            <div class="rounded-lg border border-amber-200/70 bg-amber-50 px-3 py-2"><p class="text-[11px] text-amber-700">Khách còn nợ</p><strong class="mt-0.5 block text-sm text-amber-800">{{ money(shift.customer_debt_amount) }}</strong></div>
-                            <div v-if="shift.difference !== null" class="rounded-lg border border-rose-200/70 bg-rose-50 px-3 py-2"><p class="text-[11px] text-rose-700">Số tiền chênh lệch</p><strong class="mt-0.5 block text-sm" :class="shift.difference < 0 ? 'text-rose-700' : 'text-emerald-700'">{{ money(shift.difference) }}</strong></div>
+                        <div class="grid gap-3 lg:grid-cols-2">
+                            <section class="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                                <h4 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-700">Tiền mặt</h4>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="rounded-lg border border-slate-200 bg-white px-3 py-2"><p class="text-[11px] text-slate-500">Đầu ca</p><strong class="mt-0.5 block text-sm text-slate-800">{{ shift.opening_amount === null ? '—' : money(shift.opening_amount) }}</strong></div>
+                                    <div class="rounded-lg border border-slate-200 bg-white px-3 py-2"><p class="text-[11px] text-slate-500">Cuối ca kiểm đếm</p><strong class="mt-0.5 block text-sm text-slate-800">{{ shift.closing_amount === null ? '—' : money(shift.closing_amount) }}</strong></div>
+                                    <div class="rounded-lg border border-emerald-200/70 bg-emerald-50 px-3 py-2"><p class="text-[11px] text-emerald-700">Tiền mặt thu trong ca</p><strong class="mt-0.5 block text-sm text-emerald-800">{{ money(shift.cash_collected) }}</strong></div>
+                                    <div class="rounded-lg border border-amber-200/70 bg-amber-50 px-3 py-2"><p class="text-[11px] text-amber-700">Khách còn nợ</p><strong class="mt-0.5 block text-sm text-amber-800">{{ money(shift.customer_debt_amount) }}</strong></div>
+                                    <div v-if="shift.difference !== null" class="col-span-2 rounded-lg border px-3 py-2" :class="cashDifferenceClass(shift.difference)"><p class="text-[11px]">{{ shift.difference < 0 ? 'Tiền mặt bị thiếu' : shift.difference > 0 ? 'Tiền mặt bị dư' : 'Tiền mặt khớp' }}</p><strong class="mt-0.5 block text-sm">{{ money(Math.abs(Number(shift.difference))) }}</strong></div>
+                                </div>
+                            </section>
+                            <section class="rounded-xl border border-blue-200/80 bg-blue-50/50 p-3">
+                                <h4 class="mb-2 text-xs font-bold uppercase tracking-wide text-blue-800">Tài khoản</h4>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="rounded-lg border border-blue-200/70 bg-white px-3 py-2"><p class="text-[11px] text-blue-700">Đầu ca</p><strong class="mt-0.5 block text-sm text-blue-800">{{ money(bankTotal(shift.opening_bank_balances)) }}</strong></div>
+                                    <div class="rounded-lg border border-blue-200/70 bg-white px-3 py-2"><p class="text-[11px] text-blue-700">Cuối ca kiểm đếm</p><strong class="mt-0.5 block text-sm text-blue-800">{{ money(bankTotal(shift.closing_bank_balances)) }}</strong></div>
+                                    <div class="col-span-2 rounded-lg border border-emerald-200/70 bg-emerald-50 px-3 py-2"><p class="text-[11px] text-emerald-700">Chuyển khoản thu trong ca</p><strong class="mt-0.5 block text-sm text-emerald-800">{{ money(bankTotal(shift.bank_collected)) }}</strong></div>
+                                </div>
+                            </section>
                         </div>
                     </div>
                 </div>
