@@ -406,6 +406,9 @@ const checkout = async (data) => {
         note: data.note,
         payment_method: data.payment_method,
         paid_amount: Number(data.paid_amount || 0),
+        cash_received_amount: Number(data.cash_received_amount || 0),
+        bank_received_amount: Number(data.bank_received_amount || 0),
+        bank_account: data.bank_account ?? null,
         pay_old_debt: data.pay_old_debt,
         invoice_code: data.invoice_code,
     })

@@ -99,6 +99,7 @@ class RecordDetailController extends Controller
             'Khách hàng' => $r->customer?->full_name, 'Nhân viên' => $r->user?->name,
             'Ngày tạo' => $this->date($r->created_at), 'Tạm tính' => $this->money($r->subtotal),
             'Tổng thanh toán' => $this->money($r->grand_total), 'Đã thanh toán' => $this->money($r->paid_amount),
+            'Tiền mặt nhận' => $this->money($r->cash_received_amount), 'Chuyển khoản nhận' => $this->money($r->bank_received_amount),
             'Trạng thái' => $r->status,
         ])];
     }

@@ -159,6 +159,11 @@ const saleQuantityText = (item) => {
                     </span>
                 </div>
 
+                <div v-if="Number(sale.cash_received_amount || 0) > 0 && Number(sale.bank_received_amount || 0) > 0" class="space-y-1 border-t border-dashed border-slate-200 pt-2 text-xs text-slate-600">
+                    <div class="flex justify-between"><span>Tiền mặt</span><span>{{ formatCurrency(sale.cash_received_amount) }}</span></div>
+                    <div class="flex justify-between"><span>Chuyển khoản{{ sale.bank_account ? ` · ${sale.bank_account}` : '' }}</span><span>{{ formatCurrency(sale.bank_received_amount) }}</span></div>
+                </div>
+
                 <div class="flex justify-between items-center pt-2 border-t border-dashed border-slate-200 text-base font-bold text-slate-900">
                     <span>Tiền thừa trả khách</span>
                     <span class="text-indigo-600 text-lg">

@@ -128,6 +128,12 @@ export function useCheckout(
                     paid_amount:
                         paymentData.paid_amount,
 
+                    cash_received_amount:
+                        paymentData.cash_received_amount ?? null,
+
+                    bank_received_amount:
+                        paymentData.bank_received_amount ?? null,
+
                     payment_method:
                         paymentData.payment_method,
 

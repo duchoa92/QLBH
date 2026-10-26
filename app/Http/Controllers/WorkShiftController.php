@@ -121,8 +121,7 @@ class WorkShiftController extends Controller
 
             $cashCollected = (float) $shift->sales()
                 ->where('status', '!=', 'cancelled')
-                ->where('payment_method', 'cash')
-                ->selectRaw('COALESCE(SUM(paid_amount - change_amount), 0) as total')
+                ->selectRaw('COALESCE(SUM(CASE WHEN cash_received_amount > change_amount THEN cash_received_amount - change_amount ELSE 0 END), 0) as total')
                 ->value('total');
             $customerDebt = $this->customerDebtFor($shift);
 
@@ -153,7 +152,7 @@ class WorkShiftController extends Controller
             $expectedBankBalances[$key] = (float) ($expectedBankBalances[$key] ?? 0) + $amount;
         }
         $cashCollected = $shift->cash_collected === null
-            ? (float) (clone $sales)->where('payment_method', 'cash')->selectRaw('COALESCE(SUM(paid_amount - change_amount), 0) as total')->value('total')
+            ? (float) (clone $sales)->selectRaw('COALESCE(SUM(CASE WHEN cash_received_amount > change_amount THEN cash_received_amount - change_amount ELSE 0 END), 0) as total')->value('total')
             : (float) $shift->cash_collected;
         $expectedCash = $shift->expected_cash === null
             ? (float) $shift->opening_amount + $cashCollected
@@ -194,14 +193,14 @@ class WorkShiftController extends Controller
 
         $bankSales = $shift->sales()
             ->where('status', '!=', 'cancelled')
-            ->where('payment_method', 'bank')
+            ->where('bank_received_amount', '>', 0)
             ->orderBy('created_at')
-            ->get(['id', 'code', 'bank_account', 'paid_amount', 'created_at']);
+            ->get(['id', 'code', 'bank_account', 'bank_received_amount', 'created_at']);
 
         $sales = $bankSales->map(function ($sale) use ($accounts, &$byAccount): array {
             $account = collect($accounts)->first(fn (array $item): bool => (string) ($item['bank_account'] ?? '') === (string) ($sale->bank_account ?? ''));
             $key = $account['key'] ?? ($sale->bank_account ?: 'unassigned');
-            $amount = (float) $sale->paid_amount;
+            $amount = (float) $sale->bank_received_amount;
             $byAccount[$key] = (float) ($byAccount[$key] ?? 0) + $amount;
 
             return [

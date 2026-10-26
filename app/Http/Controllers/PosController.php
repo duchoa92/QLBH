@@ -71,6 +71,8 @@ class PosController extends Controller
             'pay_old_debt' => ['required', 'boolean'],
             'invoice_code' => ['required', 'string', 'regex:/^INV-[0-9]{14}$/'],
             'expected_amount' => ['required', 'integer', 'min:1', 'max:9999999999999'],
+            'total_amount' => ['required', 'integer', 'min:1', 'max:9999999999999'],
+            'cash_received_amount' => ['nullable', 'integer', 'min:0', 'max:9999999999999'],
             'bank_account' => ['required', 'string', 'max:50'],
         ]);
 
@@ -103,12 +105,16 @@ class PosController extends Controller
                 ? $line * (float) ($item['discount_value'] ?? 0) / 100
                 : (($item['discount_type'] ?? null) === 'amount' ? (float) ($item['discount_value'] ?? 0) : 0);
         });
-        $expected = (int) round(max(0, $subtotal - $discount));
+        $checkoutTotal = (int) round(max(0, $subtotal - $discount));
         if ($data['pay_old_debt']) {
             $customer = Customer::query()->findOrFail($data['customer_id'] ?? null);
-            $expected += (int) round((float) $customer->debt_balance);
+            $checkoutTotal += (int) round((float) $customer->debt_balance);
         }
-        abort_unless($expected === (int) $data['expected_amount'], 422, 'Tổng tiền cần thanh toán đã thay đổi. Vui lòng mở lại QR.');
+        abort_unless($checkoutTotal === (int) $data['total_amount'], 422, 'Tổng tiền cần thanh toán đã thay đổi. Vui lòng mở lại QR.');
+        $expected = (int) $data['expected_amount'];
+        abort_unless($expected <= $checkoutTotal, 422, 'Số tiền chuyển khoản không được lớn hơn tổng tiền cần thanh toán.');
+        $cashReceivedAmount = (int) ($data['cash_received_amount'] ?? 0);
+        abort_if(! ($data['customer_id'] ?? null) && $expected + $cashReceivedAmount < $checkoutTotal, 422, 'Khách lẻ cần thanh toán đủ tổng tiền bằng tiền mặt và chuyển khoản.');
 
         $intent = BankPaymentIntent::query()->create([
             'invoice_code' => $data['invoice_code'],
@@ -121,6 +127,7 @@ class PosController extends Controller
                 'items' => $data['items'],
                 'customer_id' => $data['customer_id'] ?? null,
                 'pay_old_debt' => $data['pay_old_debt'],
+                'cash_received_amount' => $cashReceivedAmount,
             ],
             'status' => 'waiting',
             'expires_at' => now()->addMinutes(15),
@@ -268,8 +275,11 @@ class PosController extends Controller
 
             'items' => 'required|array',
 
-            'payment_method' => 'required|string',
-            'bank_account' => 'required_if:payment_method,bank|nullable|string|max:50',
+            'payment_method' => 'required|in:cash,bank,mixed,card',
+            'bank_account' => 'nullable|string|max:50',
+            'cash_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'bank_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'paid_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'invoice_code' => ['nullable', 'string', 'regex:/^INV-[0-9]{14}$/', 'unique:sales,code'],
 
             'items.*.discount_type' => 'nullable|string',
@@ -308,6 +318,11 @@ class PosController extends Controller
             'payment_method.required' => 'Vui lòng chọn phương thức thanh toán.',
         ]);
 
+        if ($request->payment_method === 'mixed') {
+            $splitTotal = (float) ($request->cash_received_amount ?? 0) + (float) ($request->bank_received_amount ?? 0);
+            abort_unless(abs($splitTotal - (float) ($request->paid_amount ?? 0)) < 0.01, 422, 'Tổng tiền mặt và chuyển khoản không khớp số tiền đã nhận.');
+        }
+
         try {
 
             $sale = $service->checkout(
@@ -318,11 +333,13 @@ class PosController extends Controller
                 payOldDebt: (bool) $request->pay_old_debt,
                 userId: auth()->id(),
                 invoiceCode: $request->input('invoice_code'),
+                cashReceivedAmount: $request->input('cash_received_amount') !== null ? (float) $request->input('cash_received_amount') : null,
+                bankReceivedAmount: $request->input('bank_received_amount') !== null ? (float) $request->input('bank_received_amount') : null,
             );
 
             $sale->update([
                 'work_shift_id' => $workShift->id,
-                'bank_account' => $request->payment_method === 'bank' ? $request->bank_account : null,
+                'bank_account' => in_array($request->payment_method, ['bank', 'mixed'], true) ? $request->bank_account : null,
             ]);
 
             $sale->load([
@@ -378,6 +395,8 @@ class PosController extends Controller
                     'subtotal' => $sale->subtotal,
                     'discount' => $sale->discount,
                     'paid' => (float) $sale->paid_amount,
+                    'cash_received_amount' => (float) $sale->cash_received_amount,
+                    'bank_received_amount' => (float) $sale->bank_received_amount,
                     'change' => (float) $sale->change_amount,
                     'payment_method' => $sale->payment_method ?? 'cash',
                 ],

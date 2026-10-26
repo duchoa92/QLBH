@@ -62,12 +62,12 @@ class DashboardController extends Controller
             ->whereBetween('created_at', [$todayStart, $todayEnd]);
 
         $cashAmount = (float) (clone $salesToday)
-            ->where('payment_method', 'cash')
-            ->sum('paid_amount');
+            ->selectRaw('COALESCE(SUM(CASE WHEN cash_received_amount > change_amount THEN cash_received_amount - change_amount ELSE 0 END), 0) as total')
+            ->value('total');
 
         $bankAmount = (float) (clone $salesToday)
-            ->where('payment_method', '!=', 'cash')
-            ->sum('paid_amount');
+            ->sum('bank_received_amount');
+        $bankAmount += (float) (clone $salesToday)->where('payment_method', 'card')->sum('paid_amount');
 
         /*
         |--------------------------------------------------------------------------

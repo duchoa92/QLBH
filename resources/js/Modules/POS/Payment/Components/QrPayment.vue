@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { buildVietQrPayload, renderVietQrImage } from '@/Modules/POS/Payment/Utils/vietQr'
 
 const props = defineProps({
@@ -21,11 +21,40 @@ const props = defineProps({
     },
     providerQrUrl: { type: String, default: '' },
     providerPaymentUrl: { type: String, default: '' },
+    editable: { type: Boolean, default: false },
     theme: {
         type: String,
         default: 'classic',
     },
 })
+
+const emit = defineEmits(['amount-change'])
+const editingAmount = ref(false)
+const editedAmount = ref('')
+const amountInput = ref(null)
+
+watch(() => props.amount, amount => {
+    if (!editingAmount.value) editedAmount.value = String(Math.round(Number(amount || 0)))
+}, { immediate: true })
+
+const beginEditAmount = async () => {
+    if (!props.editable) return
+    editingAmount.value = true
+    editedAmount.value = String(Math.round(Number(props.amount || 0)))
+    await nextTick()
+    amountInput.value?.focus()
+    amountInput.value?.select()
+}
+
+const updateAmount = event => {
+    const digits = String(event.target.value || '').replace(/\D/g, '')
+    editedAmount.value = digits
+    emit('amount-change', Number(digits || 0))
+}
+
+const finishEditAmount = () => {
+    editingAmount.value = false
+}
 
 const qrImage = computed(() => {
     if (props.providerQrUrl) return props.providerQrUrl
@@ -69,10 +98,31 @@ const qrImage = computed(() => {
 
         <div class="mt-4">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Số tiền chuyển</div>
-            <div class="mt-1 inline-flex items-baseline gap-1 rounded-full border border-emerald-100 bg-white/85 px-4 py-1.5 text-xl font-black tracking-tight text-emerald-800 shadow-sm">
+            <input
+                v-if="editable && editingAmount"
+                ref="amountInput"
+                :value="editedAmount"
+                type="text"
+                inputmode="numeric"
+                aria-label="Số tiền chuyển khoản"
+                class="mt-1 w-48 rounded-full border border-emerald-300 bg-white px-4 py-1.5 text-center text-xl font-black tracking-tight text-emerald-800 shadow-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                @input="updateAmount"
+                @blur="finishEditAmount"
+                @keydown.enter.prevent="finishEditAmount"
+            />
+            <button
+                v-else-if="editable"
+                type="button"
+                title="Nhấn để sửa số tiền chuyển khoản"
+                class="mt-1 inline-flex items-baseline gap-1 rounded-full border border-emerald-100 bg-white/85 px-4 py-1.5 text-xl font-black tracking-tight text-emerald-800 shadow-sm hover:border-emerald-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                @click="beginEditAmount"
+            >
+                {{ $money(amount) }}
+            </button>
+            <div v-else class="mt-1 inline-flex items-baseline gap-1 rounded-full border border-emerald-100 bg-white/85 px-4 py-1.5 text-xl font-black tracking-tight text-emerald-800 shadow-sm">
                 {{ $money(amount) }}
             </div>
-            <p class="mt-2 text-xs font-medium text-slate-500">Mở ứng dụng ngân hàng và quét mã phía trên</p>
+            <p v-if="editable" class="mt-1 text-[11px] text-slate-500">Nhấn vào số tiền để chỉnh sửa</p>
             <a v-if="providerPaymentUrl" :href="providerPaymentUrl" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex text-xs font-semibold text-violet-700 underline">Mở trang thanh toán ApiPay</a>
         </div>
     </div>

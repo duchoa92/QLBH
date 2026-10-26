@@ -24,6 +24,8 @@ class PosCheckoutService
         bool $payOldDebt,
         int $userId,
         ?string $invoiceCode = null,
+        ?float $cashReceivedAmount = null,
+        ?float $bankReceivedAmount = null,
     ): Sale {
 
         return DB::transaction(function () use (
@@ -34,6 +36,8 @@ class PosCheckoutService
             $payOldDebt,
             $userId,
             $invoiceCode,
+            $cashReceivedAmount,
+            $bankReceivedAmount,
         ): Sale {
 
             /*
@@ -94,6 +98,9 @@ class PosCheckoutService
             |--------------------------------------------------------------------------
             */
 
+            $cashReceivedAmount ??= $paymentMethod === 'cash' ? $paidAmount : 0;
+            $bankReceivedAmount ??= $paymentMethod === 'bank' ? $paidAmount : 0;
+
             $sale = Sale::query()->create([
                 'code' => $invoiceCode ?: $this->generateCode(),
                 'customer_id' => $customerId,
@@ -102,6 +109,8 @@ class PosCheckoutService
                 'discount' => $discount,
                 'grand_total' => $grandTotal,
                 'paid_amount' => $paidAmount,
+                'cash_received_amount' => $cashReceivedAmount,
+                'bank_received_amount' => $bankReceivedAmount,
                 'change_amount' => 0, // Sẽ cập nhật lại ở cuối sau khi tính toán chính xác
                 'payment_method' => $paymentMethod ?? 'cash', // Phòng hờ nếu null thì lưu là 'cash'
             ]);

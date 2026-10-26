@@ -129,6 +129,14 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
                     <span>Khách đưa:</span>
                     <span>{{ formatMoney(sale.paid_amount || 0) }}</span>
                 </div>
+                <div v-if="Number(sale.cash_received_amount || 0) > 0 && Number(sale.bank_received_amount || 0) > 0" class="row text-xs">
+                    <span>Tiền mặt:</span>
+                    <span>{{ formatMoney(sale.cash_received_amount) }}</span>
+                </div>
+                <div v-if="Number(sale.cash_received_amount || 0) > 0 && Number(sale.bank_received_amount || 0) > 0" class="row text-xs">
+                    <span>Chuyển khoản{{ sale.bank_account ? ` · ${sale.bank_account}` : '' }}:</span>
+                    <span>{{ formatMoney(sale.bank_received_amount) }}</span>
+                </div>
                 <div class="row">
                     <span>{{ balanceLabel().label }}</span>
                     <span>{{ formatMoney(balanceLabel().amount) }}</span>

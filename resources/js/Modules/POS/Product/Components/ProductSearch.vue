@@ -279,15 +279,15 @@ const categoryOptions = computed(() => [
             <div class="grid gap-3 md:grid-cols-[1fr_260px] lg:grid-cols-[1fr_320px] items-center">
                 
                 <!-- Ô TÌM KIẾM -->
-                <div class="relative">
+                <div class="relative min-w-0">
                     <FloatingInput
                         v-model="keyword"
                         @keyup.enter="scanImei"
                         type="text"
                         label="Tìm tên, SKU, barcode hoặc IMEI"
-                        class="pr-12"
+                        input-class="pr-12"
                     />
-                    <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onCameraScan" />
+                    <BarcodeCameraButton class="absolute right-2 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onCameraScan" />
                 </div>
 
                 <!-- LỌC DANH MỤC & NÚT REFRESH -->

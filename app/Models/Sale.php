@@ -19,6 +19,8 @@ class Sale extends Model
         'tax',
         'grand_total',
         'paid_amount',
+        'cash_received_amount',
+        'bank_received_amount',
         'change_amount',
         'payment_method',
         'bank_account',

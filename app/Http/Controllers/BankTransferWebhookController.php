@@ -164,11 +164,13 @@ class BankTransferWebhookController extends Controller
                 $sale = $checkout->checkout(
                     items: $payload['items'],
                     customerId: $payload['customer_id'] ? (int) $payload['customer_id'] : null,
-                    paidAmount: $received,
-                    paymentMethod: 'bank',
+                    paidAmount: $received + (int) ($payload['cash_received_amount'] ?? 0),
+                    paymentMethod: (int) ($payload['cash_received_amount'] ?? 0) > 0 ? 'mixed' : 'bank',
                     payOldDebt: (bool) $payload['pay_old_debt'],
                     userId: (int) $locked->user_id,
                     invoiceCode: $locked->invoice_code,
+                    cashReceivedAmount: (float) ($payload['cash_received_amount'] ?? 0),
+                    bankReceivedAmount: (float) $received,
                 );
                 $sale->update(['work_shift_id' => $locked->work_shift_id, 'bank_account' => $locked->bank_account]);
                 $sale->load(['items.product', 'items.variant', 'items.productImei', 'customer']);
@@ -221,8 +223,10 @@ class BankTransferWebhookController extends Controller
                 ])->all(),
                 'subtotal' => $sale->subtotal,
                 'paid' => (float) $sale->paid_amount,
+                'cash_received_amount' => (float) $sale->cash_received_amount,
+                'bank_received_amount' => (float) $sale->bank_received_amount,
                 'change' => (float) $sale->change_amount,
-                'payment_method' => 'bank',
+                'payment_method' => $sale->payment_method,
             ],
         ];
     }
