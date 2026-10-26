@@ -128,7 +128,7 @@ const destroy = (user) => {
                 title="Quản lý người dùng"
             />
 
-            <DataPanel>
+            <DataPanel detached>
                 <template #header>
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div class="relative w-full sm:max-w-md">

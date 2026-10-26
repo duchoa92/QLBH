@@ -31,6 +31,9 @@ class PasswordResetLinkController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
+        ], [
+            'email.required' => 'Vui lòng nhập địa chỉ email.',
+            'email.email' => 'Địa chỉ email không hợp lệ.',
         ]);
 
         // We will send the password reset link to this user. Once we have attempted
@@ -41,11 +44,13 @@ class PasswordResetLinkController extends Controller
         );
 
         if ($status == Password::RESET_LINK_SENT) {
-            return back()->with('status', __($status));
+            return back()->with('status', 'password.reset-link-sent');
         }
 
         throw ValidationException::withMessages([
-            'email' => [trans($status)],
+            'email' => [$status === Password::RESET_THROTTLED
+                ? 'Bạn vừa yêu cầu gửi liên kết. Vui lòng thử lại sau một phút.'
+                : 'Không tìm thấy tài khoản phù hợp với địa chỉ email này.'],
         ]);
     }
 }

@@ -29,16 +29,21 @@ class HandleInertiaRequests extends Middleware
      */
    public function share(Request $request): array
     {
+        // The installer can run while the configured database is unavailable.
+        // In that state Laravel uses a temporary SQLite connection with no users
+        // table, so a stale remember-me cookie must not trigger a user lookup.
+        $isSetupRequest = $request->is('setup', 'setup/*');
+
         return array_merge(
             parent::share($request),
             [
 
                 'auth' => [
 
-                    'user' => $request->user(),
+                    'user' => fn () => $isSetupRequest ? null : $request->user(),
 
                     'permissions' => fn () =>
-                        $request->user()
+                        ! $isSetupRequest && $request->user()
                             ? $request->user()
                                 ->getAllPermissions()
                                 ->pluck('name')
@@ -46,7 +51,7 @@ class HandleInertiaRequests extends Middleware
                             : [],
 
                     'roles' => fn () =>
-                        $request->user()
+                        ! $isSetupRequest && $request->user()
                             ? $request->user()
                                 ->getRoleNames()
                                 ->values()

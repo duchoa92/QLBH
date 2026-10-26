@@ -259,7 +259,7 @@ const showImport = (id) => {
     <div class="space-y-3">
         <PageHeader title="Phiếu nhập hàng" />
 
-        <DataPanel>
+        <DataPanel detached>
 
             <!-- SEARCH -->
 
@@ -344,6 +344,7 @@ const showImport = (id) => {
 
             <!-- TABLE -->
 
+            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="overflow-x-auto">
 
                 <table class="w-full text-sm">
@@ -526,6 +527,7 @@ const showImport = (id) => {
             </div>
 
             <PaginationBar :data="props.imports" :filters="props.filters" />
+            </div>
 
         </DataPanel>
 

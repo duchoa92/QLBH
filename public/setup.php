@@ -7,7 +7,7 @@ Dotenv\Dotenv::createMutable($basePath)->safeLoad();
 $readEnv = static fn (string $key, string $default = ''): string => (string) ($_ENV[$key] ?? $_SERVER[$key] ?? $default);
 
 if (! is_file($installedFlag)) {
-    $legacyInstalled = false;
+    $databaseExists = false;
 
     try {
         $driver = $readEnv('DB_CONNECTION', 'sqlite');
@@ -28,24 +28,18 @@ if (! is_file($installedFlag)) {
         if ($driver === 'sqlite' && $database !== ':memory:' && ! is_file($database)) {
             $dsn = '';
         }
+        if ($driver === 'sqlite' && $database === ':memory:') {
+            $dsn = '';
+        }
         if ($dsn !== '') {
-            $pdo = new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 2]);
-            if ($driver === 'mysql') {
-                $hasUsers = (bool) $pdo->query("SHOW TABLES LIKE 'users'")->fetchColumn();
-            } elseif ($driver === 'pgsql') {
-                $hasUsers = (bool) $pdo->query("SELECT to_regclass('public.users')")->fetchColumn();
-            } else {
-                $hasUsers = (bool) $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")->fetchColumn();
-            }
-            if ($hasUsers) {
-                $legacyInstalled = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0;
-            }
+            new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 2]);
+            $databaseExists = true;
         }
     } catch (Throwable $exception) {
         // If the current connection is unavailable, the setup wizard can repair it.
     }
 
-    if ($legacyInstalled) {
+    if ($databaseExists) {
         if (! is_dir(dirname($installedFlag))) {
             mkdir(dirname($installedFlag), 0775, true);
         }
@@ -81,7 +75,7 @@ if (! is_file($installedFlag)) {
 }
 
 // A marker alone is not proof that the configured database is still available.
-// Recheck legacy installations so a removed database can be set up again.
+// Recheck the configured database so a removed database can be set up again.
 if (is_file($installedFlag) && ! defined('QLBH_DATABASE_INSTALLED')) {
     $driver = $readEnv('DB_CONNECTION', 'mysql');
     $database = $readEnv('DB_DATABASE', '');
@@ -90,7 +84,7 @@ if (is_file($installedFlag) && ! defined('QLBH_DATABASE_INSTALLED')) {
     $username = $readEnv('DB_USERNAME');
     $password = $readEnv('DB_PASSWORD');
     $connectionFailed = false;
-    $hasUsers = false;
+    $databaseExists = false;
 
     try {
         $dsn = match ($driver) {
@@ -100,23 +94,20 @@ if (is_file($installedFlag) && ! defined('QLBH_DATABASE_INSTALLED')) {
             default => '',
         };
         if ($dsn !== '') {
-            $pdo = new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 2]);
-            if ($driver === 'mysql') {
-                $hasUsers = (bool) $pdo->query("SHOW TABLES LIKE 'users'")->fetchColumn();
-            } elseif ($driver === 'pgsql') {
-                $hasUsers = (bool) $pdo->query("SELECT to_regclass('public.users')")->fetchColumn();
+            if ($driver !== 'sqlite' || $database !== ':memory:') {
+                new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 2]);
+                $databaseExists = true;
             } else {
-                $hasUsers = (bool) $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")->fetchColumn();
+                $connectionFailed = true;
             }
-            if ($hasUsers) {
-                $hasUsers = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0;
-            }
+        } else {
+            $connectionFailed = true;
         }
     } catch (Throwable $exception) {
         $connectionFailed = true;
     }
 
-    define('QLBH_DATABASE_INSTALLED', $hasUsers);
+    define('QLBH_DATABASE_INSTALLED', $databaseExists);
     if ($connectionFailed) {
         foreach (['DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => ':memory:', 'SESSION_DRIVER' => 'file', 'CACHE_STORE' => 'file', 'QUEUE_CONNECTION' => 'sync', 'APP_DEBUG' => 'false'] as $key => $value) {
             $_ENV[$key] = $value;

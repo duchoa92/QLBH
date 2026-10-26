@@ -56,7 +56,10 @@ function testConnection() {
     });
 }
 function install() {
-    form.post('/setup/install', { preserveScroll: true });
+    form.post('/setup/install', {
+        preserveScroll: true,
+        onSuccess: () => window.location.replace('/login'),
+    });
 }
 function changeDriver() {
     form.database_port = form.database_driver === 'pgsql' ? '5432' : form.database_driver === 'mysql' ? '3306' : '';

@@ -66,8 +66,8 @@ const applySort = ({ field, order }) => router.get(route('expenses.index'), {
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Tổng chi tháng {{ month }}</p><p class="mt-1 text-2xl font-black text-rose-700">{{ formatMoney(summary.total) }}</p></div>
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Số khoản chi trong tháng</p><p class="mt-1 text-2xl font-black text-slate-900">{{ summary.count }}</p></div>
         </div>
-        <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
+        <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
                 <input v-model="month" type="month" class="rounded-xl border-slate-200 text-sm" />
                 <select v-model="category" class="rounded-xl border-slate-200 text-sm"><option value="">Tất cả loại chi</option><option v-for="item in categories" :key="item" :value="item">{{ categoryLabels[item] || item }}</option></select>
                 <div class="relative min-w-48 flex-1"><Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input v-model="search" placeholder="Tìm nội dung hoặc người nhận" class="w-full rounded-xl border-slate-200 pl-9 text-sm" /></div>
@@ -83,7 +83,7 @@ const applySort = ({ field, order }) => router.get(route('expenses.index'), {
                     <td class="p-2 text-right" @click.stop><template v-if="canManage"><button class="mr-1 rounded-lg p-2 text-emerald-700 hover:bg-emerald-50" aria-label="Sửa" @click="openEdit(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa" @click="remove(row)"><Trash2 :size="15" /></button></template></td>
                 </template>
             </BaseTable>
-        </section>
+        </div>
         <section class="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 bg-blue-50/70 p-4">
                 <div><h2 class="flex items-center gap-2 font-bold text-slate-900"><BellRing :size="18" class="text-blue-700" />Lịch chi phí cố định</h2><p class="mt-1 text-xs text-slate-600">Nhắc trước hạn và hiện nhắc việc trên trang tổng quan. Tháng đang xem: {{ month }}.</p></div>

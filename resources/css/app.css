@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep data tables visually consistent across pages and embedded panels. */
+@media screen {
+    table:not(.no-grid) {
+        border-collapse: collapse;
+    }
+
+    table:not(.no-grid) th,
+    table:not(.no-grid) td {
+        border-right: 1px solid #e2e8f0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    table:not(.no-grid) thead,
+    table:not(.no-grid) thead tr {
+        background-color: #fff;
+    }
+
+    table:not(.no-grid) tr > :last-child {
+        border-right: 0;
+    }
+
+    table:not(.no-grid) tbody tr:last-child > td {
+        border-bottom: 0;
+    }
+}
+
 
 
 [data-sonner-toast] {

@@ -56,7 +56,6 @@ const scheduleForm = useForm({
 
 const restoreForm = useForm({ mode: 'merge', conflict_policy: 'keep_current', confirmed: false, operation_id: null })
 const uploadForm = useForm({ backup_file: null, operation_id: null })
-const clearDataForm = useForm({ confirmation: '', operation_id: null })
 const cloudForm = useForm({ provider: 'google_drive', name: '' })
 const cloudOAuthCallbackUri = computed(() => props.cloud_oauth.redirect_uri?.[cloudForm.provider] || '')
 const cloudOAuthOriginMatches = computed(() => {
@@ -71,22 +70,20 @@ const confirmBox = useConfirm()
 const selectedFileName = ref('')
 const restorePreview = ref(props.restore_preview)
 const showRestorePreview = ref(Boolean(restorePreview.value))
-const showRestoreTableDetails = ref(false)
-const restoreTableSort = ref({ key: 'name', direction: 'asc' })
+const inspectionInProgress = ref(false)
+const inspectionOperation = ref(false)
+const comparisonError = ref('')
 const lastPreviewKey = ref(restorePreview.value?.backup || null)
 const dismissedPreviewKey = ref(null)
 const showCloudStorage = ref(true)
 const showCloudGuide = ref(false)
-const showClearDataDialog = ref(false)
-const clearDataPhrase = ref('')
 const operationProgress = ref({ active: false, percent: 0, message: '', state: 'running', steps: [], report: null })
 const showOperationReportDetails = ref(false)
 let progressTimer = null
 let activeOperation = null
 
-const progressPercent = computed(() => uploadForm.progress?.percentage ?? operationProgress.value.percent)
-const progressVisible = computed(() => operationProgress.value.active || operationProgress.value.state !== 'running' || Boolean(uploadForm.progress))
-const previewFileBytes = computed(() => Number(restorePreview.value?.files_total_bytes || 0))
+const progressPercent = computed(() => inspectionInProgress.value ? operationProgress.value.percent : uploadForm.progress?.percentage ?? operationProgress.value.percent)
+const progressVisible = computed(() => !inspectionOperation.value && (operationProgress.value.active || operationProgress.value.state !== 'running' || Boolean(uploadForm.progress)))
 const backupMonth = ref('')
 const backupPage = ref(1)
 const selectedBackupNames = ref([])
@@ -105,27 +102,68 @@ const scheduleDirty = computed(() =>
     || Number(scheduleForm.weekday) !== Number(props.schedule.weekday ?? 1)
     || Number(scheduleForm.monthday) !== Number(props.schedule.monthday ?? 1)
 )
-const sortedRestoreTables = computed(() => {
-    const rows = Object.entries(restorePreview.value?.tables || {}).map(([name, table]) => ({ name, ...table }))
-    const { key, direction } = restoreTableSort.value
-    const multiplier = direction === 'asc' ? 1 : -1
-    return rows.sort((a, b) => {
-        const left = key === 'difference' ? Number(a.backup_rows || 0) - Number(a.current_rows || 0) : key === 'name' ? a.name : a[key]
-        const right = key === 'difference' ? Number(b.backup_rows || 0) - Number(b.current_rows || 0) : key === 'name' ? b.name : b[key]
-        if (left == null && right == null) return 0
-        if (left == null) return 1
-        if (right == null) return -1
-        if (typeof left === 'number' && typeof right === 'number') return (left - right) * multiplier
-        if (typeof left === 'boolean' && typeof right === 'boolean') return (Number(left) - Number(right)) * multiplier
-        return String(left).localeCompare(String(right), 'vi', { numeric: true }) * multiplier
-    })
-})
-const sortRestoreTables = (key) => {
-    restoreTableSort.value = {
-        key,
-        direction: restoreTableSort.value.key === key && restoreTableSort.value.direction === 'asc' ? 'desc' : 'asc',
+const restoreSortBy = ref('name')
+const restoreSortDirection = ref('asc')
+const sortedRestoreTables = computed(() => Object.entries(restorePreview.value?.tables || {})
+    .map(([name, table], index) => ({ name, ...table, index }))
+    .sort((left, right) => {
+        const completionOrder = Number(left.status === 'completed') - Number(right.status === 'completed')
+        if (completionOrder) return completionOrder
+
+        const field = restoreSortBy.value
+        const values = {
+            name: [tableLabel(left.name), tableLabel(right.name)],
+            backup_rows: [Number(left.backup_rows || 0), Number(right.backup_rows || 0)],
+            current_rows: [Number(left.current_rows || 0), Number(right.current_rows || 0)],
+            difference: [Number(left.backup_rows || 0) - Number(left.current_rows || 0), Number(right.backup_rows || 0) - Number(right.current_rows || 0)],
+            schema: [Number(Boolean(left.schema_compatible)), Number(Boolean(right.schema_compatible))],
+            data: [Number(Boolean(left.data_matches)), Number(Boolean(right.data_matches))],
+            conflicts: [Number(left.primary_key_conflicts ?? -1), Number(right.primary_key_conflicts ?? -1)],
+        }[field]
+        const compared = typeof values[0] === 'string'
+            ? values[0].localeCompare(values[1], 'vi')
+            : values[0] - values[1]
+        return (restoreSortDirection.value === 'asc' ? compared : -compared) || left.index - right.index
+    }))
+
+const sortRestoreTablesBy = (field) => {
+    if (restoreSortBy.value === field) {
+        restoreSortDirection.value = restoreSortDirection.value === 'asc' ? 'desc' : 'asc'
+        return
     }
+    restoreSortBy.value = field
+    restoreSortDirection.value = 'asc'
 }
+
+const tableLabels = {
+    user: 'Người dùng', users: 'Người dùng', product: 'Sản phẩm', products: 'Sản phẩm',
+    customer: 'Khách hàng', supplier: 'Nhà cung cấp', sale: 'Đơn bán hàng', category: 'Danh mục sản phẩm',
+    users: 'Người dùng', password_reset_tokens: 'Mã đặt lại mật khẩu', sessions: 'Phiên đăng nhập',
+    products: 'Sản phẩm', product_variants: 'Phiên bản sản phẩm', product_imeis: 'Mã IMEI sản phẩm',
+    product_imei_histories: 'Lịch sử IMEI sản phẩm', categories: 'Danh mục sản phẩm', brands: 'Thương hiệu', units: 'Đơn vị tính',
+    sales: 'Đơn bán hàng', sale_items: 'Chi tiết đơn hàng', sale_item_gifts: 'Quà tặng trong đơn hàng',
+    customers: 'Khách hàng', customer_images: 'Ảnh khách hàng', customer_logs: 'Lịch sử khách hàng',
+    customer_points: 'Điểm khách hàng', customer_debts: 'Công nợ khách hàng', customer_devices: 'Thiết bị khách hàng',
+    suppliers: 'Nhà cung cấp', supplier_debts: 'Công nợ nhà cung cấp', stock_imports: 'Phiếu nhập hàng', stock_import_items: 'Chi tiết phiếu nhập',
+    repairs: 'Phiếu sửa chữa', repair_images: 'Ảnh sửa chữa', repair_timelines: 'Lịch sử sửa chữa', repair_parts: 'Linh kiện sửa chữa',
+    expenses: 'Chi phí', recurring_expenses: 'Chi phí định kỳ', recurring_expense_payments: 'Thanh toán chi phí định kỳ',
+    settings: 'Cài đặt hệ thống', roles: 'Vai trò', permissions: 'Quyền', model_has_permissions: 'Quyền người dùng',
+    model_has_roles: 'Vai trò người dùng', role_has_permissions: 'Quyền của vai trò', migrations: 'Lịch sử cập nhật hệ thống',
+    cache: 'Bộ nhớ đệm', cache_locks: 'Khóa bộ nhớ đệm', jobs: 'Tác vụ nền', job_batches: 'Nhóm tác vụ nền', failed_jobs: 'Tác vụ lỗi', password_reset_tokens: 'Mã đặt lại mật khẩu',
+    notifications: 'Thông báo', personal_access_tokens: 'Mã truy cập cá nhân', work_shifts: 'Ca làm việc',
+    backup_cloud_connections: 'Kết nối sao lưu đám mây', bank_payment_intents: 'Yêu cầu thanh toán ngân hàng', bank_payment_transactions: 'Giao dịch ngân hàng',
+    category_attributes: 'Thuộc tính danh mục', category_attribute_values: 'Giá trị thuộc tính danh mục', export_histories: 'Lịch sử xuất dữ liệu',
+    hold_sales: 'Đơn hàng tạm giữ',
+}
+const tableLabel = (name) => tableLabels[name] || name.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+const comparisonErrorLocation = computed(() => {
+    const currentTable = operationProgress.value.report?.inspection?.current_table
+        || sortedRestoreTables.value.find((table) => table.status === 'checking')?.name
+    return currentTable ? { name: currentTable, label: tableLabel(currentTable) } : null
+})
+const comparisonErrorDetails = computed(() => comparisonError.value
+    ?.replace(/^(?:Đối chiếu thất bại|Kiểm tra tệp sao lưu thất bại|Tải hoặc đối chiếu bản sao lưu đám mây thất bại):\s*/i, '')
+    || 'Không có thông tin chi tiết từ máy chủ.')
 
 watch(backupMonth, () => { backupPage.value = 1 })
 watch(() => props.backups, (backups) => {
@@ -171,8 +209,22 @@ const startProgress = (title = 'Đang xử lý sao lưu') => {
             if (activeOperation !== operationId) return
             if (result) {
                 operationProgress.value = { ...operationProgress.value, ...result, active: result.state === 'running' }
+                if (inspectionOperation.value && result.report?.inspection) {
+                    const inspection = result.report.inspection
+                    restorePreview.value = {
+                        ...restorePreview.value,
+                        summary: { ...(restorePreview.value?.summary || {}), ...(inspection.summary || {}) },
+                        tables: inspection.tables || restorePreview.value?.tables || {},
+                    }
+                }
+                if (inspectionOperation.value && result.state === 'failed') {
+                    comparisonError.value = result.message || 'Không thể đối chiếu bản sao lưu.'
+                    inspectionInProgress.value = false
+                }
                 if (result.state !== 'running') {
                     clearInterval(progressTimer)
+                    progressTimer = null
+                    activeOperation = null
                 }
             }
         } catch (_) { /* Polling retries on the next interval. */ }
@@ -184,6 +236,10 @@ onUnmounted(() => clearInterval(progressTimer))
 
 const dismissProgress = () => {
     if (operationProgress.value.active) return
+    clearInterval(progressTimer)
+    progressTimer = null
+    activeOperation = null
+    showOperationReportDetails.value = false
     operationProgress.value = { active: false, percent: 0, message: '', state: 'running', steps: [], report: null }
 }
 
@@ -244,10 +300,11 @@ const removeSelectedBackups = () => {
 const saveSchedule = () => scheduleForm.put(route('backups.schedule'), { preserveScroll: true })
 const openRestorePreview = (preview, force = false) => {
     if (!preview?.summary || !preview?.tables) return
+    inspectionInProgress.value = false
+    inspectionOperation.value = false
+    comparisonError.value = ''
     const key = preview.backup || JSON.stringify(preview.summary)
     restorePreview.value = preview
-    showRestoreTableDetails.value = false
-    restoreTableSort.value = { key: 'name', direction: 'asc' }
     if (force || key !== lastPreviewKey.value) {
         lastPreviewKey.value = key
         dismissedPreviewKey.value = null
@@ -255,7 +312,7 @@ const openRestorePreview = (preview, force = false) => {
     } else if (dismissedPreviewKey.value !== key) {
         showRestorePreview.value = true
     }
-    restoreForm.mode = preview.summary.schema_compatible && preview.summary.new_tables === 0 ? 'merge' : 'replace'
+    restoreForm.mode = canMergeRestore.value ? 'merge' : 'replace'
 }
 
 const closeRestorePreview = () => {
@@ -263,27 +320,50 @@ const closeRestorePreview = () => {
     showRestorePreview.value = false
 }
 
-const applyPreviewFromPage = (page) => {
-    const preview = page?.props?.restore_preview
+const applyRestorePreview = (preview) => {
     openRestorePreview(preview, true)
     if (preview?.summary) {
-        // The comparison modal is the result of inspection; close the completed
-        // progress overlay so it cannot cover or intermittently hide the table.
         clearInterval(progressTimer)
         activeOperation = null
         operationProgress.value = { active: false, percent: 0, message: '', state: 'running', steps: [], report: null }
     }
 }
 
+const applyPreviewFromPage = (page) => applyRestorePreview(page?.props?.restore_preview)
+
 watch(() => props.restore_preview, openRestorePreview, { immediate: true })
 
-const inspectBackup = (backup) => router.post(backupRoute('inspect', backup.name), { operation_id: startProgress('Đang kiểm tra bản sao lưu') }, {
+const beginRestoreComparison = (backupName, title) => {
+    comparisonError.value = ''
+    inspectionInProgress.value = true
+    inspectionOperation.value = true
+    restorePreview.value = { backup: backupName, created_at: null, summary: {}, tables: {}, files: [], files_count: 0, files_total_bytes: 0, has_files: false }
+    lastPreviewKey.value = backupName
+    dismissedPreviewKey.value = null
+    showRestorePreview.value = true
+    return startProgress(title)
+}
+
+const finishRestoreComparison = (page) => {
+    const preview = page?.props?.restore_preview
+        || operationProgress.value.report?.inspection?.preview
+    if (preview?.summary && preview?.tables) {
+        applyRestorePreview({ ...preview, backup: preview.backup || restorePreview.value?.backup })
+        return
+    }
+    clearInterval(progressTimer)
+    activeOperation = null
+    inspectionInProgress.value = false
+    comparisonError.value = page?.props?.flash?.error || comparisonError.value || 'Không thể đối chiếu bản sao lưu. Hãy thử lại.'
+}
+
+const inspectBackup = (backup) => router.post(backupRoute('inspect', backup.name), { operation_id: beginRestoreComparison(backup.name, 'Đang kiểm tra bản sao lưu') }, {
     preserveScroll: true,
-    onSuccess: applyPreviewFromPage,
+    onSuccess: finishRestoreComparison,
 })
-const inspectCloudBackup = (connection, backup) => router.post(route('backups.cloud.inspect', { connection: connection.id }), { name: backup.name, operation_id: startProgress('Đang tải và kiểm tra bản sao lưu') }, {
+const inspectCloudBackup = (connection, backup) => router.post(route('backups.cloud.inspect', { connection: connection.id }), { name: backup.name, operation_id: beginRestoreComparison(backup.name, 'Đang tải và kiểm tra bản sao lưu') }, {
     preserveScroll: true,
-    onSuccess: applyPreviewFromPage,
+    onSuccess: finishRestoreComparison,
 })
 const saveCloudConnection = (event) => {
     const inputName = event?.currentTarget?.querySelector('[name="name"]')?.value
@@ -312,12 +392,12 @@ const selectBackupFile = (event) => {
 
 const inspectUploadedFile = () => {
     if (!uploadForm.backup_file) return
-    uploadForm.operation_id = startProgress('Đang kiểm tra bản sao lưu tải lên')
+    uploadForm.operation_id = beginRestoreComparison(selectedFileName.value || 'Bản sao lưu tải lên', 'Đang kiểm tra bản sao lưu tải lên')
     uploadForm.post(route('backups.import'), {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: (page) => {
-            applyPreviewFromPage(page)
+            finishRestoreComparison(page)
             uploadForm.reset()
             selectedFileName.value = ''
         },
@@ -327,7 +407,7 @@ const inspectUploadedFile = () => {
 
 const restoreBackup = () => {
     const preview = restorePreview.value
-    if (!preview) return
+    if (!preview?.summary || inspectionInProgress.value || comparisonError.value) return
     const warning = restoreForm.mode === 'replace'
         ? 'Thay toàn bộ cơ sở dữ liệu hiện tại bằng bản sao lưu? Hệ thống sẽ tự tạo một bản cứu hộ trước khi thực hiện.'
         : restoreForm.conflict_policy === 'use_backup'
@@ -345,19 +425,6 @@ const restoreBackup = () => {
                 preserveScroll: true,
                 onFinish: () => { restoreForm.confirmed = false },
             })
-        },
-    })
-}
-
-const clearSystemData = () => {
-    if (clearDataPhrase.value !== 'XOA DU LIEU') return
-    clearDataForm.confirmation = 'XOA DU LIEU'
-    clearDataForm.operation_id = startProgress('Đang xóa dữ liệu')
-    clearDataForm.post(route('backups.clear-data'), {
-        preserveScroll: true,
-        onFinish: () => {
-            clearDataForm.confirmation = ''
-            showClearDataDialog.value = false
         },
     })
 }
@@ -428,10 +495,37 @@ const monthdayOptions = Array.from({ length: 31 }, (_, i) => ({
     label: `Ngày ${i + 1}`
 }))
 
+const transientRestoreTableNames = ['cache', 'cache_locks', 'sessions', 'jobs', 'job_batches', 'failed_jobs', 'password_reset_tokens']
+const isTransientRestoreTable = (name) => transientRestoreTableNames.includes(String(name).toLowerCase())
+const persistentRestoreTables = computed(() => Object.entries(restorePreview.value?.tables || {}).filter(([name]) => !isTransientRestoreTable(name)))
+const persistentDataMismatchCount = computed(() => persistentRestoreTables.value.filter(([, table]) => table.data_matches === false).length)
+const tablesOnlyInCurrent = computed(() => (restorePreview.value?.summary?.tables_missing_from_backup || []).filter((name) => !isTransientRestoreTable(name)))
+const tablesOnlyInBackup = computed(() => (restorePreview.value?.summary?.tables_missing_from_current || []).filter((name) => !isTransientRestoreTable(name)))
+const canMergeRestore = computed(() => Boolean(restorePreview.value?.summary?.schema_compatible && restorePreview.value?.summary?.new_tables === 0))
 const restoreModeOptions = computed(() => [
     { value: 'merge', label: 'Gộp dữ liệu vào hệ thống hiện tại' },
     { value: 'replace', label: 'Thay toàn bộ cơ sở dữ liệu bằng bản sao lưu' },
-].filter((option) => option.value !== 'merge' || (restorePreview.value?.summary?.schema_compatible && restorePreview.value?.summary?.new_tables === 0)))
+].filter((option) => option.value !== 'merge' || canMergeRestore.value))
+const hasRestoreMismatch = computed(() => {
+    const summary = restorePreview.value?.summary || {}
+    return persistentDataMismatchCount.value > 0
+        || !canMergeRestore.value
+        || tablesOnlyInCurrent.value.length > 0
+        || tablesOnlyInBackup.value.length > 0
+})
+const restoreNoticeMessages = computed(() => {
+    const summary = restorePreview.value?.summary || {}
+    const messages = []
+    if (restoreForm.mode === 'replace') messages.push('Thay toàn bộ dữ liệu; hệ thống tạo bản cứu hộ trước.')
+    if (persistentDataMismatchCount.value > 0) messages.push(`Dữ liệu lệch ở ${persistentDataMismatchCount.value} bảng.`)
+    if (!canMergeRestore.value) messages.push('Có bảng/cấu trúc không tương thích; chỉ thay toàn bộ.')
+    else if (tablesOnlyInCurrent.value.length > 0) messages.push('Chế độ gộp sẽ giữ các bảng chỉ có trong hệ thống.')
+    if (summary.primary_key_conflicts > 0) messages.push(`${summary.primary_key_conflicts} dòng trùng khóa.`)
+    else if (summary.primary_key_conflicts === null) messages.push('Không xác định trước được số dòng trùng khóa.')
+    if (restorePreview.value?.has_files) messages.push(`${restorePreview.value.files_count} tệp đính kèm sẽ được xử lý theo chế độ đã chọn.`)
+    messages.push('Bỏ qua dòng dữ liệu tạm (cache, phiên, hàng đợi, mã đặt lại mật khẩu).')
+    return messages
+})
 
 const conflictPolicyOptions = [
     { value: 'keep_current', label: 'Giữ nguyên dữ liệu hiện tại' },
@@ -462,7 +556,7 @@ const conflictPolicyOptions = [
                             <span class="ml-auto shrink-0 text-[10px] text-slate-400">{{ step.at }}</span>
                         </div>
                     </div>
-                    <div v-if="operationProgress.report" class="mt-4 rounded-xl border p-3" :class="operationProgress.state === 'failed' ? 'border-red-200 bg-red-50/70' : operationProgress.state === 'partial' ? 'border-amber-200 bg-amber-50/70' : 'border-emerald-200 bg-emerald-50/70'">
+                    <div v-if="operationProgress.report && !operationProgress.report.inspection" class="mt-4 rounded-xl border p-3" :class="operationProgress.state === 'failed' ? 'border-red-200 bg-red-50/70' : operationProgress.state === 'partial' ? 'border-amber-200 bg-amber-50/70' : 'border-emerald-200 bg-emerald-50/70'">
                         <div class="flex items-center justify-between gap-2">
                             <p class="text-sm font-bold" :class="operationProgress.state === 'failed' ? 'text-red-900' : operationProgress.state === 'partial' ? 'text-amber-900' : 'text-emerald-900'">{{ operationProgress.report.title }}</p>
                             <button type="button" class="shrink-0 text-xs font-bold underline underline-offset-2" :class="operationProgress.state === 'failed' ? 'text-red-800' : operationProgress.state === 'partial' ? 'text-amber-800' : 'text-emerald-800'" @click="showOperationReportDetails = !showOperationReportDetails">{{ showOperationReportDetails ? 'Ẩn chi tiết' : 'Xem chi tiết' }}</button>
@@ -498,7 +592,7 @@ const conflictPolicyOptions = [
                         </div>
                         <div v-if="showOperationReportDetails && operationProgress.report.table_results?.length" class="mt-3 max-h-32 overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 text-[11px]">
                             <p class="mb-1 font-bold text-emerald-900">Kết quả theo bảng</p>
-                            <div v-for="item in operationProgress.report.table_results" :key="item.table" class="py-1 text-emerald-900"><strong>{{ item.table }}</strong><template v-if="item.rows_restored !== undefined"> · đã khôi phục {{ item.rows_restored }} dòng</template><template v-else> · thêm {{ item.added }} · ghi đè {{ item.overwritten }} · giữ/không đổi {{ item.kept_or_unchanged }}</template></div>
+                            <div v-for="item in operationProgress.report.table_results" :key="item.table" class="py-1 text-emerald-900"><strong>{{ item.table }}</strong><template v-if="item.rows_restored !== undefined"> · đã khôi phục {{ item.rows_restored }} dòng<template v-if="item.transient_data_skipped"> · bỏ qua {{ item.rows_in_backup }} dòng tạm</template></template><template v-else> · thêm {{ item.added }} · ghi đè {{ item.overwritten }} · giữ/không đổi {{ item.kept_or_unchanged }}<template v-if="item.skipped_transient"> · bỏ qua {{ item.skipped_transient }} dòng tạm</template></template></div>
                         </div>
                         <div v-if="showOperationReportDetails && operationProgress.report.files_report" class="mt-2 text-xs text-emerald-900">Tệp: thêm {{ operationProgress.report.files_report.added }}, ghi đè {{ operationProgress.report.files_report.overwritten }}, bỏ qua {{ operationProgress.report.files_report.skipped }}, xóa tệp cũ {{ operationProgress.report.files_report.deleted }}.</div>
                     </div>
@@ -765,47 +859,10 @@ const conflictPolicyOptions = [
             <p class="mt-3 text-[11px] text-slate-400">Tệp sao lưu gốc được lưu trữ an toàn tại thư mục <code class="rounded bg-slate-100 px-1 py-0.5 text-slate-600 font-mono">storage/app/backups</code>.</p>
         </DataPanel>
 
-        <DataPanel class="border border-red-200 bg-red-50/40 p-3.5 sm:p-4">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><AlertTriangle :size="20" /></div>
-                    <div>
-                        <h2 class="text-sm font-bold text-red-900">Xóa sạch dữ liệu nghiệp vụ</h2>
-                        <p class="mt-1 max-w-3xl text-xs leading-5 text-red-800">Xóa dữ liệu bán hàng, kho, khách hàng, sửa chữa, chi phí và tệp đã tải lên. Hệ thống tự tạo bản sao lưu cứu hộ trước khi xóa. Tài khoản đăng nhập, phân quyền, cấu hình và các bản sao lưu được giữ lại.</p>
-                    </div>
-                </div>
-                <button type="button" class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-red-700 px-4 text-xs font-bold text-white shadow-sm hover:bg-red-800 disabled:opacity-50" :disabled="operationProgress.active" @click="clearDataPhrase = ''; showClearDataDialog = true">
-                    <Trash2 :size="15" /> Xóa dữ liệu hệ thống
-                </button>
-            </div>
-        </DataPanel>
-
-        <Teleport to="body">
-            <div v-if="showClearDataDialog" class="fixed inset-0 z-[10010] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="clear-data-title">
-                <section class="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-5 shadow-2xl sm:p-6">
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><AlertTriangle :size="21" /></div>
-                        <div>
-                            <h2 id="clear-data-title" class="text-base font-bold text-red-900">Xác nhận xóa sạch dữ liệu nghiệp vụ</h2>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">Thao tác này không thể hoàn tác trực tiếp. Hệ thống sẽ tạo bản sao lưu cứu hộ trước, sau đó xóa dữ liệu nghiệp vụ và tệp tải lên. Tài khoản và cấu hình vẫn được giữ.</p>
-                        </div>
-                    </div>
-                    <label class="mt-5 block text-xs font-semibold text-slate-700">Nhập chính xác <code class="rounded bg-red-50 px-1.5 py-0.5 text-red-700">XOA DU LIEU</code> để xác nhận</label>
-                    <input v-model="clearDataPhrase" type="text" autocomplete="off" class="mt-1.5 h-11 w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500" placeholder="XOA DU LIEU">
-                    <div class="mt-5 flex justify-end gap-2">
-                        <button type="button" class="h-10 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="showClearDataDialog = false">Hủy</button>
-                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-xl bg-red-700 px-4 text-xs font-bold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40" :disabled="clearDataPhrase !== 'XOA DU LIEU' || operationProgress.active" @click="clearSystemData">
-                            <Trash2 :size="14" /> Tạo backup và xóa dữ liệu
-                        </button>
-                    </div>
-                </section>
-            </div>
-        </Teleport>
-
         <!-- Modal Đối chiếu & Khôi phục -->
         <Teleport to="body">
         <div v-if="showRestorePreview && restorePreview" class="fixed inset-0 z-[9990] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6">
-            <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
+            <section class="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
                 <!-- Modal Header -->
                 <header class="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50 px-4 py-3 sm:px-6">
                     <div class="flex items-center gap-3">
@@ -822,43 +879,98 @@ const conflictPolicyOptions = [
                     </button>
                 </header>
 
+                <div v-if="inspectionInProgress" class="shrink-0 border-b border-blue-100 bg-blue-50/70 px-4 py-3 sm:px-6">
+                    <div class="flex items-center justify-between gap-3 text-xs">
+                        <span class="font-semibold text-blue-900">{{ operationProgress.message || 'Đang bắt đầu đối chiếu…' }}</span>
+                        <span class="shrink-0 font-bold tabular-nums text-blue-800">{{ Math.round(progressPercent) }}%</span>
+                    </div>
+                    <div class="mt-2 h-2 overflow-hidden rounded-full bg-blue-100" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100" aria-label="Tiến trình đối chiếu">
+                        <div class="h-full rounded-full bg-blue-600 transition-[width] duration-300" :style="{ width: `${Math.max(3, progressPercent)}%` }"></div>
+                    </div>
+                    <p class="mt-1.5 text-[11px] text-blue-800">Đã xử lý {{ sortedRestoreTables.filter((table) => table.status === 'completed').length }} / {{ operationProgress.report?.inspection?.total || '…' }} bảng</p>
+                </div>
+
                 <!-- Modal Body -->
                 <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6 text-xs sm:text-sm">
-                    <!-- Thẻ thống kê tổng quan -->
-                    <div class="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
-                        <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
-                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Tổng số bảng</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.backup_tables }} sao lưu / {{ restorePreview.summary.current_tables }} hiện tại</span>
-                        </div>
-                        <div class="rounded-xl p-2.5 border" :class="restorePreview.summary.row_count_difference ? 'bg-amber-50/80 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200/70 text-slate-800'">
-                            <span class="block text-[11px] font-semibold uppercase opacity-75">Số bản ghi (Dòng)</span>
-                            <span class="text-sm font-bold mt-0.5 block">
-                                {{ restorePreview.summary.backup_rows }} / {{ restorePreview.summary.current_rows }}
-                                <span v-if="restorePreview.summary.row_count_difference" class="text-xs font-semibold">({{ restorePreview.summary.row_count_difference > 0 ? '+' : '' }}{{ restorePreview.summary.row_count_difference }})</span>
-                            </span>
-                        </div>
-                        <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
-                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng hiện tại thiếu trong backup</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.missing_tables }}</span>
-                        </div>
-                        <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
-                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Bảng backup không có hiện tại</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.summary.new_tables }}</span>
-                        </div>
-                        <div class="rounded-xl bg-amber-50 p-2.5 border border-amber-200 col-span-2 sm:col-span-1">
-                            <span class="block text-[11px] font-semibold text-amber-700 uppercase">Dữ liệu bị lệch</span>
-                            <span class="text-sm font-bold text-amber-800 mt-0.5 block">{{ restorePreview.summary.mismatched_data_tables }} bảng</span>
-                        </div>
-                        <div class="rounded-xl bg-slate-50 p-2.5 border border-slate-200/70">
-                            <span class="block text-[11px] font-semibold text-slate-500 uppercase">Tệp trong backup</span>
-                            <span class="text-sm font-bold text-slate-800 mt-0.5 block">{{ restorePreview.files_count }} tệp · {{ formatSize(previewFileBytes) }}</span>
-                        </div>
-                        <div class="rounded-xl p-2.5 border" :class="restorePreview.summary.primary_key_conflicts ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200/70 text-slate-800'">
-                            <span class="block text-[11px] font-semibold uppercase opacity-75">Khóa chính trùng</span>
-                            <span class="text-sm font-bold mt-0.5 block">{{ restorePreview.summary.primary_key_conflicts ?? '—' }} dòng</span>
+                    <div v-if="comparisonError" class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900" role="alert">
+                        <p class="font-bold">Lỗi đối chiếu<span v-if="comparisonErrorLocation"> tại {{ comparisonErrorLocation.label }} (<code>{{ comparisonErrorLocation.name }}</code>)</span><span v-else-if="operationProgress.message"> · {{ operationProgress.message }}</span></p>
+                        <p class="mt-1 break-words">{{ comparisonErrorDetails }}</p>
+                    </div>
+                    <div v-if="!inspectionInProgress && !comparisonError" class="rounded-lg border px-3 py-2 text-[11px] leading-5" :class="restoreForm.mode === 'replace' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-700'">
+                        <strong>Lưu ý:</strong> {{ restoreNoticeMessages.join(' · ') }}
+                        <details v-if="tablesOnlyInCurrent.length || tablesOnlyInBackup.length" class="mt-1">
+                            <summary class="cursor-pointer font-semibold">Xem các bảng thiếu/thừa</summary>
+                            <p v-if="tablesOnlyInCurrent.length" class="mt-1">Chỉ có trong hệ thống: {{ tablesOnlyInCurrent.join(', ') }}</p>
+                            <p v-if="tablesOnlyInBackup.length" class="mt-1">Chỉ có trong backup: {{ tablesOnlyInBackup.join(', ') }}</p>
+                        </details>
+                    </div>
+                    <div v-if="!inspectionInProgress && !comparisonError" class="space-y-2 border border-slate-200 rounded-xl bg-white p-3">
+                        <p class="text-xs font-bold text-slate-700">{{ hasRestoreMismatch ? 'Chọn cách xử lý các bảng hoặc dữ liệu không khớp' : 'Cách khôi phục' }}</p>
+                        <template v-if="hasRestoreMismatch">
+                            <div class="grid gap-2 sm:grid-cols-3">
+                                <button type="button" :disabled="!canMergeRestore" class="rounded-lg border p-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45" :class="restoreForm.mode === 'merge' && restoreForm.conflict_policy === 'keep_current' ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 hover:border-slate-300'" @click="restoreForm.mode = 'merge'; restoreForm.conflict_policy = 'keep_current'">
+                                    <span class="block text-xs font-bold text-slate-800">Gộp, giữ dữ liệu hiện tại</span>
+                                    <span class="mt-1 block text-[11px] leading-4 text-slate-500">Dòng trùng được giữ nguyên.</span>
+                                </button>
+                                <button type="button" :disabled="!canMergeRestore" class="rounded-lg border p-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45" :class="restoreForm.mode === 'merge' && restoreForm.conflict_policy === 'use_backup' ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 hover:border-slate-300'" @click="restoreForm.mode = 'merge'; restoreForm.conflict_policy = 'use_backup'">
+                                    <span class="block text-xs font-bold text-slate-800">Gộp, dùng dữ liệu backup</span>
+                                    <span class="mt-1 block text-[11px] leading-4 text-slate-500">Dòng trùng lấy từ bản sao lưu.</span>
+                                </button>
+                                <button type="button" class="rounded-lg border p-2.5 text-left transition-colors" :class="restoreForm.mode === 'replace' ? 'border-red-400 bg-red-50 ring-1 ring-red-200' : 'border-slate-200 hover:border-slate-300'" @click="restoreForm.mode = 'replace'">
+                                    <span class="block text-xs font-bold text-slate-800">Thay toàn bộ bằng backup</span>
+                                    <span class="mt-1 block text-[11px] leading-4 text-slate-500">Thay dữ liệu hiện tại hoàn toàn.</span>
+                                </button>
+                            </div>
+                            <p v-if="!canMergeRestore" class="text-[11px] text-amber-700">Cấu trúc bảng không tương thích nên chỉ có thể thay toàn bộ dữ liệu.</p>
+                        </template>
+                        <div v-else class="grid gap-3 sm:grid-cols-2">
+                            <FloatingSelect name="restore_mode" v-model="restoreForm.mode" label="Phương thức khôi phục" :options="restoreModeOptions" />
+                            <FloatingSelect v-if="restoreForm.mode === 'merge'" name="conflict_policy" v-model="restoreForm.conflict_policy" label="Xử lý khi bị trùng dữ liệu" :options="conflictPolicyOptions" />
                         </div>
                     </div>
-
+                    <section class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800">{{ inspectionInProgress ? 'Đối chiếu dữ liệu theo từng bảng' : 'Bảng đối chiếu dữ liệu' }}</h3>
+                                <p class="mt-0.5 text-[11px] text-slate-500">{{ sortedRestoreTables.length }} bảng đã hiển thị · mỗi bảng cập nhật ngay khi xử lý xong</p>
+                            </div>
+                            <span v-if="inspectionInProgress" class="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-800">ĐANG CHẠY</span>
+                            <span v-else-if="!comparisonError" class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800">ĐÃ ĐỐI CHIẾU</span>
+                        </div>
+                        <div class="max-h-[38vh] overflow-auto">
+                            <table class="w-full min-w-[720px] table-fixed border-collapse text-left text-xs">
+                                <thead class="sticky top-0 z-10 bg-slate-50 text-[10px] font-bold tracking-wide text-slate-600">
+                                    <tr>
+                                        <th class="w-[24%] border border-slate-200 px-1.5 py-2"><button type="button" class="flex items-center gap-1 text-left" @click="sortRestoreTablesBy('name')">Tên tiếng Việt / bảng <span class="text-slate-400">{{ restoreSortBy === 'name' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                        <th class="w-[11%] whitespace-nowrap border border-slate-200 px-1.5 py-2 text-right"><button type="button" @click="sortRestoreTablesBy('backup_rows')">Dòng backup <span class="text-slate-400">{{ restoreSortBy === 'backup_rows' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                        <th class="w-[12%] whitespace-nowrap border border-slate-200 px-1.5 py-2 text-right"><button type="button" @click="sortRestoreTablesBy('current_rows')">Dòng hiện tại <span class="text-slate-400">{{ restoreSortBy === 'current_rows' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                        <th class="w-[10%] whitespace-nowrap border border-slate-200 px-1.5 py-2 text-right"><button type="button" @click="sortRestoreTablesBy('difference')">Chênh lệch <span class="text-slate-400">{{ restoreSortBy === 'difference' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                        <th class="w-[12%] whitespace-nowrap border border-slate-200 px-1.5 py-2"><button type="button" @click="sortRestoreTablesBy('schema')">Cấu trúc <span class="text-slate-400">{{ restoreSortBy === 'schema' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                        <th class="w-[17%] whitespace-nowrap border border-slate-200 px-1.5 py-2"><button type="button" @click="sortRestoreTablesBy('data')">Đối chiếu dữ liệu <span class="text-slate-400">{{ restoreSortBy === 'data' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                        <th class="w-[14%] whitespace-nowrap border border-slate-200 px-1.5 py-2"><button type="button" @click="sortRestoreTablesBy('conflicts')">Khóa trùng <span class="text-slate-400">{{ restoreSortBy === 'conflicts' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="font-medium">
+                                    <tr v-for="table in sortedRestoreTables" :key="table.name" :class="table.status === 'checking' ? 'bg-blue-50/70' : 'hover:bg-slate-50/60'">
+                                        <td class="border border-slate-200 px-1.5 py-1.5">
+                                            <span class="block font-semibold leading-4 text-slate-800">{{ tableLabel(table.name) }}</span>
+                                            <code class="mt-0.5 block text-[10px] text-slate-400">{{ table.name }}</code>
+                                            <span v-if="isTransientRestoreTable(table.name)" class="mt-0.5 inline-block rounded bg-slate-100 px-1 py-0.5 text-[9px] font-semibold text-slate-500">Dữ liệu tạm sẽ bỏ qua</span>
+                                        </td>
+                                        <td class="whitespace-nowrap border border-slate-200 px-1.5 py-1.5 text-right tabular-nums text-slate-600">{{ Number(table.backup_rows || 0).toLocaleString() }}</td>
+                                        <td class="whitespace-nowrap border border-slate-200 px-1.5 py-1.5 text-right tabular-nums text-slate-600">{{ Number(table.current_rows || 0).toLocaleString() }}</td>
+                                        <td class="whitespace-nowrap border border-slate-200 px-1.5 py-1.5 text-right tabular-nums" :class="Number(table.backup_rows || 0) !== Number(table.current_rows || 0) ? 'font-bold text-amber-700' : 'text-slate-500'">{{ Number(table.backup_rows || 0) - Number(table.current_rows || 0) }}</td>
+                                        <td class="whitespace-nowrap border border-slate-200 px-1.5 py-1.5" :class="table.schema_compatible ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'">{{ table.schema_compatible ? 'Tương thích' : inspectionInProgress && table.status === 'checking' ? 'Đang kiểm tra' : 'Khác cấu trúc' }}</td>
+                                        <td class="whitespace-nowrap border border-slate-200 px-1.5 py-1.5" :class="table.status === 'checking' ? 'font-semibold text-blue-700' : table.data_matches || isTransientRestoreTable(table.name) ? 'font-semibold text-slate-500' : 'font-semibold text-amber-700'">{{ table.status === 'checking' ? 'Đang đối chiếu…' : isTransientRestoreTable(table.name) ? 'Bỏ qua dữ liệu tạm' : table.data_matches ? 'Khớp' : comparisonError ? 'Chưa hoàn tất' : 'Có khác biệt' }}</td>
+                                        <td class="whitespace-nowrap border border-slate-200 px-1.5 py-1.5 text-slate-500">{{ isTransientRestoreTable(table.name) ? 'Bỏ qua' : table.primary_key_conflicts ?? (inspectionInProgress ? 'Đang chờ' : 'Không xác định') }}</td>
+                                    </tr>
+                                    <tr v-if="inspectionInProgress && !sortedRestoreTables.length"><td colspan="7" class="px-3 py-8 text-center text-slate-500">Đang đọc danh sách bảng trong bản sao lưu…</td></tr>
+                                    <tr v-else-if="!sortedRestoreTables.length && !comparisonError"><td colspan="7" class="px-3 py-8 text-center text-slate-500">Không có dữ liệu bảng để hiển thị.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <template v-if="!inspectionInProgress && !comparisonError">
                     <details v-if="restorePreview.files?.length" class="rounded-lg border border-slate-200 bg-white p-2.5">
                             <summary class="cursor-pointer text-xs font-bold text-slate-700">Xem danh sách tệp đính kèm</summary>
                         <div class="mt-2 max-h-32 space-y-1 overflow-y-auto text-[11px] text-slate-600">
@@ -867,96 +979,8 @@ const conflictPolicyOptions = [
                         </div>
                     </details>
 
-                    <div v-if="restorePreview.summary.tables_missing_from_backup?.length || restorePreview.summary.tables_missing_from_current?.length" class="grid gap-2 sm:grid-cols-2">
-                        <div v-if="restorePreview.summary.tables_missing_from_backup?.length" class="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
-                            <p class="font-bold">Có trong hệ thống, không có trong backup</p>
-                            <p class="mt-1 break-words">{{ restorePreview.summary.tables_missing_from_backup.join(', ') }}</p>
-                        </div>
-                        <div v-if="restorePreview.summary.tables_missing_from_current?.length" class="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
-                            <p class="font-bold">Có trong backup, không có trong hệ thống</p>
-                            <p class="mt-1 break-words">{{ restorePreview.summary.tables_missing_from_current.join(', ') }}</p>
-                        </div>
-                    </div>
+                    </template>
 
-                    <!-- Cấu hình khôi phục -->
-                    <div class="grid gap-3 sm:grid-cols-2 pt-2 border-t border-slate-100">
-                        <!-- Mode -->
-                        <FloatingSelect
-                            name="restore_mode"
-                            v-model="restoreForm.mode"
-                            label="Phương thức khôi phục"
-                            :options="restoreModeOptions"
-                        />
-
-                        <!-- Conflict Policy -->
-                        <FloatingSelect
-                            v-if="restoreForm.mode === 'merge'"
-                            name="conflict_policy"
-                            v-model="restoreForm.conflict_policy"
-                            label="Xử lý khi bị trùng dữ liệu"
-                            :options="conflictPolicyOptions"
-                        />
-                    </div>
-
-                    <!-- Cảnh báo & Lưu ý -->
-                    <div class="space-y-2 text-xs">
-                        <p v-if="restoreForm.mode === 'merge'" class="text-slate-500">
-                            * Gộp: thêm dòng mới, giữ bảng chỉ có ở hệ thống; dòng trùng xử lý theo lựa chọn bên trên.
-                        </p>
-                        <p v-else class="rounded-xl bg-red-50 p-2.5 text-red-800 border border-red-200">
-                            ⚠️ Thay toàn bộ dữ liệu bằng backup; bảng không có trong backup sẽ bị xóa. Hệ thống tạo backup cứu hộ trước.
-                        </p>
-                        <p v-if="restorePreview.summary.mismatched_data_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            ⚠️ {{ restorePreview.summary.mismatched_data_tables }} bảng có dữ liệu khác. Kết quả thêm, ghi đè và giữ nguyên sẽ có trong báo cáo.
-                        </p>
-                        <p v-if="restorePreview.summary.primary_key_conflicts > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            Có {{ restorePreview.summary.primary_key_conflicts }} dòng trùng khóa. Chọn giữ dữ liệu hiện tại hoặc ghi đè từ backup.
-                        </p>
-                        <p v-else-if="restorePreview.summary.primary_key_conflicts === null" class="rounded-xl bg-slate-50 p-2.5 text-slate-700 border border-slate-200">
-                            Không thể đếm trước số dòng trùng ở một số bảng; kết quả thực tế sẽ có trong báo cáo.
-                        </p>
-                        <p v-if="!restorePreview.summary.schema_compatible || restorePreview.summary.new_tables > 0" class="rounded-xl bg-amber-50 p-2.5 text-amber-800 border border-amber-200">
-                            ⚠️ Cấu trúc không khớp hoặc có bảng mới; chỉ cho phép Thay toàn bộ.
-                        </p>
-                        <p v-if="restorePreview.has_files" class="text-slate-500">
-                            * Backup có {{ restorePreview.files_count }} tệp đính kèm; quy tắc tệp sẽ áp dụng khi khôi phục.
-                        </p>
-                    </div>
-
-                    <section class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                        <button type="button" class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50" :aria-expanded="showRestoreTableDetails" @click="showRestoreTableDetails = !showRestoreTableDetails">
-                            <span>
-                                <span class="block text-xs font-bold text-slate-800">{{ showRestoreTableDetails ? 'Ẩn bảng đối chiếu' : 'Xem chi tiết bảng đối chiếu' }}</span>
-                                <span class="mt-0.5 block text-[11px] text-slate-500">{{ Object.keys(restorePreview.tables || {}).length }} bảng · Nhấn tiêu đề cột để sắp xếp</span>
-                            </span>
-                            <ChevronDown :size="16" class="shrink-0 text-slate-500 transition-transform" :class="showRestoreTableDetails && 'rotate-180'" />
-                        </button>
-                        <div v-if="showRestoreTableDetails" class="max-h-64 overflow-auto border-t border-slate-200">
-                            <table class="w-full min-w-[680px] text-left text-[11px]">
-                                <thead class="sticky top-0 bg-slate-50 uppercase text-[9px] font-bold tracking-wide text-slate-500">
-                                    <tr>
-                                        <th v-for="column in [{ key: 'name', label: 'Bảng' }, { key: 'backup_rows', label: 'Dòng backup' }, { key: 'current_rows', label: 'Dòng hiện tại' }, { key: 'difference', label: 'Chênh lệch' }, { key: 'schema_compatible', label: 'Cấu trúc' }, { key: 'data_matches', label: 'Dữ liệu' }, { key: 'primary_key_conflicts', label: 'Khóa trùng' }]" :key="column.key" class="whitespace-nowrap px-2.5 py-2">
-                                            <button type="button" class="inline-flex items-center gap-1 hover:text-slate-900" @click="sortRestoreTables(column.key)">{{ column.label }}<span aria-hidden="true">{{ restoreTableSort.key === column.key ? (restoreTableSort.direction === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-100 font-medium">
-                                    <tr v-for="table in sortedRestoreTables" :key="table.name" class="hover:bg-slate-50/50">
-                                        <td class="px-2.5 py-1.5 font-semibold text-slate-800">{{ table.name }}</td>
-                                        <td class="px-2.5 py-1.5 text-slate-600">{{ table.backup_rows }}</td>
-                                        <td class="px-2.5 py-1.5 text-slate-600">{{ table.current_rows }}</td>
-                                        <td class="px-2.5 py-1.5" :class="table.backup_rows !== table.current_rows ? 'font-bold text-amber-600' : 'text-slate-400'">{{ Number(table.backup_rows || 0) - Number(table.current_rows || 0) }}</td>
-                                        <td class="px-2.5 py-1.5" :class="table.schema_compatible ? 'font-semibold text-emerald-600' : 'font-bold text-amber-600'">
-                                            {{ table.schema_compatible ? 'Tương thích' : 'Khác cấu trúc' }}
-                                            <span v-if="!table.schema_compatible && (table.columns_missing_from_current?.length || table.columns_missing_from_backup?.length)" class="block max-w-56 whitespace-normal text-[10px] font-normal text-amber-700">{{ table.columns_missing_from_current?.length ? `Thiếu ở hiện tại: ${table.columns_missing_from_current.join(', ')}` : '' }}{{ table.columns_missing_from_backup?.length ? ` · Thiếu ở backup: ${table.columns_missing_from_backup.join(', ')}` : '' }}</span>
-                                        </td>
-                                        <td class="px-2.5 py-1.5" :class="table.data_matches ? 'font-semibold text-emerald-600' : 'font-bold text-amber-600'">{{ table.data_matches ? 'Khớp' : 'Khác' }}</td>
-                                        <td class="px-2.5 py-1.5" :class="table.primary_key_conflicts > 0 ? 'font-bold text-amber-700' : 'text-slate-500'">{{ table.primary_key_conflicts ?? 'Không xác định' }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
                 </div>
 
                 <!-- Modal Footer -->
@@ -964,8 +988,8 @@ const conflictPolicyOptions = [
                     <button type="button" class="h-9 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors" @click="closeRestorePreview">
                         Hủy bỏ
                     </button>
-                    <button type="button" :disabled="restoreForm.processing" class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors" @click="restoreBackup">
-                        <RotateCcw :size="15" /> {{ restoreForm.processing ? 'Đang khôi phục...' : 'Thực hiện khôi phục' }}
+                    <button type="button" :disabled="restoreForm.processing || inspectionInProgress || Boolean(comparisonError) || !restorePreview.summary" class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors" @click="restoreBackup">
+                        <RotateCcw :size="15" /> {{ inspectionInProgress ? 'Đang đối chiếu...' : restoreForm.processing ? 'Đang khôi phục...' : 'Thực hiện khôi phục' }}
                     </button>
                 </footer>
             </section>

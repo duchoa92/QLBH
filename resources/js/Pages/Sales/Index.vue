@@ -270,7 +270,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
         </div>
 
         <!-- 2. BẢNG DỮ LIỆU VÀ BỘ LỌC -->
-        <DataPanel>
+        <DataPanel detached>
             <template #header>
                 <div class="w-full">
                     <div class="flex flex-wrap items-center gap-2 w-full">
@@ -336,7 +336,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
             </template>
 
             <!-- DANH SÁCH BẢNG DỮ LIỆU CÓ SORT & CLICK LỌC -->
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                 <table class="w-full min-w-[850px] text-xs text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-200 select-none">

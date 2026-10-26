@@ -9,7 +9,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode } from 'lucide-vue-next'
+import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
@@ -41,6 +41,105 @@ const confirmBox = useConfirm()
 const paymentVoiceAvailable = ref(false)
 const paymentVoiceChecked = ref(false)
 const paymentVoiceTestMessage = ref('')
+const cleanupLoading = ref(false)
+const cleanupDeleting = ref(false)
+const cleanupResult = ref(null)
+const cleanupError = ref('')
+const selectedCleanupPaths = ref([])
+const clearDataForm = useForm({ confirmation: '', operation_id: '' })
+const clearDataPhrase = ref('')
+const showClearDataDialog = ref(false)
+const clearDataProgress = ref({ active: false, percent: 0, message: '', state: 'running', report: null })
+let clearDataProgressTimer = null
+let clearDataActiveOperation = null
+const scanUnusedFiles = async () => {
+    cleanupLoading.value = true
+    cleanupError.value = ''
+    try {
+        const response = await window.axios.get(route('settings.cleanup.scan'))
+        cleanupResult.value = response.data
+        selectedCleanupPaths.value = (response.data.files || []).map(file => file.path)
+    } catch (error) {
+        cleanupError.value = error.response?.data?.message || 'Không thể quét file lúc này.'
+    } finally {
+        cleanupLoading.value = false
+    }
+}
+const cleanupUnusedFiles = async () => {
+    if (!selectedCleanupPaths.value.length) return
+    const paths = [...selectedCleanupPaths.value]
+    confirmBox.show({
+        title: 'Xóa file không còn sử dụng',
+        message: `Xóa ${paths.length} file mồ côi đã chọn? Thao tác này không thể hoàn tác.`,
+        confirmText: `Xóa ${paths.length} file`,
+        onConfirm: async () => {
+            cleanupDeleting.value = true
+            cleanupError.value = ''
+            try {
+                let deleted = 0
+                let bytes = 0
+                for (let index = 0; index < paths.length; index += 500) {
+                    const response = await window.axios.delete(route('settings.cleanup.destroy'), { data: { paths: paths.slice(index, index + 500) } })
+                    deleted += Number(response.data.deleted || 0)
+                    bytes += Number(response.data.bytes || 0)
+                }
+                await scanUnusedFiles()
+                cleanupResult.value = { ...cleanupResult.value, deleted, deleted_bytes: bytes }
+            } catch (error) {
+                cleanupError.value = error.response?.data?.message || 'Không thể xóa các file đã chọn.'
+            } finally {
+                cleanupDeleting.value = false
+            }
+        },
+    })
+}
+const createOperationId = () => {
+    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
+    const bytes = new Uint8Array(16)
+    globalThis.crypto?.getRandomValues?.(bytes)
+    if (!globalThis.crypto?.getRandomValues) for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+const beginClearDataProgress = () => {
+    const operation = createOperationId()
+    clearDataActiveOperation = operation
+    clearDataProgress.value = { active: true, percent: 1, message: 'Đang khởi chạy…', state: 'running', report: null }
+    clearInterval(clearDataProgressTimer)
+    clearDataProgressTimer = setInterval(async () => {
+        try {
+            const response = await window.axios.get(route('backups.progress', { operation }))
+            if (clearDataActiveOperation !== operation) return
+            clearDataProgress.value = { ...response.data, active: response.data.state === 'running' }
+            if (response.data.state !== 'running') clearInterval(clearDataProgressTimer)
+        } catch (_) { /* Retry on next poll while server writes progress. */ }
+    }, 500)
+    return operation
+}
+const clearBusinessData = () => {
+    clearDataForm.confirmation = 'XOA DU LIEU'
+    clearDataForm.operation_id = beginClearDataProgress()
+    showClearDataDialog.value = false
+    clearDataForm.post(route('backups.clear-data'), {
+        preserveScroll: true,
+        onError: errors => { cleanupError.value = errors.confirmation || errors.operation_id || 'Không thể bắt đầu dọn dữ liệu.' },
+    })
+}
+const dismissClearDataProgress = () => {
+    if (clearDataProgress.value.active) return
+    clearInterval(clearDataProgressTimer)
+    clearDataActiveOperation = null
+    clearDataProgress.value = { active: false, percent: 0, message: '', state: 'running', report: null }
+}
+const formatBytes = value => {
+    const bytes = Number(value || 0)
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
 const updatePaymentVoiceAvailability = () => {
     paymentVoiceAvailable.value = hasPaymentVoice(form.payment_voice_language || 'vi-VN')
     paymentVoiceChecked.value = true
@@ -52,6 +151,7 @@ const testSelectedPaymentVoice = () => {
 }
 watch(() => props.active_section, (section) => {
     if (section === 'backups' && props.can_manage_backups) activeModal.value = 'backups'
+    else if (section === 'cleanup' && props.can_edit_settings) { activeModal.value = section; scanUnusedFiles() }
     else if (section === 'system' && props.can_edit_settings) activeModal.value = section
     else if (section === 'payments' && props.can_manage_payment_accounts) activeModal.value = section
     else if (section === 'inventory' && props.can_manage_inventory_settings) activeModal.value = section
@@ -161,7 +261,10 @@ onMounted(() => {
     updatePaymentVoiceAvailability()
     window.speechSynthesis?.addEventListener?.('voiceschanged', updatePaymentVoiceAvailability)
 })
-onBeforeUnmount(() => window.speechSynthesis?.removeEventListener?.('voiceschanged', updatePaymentVoiceAvailability))
+onBeforeUnmount(() => {
+    window.speechSynthesis?.removeEventListener?.('voiceschanged', updatePaymentVoiceAvailability)
+    clearInterval(clearDataProgressTimer)
+})
 
 const bankWebhookEndpoint = computed(() => `${window.location.origin}/api/webhooks/bank-transactions`)
 
@@ -396,6 +499,10 @@ const unitDisplayName = (unit) =>
             <button v-if="can_manage_backups" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md" @click="openModal('backups')">
                 <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><DatabaseBackup :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Sao lưu và khôi phục</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-emerald-600" :size="19" /></span>
                 <span class="col-span-3 text-sm leading-5 text-slate-500">Tạo bản sao, đặt lịch tự động, kết nối đám mây và khôi phục dữ liệu.</span>
+            </button>
+            <button v-if="can_edit_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-rose-300 hover:shadow-md" @click="openModal('cleanup')">
+                <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700"><HardDrive :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Dọn dẹp hệ thống</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-rose-600" :size="19" /></span>
+                <span class="col-span-3 text-sm leading-5 text-slate-500">Tìm và xóa ảnh tải lên không còn được dữ liệu sử dụng.</span>
             </button>
         </div>
 
@@ -921,5 +1028,75 @@ const unitDisplayName = (unit) =>
         <BaseModal v-if="activeModal === 'backups' && can_manage_backups" title="Sao lưu và khôi phục" size="xl" body-class="bg-slate-50 p-4 sm:p-5" @close="closeModal">
             <BackupsIndex hide-header :backups="backups" :cloud_connections="cloud_connections" :cloud_oauth="cloud_oauth" :schedule="schedule" :restore_preview="restore_preview" />
         </BaseModal>
+        <BaseModal v-if="activeModal === 'cleanup' && can_edit_settings" title="Dọn dẹp hệ thống" size="xl" body-class="bg-slate-50 p-4 sm:p-5" @close="closeModal">
+            <div class="space-y-4">
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Khu vực backup được bảo vệ:</strong> chức năng này không quét hoặc xóa file sao lưu. Chỉ ảnh sản phẩm, khách hàng, sửa chữa, avatar và ảnh IMEI không còn được dữ liệu sử dụng mới xuất hiện trong danh sách.</div>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div v-if="cleanupResult" class="text-sm text-slate-700">Tìm thấy <strong>{{ cleanupResult.count }}</strong> file · {{ formatBytes(cleanupResult.bytes) }} có thể giải phóng</div>
+                    <div v-else class="text-sm text-slate-500">{{ cleanupLoading ? 'Đang quét...' : 'Chưa quét file.' }}</div>
+                    <div class="flex gap-2">
+                        <ActionButton variant="secondary" :disabled="cleanupLoading || cleanupDeleting" @click="scanUnusedFiles"><RefreshCw :size="15" /> Quét lại</ActionButton>
+                        <ActionButton variant="danger" :disabled="!selectedCleanupPaths.length || cleanupLoading || cleanupDeleting" @click="cleanupUnusedFiles"><Trash2 :size="15" /> {{ cleanupDeleting ? 'Đang xóa...' : `Xóa đã chọn (${selectedCleanupPaths.length})` }}</ActionButton>
+                    </div>
+                </div>
+                <p v-if="cleanupError" class="rounded-md bg-rose-50 p-3 text-sm text-rose-700">{{ cleanupError }}</p>
+                <p v-if="cleanupResult?.deleted" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">Đã xóa {{ cleanupResult.deleted }} file, giải phóng {{ formatBytes(cleanupResult.deleted_bytes) }}.</p>
+                <div v-if="cleanupResult?.files?.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-600"><input type="checkbox" :checked="selectedCleanupPaths.length === cleanupResult.files.length" @change="selectedCleanupPaths = $event.target.checked ? cleanupResult.files.map(file => file.path) : []" /><span>Chọn tất cả</span></div>
+                    <div class="max-h-[48vh] divide-y divide-slate-100 overflow-y-auto">
+                        <label v-for="file in cleanupResult.files" :key="file.path" class="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-slate-50"><input v-model="selectedCleanupPaths" type="checkbox" :value="file.path" class="mt-1" /><span class="min-w-0 flex-1"><span class="block break-all font-mono text-xs text-slate-700">{{ file.path }}</span><span class="mt-1 block text-[11px] text-slate-400">{{ formatBytes(file.size) }} · {{ new Date(file.last_modified * 1000).toLocaleString() }}</span></span></label>
+                    </div>
+                </div>
+                <div v-else-if="cleanupResult && !cleanupLoading" class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Không tìm thấy file mồ côi trong các thư mục được quét.</div>
+                <section v-if="can_manage_backups" class="rounded-xl border border-red-200 bg-red-50/50 p-4">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex items-start gap-3">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><Trash2 :size="19" /></span>
+                            <div>
+                                <h2 class="text-sm font-bold text-red-900">Xóa dữ liệu nghiệp vụ</h2>
+                                <p class="mt-1 max-w-3xl text-xs leading-5 text-red-800">Hệ thống tạo bản sao lưu cứu hộ trước, sau đó xóa dữ liệu bán hàng, kho, khách hàng, sửa chữa, chi phí và tệp tải lên. Tài khoản, phân quyền, cấu hình và bản sao lưu được giữ lại.</p>
+                            </div>
+                        </div>
+                        <ActionButton variant="danger" :disabled="clearDataForm.processing" @click="clearDataPhrase = ''; showClearDataDialog = true"><Trash2 :size="15" /> Xóa dữ liệu nghiệp vụ</ActionButton>
+                    </div>
+                </section>
+            </div>
+        </BaseModal>
+
+        <Teleport to="body">
+            <div v-if="showClearDataDialog" class="fixed inset-0 z-[10010] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="clear-data-title">
+                <section class="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-5 shadow-2xl sm:p-6">
+                    <div class="flex items-start gap-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><Trash2 :size="21" /></div>
+                        <div>
+                            <h2 id="clear-data-title" class="text-base font-bold text-red-900">Xác nhận xóa sạch dữ liệu nghiệp vụ</h2>
+                            <p class="mt-2 text-sm leading-6 text-slate-600">Thao tác không thể hoàn tác trực tiếp. Hệ thống sẽ tạo bản sao lưu cứu hộ trước khi xóa. Tài khoản, quyền và cấu hình sẽ được giữ lại.</p>
+                        </div>
+                    </div>
+                    <label class="mt-5 block text-xs font-semibold text-slate-700">Nhập chính xác <code class="rounded bg-red-50 px-1.5 py-0.5 text-red-700">XOA DU LIEU</code> để xác nhận</label>
+                    <input v-model="clearDataPhrase" type="text" autocomplete="off" class="mt-1.5 h-11 w-full rounded-xl border-slate-300 text-sm focus:border-red-500 focus:ring-red-500" placeholder="XOA DU LIEU">
+                    <p v-if="cleanupError" class="mt-2 text-xs text-red-700">{{ cleanupError }}</p>
+                    <div class="mt-5 flex justify-end gap-2">
+                        <ActionButton variant="secondary" @click="showClearDataDialog = false">Hủy</ActionButton>
+                        <ActionButton variant="danger" :disabled="clearDataPhrase !== 'XOA DU LIEU' || clearDataForm.processing" @click="clearBusinessData"><Trash2 :size="14" /> Tạo backup và xóa dữ liệu</ActionButton>
+                    </div>
+                </section>
+            </div>
+            <div v-if="clearDataProgress.active || clearDataProgress.state !== 'running'" class="fixed inset-0 z-[10020] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-live="polite" aria-label="Tiến trình xóa dữ liệu">
+                <section class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+                    <div class="flex items-start justify-between gap-3">
+                        <div><h2 class="text-sm font-bold text-slate-800">{{ clearDataProgress.active ? 'Đang dọn dẹp hệ thống' : clearDataProgress.state === 'failed' ? 'Dọn dẹp thất bại' : 'Dọn dẹp hoàn tất' }}</h2><p class="mt-1 text-sm text-slate-600">{{ clearDataProgress.message }}</p></div>
+                        <span class="rounded-full bg-red-50 px-2.5 py-1 text-sm font-bold tabular-nums text-red-700">{{ Math.round(clearDataProgress.percent || 0) }}%</span>
+                    </div>
+                    <div class="mt-3 h-3 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-red-600 transition-[width] duration-300" :style="{ width: `${Math.max(3, clearDataProgress.percent || 0)}%` }"></div></div>
+                    <div v-if="clearDataProgress.report" class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                        <p class="font-bold">{{ clearDataProgress.report.title }}</p>
+                        <p v-if="clearDataProgress.report.tables_cleared !== undefined" class="mt-1">{{ clearDataProgress.report.tables_cleared }} bảng · {{ Number(clearDataProgress.report.rows_cleared || 0).toLocaleString() }} dòng · {{ clearDataProgress.report.files_cleared }} tệp đã xóa</p>
+                        <p v-if="clearDataProgress.report.recovery_backup" class="mt-1 break-all">Bản cứu hộ: {{ clearDataProgress.report.recovery_backup }}</p>
+                    </div>
+                    <div v-if="!clearDataProgress.active" class="mt-5 flex justify-end"><ActionButton @click="dismissClearDataProgress">OK</ActionButton></div>
+                </section>
+            </div>
+        </Teleport>
     </div>
 </template>

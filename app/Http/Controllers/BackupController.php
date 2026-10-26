@@ -213,14 +213,14 @@ class BackupController extends Controller
                 'preserved' => 'Tài khoản đăng nhập, phân quyền, cấu hình hệ thống và bản sao lưu.',
             ]);
 
-            return $this->backupSettingsRedirect()->with('success', 'Đã xóa dữ liệu nghiệp vụ. Có thể dùng bản cứu hộ để khôi phục.');
+            return redirect()->route('settings.index', ['section' => 'cleanup'])->with('success', 'Đã xóa dữ liệu nghiệp vụ. Có thể dùng bản cứu hộ để khôi phục.');
         } catch (Throwable $exception) {
             $update(100, 'Không thể hoàn tất việc xóa dữ liệu: '.$exception->getMessage(), 'failed', [
                 'title' => 'Xóa dữ liệu thất bại',
                 'recovery_backup' => $recovery ? basename($recovery) : null,
                 'error' => $exception->getMessage(),
             ]);
-            return $this->backupSettingsRedirect()->with('error', 'Không thể hoàn tất việc xóa dữ liệu: '.$exception->getMessage());
+            return redirect()->route('settings.index', ['section' => 'cleanup'])->with('error', 'Không thể hoàn tất việc xóa dữ liệu: '.$exception->getMessage());
         }
     }
 
@@ -246,14 +246,14 @@ class BackupController extends Controller
         $operation = $request->validate(['operation_id' => ['required', 'uuid']])['operation_id'];
         $userId = (int) $request->user()->id;
         $request->session()->save();
-        $update = fn ($percent, $message) => $progress->update($userId, $operation, $percent, $message);
+        $update = fn ($percent, $message, $report = null) => $progress->update($userId, $operation, $percent, $message, 'running', $report);
         try {
             $progress->update($userId, $operation, 1, 'Đang kiểm tra tệp sao lưu.');
             $preview = $restoreService->inspect($backup, $update);
             $progress->update($userId, $operation, 100, 'Đối chiếu hoàn tất.', 'completed');
             return $this->backupSettingsRedirect()->with('restore_preview', $preview)->with('success', 'Đã kiểm tra tính toàn vẹn và đối chiếu cấu trúc bản sao lưu.');
         } catch (Throwable $exception) {
-            $progress->update($userId, $operation, 100, 'Kiểm tra bản sao lưu thất bại.', 'failed');
+            $progress->update($userId, $operation, 100, 'Đối chiếu thất bại: '.$exception->getMessage(), 'failed');
             return $this->backupSettingsRedirect()->with('error', 'Không thể kiểm tra bản sao lưu: '.$exception->getMessage());
         }
     }
@@ -276,12 +276,12 @@ class BackupController extends Controller
 
         try {
             $progress->update($userId, $operation, 35, 'Đã tải tệp lên; đang kiểm tra cấu trúc và dữ liệu.');
-            $preview = $restoreService->inspect($filename, fn ($percent, $message) => $progress->update($userId, $operation, 35 + (int) ($percent * 0.64), $message));
+            $preview = $restoreService->inspect($filename, fn ($percent, $message, $report = null) => $progress->update($userId, $operation, 35 + (int) ($percent * 0.64), $message, 'running', $report));
             $progress->update($userId, $operation, 100, 'Tải lên và đối chiếu hoàn tất.', 'completed');
             return $this->backupSettingsRedirect()->with('restore_preview', $preview)->with('success', 'Đã tải tệp lên và kiểm tra cấu trúc bản sao lưu.');
         } catch (Throwable $exception) {
             File::delete($directory.DIRECTORY_SEPARATOR.$filename);
-            $progress->update($userId, $operation, 100, 'Tệp sao lưu không hợp lệ.', 'failed');
+            $progress->update($userId, $operation, 100, 'Kiểm tra tệp sao lưu thất bại: '.$exception->getMessage(), 'failed');
             return $this->backupSettingsRedirect()->with('error', 'Tệp không phải bản sao lưu hợp lệ: '.$exception->getMessage());
         }
     }
@@ -372,12 +372,12 @@ class BackupController extends Controller
         try {
             $progress->update($userId, $operation, 5, 'Đang tải bản sao lưu từ '.$connection->name.'.');
             $cloudStorage->download($connection, $data['name'], $localPath, fn ($percent, $message) => $progress->update($userId, $operation, 5 + (int) ($percent * 0.44), $message));
-            $preview = $restoreService->inspect($localName, fn ($percent, $message) => $progress->update($userId, $operation, 50 + (int) ($percent * 0.49), $message));
+            $preview = $restoreService->inspect($localName, fn ($percent, $message, $report = null) => $progress->update($userId, $operation, 50 + (int) ($percent * 0.49), $message, 'running', $report));
             $progress->update($userId, $operation, 100, 'Đã tải xuống và đối chiếu xong.', 'completed');
             return $this->backupSettingsRedirect()->with('restore_preview', $preview)->with('success', 'Đã tải bản sao lưu từ đám mây và kiểm tra dữ liệu.');
         } catch (Throwable $exception) {
             File::delete($localPath);
-            $progress->update($userId, $operation, 100, 'Không thể tải hoặc kiểm tra bản sao lưu đám mây.', 'failed');
+            $progress->update($userId, $operation, 100, 'Tải hoặc đối chiếu bản sao lưu đám mây thất bại: '.$exception->getMessage(), 'failed');
             return $this->backupSettingsRedirect()->with('error', 'Không thể kiểm tra bản sao lưu đám mây: '.$exception->getMessage());
         }
     }

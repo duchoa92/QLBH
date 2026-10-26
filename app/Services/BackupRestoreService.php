@@ -9,6 +9,15 @@ use ZipArchive;
 
 class BackupRestoreService
 {
+    private const TRANSIENT_TABLES = [
+        'cache', 'cache_locks', 'sessions', 'jobs', 'job_batches', 'failed_jobs', 'password_reset_tokens',
+    ];
+
+    private function isTransientTable(string $table): bool
+    {
+        return in_array(strtolower($table), self::TRANSIENT_TABLES, true);
+    }
+
     public function inspect(string $name, ?callable $progress = null): array
     {
         $progress ??= static fn (int $percent, string $message) => null;
@@ -95,6 +104,10 @@ class BackupRestoreService
             }, $currentTables);
             $currentCounts = [];
             foreach (DB::select(implode(' UNION ALL ', $countQueries)) as $countRow) $currentCounts[$countRow->table_name] = (int) $countRow->aggregate;
+            $inspectionTables = [];
+            $progress(25, 'Đang đối chiếu cấu trúc các bảng.', [
+                'inspection' => ['title' => 'Đối chiếu dữ liệu', 'tables' => $inspectionTables, 'completed' => 0, 'total' => count($tables)],
+            ]);
             $tableIndex = 0;
             foreach ($tables as $table => &$info) {
                 $summary['backup_rows'] += $info['backup_rows'];
@@ -106,6 +119,11 @@ class BackupRestoreService
                 $info['schema_compatible'] = $info['exists']
                     && ($currentColumns[$table] ?? []) === $info['columns']
                     && $hasUniqueKey;
+                $inspectionTables[$table]['schema_compatible'] = $info['schema_compatible'];
+                $inspectionTables[$table]['status'] = 'checking';
+                $progress(25 + (int) floor($tableIndex / max(1, count($tables)) * 60), 'Đang đối chiếu bảng '.$table.'.', [
+                    'inspection' => ['title' => 'Đối chiếu dữ liệu', 'tables' => $inspectionTables, 'completed' => $tableIndex, 'total' => count($tables), 'current_table' => $table],
+                ]);
                 $info['primary_key_conflicts'] = null;
                 if ($info['exists'] && count($primaryColumns[$table] ?? []) === 1
                     && in_array($primaryColumns[$table][0], $info['columns'], true)
@@ -127,7 +145,9 @@ class BackupRestoreService
                         $processedRows++;
                         if ($processedRows % 100 === 0) {
                             $fraction = ($tableIndex + min(1, $processedRows / $totalTableRows)) / max(1, count($tables));
-                            $progress(25 + (int) floor($fraction * 60), 'Đang đối chiếu bảng '.$table.' ('.number_format($processedRows).' / '.number_format($info['current_rows']).' dòng).');
+                            $progress(25 + (int) floor($fraction * 60), 'Đang đối chiếu bảng '.$table.' ('.number_format($processedRows).' / '.number_format($info['current_rows']).' dòng).', [
+                                'inspection' => ['title' => 'Đối chiếu dữ liệu', 'tables' => $inspectionTables, 'completed' => $tableIndex, 'total' => count($tables), 'current_table' => $table, 'current_rows_checked' => $processedRows],
+                            ]);
                         }
                     }
                 }
@@ -135,11 +155,20 @@ class BackupRestoreService
                     && $info['backup_rows'] === $info['current_rows']
                     && hash_equals($backupChecksum, hash_final($currentHash));
                 if (! $info['data_matches']) $summary['mismatched_data_tables']++;
+                $inspectionTables[$table] = [
+                    'backup_rows' => $info['backup_rows'],
+                    'current_rows' => $info['current_rows'],
+                    'schema_compatible' => $info['schema_compatible'],
+                    'data_matches' => $info['data_matches'],
+                    'status' => 'completed',
+                ];
                 $summary['current_rows'] += $info['current_rows'];
                 if (! $info['exists']) $summary['new_tables']++;
                 if (! $info['schema_compatible']) $summary['schema_compatible'] = false;
                 $tableIndex++;
-                $progress(25 + (int) floor($tableIndex / max(1, count($tables)) * 60), 'Đang so sánh dữ liệu bảng '.$table.' ('.$tableIndex.' / '.count($tables).').');
+                $progress(25 + (int) floor($tableIndex / max(1, count($tables)) * 60), 'Đang so sánh dữ liệu bảng '.$table.' ('.$tableIndex.' / '.count($tables).').', [
+                    'inspection' => ['title' => 'Đối chiếu dữ liệu', 'summary' => $summary, 'tables' => $inspectionTables, 'completed' => $tableIndex, 'total' => count($tables)],
+                ]);
             }
             unset($info);
             $pendingPrimaryKeys = [];
@@ -147,6 +176,7 @@ class BackupRestoreService
             foreach (preg_split('/\R/', $dump) as $line) {
                 if (! preg_match('/^\s*INSERT\s+INTO\s+(?:\x60([^\x60]+)\x60|"([^"]+)"|([\w.-]+))\s*\((.*?)\)\s*VALUES\s*\((.*)\)\s*;\s*$/i', $line, $insert)) continue;
                 $table = $insert[1] ?: ($insert[2] ?: $insert[3]);
+                if ($this->isTransientTable($table)) continue;
                 $primary = $primaryColumns[$table] ?? [];
                 if (count($primary) !== 1 || ! isset($tables[$table]) || ! $tables[$table]['exists']) continue;
                 $columns = array_map(fn ($value) => trim($value, " ".chr(96)."\"\t"), explode(',', $insert[4]));
@@ -169,10 +199,11 @@ class BackupRestoreService
             foreach ($pendingPrimaryKeys as $table => $keys) {
                 if ($keys !== []) $tables[$table]['primary_key_conflicts'] += $this->countPrimaryKeyConflicts($table, $primaryColumns[$table][0], $keys);
             }
-            $hasUnknownPrimaryKeyConflicts = collect($tables)->contains(fn ($table) => $table['backup_rows'] > 0 && $table['primary_key_conflicts'] === null);
+            $persistentTables = array_filter($tables, fn ($table, $name) => ! $this->isTransientTable($name), ARRAY_FILTER_USE_BOTH);
+            $hasUnknownPrimaryKeyConflicts = collect($persistentTables)->contains(fn ($table) => $table['backup_rows'] > 0 && $table['primary_key_conflicts'] === null);
             $summary['primary_key_conflicts'] = $hasUnknownPrimaryKeyConflicts
                 ? null
-                : array_sum(array_map(fn ($table) => (int) ($table['primary_key_conflicts'] ?? 0), $tables));
+                : array_sum(array_map(fn ($table) => (int) ($table['primary_key_conflicts'] ?? 0), $persistentTables));
             $summary['current_rows'] = array_sum($currentCounts);
             $summary['missing_tables'] = count(array_diff($currentTables, array_keys($tables)));
             $summary['row_count_difference'] = $summary['backup_rows'] - $summary['current_rows'];
@@ -219,13 +250,23 @@ class BackupRestoreService
             if (isset($manifestContents['uploaded_bytes']) && (int) $manifestContents['uploaded_bytes'] !== $fileBytes) {
                 throw new RuntimeException('Dung lượng tệp đọc được không khớp manifest của bản sao lưu.');
             }
-            $progress(100, 'Đã kiểm tra xong cấu trúc, dữ liệu và danh sách tệp.');
-            return [
+            $preview = [
                 'valid' => true, 'backup' => $name, 'created_at' => $manifest['created_at'] ?? null,
                 'summary' => $summary, 'tables' => $tables,
                 'has_files' => $fileCount > 0, 'files_count' => $fileCount, 'files_total_bytes' => $fileBytes,
                 'files_omitted' => max(0, $fileCount - count($fileDetails)), 'files' => $fileDetails,
             ];
+            $progress(100, 'Đã kiểm tra xong cấu trúc, dữ liệu và danh sách tệp.', [
+                'inspection' => [
+                    'title' => 'Đối chiếu hoàn tất',
+                    'summary' => $summary,
+                    'tables' => $inspectionTables,
+                    'completed' => count($tables),
+                    'total' => count($tables),
+                    'preview' => $preview,
+                ],
+            ]);
+            return $preview;
         } finally {
             $zip->close();
         }
@@ -249,7 +290,7 @@ class BackupRestoreService
             try {
                 $this->setForeignKeyChecks(false);
                 $mergeReport = [
-                    'tables' => array_fill_keys(array_keys($inspection['tables']), ['added' => 0, 'overwritten' => 0, 'kept_or_unchanged' => 0]),
+                    'tables' => array_fill_keys(array_keys($inspection['tables']), ['added' => 0, 'overwritten' => 0, 'kept_or_unchanged' => 0, 'skipped_transient' => 0]),
                     'files' => ['added' => 0, 'overwritten' => 0, 'skipped' => 0, 'deleted' => 0],
                 ];
                 DB::transaction(function () use ($dump, $conflictPolicy, $name, $progress, &$mergeReport) {
@@ -260,6 +301,12 @@ class BackupRestoreService
                         if (! preg_match('/^\s*INSERT\s+INTO\s+(\x60([^\x60]+)\x60|"([^"]+)"|([\w.-]+))\s*\((.*?)\)\s*(VALUES\s*\(.*\))\s*;\s*$/i', $line, $m)) continue;
                         $columns = array_map(fn ($value) => trim($value, " ".chr(96)."\"\t"), explode(',', $m[5]));
                         $sql = 'INSERT INTO '.$m[1].' ('.$m[5].') '.$m[6];
+                        $table = $m[2] ?: ($m[3] ?: $m[4]);
+                        $mergeReport['tables'][$table] ??= ['added' => 0, 'overwritten' => 0, 'kept_or_unchanged' => 0, 'skipped_transient' => 0];
+                        if ($this->isTransientTable($table)) {
+                            $mergeReport['tables'][$table]['skipped_transient']++;
+                            continue;
+                        }
                         $driver = DB::connection()->getDriverName();
                         if ($conflictPolicy === 'keep_current') {
                             $sql = preg_replace('/^\s*INSERT\s+INTO/i', $driver === 'sqlite' ? 'INSERT OR IGNORE INTO' : 'INSERT IGNORE INTO', $sql, 1);
@@ -271,8 +318,6 @@ class BackupRestoreService
                             $sql = rtrim($sql, ';').' ON DUPLICATE KEY UPDATE '.implode(', ', $updates);
                         }
                         $affected = DB::connection()->getPdo()->exec($sql);
-                        $table = $m[2] ?: ($m[3] ?: $m[4]);
-                        $mergeReport['tables'][$table] ??= ['added' => 0, 'overwritten' => 0, 'kept_or_unchanged' => 0];
                         if ($conflictPolicy === 'keep_current') {
                             if ($affected > 0) $mergeReport['tables'][$table]['added']++;
                             else $mergeReport['tables'][$table]['kept_or_unchanged']++;
@@ -318,7 +363,7 @@ class BackupRestoreService
                 if ($recoveryZip->open($recovery) === true) {
                     $recoveryDump = $recoveryZip->getFromName('database.sql');
                     $recoveryZip->close();
-                    if (is_string($recoveryDump)) $this->replace($recoveryDump);
+                    if (is_string($recoveryDump)) $this->replace($recoveryDump, null, false);
                 }
                 $this->restoreFiles(basename($recovery), 'replace', 'use_backup');
             } catch (\Throwable $rollbackError) { report($rollbackError); }
@@ -330,7 +375,12 @@ class BackupRestoreService
             if (DB::getSchemaBuilder()->hasTable($table)) {
                 $rowCount = (int) DB::table($table)->count();
                 $restoredRows += $rowCount;
-                $restoredTables[] = ['table' => $table, 'rows_restored' => $rowCount];
+                $restoredTables[] = [
+                    'table' => $table,
+                    'rows_restored' => $rowCount,
+                    'rows_in_backup' => $inspection['tables'][$table]['backup_rows'] ?? 0,
+                    'transient_data_skipped' => $this->isTransientTable($table),
+                ];
             }
         }
         return ['mode' => 'replace', 'recovery_backup' => basename($recovery), 'summary' => $inspection['summary'], 'has_files' => $inspection['has_files'], 'files_count' => $inspection['files_count'], 'files_total_bytes' => $inspection['files_total_bytes'], 'files_omitted' => $inspection['files_omitted'], 'backup_file_details' => $inspection['files'], 'restored_rows' => $restoredRows, 'table_report' => $restoredTables, 'files' => $fileReport];
@@ -353,7 +403,7 @@ class BackupRestoreService
         return $zip;
     }
 
-    private function replace(string $dump, ?callable $progress = null): void
+    private function replace(string $dump, ?callable $progress = null, bool $skipTransientData = true): void
     {
         $driver = DB::connection()->getDriverName();
         $this->setForeignKeyChecks(false);
@@ -368,6 +418,10 @@ class BackupRestoreService
         $statements = iterator_to_array($this->splitStatements($dump), false);
         foreach ($statements as $index => $statement) {
             if (preg_match('/^\s*(?:--.*\R)?\s*(?:SET\s+FOREIGN_KEY_CHECKS|PRAGMA\s+foreign_keys)/i', $statement)) continue;
+            if ($skipTransientData && preg_match('/^\s*INSERT\s+INTO\s+(?:\x60([^\x60]+)\x60|"([^"]+)"|([\w.-]+))/i', $statement, $insert)) {
+                $table = $insert[1] ?: ($insert[2] ?: $insert[3]);
+                if ($this->isTransientTable($table)) continue;
+            }
             DB::unprepared($statement);
             if ($index % 100 === 0 && $progress) $progress(25 + (int) floor(($index + 1) / max(1, count($statements)) * 70), 'Đang khôi phục cấu trúc và dữ liệu.');
         }

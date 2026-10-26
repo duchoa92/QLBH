@@ -31,7 +31,7 @@ const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(r
 
             <!-- HEADER -->
             <thead>
-                <tr class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <tr class="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
 
                     <!-- checkbox -->
                     <th v-if="selectable" class="w-10 border-r border-slate-200 p-2 text-center">

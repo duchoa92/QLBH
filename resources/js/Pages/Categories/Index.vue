@@ -189,7 +189,7 @@ const sort = ({ field, order }) => {
             </ActionButton>
     </CatalogTabs>
 
-    <DataPanel>
+    <DataPanel detached>
         <template #header>
             <div class="grid gap-3 md:grid-cols-[260px_220px]">
                 <FloatingInput

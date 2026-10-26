@@ -24,6 +24,7 @@ use App\Http\Controllers\RecordDetailController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleReceiptController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\SystemCleanupController;
 use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UnitController;
@@ -75,6 +76,8 @@ Route::middleware(['auth'])->group(function () {
     // Settings
     Route::get('/settings', [SettingController::class, 'index'])->middleware('permission:settings.view')->name('settings.index');
     Route::post('/settings', [SettingController::class, 'update'])->middleware('permission:settings.edit|payment_accounts.manage|units.manage')->name('settings.update');
+    Route::get('/settings/system-cleanup/scan', [SystemCleanupController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.cleanup.scan');
+    Route::delete('/settings/system-cleanup', [SystemCleanupController::class, 'destroy'])->middleware('permission:settings.edit')->name('settings.cleanup.destroy');
     Route::get('/backups', [BackupController::class, 'index'])->middleware('permission:backups.manage')->name('backups.index');
     Route::post('/backups', [BackupController::class, 'store'])->middleware('permission:backups.manage')->name('backups.store');
     Route::post('/backups/clear-data', [BackupController::class, 'clearData'])->middleware('permission:backups.manage')->name('backups.clear-data');
