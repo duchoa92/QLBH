@@ -35,7 +35,7 @@ export function buildVietQrPayload({ bankBin, bankAccount, amount, description }
     const account = String(bankAccount ?? '').trim()
     const numericAmount = Math.round(Number(amount || 0))
 
-    if (!/^\d{6}$/.test(bin) || !/^\d{6,19}$/.test(account) || !Number.isFinite(numericAmount) || numericAmount < 0) {
+    if (!/^\d{6}$/.test(bin) || !/^[a-zA-Z0-9]{1,50}$/.test(account) || !Number.isFinite(numericAmount) || numericAmount < 0) {
         return ''
     }
 

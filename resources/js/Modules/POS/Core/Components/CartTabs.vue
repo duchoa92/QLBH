@@ -25,7 +25,7 @@ const emit = defineEmits(['select', 'create', 'remove'])
             class="group relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all shrink-0"
             :class="[
                 activeTabId === tab.id
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
             ]"
             @click="emit('select', tab.id)"
@@ -46,7 +46,7 @@ const emit = defineEmits(['select', 'create', 'remove'])
         <!-- Nút tạo tab đơn hàng mới -->
         <button
             type="button"
-            class="flex items-center justify-center rounded-xl bg-slate-100 p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors shrink-0"
+            class="flex items-center justify-center rounded-xl bg-slate-100 p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors shrink-0"
             title="Thêm đơn hàng mới"
             @click="emit('create')"
         >

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { router, useForm } from '@inertiajs/vue3'
+import { router, useForm, usePage } from '@inertiajs/vue3'
 import { Search, HandCoins, Wallet, Users, Truck, X, ChevronDown, ScanLine, History } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -22,9 +22,11 @@ const props = defineProps({
 })
 
 const isCustomer = computed(() => props.entity === 'customer')
+const page = usePage()
 const title = computed(() => isCustomer.value ? 'Thu công nợ khách hàng' : 'Thanh toán công nợ nhà cung cấp')
 const search = ref(props.filters.search || '')
 const selected = ref(null)
+const reminderParty = ref(null)
 const expandedId = ref(null)
 const scanCode = ref('')
 const scanMessage = ref('')
@@ -32,7 +34,27 @@ const error = ref('')
 const form = useForm({ amount: '', payment_method: 'cash', note: '', order_id: '' })
 let searchTimer
 
+const openDebtReminder = () => {
+    const url = new URL(window.location.href)
+    const id = Number(url.searchParams.get('open_reminder'))
+    reminderParty.value = id ? props.rows?.data?.find(row => Number(row.id) === id) || null : null
+}
+const closeDebtReminder = () => {
+    reminderParty.value = null
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('open_reminder')) return
+    url.searchParams.delete('open_reminder')
+    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true })
+}
+const payReminder = () => {
+    const party = reminderParty.value
+    closeDebtReminder()
+    if (party) pay(party)
+}
+
 watch(() => props.filters.search, value => { search.value = value || '' })
+watch(() => page.url, openDebtReminder, { immediate: true })
+watch(() => props.rows, openDebtReminder)
 watch(search, value => {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => router.get(
@@ -134,6 +156,30 @@ const submit = () => {
             <div class="flex items-center gap-2"><History :size="18" class="text-blue-600" /><h2 class="font-bold text-slate-900">Lịch sử thanh toán gần đây</h2></div>
             <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table class="app-data-table w-full min-w-[760px] text-left text-sm"><thead class="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="item in history" :key="item.id"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><a v-if="item.code && item.href" :href="item.href" class="font-semibold text-blue-700 hover:underline">{{ item.code }}</a><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
         </div>
+
+        <BaseModal v-if="reminderParty" :title="isCustomer ? 'Nhắc thu công nợ khách hàng' : 'Nhắc thanh toán nhà cung cấp'" size="md" @close="closeDebtReminder">
+            <div class="space-y-3">
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <div class="text-base font-bold text-slate-900">{{ nameOf(reminderParty) }}</div>
+                    <div class="mt-1 text-xl font-black text-rose-700">Còn nợ {{ formatMoney(reminderParty.debt_balance) }}</div>
+                </div>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <div class="rounded-lg bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Mã</div><div class="mt-1 text-sm font-bold text-slate-800">{{ reminderParty.code || '—' }}</div></div>
+                    <div class="rounded-lg bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Điện thoại</div><div class="mt-1 text-sm font-bold text-slate-800">{{ reminderParty.phone || '—' }}</div></div>
+                </div>
+                <div>
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div>
+                    <div v-for="order in orders.filter(item => Number(item.party_id) === Number(reminderParty.id))" :key="order.id" class="mb-2 flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+                        <div><div class="font-bold text-slate-800">{{ order.code }}</div><div class="text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã trả {{ formatMoney(order.paid) }}</div></div>
+                        <div class="shrink-0 text-sm font-bold text-rose-700">Còn {{ formatMoney(order.due) }}</div>
+                    </div>
+                    <p v-if="!orders.some(item => Number(item.party_id) === Number(reminderParty.id))" class="text-sm text-slate-500">Khoản công nợ chưa gắn với hóa đơn hoặc phiếu nhập cụ thể.</p>
+                </div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2"><ActionButton variant="secondary" @click="closeDebtReminder">Đóng</ActionButton><ActionButton @click="payReminder"><HandCoins :size="15" />Ghi nhận thanh toán</ActionButton></div>
+            </template>
+        </BaseModal>
 
         <BaseModal v-if="selected" :title="isCustomer ? 'Ghi nhận khách trả nợ' : 'Thanh toán cho nhà cung cấp'" size="md" @close="selected = null">
             <p class="mb-4 text-sm text-slate-500">{{ nameOf(selected) }} · Còn nợ {{ formatMoney(selected.debt_balance) }}</p>

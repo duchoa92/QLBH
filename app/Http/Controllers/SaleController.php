@@ -294,6 +294,12 @@ class SaleController extends Controller
             'Sales/Index',
             [
                 'sales' => $sales,
+                'selectedSale' => $request->filled('open_sale')
+                    ? Sale::query()->with([
+                        'customer', 'user', 'items.product.conversionUnit', 'items.variant',
+                        'items.productImei', 'items.gifts.product', 'items.gifts.productImei',
+                    ])->findOrFail((int) $request->query('open_sale'))
+                    : null,
                 'stats' => $stats,
                 'filters' => [
                     'search' => $search,

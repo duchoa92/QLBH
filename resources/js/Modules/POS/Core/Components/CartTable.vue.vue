@@ -63,7 +63,7 @@ const toggleDiscountInput = (itemId) => {
                     <!-- BADGE QUÀ TẶNG (NẾU GIÁ = 0 HOẶC IS_GIFT) -->
                     <div
                         v-if="item.is_gift || Number(item.price || item.sell_price) === 0"
-                        class="absolute inset-0 bg-indigo-900/40 backdrop-blur-[1px] flex items-center justify-center"
+                        class="absolute inset-0 bg-blue-900/40 backdrop-blur-[1px] flex items-center justify-center"
                         title="Hàng quà tặng"
                     >
                         <Gift class="h-5 w-5 text-amber-300 animate-pulse" />
@@ -90,7 +90,7 @@ const toggleDiscountInput = (itemId) => {
 
                     <!-- HIỂN THỊ PHIÊN BẢN / IMEI / SERIAL -->
                     <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                        <span v-if="item.variant_name || item.variant?.name" class="font-semibold text-indigo-600">
+                        <span v-if="item.variant_name || item.variant?.name" class="font-semibold text-blue-600">
                             {{ item.variant_name || item.variant?.name }}
                         </span>
 
@@ -163,7 +163,7 @@ const toggleDiscountInput = (itemId) => {
                                 <button
                                     type="button"
                                     class="text-[10px] p-0.5 rounded"
-                                    :class="item.note ? 'text-indigo-600 bg-indigo-50 font-bold' : 'text-slate-400 hover:text-slate-600'"
+                                    :class="item.note ? 'text-blue-600 bg-blue-50 font-bold' : 'text-slate-400 hover:text-slate-600'"
                                     @click="item.showNote = !item.showNote"
                                     title="Thêm ghi chú"
                                 >
@@ -220,7 +220,7 @@ const toggleDiscountInput = (itemId) => {
                             v-model="item.note"
                             type="text"
                             placeholder="Ghi chú cho món này (VD: Trầy xước nhẹ, tặng kèm bao da...)"
-                            class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500 focus:bg-white"
+                            class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 outline-none focus:border-blue-500 focus:bg-white"
                         />
                     </div>
 

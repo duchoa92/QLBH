@@ -38,8 +38,10 @@ class DebtPaymentController extends Controller
         $sortBy = in_array($request->query('sort_by'), ['debt_balance', 'code', $nameColumn], true)
             ? $request->query('sort_by') : 'debt_balance';
         $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
+        $openReminderId = (int) $request->query('open_reminder', 0);
 
         $rows = $model->where('debt_balance', '>', 0)
+            ->when($openReminderId > 0, fn ($query) => $query->whereKey($openReminderId))
             ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                 ->where($nameColumn, 'like', "%{$search}%")
                 ->orWhere('code', 'like', "%{$search}%")

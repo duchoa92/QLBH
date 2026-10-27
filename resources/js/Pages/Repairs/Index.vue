@@ -70,8 +70,24 @@ const openCreateFromQuery = () => {
     }
 };
 
-onMounted(openCreateFromQuery);
-watch(() => page.url, openCreateFromQuery);
+const openRepairFromQuery = () => {
+    const url = new URL(window.location.href);
+    const repairId = Number(url.searchParams.get('open_repair'));
+    if (!repairId) return;
+    detailRepair.value = props.repairs?.data?.find(repair => Number(repair.id) === repairId) || null;
+};
+
+const closeRepairDetail = () => {
+    detailRepair.value = null;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('open_repair')) return;
+    url.searchParams.delete('open_repair');
+    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true });
+};
+
+onMounted(() => { openCreateFromQuery(); openRepairFromQuery(); });
+watch(() => page.url, () => { openCreateFromQuery(); openRepairFromQuery(); });
+watch(() => props.repairs, openRepairFromQuery);
 
 const onRepairCompleted = (repair) => {
     paymentRepair.value = repair;
@@ -391,7 +407,7 @@ const confirmPayment = async (payment) => {
             :title="`Phiếu sửa ${detailRepair.code}`"
             :rows="detailRows"
             size="lg"
-            @close="detailRepair = null"
+            @close="closeRepairDetail"
         >
             <div v-if="detailRepair.images?.length" class="mt-4">
                 <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Ảnh tiếp nhận</h3>

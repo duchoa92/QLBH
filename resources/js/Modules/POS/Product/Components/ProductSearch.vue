@@ -321,7 +321,7 @@ const categoryOptions = computed(() => [
                 v-if="loading"
                 class="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/50 text-slate-400 gap-3"
             >
-                <Loader2 class="w-8 h-8 animate-spin text-indigo-500" />
+                <Loader2 class="w-8 h-8 animate-spin text-blue-500" />
                 <span class="text-xs font-medium">Đang tải dữ liệu sản phẩm...</span>
             </div>
 
@@ -339,7 +339,7 @@ const categoryOptions = computed(() => [
                     :class="[
                         getDisplayStock(product) <= 0 && !canSellWithoutStock(product)
                             ? 'opacity-60 border-slate-200 bg-slate-100/50 cursor-not-allowed'
-                            : 'border-slate-200/80 bg-white shadow-sm hover:border-indigo-400 hover:shadow-md active:scale-[0.98]'
+                            : 'border-slate-200/80 bg-white shadow-sm hover:border-blue-400 hover:shadow-md active:scale-[0.98]'
                     ]"
                     @click="selectProduct(product)"
                 >
@@ -389,7 +389,7 @@ const categoryOptions = computed(() => [
                         <!-- BADGE LOẠI SẢN PHẨM -->
                         <div
                             v-if="product.product_type === 'imei' || product.manage_stock_by_serial"
-                            class="absolute top-2 right-2 rounded-md bg-indigo-600 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm"
+                            class="absolute top-2 right-2 rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm"
                         >
                             IMEI
                         </div>
@@ -406,7 +406,7 @@ const categoryOptions = computed(() => [
                     <div class="flex flex-1 flex-col justify-between bg-white p-2 sm:p-3">
                         <div
                             class="line-clamp-2 min-h-[32px] text-[11px] font-semibold leading-snug transition-colors sm:min-h-[36px] sm:text-xs"
-                            :class="getDisplayStock(product) > 0 ? 'text-slate-800 group-hover:text-indigo-600' : 'text-slate-400'"
+                            :class="getDisplayStock(product) > 0 ? 'text-slate-800 group-hover:text-blue-600' : 'text-slate-400'"
                             :title="product.name"
                         >
                             {{ product.name }}

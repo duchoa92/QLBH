@@ -147,6 +147,10 @@ export function useCartGift() {
         }
     }
 
+    const deleteGift = (item, giftId) => {
+        item.gifts = (item.gifts || []).filter(gift => gift.key !== giftId && (gift.key || gift.id) !== giftId)
+    }
+
     return {
 
         searchGiftProducts,
@@ -154,5 +158,6 @@ export function useCartGift() {
         selectGiftProduct,
 
         removeGift,
+        deleteGift,
     }
 }

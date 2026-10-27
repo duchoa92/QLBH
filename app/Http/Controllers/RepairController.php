@@ -24,6 +24,7 @@ use App\Models\RepairPart;
 use Illuminate\Validation\ValidationException;
 use App\Models\User;
 use App\Notifications\SystemNotification;
+use App\Support\NotificationRecipients;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Carbon;
 
@@ -56,6 +57,7 @@ class RepairController extends Controller
         $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
             ? (int) $request->query('per_page', 20) : 20;
         $createdRepairId = (int) $request->query('created_repair_id', 0);
+        $openRepairId = (int) $request->query('open_repair', 0);
         $statusCounts = Repair::query()
             ->selectRaw('status, COUNT(*) as total')
             ->whereIn('status', ['pending', 'repairing', 'done'])
@@ -141,6 +143,8 @@ class RepairController extends Controller
                     );
                 }
             )
+
+            ->when($openRepairId > 0, fn ($query) => $query->whereKey($openRepairId))
 
             ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
@@ -1528,8 +1532,14 @@ class RepairController extends Controller
     private function notifyRepairEvent(Repair $repair, string $title, string $message, string $type = 'repair'): void
     {
         Notification::send(
-            User::query()->get(),
-            new SystemNotification($title, $message, $type, route('records.show', ['type' => 'repair', 'id' => $repair->id], false))
+            NotificationRecipients::withPermission('repairs.view'),
+            new SystemNotification(
+                $title,
+                $message,
+                $type,
+                route('repairs.index', ['open_repair' => $repair->id], false),
+                ['required_permission' => 'repairs.view']
+            )
         );
     }
 

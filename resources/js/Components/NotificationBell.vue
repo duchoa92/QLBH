@@ -3,14 +3,18 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { router } from '@inertiajs/vue3'
 import axios from 'axios'
 import { toast } from 'vue-sonner'
-import { Bell, Trash2, CheckCheck, ExternalLink, AlertTriangle, Package, FileText, Wrench } from 'lucide-vue-next'
+import { Bell, Trash2, CheckCheck, ExternalLink, AlertTriangle, Package, FileText, Wrench, SlidersHorizontal } from 'lucide-vue-next'
+import BaseModal from '@/Components/UI/BaseModal.vue'
 
 const isOpen = ref(false)
+const filterMenuOpen = ref(false)
 const bellRef = ref(null)
 const notifications = ref([])
+const activeFilter = ref('all')
 const unreadCount = ref(0)
 const loading = ref(false)
 const loadFailed = ref(false)
+const detailNotification = ref(null)
 let refreshTimer
 let requestPending = false
 
@@ -65,7 +69,15 @@ const markAllAsRead = async () => {
 const openNotification = (item) => {
     isOpen.value = false
     markAsRead(item)
-    if (item.url) router.visit(item.url)
+    const path = item.url ? new URL(item.url, window.location.origin).pathname : null
+    if (item.url && path !== '/pos') router.visit(item.url)
+    else detailNotification.value = item
+}
+
+const openNotificationTarget = () => {
+    const url = detailNotification.value?.url
+    detailNotification.value = null
+    if (url) router.visit(url)
 }
 
 const removeNotification = async (id) => {
@@ -80,7 +92,27 @@ const removeNotification = async (id) => {
 }
 
 const unreadLabel = computed(() => unreadCount.value > 9 ? '9+' : unreadCount.value)
-
+const filters = [
+    { id: 'all', label: 'Tất cả' },
+    { id: 'unread', label: 'Chưa đọc' },
+    { id: 'read', label: 'Đã đọc' },
+    { id: 'order', label: 'Đơn hàng' },
+    { id: 'repair', label: 'Sửa chữa' },
+    { id: 'system', label: 'Hệ thống' },
+]
+const activeFilterLabel = computed(() => filters.find(filter => filter.id === activeFilter.value)?.label || 'Tất cả')
+const filterCount = (filterId) => {
+    if (filterId === 'all') return notifications.value.length
+    if (filterId === 'unread') return notifications.value.filter(item => !item.read).length
+    if (filterId === 'read') return notifications.value.filter(item => item.read).length
+    return notifications.value.filter(item => item.category === filterId).length
+}
+const filteredNotifications = computed(() => notifications.value.filter((item) => {
+    if (activeFilter.value === 'unread') return !item.read
+    if (activeFilter.value === 'read') return item.read
+    if (['order', 'repair', 'system'].includes(activeFilter.value)) return item.category === activeFilter.value
+    return true
+}))
 const getIcon = (type) => {
     if (type === 'repair') return Wrench
     if (type === 'warning') return AlertTriangle
@@ -125,7 +157,7 @@ onBeforeUnmount(() => {
             <!-- BADGE SỐ LƯỢNG CHƯA ĐỌC -->
             <span
                 v-if="unreadCount > 0"
-                class="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-xs animate-pulse"
+                class="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-xs animate-[pulse_0.55s_ease-in-out_infinite]"
             >
                 {{ unreadLabel }}
             </span>
@@ -137,28 +169,55 @@ onBeforeUnmount(() => {
             class="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white p-2 shadow-2xl border border-slate-100 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-150"
         >
             <!-- HEADER DROPDOWN -->
-            <div class="flex items-center justify-between px-3 py-2 border-b border-slate-100 mb-1">
-                <div class="flex items-center gap-2">
+            <div class="mb-1 flex min-w-0 items-center gap-2 border-b border-slate-100 px-2 py-2">
+                <div class="flex shrink-0 items-center gap-1.5">
                     <span class="font-extrabold text-slate-900 text-sm">Thông báo</span>
-                    <span v-if="unreadCount > 0" class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-600">
-                        {{ unreadCount }} mới
+                    <span v-if="unreadCount > 0" class="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-600">
+                        {{ unreadLabel }}
                     </span>
+                </div>
+                <div class="relative min-w-0 flex-1">
+                    <button
+                        type="button"
+                        aria-label="Lọc thông báo"
+                        :aria-expanded="filterMenuOpen"
+                        @click="filterMenuOpen = !filterMenuOpen"
+                        class="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2 text-left text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    >
+                        <SlidersHorizontal :size="14" class="shrink-0 text-slate-500" />
+                        <span class="min-w-0 flex-1 truncate">{{ activeFilterLabel }}</span>
+                    </button>
+                    <div v-if="filterMenuOpen" class="absolute left-0 top-full z-[60] mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                        <button
+                            v-for="filter in filters"
+                            :key="filter.id"
+                            type="button"
+                            class="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium transition"
+                            :class="activeFilter === filter.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'"
+                            @click="activeFilter = filter.id; filterMenuOpen = false"
+                        >
+                            <span>{{ filter.label }}</span>
+                            <span class="ml-3 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{{ filterCount(filter.id) }}</span>
+                        </button>
+                    </div>
                 </div>
                 <button
                     v-if="unreadCount > 0"
                     type="button"
                     @click="markAllAsRead"
-                    class="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline transition"
+                    aria-label="Đánh dấu đã đọc"
+                    title="Đánh dấu đã đọc"
+                    class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg p-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition"
                 >
-                    <CheckCheck :size="14" />
-                    <span>Đánh dấu đã đọc</span>
+                    <CheckCheck :size="16" />
+                    <span class="hidden sm:inline">Đánh dấu đã đọc</span>
                 </button>
             </div>
 
             <!-- DANH SÁCH ITEM -->
             <div class="max-h-80 overflow-y-auto space-y-1 pr-0.5">
                 <div
-                    v-for="item in notifications"
+                    v-for="item in filteredNotifications"
                     :key="item.id"
                     @click="openNotification(item)"
                     class="group relative flex items-start gap-3 rounded-xl p-2.5 transition-all cursor-pointer"
@@ -177,20 +236,20 @@ onBeforeUnmount(() => {
 
                     <!-- NỘI DUNG -->
                     <div class="min-w-0 flex-1">
-                        <div class="flex items-center justify-between gap-1">
-                            <p class="font-bold text-slate-900 truncate" :class="!item.read && 'text-blue-950'">
-                                {{ item.title }}
-                            </p>
-                            <span class="text-[10px] font-medium text-slate-400 shrink-0">{{ item.time }}</span>
-                        </div>
-                        <p class="mt-0.5 text-slate-600 leading-snug line-clamp-2">
+                        <p class="break-words font-bold leading-snug text-slate-900" :class="!item.read && 'text-blue-950'">
+                            {{ item.title }}
+                        </p>
+                        <p class="mt-0.5 break-words text-slate-600 leading-snug line-clamp-2">
                             {{ item.message }}
                         </p>
 
-                        <!-- LINK CHI TIẾT -->
-                        <div v-if="item.url" class="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-blue-600">
+                        <div class="mt-1.5 flex items-center justify-between gap-2">
+                            <span class="text-[10px] font-medium text-slate-400">{{ item.time }}</span>
+                            <!-- LINK CHI TIẾT -->
+                            <span v-if="item.url" class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600">
                                 <span>Xem chi tiết</span>
                                 <ExternalLink :size="12" />
+                            </span>
                         </div>
                     </div>
 
@@ -215,7 +274,20 @@ onBeforeUnmount(() => {
                 <div v-else-if="!notifications.length" class="py-8 text-center text-slate-400 font-medium">
                     Không có thông báo nào
                 </div>
+                <div v-else-if="!filteredNotifications.length" class="py-8 text-center text-slate-400 font-medium">
+                    Không có thông báo phù hợp với bộ lọc
+                </div>
             </div>
         </div>
+
+        <BaseModal v-if="detailNotification" :title="detailNotification.title" size="sm" @close="detailNotification = null">
+            <p class="whitespace-pre-line text-sm leading-relaxed text-slate-700">{{ detailNotification.message || 'Không có nội dung chi tiết.' }}</p>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="detailNotification = null">Đóng</button>
+                    <button v-if="detailNotification.url" type="button" class="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700" @click="openNotificationTarget">Mở POS <ExternalLink :size="14" /></button>
+                </div>
+            </template>
+        </BaseModal>
     </div>
 </template>

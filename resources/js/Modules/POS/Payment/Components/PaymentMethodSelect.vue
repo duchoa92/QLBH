@@ -26,7 +26,7 @@ const methods = [
             type="button"
             class="flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-xs font-bold transition-all"
             :class="props.modelValue === item.id
-                ? 'border-indigo-600 bg-indigo-50/60 text-indigo-600 shadow-sm'
+                ? 'border-blue-600 bg-blue-50/60 text-blue-600 shadow-sm'
                 : 'border-slate-200/80 bg-white text-slate-600 hover:border-slate-300'"
             :disabled="props.disabled"
             @click="emit('update:modelValue', item.id)"

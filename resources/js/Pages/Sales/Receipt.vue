@@ -1,6 +1,6 @@
 <script setup>
 import { usePage } from '@inertiajs/vue3'
-import { formatCurrency, formatNumber } from '@/utils/format'
+import { formatCurrency, formatNumber, formatDateTime } from '@/utils/format'
 
 defineOptions({
     // BẮT BUỘC: Báo cho Inertia biết trang này KHÔNG sử dụng bất kỳ Layout nào (Kể cả AdminLayout mặc định)
@@ -13,6 +13,27 @@ const props = defineProps({
 const page = usePage()
 
 const formatMoney = formatCurrency
+const itemDiscount = (item) => {
+    const saved = Number(item.discount_amount)
+    if (Number.isFinite(saved) && saved > 0) return saved
+
+    const line = Number(item.unit_price || 0) * Number(item.quantity || 0)
+    const value = Number(item.discount_value || 0)
+    if (item.discount_type === 'percent') return line * value / 100
+    if (item.discount_type === 'amount') return value
+    return 0
+}
+
+const paper = () => page.props.settings?.print_paper_size || 'a4'
+const previewReceiptWidth = () => {
+    const orientation = page.props.settings?.print_orientation === 'landscape'
+    return ({
+        '58mm': '54mm',
+        '80mm': '76mm',
+        a4: orientation ? '277mm' : '190mm',
+        a5: orientation ? '190mm' : '128mm',
+    })[paper()] || '190mm'
+}
 
 const saleQuantityText = (item) => {
     const qty = Number(item.quantity ?? 0)
@@ -56,7 +77,7 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
 <!-- Receipt.vue -->
 <template>
     <div class="receipt-wrapper">
-        <div class="receipt-container relative">
+        <div class="receipt-container relative" :class="{ 'receipt-compact': page.props.settings?.print_template === 'compact' }" :style="{ '--configured-receipt-width': previewReceiptWidth() }">
             
             <!-- 🔴 DẤU CON DẤU "ĐÃ HỦY" ĐÓNG MỜ NỔI BẬT -->
             <div 
@@ -72,9 +93,9 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
             <!-- Header Cửa hàng -->
             <div class="header">
                 <h2>{{ page.props.settings?.shop_name || 'Cửa hàng' }}</h2>
-                <div class="sub">Điện Thoại - Máy Tính - Camera</div>
-                <div>Đ/c: Cầu Giớ - Vạn Xuân - Hưng Yên</div>
-                <div class="phone">Hotline: 0906.064.789</div>
+                <div v-if="page.props.settings?.print_shop_subtitle" class="sub">{{ page.props.settings.print_shop_subtitle }}</div>
+                <div v-if="page.props.settings?.print_shop_address">{{ page.props.settings.print_shop_address }}</div>
+                <div v-if="page.props.settings?.print_shop_phone" class="phone">{{ page.props.settings.print_shop_phone }}</div>
             </div>
 
             <div class="divider"></div>
@@ -82,7 +103,7 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
             <!-- Thông tin đơn hàng -->
             <div class="info">
                 <div class="row"><span>Mã HD:</span> <strong>#{{ sale.code }}</strong></div>
-                <div class="row"><span>Ngày:</span> <span>{{ sale.created_at }}</span></div>
+                <div class="row"><span>Ngày:</span> <span>{{ formatDateTime(sale.created_at) }}</span></div>
                 <div class="row" v-if="sale.user"><span>Thu ngân:</span> <span>{{ sale.user?.name }}</span></div>
                 <div class="row" v-if="sale.customer">
                     <span>Khách hàng:</span>
@@ -108,7 +129,19 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
 
                     <div class="item-calc">
                         <span>{{ saleQuantityText(item) }}{{ baseQuantityText(item) }} x {{ formatMoney(item.unit_price) }}</span>
+                        <strong>{{ formatMoney(Number(item.unit_price || 0) * Number(item.quantity || 0)) }}</strong>
+                    </div>
+                    <div v-if="itemDiscount(item) > 0" class="item-discount">
+                        <span>Giảm giá{{ item.discount_type === 'percent' ? ` (${item.discount_value}%)` : '' }}</span>
+                        <span>-{{ formatMoney(itemDiscount(item)) }}</span>
+                    </div>
+                    <div v-if="itemDiscount(item) > 0" class="item-net">
+                        <span>Thành tiền</span>
                         <strong>{{ formatMoney(item.subtotal) }}</strong>
+                    </div>
+                    <div v-for="gift in item.gifts || []" :key="gift.id" class="item-gift">
+                        <span>🎁 {{ gift.product?.name || 'Quà tặng' }} × {{ gift.quantity || 1 }}</span>
+                        <span>Miễn phí</span>
                     </div>
                 </div>
             </div>
@@ -120,6 +153,10 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
                 <div class="row" v-if="sale.subtotal">
                     <span>Tạm tính:</span>
                     <span>{{ formatMoney(sale.subtotal) }}</span>
+                </div>
+                <div class="row" v-if="Number(sale.discount || 0) > 0">
+                    <span>Giảm giá hóa đơn:</span>
+                    <span>-{{ formatMoney(sale.discount) }}</span>
                 </div>
                 <div class="row total-grand">
                     <span>TỔNG CỘNG:</span>
@@ -175,7 +212,7 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
 }
 
 .receipt-container {
-    width: 80mm;
+    width: var(--configured-receipt-width, 80mm);
     background: #fff;
     padding: 12px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -225,6 +262,10 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
 .item-variant { font-weight: normal; color: #475569; }
 .item-imei { font-family: monospace; font-size: 10px; color: #475569; }
 .item-calc { display: flex; justify-content: space-between; margin-top: 2px; }
+.item-discount, .item-gift { display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; font-size: 10px; }
+.item-discount { color: #b45309; }
+.item-gift { color: #047857; }
+.item-net { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; }
 
 .total-grand {
     font-size: 13px;
@@ -235,6 +276,9 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
 .footer { text-align: center; margin-top: 8px; }
 .footer .thanks { font-weight: bold; }
 .footer .sub { font-size: 10px; font-style: italic; color: #64748b; }
+
+.receipt-compact .info .row:nth-child(3),
+.receipt-compact .footer .sub { display: none; }
 
 /* 🔴 BẮT BUỘC: KHI NẤM NÚT IN HOẶC TRÌNH DUYỆT TỰ IN -> ẨN SẠCH ADMIN LAYOUT */
 @media print {
@@ -252,14 +296,16 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
         padding: 0 !important;
         min-height: 0 !important;
         background: transparent !important;
+        display: block !important;
     }
 
     .receipt-container {
         position: relative !important;
         left: auto !important;
         top: auto !important;
-        width: var(--configured-receipt-width, 80mm) !important;
-        margin: 0 auto !important;
+        width: var(--configured-receipt-width, 190mm) !important;
+        max-width: none !important;
+        margin: 0 !important;
         box-shadow: none !important;
         padding: 0 !important;
     }

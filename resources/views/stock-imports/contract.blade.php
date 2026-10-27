@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Hợp đồng mua bán {{ $import->code }}</title>
+    <title>{{ $contractTitle }} {{ $import->code }}</title>
     <style>
         @page { size: A4; margin: 18mm; }
         * { box-sizing: border-box; }
@@ -28,12 +28,12 @@
 </head>
 <body>
     <div class="toolbar"><button type="button" onclick="window.print()">In hợp đồng</button></div>
-    <h1>Hợp đồng mua bán hàng hóa</h1>
+    <h1>{{ $contractTitle }}</h1>
     <h2>Số: {{ $import->code }}</h2>
     <p>Hôm nay, ngày {{ optional($import->import_date)->format('d/m/Y') }}, các bên gồm:</p>
 
     <div class="party">
-        <p><strong>BÊN MUA (CỬA HÀNG):</strong> {{ config('app.name', 'Cửa hàng') }}</p>
+        <p><strong>BÊN MUA (CỬA HÀNG):</strong> {{ $buyerName }}</p>
         <p>Đại diện: {{ $import->user?->name ?: 'Đại diện cửa hàng' }}</p>
     </div>
     <div class="party">
@@ -43,7 +43,6 @@
         <p>Địa chỉ: {{ $import->party_address ?: ($import->customer?->address ?: ($import->supplier?->address ?: '—')) }}</p>
     </div>
 
-    <p>Hai bên thống nhất việc mua bán hàng hóa với nội dung sau:</p>
     <table>
         <thead><tr><th>STT</th><th>Tên hàng / thông tin</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
         <tbody>
@@ -63,8 +62,7 @@
     <p class="num">Giảm giá: {{ number_format((float) $import->discount, 0, ',', '.') }} đ</p>
     <p class="num">Phí khác: {{ number_format((float) $import->extra_fee, 0, ',', '.') }} đ</p>
     <p class="total">Tổng thanh toán: {{ number_format((float) $import->grand_total, 0, ',', '.') }} đ</p>
-    @if($import->note)<p>Ghi chú: {{ $import->note }}</p>@endif
-    <p>Hai bên xác nhận hàng hóa và giá trị nêu trên, cùng ký tên dưới đây.</p>
+    <p>{!! nl2br(e($contractContent)) !!}</p>
     <div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>{{ $import->party_name ?: ($import->customer?->full_name ?: ($import->supplier?->name ?: '')) }}</div></div>
 </body>
 </html>

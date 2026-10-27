@@ -1,40 +1,29 @@
 <script setup>
 
-import { computed } from 'vue'
-
 import {
-    PenSquare,
     Trash2,
+    PenSquare,
     Gift,
     ShieldCheck,
 } from 'lucide-vue-next'
 
-const props = defineProps({
+import { computed } from 'vue'
 
+const props = defineProps({
     item: {
         type: Object,
         required: true,
     },
 })
 
-const noteCount = computed(() => {
-    return props.item.note?.trim() ? 1 : 0
-})
-
-const giftCount = computed(() => {
-    return (props.item.gifts || []).reduce((total, gift) => {
-        return total + Math.max(1, Number(gift.quantity ?? 1))
-    }, 0)
-})
-
-const warrantyCount = computed(() => {
-    return Number(props.item.customer_warranty_days ?? 0) > 0 ? 1 : 0
-})
+const noteCount = computed(() => props.item.note?.trim() ? 1 : 0)
+const giftCount = computed(() => (props.item.gifts || []).reduce((total, gift) => total + Math.max(1, Number(gift.quantity ?? 1)), 0) + (Number(props.item.discount_value || 0) > 0 ? 1 : 0))
+const warrantyCount = computed(() => Number(props.item.customer_warranty_days ?? props.item.warranty_days ?? 0) > 0 ? 1 : 0)
 
 const emit = defineEmits([
-    'toggle-note',
-    'toggle-promotion',
-    'toggle-warranty',
+    'edit-note',
+    'edit-promotion',
+    'edit-warranty',
     'remove',
 ])
 
@@ -95,78 +84,18 @@ const emit = defineEmits([
                     {{ item.name }}
                 </div>
 
-                <div
-                    class="
-                        flex
-                        gap-2
-                        shrink-0
-                    "
-                >
-
-                    <button
-                        type="button"
-                        @click="
-                            emit(
-                                'toggle-note'
-                            )
-                        "
-                        class="relative transition"
-                        :class="noteCount > 0
-                            ? 'text-blue-600 hover:text-blue-700'
-                            : 'text-gray-400 hover:text-blue-600'"
-                        title="Ghi chú"
-                    >
-                        <PenSquare
-                            class="w-4 h-4"
-                        />
-                        <span
-                            v-if="noteCount"
-                            class="absolute -right-2 -top-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-600 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white"
-                        >
-                            {{ noteCount }}
-                        </span>
+                <div class="flex shrink-0 items-center gap-2">
+                    <button type="button" @click="emit('edit-note')" class="relative flex h-9 w-9 items-center justify-center rounded-lg transition" :class="noteCount ? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400 hover:bg-blue-50 hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
+                        <PenSquare class="h-4 w-4" />
+                        <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-blue-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
                     </button>
-
-                    <button
-                        type="button"
-                        @click="
-                            emit(
-                                'toggle-promotion'
-                            )
-                        "
-                        class="relative transition"
-                        :class="giftCount > 0
-                            ? 'text-amber-600 hover:text-amber-700'
-                            : 'text-gray-400 hover:text-amber-600'"
-                        title="Quà tặng và giảm giá"
-                    >
-                        <Gift
-                            class="w-4 h-4"
-                        />
-                        <span
-                            v-if="giftCount"
-                            class="absolute -right-2 -top-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white"
-                        >
-                            {{ giftCount }}
-                        </span>
+                    <button type="button" @click="emit('edit-promotion')" class="relative flex h-9 w-9 items-center justify-center rounded-lg transition" :class="giftCount || Number(item.discount_value || 0) ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-amber-50 hover:text-amber-600'" title="Quà tặng và giảm giá" aria-label="Quà tặng và giảm giá">
+                        <Gift class="h-4 w-4" />
+                        <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-amber-500 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
                     </button>
-
-                    <button
-                        type="button"
-                        @click="emit('toggle-warranty')"
-                        class="relative transition"
-                        :class="warrantyCount > 0
-                            ? 'text-emerald-600 hover:text-emerald-700'
-                            : 'text-gray-400 hover:text-emerald-600'"
-                        title="Bảo hành"
-                    >
-                        <ShieldCheck class="w-4 h-4" />
-                        <span
-                            v-if="warrantyCount"
-                            class="absolute -right-2 -top-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-emerald-600 px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white"
-                        >
-                            {{ warrantyCount }}
-                        </span>
+                    <button type="button" @click="emit('edit-warranty')" class="relative flex h-9 w-9 items-center justify-center rounded-lg transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
+                        <ShieldCheck class="h-4 w-4" />
+                        <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-emerald-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
                     </button>
 
                     <button
@@ -176,11 +105,9 @@ const emit = defineEmits([
                                 'remove'
                             )
                         "
-                        class="
-                            text-red-400
-                            hover:text-red-600
-                        "
+                        class="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
                         title="Xóa sản phẩm"
+                        aria-label="Xóa sản phẩm khỏi giỏ hàng"
                     >
                         <Trash2
                             class="w-4 h-4"
@@ -204,7 +131,7 @@ const emit = defineEmits([
                 v-if="item.variant_label"
                 class="
                     text-[11px]
-                    text-indigo-600
+                    text-blue-600
                     font-medium
                 "
             >

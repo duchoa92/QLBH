@@ -92,7 +92,7 @@ const qrImage = computed(() => {
                 class="h-64 w-64 max-w-full rounded-xl object-contain sm:h-72 sm:w-72"
             />
             <p v-else class="w-64 px-3 py-8 text-sm font-semibold text-rose-600 sm:w-72">
-                BIN hoặc số tài khoản chưa đúng định dạng để tạo mã QR.
+                BIN cần đủ 6 chữ số; mã tài khoản chỉ gồm chữ và số (tối đa 50 ký tự).
             </p>
         </div>
 

@@ -235,7 +235,7 @@ const cartItemCount = computed(() => cart.value.reduce((count, item) => count + 
 const showInvoice = ref(false)
 const paymentOutcome = ref(null)
 const showPaymentOutcome = ref(false)
-const presentPaymentOutcome = (saleResponse, expectedAmount = null) => {
+const presentPaymentOutcome = (saleResponse, expectedAmount = null, showDialog = false) => {
     const sale = saleResponse?.data || saleResponse || {}
     const received = Number(sale.paid ?? sale.received_amount ?? 0)
     const change = Number(sale.change ?? 0)
@@ -248,7 +248,19 @@ const presentPaymentOutcome = (saleResponse, expectedAmount = null) => {
         difference,
         status: difference > 0 ? 'excess' : difference < 0 ? 'short' : 'exact',
     }
-    showPaymentOutcome.value = true
+    if (showDialog) {
+        showPaymentOutcome.value = true
+        return
+    }
+
+    const details = [
+        sale.code ? `Hóa đơn ${sale.code}` : null,
+        difference > 0 ? `Khách trả thừa ${formatMoney(difference)}.`
+            : difference < 0 ? `Khách còn thiếu ${formatMoney(Math.abs(difference))}.`
+                : 'Đã nhận đủ tiền.',
+    ].filter(Boolean).join(' ')
+    if (difference < 0) toast.warning(details)
+    else toast.success(details)
 }
 
 // loading khi nhấn checkout để tránh việc click nhiều lần vào nút checkout
@@ -455,7 +467,7 @@ const handleBankCheckoutCompleted = async (saleResponse) => {
     showCheckoutModal.value = false
     invoiceData.value = saleResponse
     showInvoice.value = true
-    presentPaymentOutcome(saleResponse)
+    presentPaymentOutcome(saleResponse, null, true)
     await refreshShiftSummary()
     switchToNextTab()
     cleanupEmptyTabs()
@@ -465,7 +477,7 @@ const handleBackgroundBankCheckoutCompleted = async (saleResponse, cartSnapshot)
     // A cashier may start editing a new cart after hiding the QR modal.
     // Only clear the cart if it is still exactly the one used for this intent.
     if (cartSnapshot && JSON.stringify(cart.value) === cartSnapshot) clearCart()
-    presentPaymentOutcome(saleResponse)
+    presentPaymentOutcome(saleResponse, null, true)
     await refreshShiftSummary()
 }
 
@@ -608,7 +620,7 @@ useBarcodeScanner(
                 <div class="flex items-center justify-between gap-4 text-sm"><span class="text-slate-600">Đã nhận</span><strong class="text-slate-900">{{ formatMoney(paymentOutcome.received) }}</strong></div>
                 <div class="flex items-center justify-between gap-4 border-t border-slate-200 pt-3"><span class="font-bold text-slate-700">{{ paymentOutcome.status === 'excess' ? 'Tiền thừa' : paymentOutcome.status === 'short' ? 'Còn thiếu' : 'Trạng thái' }}</span><strong :class="paymentOutcome.status === 'short' ? 'text-rose-600' : paymentOutcome.status === 'excess' ? 'text-amber-600' : 'text-emerald-700'">{{ paymentOutcome.status === 'exact' ? 'Đã thanh toán đủ' : formatMoney(Math.abs(paymentOutcome.difference)) }}</strong></div>
             </div>
-            <button type="button" autofocus class="mt-7 w-full rounded-xl bg-indigo-600 px-6 py-4 text-base font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700" @click="showPaymentOutcome = false">OK</button>
+            <button type="button" autofocus class="mt-7 w-full rounded-xl bg-blue-600 px-6 py-4 text-base font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700" @click="showPaymentOutcome = false">OK</button>
         </section>
     </div>
 
@@ -635,7 +647,7 @@ useBarcodeScanner(
                     <div v-if="shiftMode === 'close' && shift" class="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:p-4">
                         <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                 <table class="no-grid w-full table-fixed text-xs sm:text-sm">
-                                <thead class="border-b-2 border-indigo-800 bg-indigo-700 text-[11px] font-extrabold uppercase tracking-wide text-white sm:text-xs"><tr><th class="w-[55%] border-r border-indigo-500 px-2 py-2.5 text-left sm:px-3">Khoản mục</th><th class="w-[22.5%] border-r border-indigo-500 px-1 py-2.5 text-right sm:px-3">Đầu ca</th><th class="w-[22.5%] px-2 py-2.5 text-right sm:px-3">Cuối ca</th></tr></thead>
+                                <thead class="border-b-2 border-blue-800 bg-blue-700 text-[11px] font-extrabold uppercase tracking-wide text-white sm:text-xs"><tr><th class="w-[55%] border-r border-blue-500 px-2 py-2.5 text-left sm:px-3">Khoản mục</th><th class="w-[22.5%] border-r border-blue-500 px-1 py-2.5 text-right sm:px-3">Đầu ca</th><th class="w-[22.5%] px-2 py-2.5 text-right sm:px-3">Cuối ca</th></tr></thead>
                                 <tbody class="divide-y divide-slate-200">
                                     <tr><td class="px-2 py-2 text-left sm:px-3">Tiền mặt kiểm đếm</td><td class="whitespace-nowrap px-1 py-2 text-right font-bold tabular-nums sm:px-3">{{ formatMoney(shift.opening_amount) }}</td><td class="whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums sm:px-3">{{ formatMoney(countedCashTotal) }}</td></tr>
                                     <tr><td class="px-2 py-2 text-left sm:px-3">Tiền tài khoản</td><td class="whitespace-nowrap px-1 py-2 text-right font-bold tabular-nums sm:px-3">{{ formatMoney(openingBankTotal) }}</td><td class="whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums sm:px-3">{{ formatMoney(countedBankTotal) }}</td></tr>
@@ -650,14 +662,14 @@ useBarcodeScanner(
                             <div class="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-100 px-3 py-2"><span class="font-bold text-emerald-800">Tổng cuối ca</span><strong class="text-emerald-900">{{ formatMoney(countedCashAndBankTotal) }}</strong></div>
                         </div>
                         <details v-if="shift.bank_sales?.length" class="border-t border-slate-200 pt-2">
-                            <summary class="cursor-pointer font-semibold text-indigo-700">Chi tiết {{ shift.bank_sales.length }} đơn chuyển khoản</summary>
+                            <summary class="cursor-pointer font-semibold text-blue-700">Chi tiết {{ shift.bank_sales.length }} đơn chuyển khoản</summary>
                             <div class="mt-1.5 max-h-36 overflow-y-auto">
                                 <p v-for="sale in shift.bank_sales" :key="sale.id" class="flex justify-between gap-3 py-1 text-xs"><span class="min-w-0 truncate text-slate-600">{{ sale.code }} · {{ sale.bank_name || sale.bank_account || 'Chưa xác định tài khoản' }}</span><strong class="shrink-0">{{ formatMoney(sale.amount) }}</strong></p>
                             </div>
                         </details>
                     </div>
                 </div>
-                <footer class="-mx-4 -mb-4 mt-3 flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5"><button class="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="shiftModal = false">Đóng</button><button :disabled="shiftLoading" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="submitShift">{{ shiftLoading ? 'Đang lưu…' : shiftMode === 'open' ? 'Bắt đầu ca' : 'Kết thúc ca' }}</button></footer>
+                <footer class="-mx-4 -mb-4 mt-3 flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5"><button class="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="shiftModal = false">Đóng</button><button :disabled="shiftLoading" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="submitShift">{{ shiftLoading ? 'Đang lưu…' : shiftMode === 'open' ? 'Bắt đầu ca' : 'Kết thúc ca' }}</button></footer>
             </template>
             <template v-else>
                 <header class="-mx-4 -mt-4 shrink-0 border-b border-slate-200 bg-slate-50 px-4 pb-3 pt-4 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5"><h2 class="text-lg font-bold text-slate-900">Tổng kết ca làm</h2></header>
@@ -666,7 +678,7 @@ useBarcodeScanner(
                         <div class="rounded-xl bg-slate-50 px-3 py-2"><span class="text-xs text-slate-500">Tiền đầu ca</span><strong class="mt-0.5 block">{{ shiftResult.opening_denominations === null ? 'Không kiểm kê' : formatMoney(shiftResult.opening_amount) }}</strong></div>
                         <div class="rounded-xl bg-emerald-50 px-3 py-2"><span class="text-xs text-emerald-700">Tiền mặt bán hàng thu</span><strong class="mt-0.5 block text-emerald-800">{{ formatMoney(shiftResult.cash_collected) }}</strong></div>
                         <div class="rounded-xl bg-amber-50 px-3 py-2"><span class="text-xs text-amber-700">Nợ khách trong ca</span><strong class="mt-0.5 block text-amber-800">{{ formatMoney(shiftResult.customer_debt_amount) }}</strong></div>
-                        <div class="rounded-xl bg-indigo-50 px-3 py-2"><span class="text-xs text-indigo-700">Tiền mặt cuối ca dự kiến</span><strong class="mt-0.5 block text-indigo-800">{{ formatMoney(shiftResult.expected_cash) }}</strong></div>
+                        <div class="rounded-xl bg-blue-50 px-3 py-2"><span class="text-xs text-blue-700">Tiền mặt cuối ca dự kiến</span><strong class="mt-0.5 block text-blue-800">{{ formatMoney(shiftResult.expected_cash) }}</strong></div>
                         <div class="rounded-xl bg-blue-50 px-3 py-2"><span class="text-xs text-blue-700">Tiền chuyển khoản trong ca</span><strong class="mt-0.5 block text-blue-800">{{ formatMoney(resultBankTransferTotal) }}</strong></div>
                         <div class="rounded-xl bg-cyan-50 px-3 py-2"><span class="text-xs text-cyan-700">Tài khoản cuối ca</span><strong class="mt-0.5 block text-cyan-800">{{ formatMoney(closingBankTotal) }}</strong></div>
                         <div class="rounded-xl bg-emerald-100 px-3 py-2"><span class="text-xs text-emerald-800">Tổng tiền mặt + tài khoản</span><strong class="mt-0.5 block text-emerald-900">{{ formatMoney(combinedClosingTotal) }}</strong></div>
@@ -674,7 +686,7 @@ useBarcodeScanner(
 
 
                     <details v-if="shiftResult.bank_sales?.length" class="overflow-hidden rounded-xl border border-slate-200">
-                        <summary class="cursor-pointer bg-slate-50 px-3 py-2 text-sm font-bold text-indigo-700">Chi tiết {{ shiftResult.bank_sales.length }} đơn chuyển khoản</summary>
+                        <summary class="cursor-pointer bg-slate-50 px-3 py-2 text-sm font-bold text-blue-700">Chi tiết {{ shiftResult.bank_sales.length }} đơn chuyển khoản</summary>
                         <div class="max-h-40 overflow-y-auto"><p v-for="sale in shiftResult.bank_sales" :key="sale.id" class="flex justify-between gap-3 border-t border-slate-100 px-3 py-1.5 text-xs"><span class="min-w-0 truncate text-slate-600">{{ sale.code }} · {{ sale.bank_name || sale.bank_account || 'Chưa xác định tài khoản' }}</span><strong class="shrink-0">{{ formatMoney(sale.amount) }}</strong></p></div>
                     </details>
 
@@ -682,7 +694,7 @@ useBarcodeScanner(
                         <h3 class="bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">Đối chiếu tiền mặt theo mệnh giá</h3>
                         <div class="overflow-x-auto">
                             <table class="no-grid w-full min-w-[620px] text-sm">
-                                <thead class="border-b-2 border-indigo-800 bg-indigo-700 text-xs font-extrabold uppercase tracking-wide text-white"><tr><th class="border-r border-indigo-500 px-3 py-2 text-left">Mệnh giá</th><th class="border-r border-indigo-500 px-3 py-2 text-right">SL đầu ca</th><th class="border-r border-indigo-500 px-3 py-2 text-right">Tiền đầu ca</th><th class="border-r border-indigo-500 px-3 py-2 text-right">SL cuối ca</th><th class="px-3 py-2 text-right">Tiền cuối ca</th></tr></thead>
+                                <thead class="border-b-2 border-blue-800 bg-blue-700 text-xs font-extrabold uppercase tracking-wide text-white"><tr><th class="border-r border-blue-500 px-3 py-2 text-left">Mệnh giá</th><th class="border-r border-blue-500 px-3 py-2 text-right">SL đầu ca</th><th class="border-r border-blue-500 px-3 py-2 text-right">Tiền đầu ca</th><th class="border-r border-blue-500 px-3 py-2 text-right">SL cuối ca</th><th class="px-3 py-2 text-right">Tiền cuối ca</th></tr></thead>
                                 <tbody class="divide-y divide-slate-100"><tr v-for="(row, index) in denominationComparison" :key="row.value" :class="index % 2 === 0 ? 'bg-white' : 'bg-slate-50'"><td class="px-3 py-1.5 font-semibold">{{ formatMoney(row.value) }}</td><td class="px-3 py-1.5 text-right">{{ row.openingCount }}</td><td class="px-3 py-1.5 text-right text-slate-600">{{ formatMoney(row.openingAmount) }}</td><td class="px-3 py-1.5 text-right">{{ row.closingCount }}</td><td class="px-3 py-1.5 text-right font-semibold">{{ formatMoney(row.closingAmount) }}</td></tr></tbody>
                                 <tfoot class="bg-slate-50 font-bold"><tr><td class="px-3 py-2">Tổng tiền mặt</td><td></td><td class="px-3 py-2 text-right">{{ formatMoney(shiftResult.opening_amount) }}</td><td></td><td class="px-3 py-2 text-right">{{ formatMoney(shiftResult.closing_amount) }}</td></tr></tfoot>
                             </table>
@@ -691,13 +703,13 @@ useBarcodeScanner(
 
                     <section v-if="bankAccounts.length" class="overflow-hidden rounded-xl border border-slate-200">
                         <h3 class="bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">Đối chiếu số dư ngân hàng</h3>
-                        <div class="overflow-x-auto"><table class="no-grid w-full min-w-[760px] text-sm"><thead class="border-b-2 border-indigo-800 bg-indigo-700 text-xs font-extrabold uppercase tracking-wide text-white"><tr><th class="border-r border-indigo-500 px-3 py-2 text-left">Tài khoản</th><th class="border-r border-indigo-500 px-3 py-2 text-right">Đầu ca</th><th class="border-r border-indigo-500 px-3 py-2 text-right">Đơn CK</th><th class="border-r border-indigo-500 px-3 py-2 text-right">Dự kiến</th><th class="border-r border-indigo-500 px-3 py-2 text-right">Cuối ca</th><th class="px-3 py-2 text-right">Lệch</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="(account, index) in bankAccounts" :key="account.shift_key" :class="index % 2 === 0 ? 'bg-white' : 'bg-slate-50'"><td class="px-3 py-1.5 font-medium">{{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.opening_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right text-emerald-700">{{ formatMoney(shiftResult.bank_collected?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.expected_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right font-semibold">{{ formatMoney(shiftResult.closing_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(Number(shiftResult.closing_bank_balances?.[account.shift_key] || 0) - Number(shiftResult.expected_bank_balances?.[account.shift_key] || 0)) }}</td></tr></tbody></table></div>
+                        <div class="overflow-x-auto"><table class="no-grid w-full min-w-[760px] text-sm"><thead class="border-b-2 border-blue-800 bg-blue-700 text-xs font-extrabold uppercase tracking-wide text-white"><tr><th class="border-r border-blue-500 px-3 py-2 text-left">Tài khoản</th><th class="border-r border-blue-500 px-3 py-2 text-right">Đầu ca</th><th class="border-r border-blue-500 px-3 py-2 text-right">Đơn CK</th><th class="border-r border-blue-500 px-3 py-2 text-right">Dự kiến</th><th class="border-r border-blue-500 px-3 py-2 text-right">Cuối ca</th><th class="px-3 py-2 text-right">Lệch</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="(account, index) in bankAccounts" :key="account.shift_key" :class="index % 2 === 0 ? 'bg-white' : 'bg-slate-50'"><td class="px-3 py-1.5 font-medium">{{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.opening_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right text-emerald-700">{{ formatMoney(shiftResult.bank_collected?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(shiftResult.expected_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right font-semibold">{{ formatMoney(shiftResult.closing_bank_balances?.[account.shift_key]) }}</td><td class="px-3 py-1.5 text-right">{{ formatMoney(Number(shiftResult.closing_bank_balances?.[account.shift_key] || 0) - Number(shiftResult.expected_bank_balances?.[account.shift_key] || 0)) }}</td></tr></tbody></table></div>
                     </section>
 
 
                     <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span>Chênh lệch tiền mặt (thực tế so với dự kiến)</span><strong :class="shiftResult.difference < 0 ? 'text-rose-600' : 'text-emerald-700'">{{ formatMoney(shiftResult.difference) }}</strong></div>
                 </div>
-                <footer class="-mx-4 -mb-4 mt-3 shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5"><button class="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white" @click="shiftModal = false">Hoàn tất</button></footer>
+                <footer class="-mx-4 -mb-4 mt-3 shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5"><button class="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white" @click="shiftModal = false">Hoàn tất</button></footer>
             </template>
         </section>
     </div>
@@ -725,7 +737,7 @@ useBarcodeScanner(
                             <p><span class="block text-xs text-slate-500">Hóa đơn trong ca</span><strong>{{ item.sale_count }}</strong></p>
                         </div>
                         <details class="mt-2 border-t border-slate-100 pt-2 text-xs">
-                            <summary class="cursor-pointer font-semibold text-indigo-700">Chi tiết kiểm đếm cuối ca</summary>
+                            <summary class="cursor-pointer font-semibold text-blue-700">Chi tiết kiểm đếm cuối ca</summary>
                             <div class="mt-2 grid gap-3 sm:grid-cols-2">
                                 <div><p class="mb-1 font-semibold text-slate-700">Tiền mặt theo mệnh giá</p><p v-for="row in denominationRows(item.closing_denominations)" :key="row.value" class="flex justify-between py-0.5 text-slate-600"><span>{{ formatMoney(row.value) }} × {{ row.count }}</span><span>{{ formatMoney(row.value * row.count) }}</span></p><p v-if="!denominationRows(item.closing_denominations).length" class="text-slate-500">Không có dữ liệu chi tiết.</p></div>
                                 <div v-if="bankAccounts.length"><p class="mb-1 font-semibold text-slate-700">Số dư tài khoản ngân hàng</p><p v-for="account in bankBalanceRows(item.closing_bank_balances)" :key="account.shift_key" class="flex justify-between gap-2 py-0.5 text-slate-600"><span>{{ account.bank_name || account.bank_account }}</span><strong>{{ formatMoney(account.balance) }}</strong></p></div>

@@ -13,7 +13,7 @@ import { openModal } from '@/Stores/modal'
 import api from '@/Services/api'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
-import { formatNumber } from '@/utils/format'
+import { formatNumber, formatDate } from '@/utils/format'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
@@ -255,6 +255,15 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character 
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
 })[character])
 const printPreviewHtml = ref('')
+const defaultContractContent = 'Bên bán cam kết điện thoại ghi trong hợp đồng này thuộc quyền sở hữu hợp pháp của mình hoặc mình được chủ sở hữu ủy quyền hợp pháp để bán; điện thoại không do trộm cắp, cướp giật, lừa đảo, chiếm đoạt hoặc vi phạm pháp luật mà có. Bên bán chịu trách nhiệm trước pháp luật nếu cam kết này không đúng.'
+
+const renderContractContent = (template, values) => {
+    let content = escapeHtml(template)
+    Object.entries(values).forEach(([key, value]) => {
+        content = content.replaceAll(`{{${key}}}`, escapeHtml(value))
+    })
+    return content.replace(/\r?\n/g, '<br>')
+}
 
 const printPurchaseContract = () => {
     const party = partyType.value === 'supplier'
@@ -276,7 +285,21 @@ const printPurchaseContract = () => {
     }).filter(row => Number(row.quantity || 0) > 0)
     const totalAmount = rows.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.price || 0), 0)
     const tableRows = rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.name)}${row.variant ? `<br><small>${escapeHtml(row.variant)}</small>` : ''}${row.imei ? `<br><small>IMEI/Serial: ${escapeHtml(row.imei)}</small>` : ''}</td><td>${escapeHtml(row.unit || '')}</td><td class="num">${Number(row.quantity || 0).toLocaleString('vi-VN')}</td><td class="num">${Number(row.price || 0).toLocaleString('vi-VN')} đ</td><td class="num">${(Number(row.price || 0) * Number(row.quantity || 0)).toLocaleString('vi-VN')} đ</td></tr>`).join('')
-    printPreviewHtml.value = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Hợp đồng mua bán hàng hóa</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font:13px/1.55 Arial,sans-serif;color:#111;margin:0}h1{text-align:center;font-size:20px;margin:0 0 4px;text-transform:uppercase}h2{text-align:center;font-size:14px;margin:0 0 20px;font-weight:400}p{margin:5px 0}.parties{margin:18px 0}.party{margin:10px 0}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{border:1px solid #555;padding:7px;vertical-align:top}th{background:#f3f4f6;text-align:center}.num{text-align:right;white-space:nowrap}.total{text-align:right;font-size:15px;font-weight:bold}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:55px;text-align:center}.signatures strong{display:block}.signatures span{font-size:11px;font-style:italic}</style></head><body><h1>Hợp đồng mua bán hàng hóa</h1><h2>Số: ${escapeHtml(`IMP-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`)}</h2><p>Hôm nay, ngày ${escapeHtml(new Date().toLocaleDateString('vi-VN'))}, các bên gồm:</p><div class="parties"><div class="party"><strong>BÊN MUA (CỬA HÀNG):</strong> ${escapeHtml(page.props.auth?.user?.name || 'Cửa hàng')}<br>Đại diện: ${escapeHtml(page.props.auth?.user?.name || '')}</div><div class="party"><strong>BÊN BÁN:</strong> ${escapeHtml(party.name)}<br>Số điện thoại: ${escapeHtml(party.phone || '—')}<br>CCCD: ${escapeHtml(party.cccd || '—')}<br>Địa chỉ: ${escapeHtml(party.address || '—')}</div></div><p>Hai bên thống nhất việc mua bán hàng hóa với nội dung sau:</p><table><thead><tr><th>STT</th><th>Tên hàng / thông tin</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${tableRows}</tbody></table><p class="total">Tổng tiền hàng: ${totalAmount.toLocaleString('vi-VN')} đ</p><p>Giảm giá: ${Number(form.discount || 0).toLocaleString('vi-VN')} đ</p><p>Phí khác: ${Number(form.extra_fee || 0).toLocaleString('vi-VN')} đ</p><p class="total">Tổng thanh toán: ${Math.max(0, totalAmount - Number(form.discount || 0) + Number(form.extra_fee || 0)).toLocaleString('vi-VN')} đ</p><p>Ngày giao nhận hàng: ${escapeHtml(form.import_date)}.</p><p>Hai bên xác nhận hàng hóa và giá trị nêu trên, cùng ký tên dưới đây.</p><div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>${escapeHtml(party.name)}</div></div></body></html>`
+    const settings = page.props.settings || {}
+    const buyerName = settings.shop_name || page.props.auth?.user?.name || 'Cửa hàng'
+    const contractCode = `IMP-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`
+    const contentTemplate = settings.purchase_contract_content ?? defaultContractContent
+    const contractContent = renderContractContent(contentTemplate, {
+        date: formatDate(new Date()),
+        delivery_date: formatDate(form.import_date),
+        import_code: contractCode,
+        buyer_name: buyerName,
+        seller_name: party.name,
+        total: `${Math.max(0, totalAmount - Number(form.discount || 0) + Number(form.extra_fee || 0)).toLocaleString('vi-VN')} đ`,
+        note: form.note || '',
+    })
+    const title = escapeHtml(settings.purchase_contract_title || 'Hợp đồng mua bán điện thoại')
+    printPreviewHtml.value = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${title}</title><style>@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font:13px/1.55 Arial,sans-serif;color:#111;margin:0}h1{text-align:center;font-size:20px;margin:0 0 4px;text-transform:uppercase}h2{text-align:center;font-size:14px;margin:0 0 20px;font-weight:400}p{margin:5px 0}.parties{margin:18px 0}.party{margin:10px 0}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{border:1px solid #555;padding:7px;vertical-align:top}th{background:#f3f4f6;text-align:center}.num{text-align:right;white-space:nowrap}.total{text-align:right;font-size:15px;font-weight:bold}.terms{margin-top:14px}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:55px;text-align:center}.signatures strong{display:block}.signatures span{font-size:11px;font-style:italic}</style></head><body><h1>${title}</h1><h2>Số: ${escapeHtml(contractCode)}</h2><p>Hôm nay, ngày ${escapeHtml(formatDate(new Date()))}, các bên gồm:</p><div class="parties"><div class="party"><strong>BÊN MUA (CỬA HÀNG):</strong> ${escapeHtml(buyerName)}<br>Đại diện: ${escapeHtml(page.props.auth?.user?.name || '')}</div><div class="party"><strong>BÊN BÁN:</strong> ${escapeHtml(party.name)}<br>Số điện thoại: ${escapeHtml(party.phone || '—')}<br>CCCD: ${escapeHtml(party.cccd || '—')}<br>Địa chỉ: ${escapeHtml(party.address || '—')}</div></div><table><thead><tr><th>STT</th><th>Tên hàng / thông tin</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${tableRows}</tbody></table><p class="total">Tổng tiền hàng: ${totalAmount.toLocaleString('vi-VN')} đ</p><p>Giảm giá: ${Number(form.discount || 0).toLocaleString('vi-VN')} đ</p><p>Phí khác: ${Number(form.extra_fee || 0).toLocaleString('vi-VN')} đ</p><p class="total">Tổng thanh toán: ${Math.max(0, totalAmount - Number(form.discount || 0) + Number(form.extra_fee || 0)).toLocaleString('vi-VN')} đ</p><div class="terms">${contractContent}</div><div class="signatures"><div><strong>BÊN MUA</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>BÊN BÁN</strong><span>(Ký, ghi rõ họ tên)</span><br><br>${escapeHtml(party.name)}</div></div></body></html>`
 }
 
 /*
@@ -401,7 +424,7 @@ const selectProduct = (product, { configure = true } = {}) => {
                 sellPrice,
 
             is_used: false,
-            has_vat: false,
+            has_vat: Boolean(page.props.settings?.stock_import_vat_default),
             extra_info: {},
 
             imeis: [],

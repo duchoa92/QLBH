@@ -3,6 +3,7 @@
 import FloatingInput
 from '@/Components/UI/FloatingInput.vue'
 import { formatNumber } from '@/utils/format'
+import { Trash2 } from 'lucide-vue-next'
 
 defineProps({
 
@@ -40,6 +41,7 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
     <div
         class="
             flex
+            min-w-0
             flex-1
             relative
         "
@@ -63,57 +65,57 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
 
             inputmode="numeric"
 
-            class="w-full no-spinner"
+            input-class="pr-20 no-spinner"
 
-            label="Nhập số tiền"
+            label="Số tiền giảm"
         />
 
         <button
-
+            v-if="Number(item.discount_value || 0) > 0"
             type="button"
+            @click="item.discount_value = 0; item.discount_type = null"
+            class="
+                absolute
+                right-9
+                top-0
+                bottom-0
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                border-l
+                bg-rose-50
+                text-rose-600
+                hover:bg-rose-100
+            "
+            title="Xóa giảm giá"
+            aria-label="Xóa giảm giá"
+        >
+            <Trash2 class="h-4 w-4" />
+        </button>
 
+        <button
+            type="button"
             @click="
-                item.discount_type =
-                item.discount_type || 'amount';
-
-                item.discount_type =
-                item.discount_type
-                ===
-                'percent'
-
-                ? 'amount'
-
-                : 'percent'
-
-                ;
-
+                item.discount_type = item.discount_type || 'amount';
+                item.discount_type = item.discount_type === 'percent' ? 'amount' : 'percent';
                 normalizeDiscount(item)
             "
-
             class="
                 absolute
                 right-0
                 top-0
                 bottom-0
                 px-1
-                min-w-6
+                min-w-9
                 border-l
                 bg-transparent
                 text-sm
                 font-medium
             "
         >
-
-            {{
-                item.discount_type
-                ===
-                'percent'
-
-                ? '%'
-
-                : $currency()
-            }}
-
+            {{ item.discount_type === 'percent' ? '%' : $currency() }}
         </button>
 
     </div>

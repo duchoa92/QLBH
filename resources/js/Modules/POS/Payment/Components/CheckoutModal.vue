@@ -415,7 +415,7 @@ const submit = () => {
                             v-if="!mixedPayment"
                             type="button"
                             :disabled="Boolean(bankIntent)"
-                            class="absolute right-1 top-1.5 rounded-md bg-indigo-50 px-2 py-1.5 text-[10px] font-bold leading-tight text-indigo-700 hover:bg-indigo-100"
+                            class="absolute right-1 top-1.5 rounded-md bg-blue-50 px-2 py-1.5 text-[10px] font-bold leading-tight text-blue-700 hover:bg-blue-100"
                             @click="enableRemainingQr"
                         >Tạo QR phần còn lại</button>
                         <button
@@ -431,7 +431,7 @@ const submit = () => {
 
                 <!-- MA QR THANH TOAN -->
                 <div v-if="usesBankPayment">
-                    <p v-if="mixedPayment" class="mb-2 inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700">Thanh toán kết hợp · tiền mặt + chuyển khoản</p>
+                    <p v-if="mixedPayment" class="mb-2 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Thanh toán kết hợp · tiền mặt + chuyển khoản</p>
                     <div v-if="bankAccounts.length" class="mb-3">
                         <label for="checkout-bank-account" class="block min-w-0 text-xs font-semibold text-slate-600">
                             Tài khoản nhận tiền
@@ -483,13 +483,13 @@ const submit = () => {
                 <!-- THANH TOÁN NỢ CŨ (NẾU CÓ) -->
                 <div
                     v-if="selectedCustomer && Number(selectedCustomer.debt_balance) > 0"
-                    class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3"
+                    class="rounded-xl border border-blue-100 bg-blue-50/40 p-3"
                 >
-                    <label class="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-indigo-900">
+                    <label class="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-blue-900">
                         <input
                             v-model="payOldDebt"
                             type="checkbox"
-                            class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                            class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
                         />
                         <span>Cộng gộp nợ cũ ({{ formatMoney(selectedCustomer.debt_balance) }})</span>
                     </label>
@@ -516,9 +516,9 @@ const submit = () => {
                         <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
                     </div>
 
-                    <div class="flex justify-between text-sm font-extrabold text-indigo-900 pt-2 border-t border-slate-200/60">
+                    <div class="flex justify-between text-sm font-extrabold text-blue-900 pt-2 border-t border-slate-200/60">
                         <span>Tổng thu</span>
-                        <span class="text-base text-indigo-600">{{ formatMoney(totalNeedToPay) }}</span>
+                        <span class="text-base text-blue-600">{{ formatMoney(totalNeedToPay) }}</span>
                     </div>
 
                     <div class="flex justify-between text-xs font-bold pt-1">

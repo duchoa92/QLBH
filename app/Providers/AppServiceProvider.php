@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\App;
+use App\Support\DefaultPurchaseContract;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -39,9 +40,16 @@ class AppServiceProvider extends ServiceProvider
                 'date_format' => setting('date_format', 'd/m/Y'),
                 'print_paper_size' => setting('print_paper_size', 'a4'),
                 'print_orientation' => setting('print_orientation', 'portrait'),
+                'print_template' => setting('print_template', 'standard'),
+                'print_shop_subtitle' => setting('print_shop_subtitle', ''),
+                'print_shop_address' => setting('print_shop_address', ''),
+                'print_shop_phone' => setting('print_shop_phone', ''),
+                'purchase_contract_title' => setting('purchase_contract_title', DefaultPurchaseContract::TITLE),
+                'purchase_contract_content' => setting('purchase_contract_content', DefaultPurchaseContract::CONTENT),
                 'allow_negative_stock' => filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_enabled' => filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_threshold' => (int) setting('inventory_alert_threshold', 5),
+                'stock_import_vat_default' => filter_var(setting('stock_import_vat_default', false), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),

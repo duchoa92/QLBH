@@ -13,7 +13,13 @@ const emit = defineEmits(['close'])
 const page = usePage()
 const source = computed(() => props.html ? `data:text/html;charset=utf-8,${encodeURIComponent(props.html)}` : props.src)
 const paper = computed(() => page.props.settings?.print_paper_size || 'a4')
-const modalWidth = computed(() => ({ '58mm': '460px', '80mm': '560px', a5: '760px', a4: '960px' }[paper.value] || '960px'))
+const modalWidth = computed(() => {
+    const landscape = page.props.settings?.print_orientation === 'landscape'
+    if (paper.value === '58mm') return '460px'
+    if (paper.value === '80mm') return '560px'
+    if (paper.value === 'a5') return landscape ? '1100px' : '760px'
+    return landscape ? '1300px' : '960px'
+})
 const applyPrintSettings = (event) => {
     const frameDocument = event.target?.contentDocument
     if (!frameDocument) return
@@ -28,7 +34,11 @@ const applyPrintSettings = (event) => {
     const thermal = paper.value === '80mm' || paper.value === '58mm'
     const orientation = thermal ? '' : ` ${page.props.settings?.print_orientation === 'landscape' ? 'landscape' : 'portrait'}`
     const margin = thermal ? '0' : '10mm'
-    const width = paper.value === '58mm' ? '54mm' : paper.value === '80mm' ? '76mm' : '100%'
+    const landscape = page.props.settings?.print_orientation === 'landscape'
+    const width = paper.value === '58mm' ? '54mm'
+        : paper.value === '80mm' ? '76mm'
+            : paper.value === 'a5' ? (landscape ? '190mm' : '128mm')
+                : (landscape ? '277mm' : '190mm')
     style.textContent = `.no-print,.print-bar,.btn-print{display:none!important} :root{--configured-receipt-width:${width}} @page{size:${sizes[paper.value] || 'A4'}${orientation};margin:${margin}} .receipt-container{width:var(--configured-receipt-width)!important;margin-left:auto!important;margin-right:auto!important}`
 }
 const print = () => document.querySelector('#print-preview-frame')?.contentWindow?.print()

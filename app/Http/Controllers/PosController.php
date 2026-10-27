@@ -11,8 +11,8 @@ use App\Models\WorkShift;
 use App\Services\PosCheckoutService;
 use App\Models\BankPaymentIntent;
 use App\Models\Customer;
-use App\Models\User;
 use App\Notifications\SystemNotification;
+use App\Support\NotificationRecipients;
 use Illuminate\Support\Facades\Notification;
 
 class PosController extends Controller
@@ -351,12 +351,13 @@ class PosController extends Controller
             ]);
 
             Notification::send(
-                User::query()->get(),
+                NotificationRecipients::withPermission('sales.view'),
                 new SystemNotification(
                     'Đơn hàng mới',
                     'Hóa đơn ' . $sale->code . ' đã được tạo cho ' . ($sale->customer?->full_name ?? 'khách lẻ') . '.',
                     'sale',
-                    route('records.show', ['type' => 'sale', 'id' => $sale->id], false)
+                    route('sales.index', ['open_sale' => $sale->id], false),
+                    ['required_permission' => 'sales.view']
                 )
             );
 

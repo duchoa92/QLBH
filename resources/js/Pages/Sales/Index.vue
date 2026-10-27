@@ -22,7 +22,6 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
-import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -37,6 +36,7 @@ defineOptions({
 const props = defineProps({
     sales: Object,
     filters: Object,
+    selectedSale: { type: Object, default: null },
     stats: {
         type: Object,
         default: () => ({
@@ -82,7 +82,20 @@ const editSale = ref(null)
 const cancelReason = ref('')
 const showCancelModal = ref(false)
 const selectedSaleForCancel = ref(null)
-const printPreviewUrl = ref('')
+const printFrameUrl = ref('')
+const printFrameKey = ref(0)
+
+watch(() => props.selectedSale, (sale) => {
+    detailSale.value = sale || null
+}, { immediate: true })
+
+const closeSaleDetail = () => {
+    detailSale.value = null
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('open_sale')) return
+    url.searchParams.delete('open_sale')
+    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true })
+}
 
 // --- QUẢN LÝ SORTING (SẮP XẾP BẢNG) ---
 const sortKey = ref(props.filters?.sort_by ?? 'created_at')
@@ -170,7 +183,38 @@ const getCustomerName = (sale) => {
 
 // In hóa đơn
 const openPrintWindow = (saleId) => {
-    printPreviewUrl.value = route('sales.receipt', saleId)
+    printFrameUrl.value = route('sales.receipt', saleId)
+    printFrameKey.value++
+}
+
+const printReceiptFrame = (event) => {
+    const frame = event.target
+    const frameWindow = frame?.contentWindow
+    const frameDocument = frame?.contentDocument
+    if (!frameWindow || !frameDocument) return
+
+    const settings = page.props.settings || {}
+    const paper = settings.print_paper_size || 'a4'
+    const landscape = settings.print_orientation === 'landscape'
+    const sizes = { a4: 'A4', a5: 'A5', '80mm': '80mm 200mm', '58mm': '58mm 150mm' }
+    const thermal = paper === '80mm' || paper === '58mm'
+    const width = paper === '58mm' ? '54mm'
+        : paper === '80mm' ? '76mm'
+            : paper === 'a5' ? (landscape ? '190mm' : '128mm')
+                : (landscape ? '277mm' : '190mm')
+
+    let style = frameDocument.getElementById('direct-print-settings')
+    if (!style) {
+        style = frameDocument.createElement('style')
+        style.id = 'direct-print-settings'
+        frameDocument.head.appendChild(style)
+    }
+    style.textContent = `.no-print,.print-bar,.btn-print{display:none!important} :root{--configured-receipt-width:${width}} @page{size:${sizes[paper] || 'A4'}${thermal ? '' : ` ${landscape ? 'landscape' : 'portrait'}`};margin:${thermal ? '0' : '10mm'}} .receipt-container{width:var(--configured-receipt-width)!important;margin-left:auto!important;margin-right:auto!important}`
+
+    frameWindow.addEventListener('afterprint', () => {
+        printFrameUrl.value = ''
+    }, { once: true })
+    window.setTimeout(() => frameWindow.print(), 120)
 }
 
 // Xác nhận Hủy
@@ -336,7 +380,8 @@ const sortedSalesData = computed(() => props.sales?.data || [])
             </template>
 
             <!-- DANH SÁCH BẢNG DỮ LIỆU CÓ SORT & CLICK LỌC -->
-            <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div class="overflow-x-auto">
                 <table class="app-data-table w-full min-w-[850px] text-xs text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-200 select-none">
@@ -463,7 +508,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                 </span>
                             </td>
 
-                            <!-- Ngày tạo -->9
+                            <!-- Ngày tạo -->
                             <td class="px-3.5 py-2.5 text-slate-500 text-[11px]">
                                 {{ formatDateTime(sale.created_at) }}
                             </td>
@@ -514,12 +559,9 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                         </tr>
                     </tbody>
                 </table>
-            </div>
-
-            <!-- FOOTER BẢNG PHÂN TRANG -->
-            <template #footer>
+                </div>
                 <PaginationBar :data="sales" :filters="filters" />
-            </template>
+            </div>
         </DataPanel>
 
         <!-- MODAL CHI TIẾT HÓA ĐƠN -->
@@ -528,11 +570,20 @@ const sortedSalesData = computed(() => props.sales?.data || [])
             :invoice="detailSale"
             :can-cancel="canCancelSales && detailSale?.status !== 'cancelled'"
             can-print
-            @close="detailSale = null"
+            @close="closeSaleDetail"
             @cancel="confirmCancel"
             @print="openPrintWindow($event.id)"
         />
-        <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hóa đơn" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
+        <iframe
+            v-if="printFrameUrl"
+            :key="printFrameKey"
+            :src="printFrameUrl"
+            title="In hóa đơn"
+            aria-hidden="true"
+            tabindex="-1"
+            class="pointer-events-none fixed left-0 top-0 h-px w-px border-0 opacity-0"
+            @load="printReceiptFrame"
+        />
 
         <SaleEditModal
             v-if="editSale"

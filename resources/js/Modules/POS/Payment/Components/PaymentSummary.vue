@@ -20,7 +20,7 @@ defineProps({
         <!-- TỔNG TIỀN -->
         <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng tiền</span>
-            <span class="text-xl font-black text-indigo-600">
+            <span class="text-xl font-black text-blue-600">
                 {{ formatMoney(grand_total) }}
             </span>
         </div>

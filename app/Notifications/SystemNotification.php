@@ -14,6 +14,7 @@ class SystemNotification extends Notification
         private readonly string $message,
         private readonly string $type = 'info',
         private readonly ?string $url = null,
+        private readonly array $extra = [],
     ) {}
 
     public function via(object $notifiable): array
@@ -23,11 +24,11 @@ class SystemNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        return [
+        return array_merge([
             'title' => $this->title,
             'message' => $this->message,
             'type' => $this->type,
             'url' => $this->url,
-        ];
+        ], $this->extra);
     }
 }

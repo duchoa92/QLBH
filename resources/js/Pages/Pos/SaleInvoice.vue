@@ -60,7 +60,7 @@ const saleQuantityText = (item) => {
             
             <button
                 @click="printInvoice"
-                class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all shadow-sm active:scale-95"
+                class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all shadow-sm active:scale-95"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -114,7 +114,7 @@ const saleQuantityText = (item) => {
                             
                             <div
                                 v-if="item.variant?.attributes"
-                                class="inline-block mt-0.5 text-xs text-indigo-600 font-medium bg-indigo-50 px-1.5 py-0.5 rounded"
+                                class="inline-block mt-0.5 text-xs text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded"
                             >
                                 {{ variantLabel(item.variant) }}
                             </div>
@@ -166,7 +166,7 @@ const saleQuantityText = (item) => {
 
                 <div class="flex justify-between items-center pt-2 border-t border-dashed border-slate-200 text-base font-bold text-slate-900">
                     <span>Tiền thừa trả khách</span>
-                    <span class="text-indigo-600 text-lg">
+                    <span class="text-blue-600 text-lg">
                         {{ formatCurrency(sale.change_amount) }}
                     </span>
                 </div>

@@ -15,7 +15,7 @@ defineProps({
 
 <template>
 
-    <div v-if="item.note" class="bg-white rounded-lg flex items-center w-full mt-2 border overflow-hidden">
+    <div v-if="item.note && !item.showNote" class="bg-white rounded-lg flex items-center w-full mt-2 border overflow-hidden">
             <div class="bg-gray-100 px-3 py-1 font-semibold text-blue-900 text-sm border-r flex items-center self-stretch">
                 Ghi chú:
             </div>

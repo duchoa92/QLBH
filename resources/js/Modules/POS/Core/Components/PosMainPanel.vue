@@ -23,7 +23,7 @@ const emit = defineEmits([
             <!-- HEADER POS PANEL -->
             <div class="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 py-2 sm:px-5 sm:py-2.5">
                 <div class="flex min-w-0 flex-1 items-center gap-2.5">
-                    <div class="rounded-xl bg-indigo-50 p-1.5 text-indigo-600 sm:p-2">
+                    <div class="rounded-xl bg-blue-50 p-1.5 text-blue-600 sm:p-2">
                         <PackageSearch class="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div class="min-w-0">

@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\BankPaymentIntent;
 use App\Models\BankPaymentTransaction;
 use App\Models\Sale;
-use App\Models\User;
 use App\Notifications\SystemNotification;
+use App\Support\NotificationRecipients;
 use App\Services\PosCheckoutService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -149,12 +149,13 @@ class BankTransferWebhookController extends Controller
                 if ($received < (int) $locked->expected_amount) {
                     $remaining = (int) $locked->expected_amount - $received;
                     Notification::send(
-                        User::query()->get(),
+                        NotificationRecipients::withPermission('pos.access'),
                         new SystemNotification(
                             'Đã nhận một phần tiền chuyển khoản',
                             'Hóa đơn ' . $locked->invoice_code . ': vừa nhận ' . number_format((int) $data['amount'], 0, ',', '.') . ' ₫; tổng đã nhận ' . number_format($received, 0, ',', '.') . '/' . number_format((int) $locked->expected_amount, 0, ',', '.') . ' ₫, còn thiếu ' . number_format($remaining, 0, ',', '.') . ' ₫.',
                             'warning',
-                            route('pos.index')
+                            route('pos.index'),
+                            ['required_permission' => 'pos.access']
                         )
                     );
                     return ['matched' => true, 'status' => 'waiting', 'received_amount' => $received];
@@ -179,14 +180,15 @@ class BankTransferWebhookController extends Controller
 
                 $excess = max(0, $received - (int) $locked->expected_amount);
                 Notification::send(
-                    User::query()->get(),
+                    NotificationRecipients::withPermission('sales.view'),
                     new SystemNotification(
                         $excess > 0 ? 'Khách chuyển khoản thừa' : 'Đã nhận đủ tiền chuyển khoản',
                         $excess > 0
                             ? 'Hóa đơn ' . $locked->invoice_code . ' đã hoàn tất. Đã nhận ' . number_format($received, 0, ',', '.') . ' ₫, thừa ' . number_format($excess, 0, ',', '.') . ' ₫.'
                             : 'Hóa đơn ' . $locked->invoice_code . ' đã nhận đủ ' . number_format($received, 0, ',', '.') . ' ₫ và tự hoàn tất.',
                         $excess > 0 ? 'warning' : 'sale',
-                        route('records.show', ['type' => 'sale', 'id' => $sale->id], false)
+                        route('sales.index', ['open_sale' => $sale->id], false),
+                        ['required_permission' => 'sales.view']
                     )
                 );
 

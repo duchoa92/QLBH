@@ -195,7 +195,7 @@ const confirm = () => {
             <!-- HEADER -->
             <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 bg-slate-50/50">
                 <div class="flex items-center gap-3">
-                    <div class="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
                         <Cpu class="w-5 h-5" />
                     </div>
                     <div>
@@ -224,7 +224,7 @@ const confirm = () => {
                         v-model="imeiKeyword"
                         type="text"
                         placeholder="Tìm kiếm mã IMEI / Seri / Biến thể..."
-                        class="w-full pl-9 pr-4 py-2 text-xs font-medium rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                        class="w-full pl-9 pr-4 py-2 text-xs font-medium rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                     />
                     <Search class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 </div>
@@ -242,7 +242,7 @@ const confirm = () => {
                             type="button"
                             class="flex flex-col justify-between rounded-xl border p-3 text-left transition-all relative overflow-hidden"
                             :class="selectedVariant?.id === variant.id
-                                ? 'border-indigo-600 bg-indigo-50/40 text-indigo-900 ring-2 ring-indigo-600/20'
+                                ? 'border-blue-600 bg-blue-50/40 text-blue-900 ring-2 ring-blue-600/20'
                                 : 'border-slate-200/80 hover:border-slate-300 bg-white'"
                             @click="selectVariant(variant)"
                         >
@@ -252,14 +252,14 @@ const confirm = () => {
                                 </span>
                                 <span
                                     v-if="selectedVariant?.id === variant.id"
-                                    class="p-0.5 bg-indigo-600 text-white rounded-full shrink-0 ml-1"
+                                    class="p-0.5 bg-blue-600 text-white rounded-full shrink-0 ml-1"
                                 >
                                     <Check class="w-3 h-3" />
                                 </span>
                             </div>
 
                             <div class="mt-2 flex items-center justify-between">
-                                <span class="text-xs font-extrabold text-indigo-600">
+                                <span class="text-xs font-extrabold text-blue-600">
                                     {{ formatMoney(
                                         (variant.sell_price > 0 ? variant.sell_price : null)
                                         ?? (variant.price > 0 ? variant.price : null)
@@ -291,7 +291,7 @@ const confirm = () => {
                         v-if="loadingImeis"
                         class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-xs text-slate-400 gap-2"
                     >
-                        <div class="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        <div class="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                         <span>Đang tải danh sách IMEI...</span>
                     </div>
 
@@ -304,7 +304,7 @@ const confirm = () => {
                             :key="item.id"
                             type="button"
                             class="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors"
-                            :class="selectedImei?.id === item.id ? 'bg-indigo-50/50' : 'hover:bg-slate-50'"
+                            :class="selectedImei?.id === item.id ? 'bg-blue-50/50' : 'hover:bg-slate-50'"
                             @click="selectImei(item)"
                         >
                             <div class="min-w-0 flex-1">
@@ -315,7 +315,7 @@ const confirm = () => {
                                     </span>
                                 </div>
 
-                                <div v-if="item.variant" class="mt-1 text-xs font-bold text-indigo-600">
+                                <div v-if="item.variant" class="mt-1 text-xs font-bold text-blue-600">
                                     {{ variantLabel(item.variant) }}
                                 </div>
 
@@ -345,7 +345,7 @@ const confirm = () => {
                             <div
                                 class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all"
                                 :class="selectedImei?.id === item.id
-                                    ? 'border-indigo-600 bg-indigo-600 text-white'
+                                    ? 'border-blue-600 bg-blue-600 text-white'
                                     : 'border-slate-300 text-transparent'"
                             >
                                 <Check class="w-3 h-3" />
@@ -377,7 +377,7 @@ const confirm = () => {
 
                 <button
                     type="button"
-                    class="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                    class="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-blue-200 transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
                     :disabled="!canConfirm"
                     @click="confirm"
                 >

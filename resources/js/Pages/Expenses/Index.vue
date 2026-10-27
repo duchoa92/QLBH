@@ -1,6 +1,6 @@
 <script setup>
-import { ref, watch } from 'vue'
-import { router, useForm } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
+import { router, useForm, usePage } from '@inertiajs/vue3'
 import { Plus, Search, Pencil, Trash2, X, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -12,6 +12,7 @@ import BaseTable from '@/Components/UI/BaseTable.vue'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({ expenses: Object, filters: Object, summary: Object, categories: Array, canManage: Boolean, recurringExpenses: { type: Array, default: () => [] } })
+const page = usePage()
 const categoryLabels = { utilities: 'Điện, nước', internet: 'Internet', rent: 'Thuê nhà', tax: 'Thuế, phí', salary: 'Lương', supplies: 'Văn phòng phẩm', other: 'Khác' }
 const paymentLabels = { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }
 const month = ref(props.filters.month)
@@ -21,9 +22,30 @@ const modal = ref(false)
 const editing = ref(null)
 const scheduleModal = ref(false)
 const editingSchedule = ref(null)
+const reminderSchedule = ref(null)
 const form = useForm({ category: 'utilities', description: '', amount: '', expense_date: new Date().toISOString().slice(0, 10), payment_method: 'cash', recipient: '', note: '' })
 const scheduleForm = useForm({ category: 'utilities', description: '', amount: '', due_day: 1, remind_days: 7, payment_method: 'cash', recipient: '', note: '', is_active: true })
 let timer
+const openScheduleReminder = () => {
+    const url = new URL(window.location.href)
+    const id = Number(url.searchParams.get('open_schedule'))
+    reminderSchedule.value = id ? props.recurringExpenses.find(item => Number(item.id) === id) || null : null
+}
+const closeScheduleReminder = () => {
+    reminderSchedule.value = null
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('open_schedule')) return
+    url.searchParams.delete('open_schedule')
+    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true })
+}
+const reminderDueDate = computed(() => {
+    if (!reminderSchedule.value || !props.filters?.month) return ''
+    const [year, monthNumber] = props.filters.month.split('-').map(Number)
+    const date = new Date(year, monthNumber - 1, Math.min(Number(reminderSchedule.value.due_day), new Date(year, monthNumber, 0).getDate()))
+    return date.toLocaleDateString('vi-VN')
+})
+watch(() => page.url, openScheduleReminder, { immediate: true })
+watch(() => props.recurringExpenses, openScheduleReminder)
 watch([month, search, category], () => {
     clearTimeout(timer)
     timer = setTimeout(() => router.get(route('expenses.index'), { month: month.value, search: search.value || undefined, category: category.value || undefined, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page }, { preserveState: true, preserveScroll: true, replace: true }), 250)
@@ -116,6 +138,28 @@ const applySort = ({ field, order }) => router.get(route('expenses.index'), {
                 <label class="block text-xs font-semibold text-slate-600">Ghi chú<textarea v-model="scheduleForm.note" rows="2" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /></label>
                 <div class="flex justify-end gap-2 pt-2"><ActionButton type="button" variant="secondary" @click="scheduleModal = false">Đóng</ActionButton><ActionButton type="submit" :disabled="scheduleForm.processing">Lưu lịch nhắc</ActionButton></div>
             </form>
+        </BaseModal>
+        <BaseModal v-if="reminderSchedule" title="Nhắc lịch thanh toán chi phí" size="md" @close="closeScheduleReminder">
+            <div class="space-y-3">
+                <div class="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+                    <div class="text-base font-bold text-slate-900">{{ reminderSchedule.description }}</div>
+                    <div class="mt-1 text-xl font-black text-blue-700">{{ formatMoney(reminderSchedule.amount) }}</div>
+                </div>
+                <dl class="grid gap-2 sm:grid-cols-2">
+                    <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Ngày đến hạn</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ reminderDueDate }}</dd></div>
+                    <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Đơn vị nhận</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ reminderSchedule.recipient || '—' }}</dd></div>
+                    <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Hình thức dự kiến</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ paymentLabels[reminderSchedule.payment_method] || reminderSchedule.payment_method }}</dd></div>
+                    <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Kỳ thanh toán</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ props.filters.month }}</dd></div>
+                </dl>
+                <p v-if="reminderSchedule.note" class="rounded-lg border border-slate-200 p-3 text-sm text-slate-600">{{ reminderSchedule.note }}</p>
+            </div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <ActionButton type="button" variant="secondary" @click="closeScheduleReminder">Đóng</ActionButton>
+                    <ActionButton v-if="canManage && !reminderSchedule.payments?.length" type="button" variant="info" @click="markPaid(reminderSchedule); closeScheduleReminder()">Đã thanh toán</ActionButton>
+                    <span v-else-if="reminderSchedule.payments?.length" class="self-center text-sm font-bold text-emerald-700">Đã thanh toán kỳ này</span>
+                </div>
+            </template>
         </BaseModal>
     </div>
 </template>

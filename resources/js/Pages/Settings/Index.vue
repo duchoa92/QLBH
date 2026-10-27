@@ -9,7 +9,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw } from 'lucide-vue-next'
+import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2 } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
@@ -163,7 +163,7 @@ const openModal = (section) => {
     activeModal.value = section
     // Keep navigation inside the app's install path (for example /qlbh/public).
     const url = `settings?section=${encodeURIComponent(section)}`
-    router.get(url, {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section'] })
+    router.get(url, {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section', 'settings'] })
 }
 
 const closeModal = () => {
@@ -183,11 +183,18 @@ const form = useForm({
         && props.settings.inventory_alert_enabled !== 0
         && props.settings.inventory_alert_enabled !== '0',
     inventory_alert_threshold: Number(props.settings.inventory_alert_threshold ?? 5),
+    stock_import_vat_default: Boolean(props.settings.stock_import_vat_default),
     work_shift_auto_open_enabled: props.settings.work_shift_auto_open_enabled !== false
         && props.settings.work_shift_auto_open_enabled !== 0
         && props.settings.work_shift_auto_open_enabled !== '0',
     print_paper_size: props.settings.print_paper_size || 'a4',
     print_orientation: props.settings.print_orientation || 'portrait',
+    print_template: props.settings.print_template || 'standard',
+    print_shop_subtitle: props.settings.print_shop_subtitle || '',
+    print_shop_address: props.settings.print_shop_address || '',
+    print_shop_phone: props.settings.print_shop_phone || '',
+    purchase_contract_title: props.settings.purchase_contract_title || 'Hợp đồng mua bán điện thoại',
+    purchase_contract_content: props.settings.purchase_contract_content || '',
     bank_bin: props.settings.bank_bin || '',
     bank_account: props.settings.bank_account || '',
     bank_account_name: props.settings.bank_account_name || '',
@@ -230,6 +237,15 @@ const form = useForm({
             : index === 0,
     })),
 })
+
+watch(
+    () => [props.settings.purchase_contract_title, props.settings.purchase_contract_content],
+    ([title, content]) => {
+        form.purchase_contract_title = title || 'Hợp đồng mua bán điện thoại'
+        form.purchase_contract_content = content || ''
+    },
+)
+
 const selectedBankAccountId = ref(String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || ''))
 const selectedBankAccount = computed(() => form.bank_accounts.find(account => String(account.id) === String(selectedBankAccountId.value)) || null)
 const selectedBankAccountIndex = computed(() => form.bank_accounts.findIndex(account => String(account.id) === String(selectedBankAccountId.value)))
@@ -284,7 +300,7 @@ const bankOptions = computed(() => {
 })
 
 const addBankAccount = () => {
-    if (!can_update_bank_settings || form.bank_accounts.length >= 10) return
+    if (!props.can_update_bank_settings || form.bank_accounts.length >= 10) return
 
     const id = `bank-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     form.bank_accounts.push({
@@ -384,6 +400,11 @@ const printOrientationOptions = [
     { value: 'landscape', label: 'Ngang' },
 ]
 
+const printTemplateOptions = [
+    { value: 'standard', label: 'Tiêu chuẩn' },
+    { value: 'compact', label: 'Rút gọn' },
+]
+
 const bankLockedText = computed(() =>
     props.can_update_bank_settings
         ? 'Admin có thể cập nhật thông tin nhận chuyển khoản.'
@@ -414,6 +435,7 @@ const save = () => {
         onSuccess: () => {
             selectedBankAccountId.value = defaultAccountId
             localStorage.setItem('pos-payment-settings-updated', String(Date.now()))
+            closeModal()
         },
     })
 }
@@ -510,7 +532,7 @@ const unitDisplayName = (unit) =>
             v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings)"
             :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : 'Hàng hóa và kho hàng'"
             size="lg"
-            body-class="max-h-[70vh] overflow-y-auto p-3 sm:p-4"
+            :body-class="activeModal === 'payments' ? 'max-h-[70vh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70vh] overflow-y-auto p-3 sm:p-4'"
             @close="closeModal"
         >
        
@@ -519,13 +541,32 @@ const unitDisplayName = (unit) =>
                 <DataPanel v-if="activeModal === 'printing'">
                     <template #header>
                         <div>
-                            <h2 class="text-sm font-bold text-slate-900">Khổ giấy và hướng in</h2>
-                            <p class="mt-0.5 text-xs font-medium text-slate-500">Áp dụng thống nhất cho hóa đơn và phiếu in trong hệ thống.</p>
+                            <h2 class="text-sm font-bold text-slate-900">Mẫu và thông tin hóa đơn</h2>
+                            <p class="mt-0.5 text-xs font-medium text-slate-500">Chỉ thông tin có nhập mới xuất hiện trên hóa đơn.</p>
                         </div>
                     </template>
-                    <div class="grid gap-4 p-4 sm:grid-cols-2">
+                    <div class="grid gap-3 p-4 sm:grid-cols-2">
+                        <FloatingInput v-model="form.shop_name" name="shop_name" label="Tên cửa hàng" :error="form.errors.shop_name" />
+                        <FloatingInput v-model="form.print_shop_subtitle" name="print_shop_subtitle" label="Ngành hàng / dòng giới thiệu" :error="form.errors.print_shop_subtitle" />
+                        <FloatingInput v-model="form.print_shop_phone" name="print_shop_phone" label="Số điện thoại cửa hàng" :error="form.errors.print_shop_phone" />
+                        <FloatingInput v-model="form.print_shop_address" name="print_shop_address" label="Địa chỉ cửa hàng" :error="form.errors.print_shop_address" />
+                        <FloatingSelect v-model="form.print_template" name="print_template" label="Mẫu hóa đơn" :options="printTemplateOptions" :show-placeholder="false" />
                         <FloatingSelect v-model="form.print_paper_size" name="print_paper_size" label="Khổ giấy" :options="printPaperOptions" />
                         <FloatingSelect v-model="form.print_orientation" name="print_orientation" label="Hướng giấy" :options="printOrientationOptions" />
+                    </div>
+                </DataPanel>
+                <DataPanel v-if="activeModal === 'printing'">
+                    <template #header>
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Nội dung hợp đồng mua bán</h2>
+                            <p class="mt-0.5 text-xs font-medium text-slate-500">Biến: <code>&#123;&#123;date&#125;&#125;</code>, <code>&#123;&#123;delivery_date&#125;&#125;</code>, <code>&#123;&#123;import_code&#125;&#125;</code>, <code>&#123;&#123;buyer_name&#125;&#125;</code>, <code>&#123;&#123;seller_name&#125;&#125;</code>, <code>&#123;&#123;total&#125;&#125;</code>, <code>&#123;&#123;note&#125;&#125;</code>.</p>
+                        </div>
+                    </template>
+                    <div class="space-y-3 p-4">
+                        <FloatingInput v-model="form.purchase_contract_title" name="purchase_contract_title" label="Tiêu đề hợp đồng" :error="form.errors.purchase_contract_title" />
+                        <label for="purchase_contract_content" class="block text-sm font-medium text-slate-700">Nội dung / điều khoản</label>
+                        <textarea id="purchase_contract_content" v-model="form.purchase_contract_content" name="purchase_contract_content" rows="5" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                        <p v-if="form.errors.purchase_contract_content" class="text-xs text-rose-600">{{ form.errors.purchase_contract_content }}</p>
                     </div>
                 </DataPanel>
                 <DataPanel v-if="activeModal === 'system'">
@@ -592,10 +633,11 @@ const unitDisplayName = (unit) =>
                     </div>
                 </DataPanel>
 
-                <DataPanel v-if="activeModal === 'inventory'">
+                <div v-if="activeModal === 'inventory'" class="grid items-start gap-3 sm:grid-cols-2">
+                <DataPanel class="!bg-slate-50">
                 
-                    <div class="p-4  bg-slate-50">
-                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg ">
+                    <div class="p-3">
+                        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
                             <span>
                                 <span class="block text-sm font-bold text-slate-800">
                                     Cho phép tồn kho âm
@@ -614,34 +656,43 @@ const unitDisplayName = (unit) =>
                     </div>
                 </DataPanel>
 
-                <DataPanel v-if="activeModal === 'inventory'">
-                    <template #header>
-                        <div>
-                            <h2 class="text-sm font-bold text-slate-900">Cảnh báo tồn kho</h2>
-                            <p class="mt-0.5 text-xs font-medium text-slate-500">Dùng ngưỡng này cho sản phẩm chưa cài ngưỡng cảnh báo riêng.</p>
-                        </div>
-                    </template>
-                    <div class="space-y-4 p-4">
-                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-amber-50 p-3">
+                <DataPanel class="!bg-emerald-50">
+                    <div class="p-3">
+                        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
                             <span>
-                                <span class="block text-sm font-bold text-slate-800">Bật cảnh báo hàng sắp hết</span>
-                                <span class="mt-0.5 block text-xs font-medium text-slate-500">Hiển thị trong bộ lọc và thống kê tồn kho.</span>
+                                <span class="block text-sm font-bold text-slate-800">Mặc định Có VAT</span>
+                                <span class="mt-0.5 block text-xs text-slate-500">Cho mặt hàng mới trong phiếu nhập.</span>
                             </span>
-                            <input v-model="form.inventory_alert_enabled" type="checkbox" class="h-5 w-5 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                            <input v-model="form.stock_import_vat_default" type="checkbox" class="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                         </label>
-                        <FloatingInput
-                            v-model.number="form.inventory_alert_threshold"
-                            name="inventory_alert_threshold"
-                            label="Ngưỡng cảnh báo mặc định (số lượng)"
-                            type="number"
-                            min="0"
-                            :error="form.errors.inventory_alert_threshold"
-                            :disabled="!form.inventory_alert_enabled"
-                        />
                     </div>
                 </DataPanel>
 
-                <DataPanel v-if="activeModal === 'inventory'">
+                <DataPanel class="sm:col-span-2 !bg-amber-50">
+                    <div class="p-3">
+                        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
+                            <div>
+                                <span class="block text-sm font-bold text-slate-800">Cảnh báo tồn kho</span>
+                                <span class="mt-0.5 block text-xs font-medium text-slate-500">Áp dụng cho sản phẩm chưa có ngưỡng riêng.</span>
+                            </div>
+                            <input v-model="form.inventory_alert_enabled" type="checkbox" aria-label="Bật cảnh báo hàng sắp hết" class="h-5 w-5 shrink-0 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                        </label>
+                        <div v-if="form.inventory_alert_enabled" class="mt-3 px-1">
+                            <FloatingInput
+                                v-model.number="form.inventory_alert_threshold"
+                                name="inventory_alert_threshold"
+                                label="Ngưỡng mặc định (số lượng)"
+                                type="number"
+                                min="0"
+                                :error="form.errors.inventory_alert_threshold"
+                            />
+                        </div>
+                    </div>
+                </DataPanel>
+
+                </div>
+
+                <DataPanel v-if="activeModal === 'inventory'" class="mt-3">
                     <template #header>
                         <div class="flex items-start justify-between gap-3">
                             <div>
@@ -803,27 +854,8 @@ const unitDisplayName = (unit) =>
             </div>
 
             <section v-if="activeModal === 'payments'" class="w-full">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <h2 class="text-sm font-bold text-slate-900">
-                                Tài khoản chuyển khoản
-                            </h2>
-                            <p class="mt-0.5 text-xs font-medium text-slate-500">
-                                {{ bankLockedText }}
-                            </p>
-                        </div>
-
-                        <span
-                            class="rounded-full px-2.5 py-1 text-xs font-bold"
-                            :class="can_update_bank_settings
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-red-50 text-red-700'"
-                        >
-                            {{ can_update_bank_settings ? 'Có quyền sửa' : 'Chỉ xem' }}
-                        </span>
-                    </div>
-                <div class="mt-4 space-y-5">
-                    <div class="space-y-3 rounded-xl bg-slate-50/70 p-3">
+                <div class="space-y-3">
+                    <div class="space-y-2">
                     <div class="flex items-end gap-2">
                         <FloatingSelect
                             :model-value="selectedBankAccountId"
@@ -882,13 +914,7 @@ const unitDisplayName = (unit) =>
                             />
                         </div>
 
-                        <div class="pt-1">
-                            <div class="mb-2 flex items-center justify-between gap-2">
-                                <div>
-                                    <p class="text-xs font-bold text-slate-700">Nội dung chuyển khoản</p>
-                                    <p class="mt-0.5 text-[11px] text-slate-500">Thiết lập riêng cho tài khoản này</p>
-                                </div>
-                            </div>
+                        <div>
                             <FloatingSelect
                                 v-model="account.transfer_content_mode"
                                 :name="`bank_accounts_${selectedBankAccountIndex}_transfer_content_mode`"
@@ -956,7 +982,7 @@ const unitDisplayName = (unit) =>
                                         {{ form.payment_voice_enabled ? 'Bật' : 'Tắt' }}
                                     </label>
                                 </div>
-                                <div v-if="form.payment_voice_enabled" class="mt-3 grid gap-2">
+                                <div v-if="form.payment_voice_enabled" class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
                                     <FloatingSelect
                                         v-model="form.payment_voice_language"
                                         name="payment_voice_language"
@@ -965,18 +991,14 @@ const unitDisplayName = (unit) =>
                                         :disabled="!can_update_bank_settings"
                                         :show-placeholder="false"
                                     />
-                                    <button type="button" :disabled="!paymentVoiceAvailable" class="w-fit rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice">Thử giọng đọc</button>
-                                    <p v-if="paymentVoiceTestMessage" class="text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
-                                    <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="text-xs text-amber-700">Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.</p>
+                                    <button type="button" :disabled="!paymentVoiceAvailable" :aria-label="paymentVoiceAvailable ? 'Nghe thử giọng đọc' : 'Không có giọng đọc phù hợp'" :title="paymentVoiceAvailable ? 'Nghe thử giọng đọc' : 'Không có giọng đọc phù hợp'" class="mb-px inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice"><Volume2 :size="18" /></button>
+                                    <p v-if="paymentVoiceTestMessage" class="col-span-2 text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
+                                    <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="col-span-2 text-xs text-amber-700">Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.</p>
                                 </div>
                             </section>
                             </div>
                         </div>
                         </div>
-                    </div>
-
-                    <div v-if="!selectedBankAccount" class="rounded-lg bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
-                        Chọn tài khoản đã có hoặc chọn “Tạo tài khoản mới”.
                     </div>
 
                     </div>
@@ -985,7 +1007,7 @@ const unitDisplayName = (unit) =>
                     <section class="rounded-lg bg-slate-50 p-3">
                         <p class="mb-1.5 text-sm font-semibold text-slate-700">Kiểu màu mã QR</p>
                         <p class="mb-3 text-xs text-slate-500">Chọn màu phù hợp với cửa hàng. Nền luôn sáng để mã dễ quét.</p>
-                        <div class="grid grid-cols-2 gap-2">
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             <button
                                 v-for="theme in VIET_QR_THEMES"
                                 :key="theme.value"

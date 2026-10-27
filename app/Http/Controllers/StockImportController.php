@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\StockImport;
+use App\Support\DefaultPurchaseContract;
 use App\Models\ProductImeiHistory;
 use App\Services\Stock\StockImportService;
 use Illuminate\Http\Request;
@@ -363,7 +364,24 @@ class StockImportController extends Controller
             'items.unit:id,name,short_name',
         ]);
 
-        return view('stock-imports.contract', ['import' => $stockImport]);
+        $sellerName = $stockImport->party_name ?: ($stockImport->customer?->full_name ?: ($stockImport->supplier?->name ?: '—'));
+        $content = (string) setting('purchase_contract_content', DefaultPurchaseContract::CONTENT);
+        $contractContent = strtr($content, [
+            '{{date}}' => now()->format('d/m/Y'),
+            '{{delivery_date}}' => optional($stockImport->import_date)->format('d/m/Y') ?: '—',
+            '{{import_code}}' => $stockImport->code,
+            '{{buyer_name}}' => (string) setting('shop_name', config('app.name', 'Cửa hàng')),
+            '{{seller_name}}' => $sellerName,
+            '{{total}}' => number_format((float) $stockImport->grand_total, 0, ',', '.') . ' đ',
+            '{{note}}' => (string) $stockImport->note,
+        ]);
+
+        return view('stock-imports.contract', [
+            'import' => $stockImport,
+            'contractTitle' => setting('purchase_contract_title', DefaultPurchaseContract::TITLE),
+            'contractContent' => $contractContent,
+            'buyerName' => setting('shop_name', config('app.name', 'Cửa hàng')),
+        ]);
     }
 
     /**
