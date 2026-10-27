@@ -385,7 +385,7 @@ const submit = () => {
                         class="overflow-x-auto"
                     >
 
-                        <table class="w-full text-sm">
+                        <table class="app-data-table w-full text-sm">
 
                             <thead
                                 class="

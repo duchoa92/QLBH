@@ -393,7 +393,7 @@ const doughnutChartOptions = {
                     </div>
 
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
+                        <table class="app-data-table w-full text-left border-collapse">
                             <thead>
                                 <tr class="text-[11px] font-extrabold uppercase text-slate-400 border-b border-slate-100 pb-2">
                                     <th class="py-2">Mã đơn</th>

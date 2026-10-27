@@ -938,7 +938,7 @@ const conflictPolicyOptions = [
                             <span v-else-if="!comparisonError" class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800">ĐÃ ĐỐI CHIẾU</span>
                         </div>
                         <div class="max-h-[38vh] overflow-auto">
-                            <table class="w-full min-w-[720px] table-fixed border-collapse text-left text-xs">
+                            <table class="app-data-table w-full min-w-[720px] table-fixed border-collapse text-left text-xs">
                                 <thead class="sticky top-0 z-10 bg-slate-50 text-[10px] font-bold tracking-wide text-slate-600">
                                     <tr>
                                         <th class="w-[24%] border border-slate-200 px-1.5 py-2"><button type="button" class="flex items-center gap-1 text-left" @click="sortRestoreTablesBy('name')">Tên tiếng Việt / bảng <span class="text-slate-400">{{ restoreSortBy === 'name' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>

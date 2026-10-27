@@ -1,0 +1,11 @@
+{
+  "name": "QLBH - Quản lý bán hàng",
+  "short_name": "QLBH",
+  "description": "Quản lý bán hàng, kho và nghiệp vụ cửa hàng",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#4f46e5",
+  "lang": "vi"
+}

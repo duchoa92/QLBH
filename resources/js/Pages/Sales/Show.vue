@@ -103,7 +103,7 @@ const printInvoice = () => {
 
             <!-- Bảng Danh Sách Sản Phẩm -->
             <div class="overflow-x-auto rounded-xl border border-slate-200 mb-6">
-                <table class="w-full text-sm text-left">
+                <table class="app-data-table w-full text-sm text-left">
                     <thead>
                         <tr class="bg-slate-50 text-xs font-bold uppercase text-slate-500 border-b border-slate-200">
                             <th class="py-3 px-4">Sản phẩm</th>

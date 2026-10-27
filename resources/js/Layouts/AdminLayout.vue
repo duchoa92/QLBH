@@ -81,6 +81,7 @@ const currentTitle = computed(() => {
         'Users/RoleManagement': 'Phân quyền',
         'Debts/Index': 'Quản lý công nợ',
         'Expenses/Index': 'Chi phí cửa hàng',
+        'Taxes/Index': 'Khai thuế',
         'Reports/Index': 'Báo cáo & Thống kê',
         'WorkShifts/History': 'Lịch sử kiểm kê',
         'Settings/Index': 'Thiết lập',
@@ -108,6 +109,7 @@ const currentTitle = computed(() => {
     if (path.startsWith('/stock-import')) return 'Nhập hàng'
     if (path.startsWith('/suppliers')) return 'Nhà cung cấp'
     if (path.startsWith('/expenses')) return 'Chi phí cửa hàng'
+    if (path.startsWith('/tax-declaration')) return 'Khai thuế'
     if (path.startsWith('/reports')) return 'Báo cáo & Thống kê'
     if (path.startsWith('/backups')) return 'Sao lưu dữ liệu'
     if (path.startsWith('/profile')) return 'Tài khoản'

@@ -191,6 +191,13 @@ const menuGroups = [
                 paths: ['/expenses'],
                 permission: 'expenses.view',
             },
+            {
+                label: 'Khai thuế',
+                icon: Receipt,
+                href: '/tax-declaration',
+                paths: ['/tax-declaration'],
+                permission: 'reports.view',
+            },
         ],
     },
     {

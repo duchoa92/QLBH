@@ -401,6 +401,7 @@ const selectProduct = (product, { configure = true } = {}) => {
                 sellPrice,
 
             is_used: false,
+            has_vat: false,
             extra_info: {},
 
             imeis: [],
@@ -805,6 +806,7 @@ const confirm = () => {
                 quantity: Math.max(0, Math.round(Number(item.quantity || 0))),
                 cost_price: importPrice(item, item.cost_price),
                 sell_price: importPrice(item, item.sell_price),
+                has_vat: Boolean(item.has_vat),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                 extra_info: partyType.value === 'customer' && item.is_used
@@ -826,6 +828,7 @@ const confirm = () => {
                     quantity: Math.max(0, Math.round(Number(row.quantity || 0))),
                     cost_price: importPrice(item, row.cost_price),
                     sell_price: importPrice(item, row.sell_price),
+                    has_vat: Boolean(item.has_vat),
                     supplier_warranty_value: item.supplier_warranty_value || null,
                     supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                     extra_info: partyType.value === 'customer' && item.is_used
@@ -845,6 +848,7 @@ const confirm = () => {
                 quantity: 1,
                 cost_price: importPrice(item, imei.cost_price ?? item.cost_price),
                 sell_price: importPrice(item, imei.sell_price ?? item.sell_price),
+                has_vat: Boolean(item.has_vat),
                 imeis: [imei],
             }))
         }
@@ -859,6 +863,7 @@ const confirm = () => {
                 quantity: 1,
                 cost_price: importPrice(item, imei.cost_price ?? item.cost_price),
                 sell_price: importPrice(item, imei.sell_price ?? item.sell_price),
+                has_vat: Boolean(item.has_vat),
                 imeis: [imei],
             }))
         }
@@ -1034,6 +1039,10 @@ const confirm = () => {
                                     <span v-if="item.type === 'variant' || item.type === 'imei_variant'" class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{{ (item.rows || []).length }} biến thể</span>
                                     <span v-if="item.type === 'imei' || item.type === 'imei_variant'" class="rounded-md bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">{{ (item.imeis || []).length }} IMEI</span>
                                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ itemUnit(item) }}</span>
+                                    <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">
+                                        <input v-model="item.has_vat" type="checkbox" class="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
+                                        Có VAT
+                                    </label>
                                 </div>
                             </div>
                             <div class="flex shrink-0 items-center gap-1">
@@ -1144,6 +1153,10 @@ const confirm = () => {
                                             <div
                                                 class="mt-1 flex flex-wrap items-center gap-1.5"
                                             >
+                                                <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800" @click.stop>
+                                                    <input v-model="item.has_vat" type="checkbox" class="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
+                                                    Có VAT
+                                                </label>
                                                 <span
                                                     v-if="
                                                         item.type ===

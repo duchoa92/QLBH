@@ -10,6 +10,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DebtPaymentController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\TaxDeclarationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\WorkShiftController;
@@ -327,6 +328,7 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/expenses/recurring/{recurringExpense}', [ExpenseController::class, 'updateRecurring'])->middleware('permission:expenses.manage')->name('expenses.recurring.update');
     Route::delete('/expenses/recurring/{recurringExpense}', [ExpenseController::class, 'destroyRecurring'])->middleware('permission:expenses.manage')->name('expenses.recurring.destroy');
     Route::post('/expenses/recurring/{recurringExpense}/paid', [ExpenseController::class, 'markRecurringPaid'])->middleware('permission:expenses.manage')->name('expenses.recurring.paid');
+    Route::get('/tax-declaration', [TaxDeclarationController::class, 'index'])->middleware('permission:reports.view')->name('tax-declaration.index');
     Route::get('/api/suppliers/search', [SupplierController::class, 'search'])->middleware('permission:suppliers.view|stock_imports.view')->name('api.suppliers.search');
     Route::resource('suppliers', SupplierController::class)
         ->middlewareFor(['index', 'show'], 'permission:suppliers.view')

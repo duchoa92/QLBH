@@ -28,6 +28,69 @@
     }
 }
 
+/* Shared visual baseline for searchable, paginated data lists. */
+@media screen {
+    table.app-data-table {
+        width: 100%;
+        table-layout: auto;
+        border-collapse: separate;
+        border-spacing: 0;
+        color: #334155;
+        font-size: 0.875rem;
+        line-height: 1.35rem;
+    }
+
+    table.app-data-table thead tr {
+        background: #dce7f2;
+    }
+
+    table.app-data-table thead th {
+        padding: 0.875rem 0.875rem !important;
+        border-color: #c5d4e3;
+        background-color: #dce7f2;
+        color: #243b53;
+        font-size: 0.6875rem !important;
+        font-weight: 700;
+        letter-spacing: 0.045em;
+        line-height: 1rem !important;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    table.app-data-table tbody td {
+        padding: 0.75rem 0.875rem !important;
+        border-color: #f1f5f9;
+        vertical-align: middle;
+    }
+
+    table.app-data-table th,
+    table.app-data-table td {
+        border-right: 1px solid #e2e8f0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    table.app-data-table th:last-child,
+    table.app-data-table td:last-child {
+        border-right: 0;
+    }
+
+    table.app-data-table th button {
+        white-space: nowrap;
+    }
+
+    table.app-data-table tbody tr:nth-child(even) {
+        background-color: #f8fafc;
+    }
+
+    table.app-data-table tbody tr:hover {
+        background-color: #ecfdf5;
+    }
+
+    table.app-data-table tbody tr:last-child > td {
+        border-bottom: 0;
+    }
+}
+
 
 
 [data-sonner-toast] {

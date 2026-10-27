@@ -7,6 +7,8 @@ import {
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { useEventBus } from '@/Composables/useEventBus'
 import { useReferenceData } from '@/Stores/referenceData'
+import { usePage } from '@inertiajs/vue3'
+import { cacheOfflineProducts, readOfflineProducts } from '@/utils/offlinePos'
 
 export function useProductSearch(emit) {
 
@@ -23,6 +25,7 @@ export function useProductSearch(emit) {
     const products = ref([])
 
     const { categories } = useReferenceData()
+    const page = usePage()
 
     const loading = ref(false)
 
@@ -56,6 +59,9 @@ export function useProductSearch(emit) {
                 )
 
             products.value = response
+            if (Array.isArray(response) && response.length) {
+                await cacheOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}`, response).catch(() => {})
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -89,8 +95,8 @@ export function useProductSearch(emit) {
             }
 
         } catch (error) {
-
-            console.error(error)
+            const cached = await readOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}`).catch(() => null)
+            products.value = cached?.products || []
 
         } finally {
 

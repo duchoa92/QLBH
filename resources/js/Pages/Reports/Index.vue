@@ -546,7 +546,7 @@ onMounted(() => {
                         Lợi nhuận theo sản phẩm (top 15)
                     </h3>
 
-                    <table class="w-full text-sm">
+                    <table class="app-data-table w-full text-sm">
                         <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                             <tr>
                                 <th class="px-4 py-3 text-left">Sản phẩm</th>
@@ -617,7 +617,7 @@ onMounted(() => {
                 </section>
 
                 <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <table class="w-full text-sm">
+                    <table class="app-data-table w-full text-sm">
                         <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                             <tr>
                                 <th class="px-4 py-3 text-left">#</th>
@@ -706,7 +706,7 @@ onMounted(() => {
                 </section>
 
                 <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <table class="w-full text-sm">
+                    <table class="app-data-table w-full text-sm">
                         <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                             <tr>
                                 <th class="px-4 py-3 text-left">Sản phẩm</th>
@@ -829,7 +829,7 @@ onMounted(() => {
                 </section>
 
                 <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <table class="w-full text-sm">
+                    <table class="app-data-table w-full text-sm">
                         <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                             <tr>
                                 <th class="px-4 py-3 text-left">Mã</th>

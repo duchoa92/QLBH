@@ -198,6 +198,8 @@ class StockImportService
 
                     'cost_price' => $costPrice,
 
+                    'has_vat' => (bool) ($item['has_vat'] ?? false),
+
                     'supplier_warranty_value' => $item['supplier_warranty_value'] ?? null,
 
                     'supplier_warranty_unit' => ! empty($item['supplier_warranty_value'])

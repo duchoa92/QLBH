@@ -223,6 +223,11 @@ class StockImportController extends Controller
                 'min:0',
             ],
 
+            'items.*.has_vat' => [
+                'nullable',
+                'boolean',
+            ],
+
             'items.*.supplier_warranty_value' => [
                 'nullable',
                 'integer',

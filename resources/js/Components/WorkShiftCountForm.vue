@@ -40,32 +40,36 @@ const focusNext = event => {
                 Tổng tiền mặt {{ mode === 'close' ? 'kiểm đếm cuối ca' : 'đầu ca' }}
                 <FormattedNumberInput :model-value="cashAmount" class="mt-1 w-full rounded-lg border-slate-300 px-3 py-2 text-right text-sm" @focus="selectInputValue" @update:model-value="emit('update:cashAmount', $event)" />
             </label>
-            <table v-else class="w-full text-left text-sm">
-                <thead class="bg-slate-100 text-[11px] uppercase text-slate-500"><tr><th class="rounded-l-lg px-2 py-1.5">Mệnh giá</th><th class="px-2 py-1.5">Số lượng</th><th class="rounded-r-lg px-2 py-1.5 text-right">Thành tiền</th></tr></thead>
-                <tbody class="divide-y divide-slate-100"><tr v-for="value in denominations" :key="value">
+            <div v-else class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table class="no-grid w-full text-left text-sm">
+                <thead class="border-b-2 border-indigo-700 bg-indigo-600 text-[11px] font-extrabold uppercase tracking-wide text-white"><tr><th class="border-r border-indigo-500 px-2 py-2">Mệnh giá</th><th class="border-r border-indigo-500 px-2 py-2">Số lượng</th><th class="px-2 py-2 text-right">Thành tiền</th></tr></thead>
+                <tbody class="divide-y divide-slate-200"><tr v-for="value in denominations" :key="value">
                     <td class="px-2 py-1.5 font-semibold text-slate-700">{{ money(value) }}</td>
                     <td class="px-2 py-1"><input v-model.number="counts[value]" data-work-shift-count type="text" inputmode="numeric" class="w-20 rounded-lg border-slate-300 px-2 py-1 text-right text-sm" @focus="selectInputValue" @keydown.enter="focusNext" /></td>
                     <td class="px-2 py-1.5 text-right text-slate-600">{{ money(value * Number(counts[value] || 0)) }}</td>
                 </tr></tbody>
-            </table>
+              </table>
+            </div>
         </div>
         <div class="space-y-2">
             <h3 class="text-sm font-bold text-slate-800">Số dư tài khoản ngân hàng {{ mode === 'close' ? 'cuối ca' : 'đầu ca' }}</h3>
-            <table v-if="accounts.length" class="w-full text-left text-sm">
-                <thead class="bg-slate-100 text-[11px] uppercase text-slate-500"><tr><th class="rounded-l-lg px-2 py-1.5">Tài khoản</th><th class="px-2 py-1.5">Chủ tài khoản</th><th class="rounded-r-lg px-2 py-1.5 text-right">Số dư</th></tr></thead>
-                <tbody class="divide-y divide-slate-100"><tr v-for="account in accounts" :key="accountKey(account)">
+            <div v-if="accounts.length" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table class="no-grid w-full text-left text-sm">
+                <thead class="border-b-2 border-indigo-700 bg-indigo-600 text-[11px] font-extrabold uppercase tracking-wide text-white"><tr><th class="border-r border-indigo-500 px-2 py-2">Tài khoản</th><th class="border-r border-indigo-500 px-2 py-2">Chủ tài khoản</th><th class="px-2 py-2 text-right">Số dư</th></tr></thead>
+                <tbody class="divide-y divide-slate-200"><tr v-for="account in accounts" :key="accountKey(account)">
                     <td class="px-2 py-2"><strong>{{ account.bank_name || `BIN ${account.bank_bin}` }}</strong><div class="text-xs text-slate-500">{{ account.bank_account }}</div></td>
                     <td class="px-2 py-2 text-xs text-slate-600">{{ account.bank_account_name || '—' }}</td>
                     <td class="px-2 py-2 text-right">
                         <FormattedNumberInput :model-value="balances[accountKey(account)]" data-work-shift-count class="w-28 rounded-lg border-slate-300 px-2 py-1 text-right text-sm" @focus="selectInputValue" @keydown.enter="focusNext" @update:model-value="balances[accountKey(account)] = $event" />
                     </td>
                 </tr></tbody>
-            </table>
+              </table>
+            </div>
             <p v-else class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Chưa cấu hình tài khoản ngân hàng.</p>
             <div v-if="mode !== 'close'" class="grid gap-2 pt-1">
-                <p class="flex items-center justify-between gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm"><span class="font-medium text-indigo-700">Tổng tiền mặt {{ mode === 'close' ? 'kiểm đếm' : 'đầu ca' }}</span><strong class="text-indigo-900">{{ money(cashTotal) }}</strong></p>
-                <p class="flex items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm"><span class="font-medium text-blue-700">Tổng tiền tài khoản</span><strong class="text-blue-900">{{ money(bankTotal) }}</strong></p>
-                <p class="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm"><span class="font-bold text-emerald-800">Tổng tiền mặt + tài khoản</span><strong class="text-emerald-900">{{ money(grandTotal) }}</strong></p>
+                <p class="flex items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm"><span class="font-medium text-indigo-700">Tổng tiền mặt {{ mode === 'close' ? 'kiểm đếm' : 'đầu ca' }}</span><strong class="text-indigo-900">{{ money(cashTotal) }}</strong></p>
+                <p class="flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm"><span class="font-medium text-blue-700">Tổng tiền tài khoản</span><strong class="text-blue-900">{{ money(bankTotal) }}</strong></p>
+                <p class="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm"><span class="font-bold text-emerald-800">Tổng tiền mặt + tài khoản</span><strong class="text-emerald-900">{{ money(grandTotal) }}</strong></p>
             </div>
         </div>
     </div>

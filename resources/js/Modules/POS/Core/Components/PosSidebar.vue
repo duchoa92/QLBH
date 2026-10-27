@@ -79,7 +79,7 @@ const emit = defineEmits([
         </div>
         
         <!-- Khối dưới: Thanh toán & Tính tiền -->
-        <div class="shrink-0 border-t border-slate-100 bg-white p-3">
+        <div class="shrink-0 bg-white px-2 pb-2 pt-1.5">
             <PaymentPanel
                 :cart="cart"
                 :grand-total="grandTotal"

@@ -112,7 +112,7 @@ const saleCustomerName = (saleItem) =>
                     Lịch sử giá và nhập hàng
                 </h2>
 
-                <table class="w-full text-sm">
+                <table class="app-data-table w-full text-sm">
                     <thead>
                         <tr>
                             <th class="text-left">
@@ -181,7 +181,7 @@ const saleCustomerName = (saleItem) =>
 
                 </h2>
 
-                <table class="w-full">
+                <table class="app-data-table w-full text-sm">
 
                     <thead>
 
@@ -256,7 +256,7 @@ const saleCustomerName = (saleItem) =>
                     Lịch sử sửa chữa
                 </h2>
 
-                <table class="w-full text-sm">
+                <table class="app-data-table w-full text-sm">
                     <thead>
                         <tr>
                             <th class="text-left">

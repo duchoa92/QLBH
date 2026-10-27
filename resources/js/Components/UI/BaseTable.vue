@@ -27,7 +27,7 @@ const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(r
 <template>
 <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div class="overflow-x-auto">
-        <table class="min-w-[500px] w-full text-sm">
+        <table class="app-data-table min-w-[500px] w-full text-sm">
 
             <!-- HEADER -->
             <thead>

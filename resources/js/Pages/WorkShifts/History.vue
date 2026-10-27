@@ -174,7 +174,7 @@ const cashDifferenceClass = difference => difference < 0
                     <div v-if="shift.closing_amount !== null">
                         <h3 class="mb-2 text-sm font-bold text-slate-800">Chi tiết số lượng tiền mặt</h3>
                         <div class="overflow-x-auto rounded-xl border border-slate-200 custom-scrollbar">
-                            <table class="w-full min-w-[400px] table-fixed text-xs">
+                            <table class="app-data-table w-full min-w-[400px] table-fixed text-xs">
                                 <thead class="bg-slate-100 text-left text-[10px] uppercase text-slate-500"><tr><th class="w-[27%] px-2 py-2">Mệnh giá</th><th class="w-[16%] px-1 py-2 text-right">SL đầu ca</th><th class="w-[16%] px-1 py-2 text-right">SL cuối ca</th><th class="w-[41%] px-2 py-2 text-right">Thành tiền cuối ca</th></tr></thead>
                                 <tbody class="divide-y divide-slate-100"><tr v-for="value in denominations" :key="value"><td class="whitespace-nowrap px-2 py-1.5 font-semibold">{{ money(value) }}</td><td class="px-1 py-1.5 text-right">{{ Number(shift.opening_denominations?.[value] || 0) }}</td><td class="px-1 py-1.5 text-right">{{ Number(shift.closing_denominations?.[value] || 0) }}</td><td class="whitespace-nowrap px-2 py-1.5 text-right font-semibold">{{ money(value * Number(shift.closing_denominations?.[value] || 0)) }}</td></tr></tbody>
                                 <tfoot class="bg-slate-50 font-bold"><tr><td colspan="3" class="px-2 py-2 text-right">Tổng kiểm đếm</td><td class="whitespace-nowrap px-2 py-2 text-right">{{ money(shift.closing_amount) }}</td></tr></tfoot>
@@ -186,7 +186,7 @@ const cashDifferenceClass = difference => difference < 0
                     <div>
                         <h3 class="mb-2 text-sm font-bold text-slate-800">Số dư tài khoản ngân hàng</h3>
                         <div class="overflow-x-auto rounded-xl border border-slate-200 custom-scrollbar">
-                            <table class="w-full min-w-[360px] table-fixed text-xs">
+                            <table class="app-data-table w-full min-w-[360px] table-fixed text-xs">
                                 <thead class="bg-slate-100 text-left text-[10px] uppercase text-slate-500"><tr><th class="w-[54%] px-2 py-2">Tài khoản</th><th class="w-[23%] px-1 py-2 text-right">Đầu ca</th><th class="w-[23%] px-1 py-2 text-right">Cuối ca</th></tr></thead>
                                 <tbody class="divide-y divide-slate-100"><tr v-for="[key, value] in balanceEntries(shift.closing_bank_balances)" :key="key"><td class="break-words px-2 py-1.5 font-medium">{{ bankLabel(key) }}</td><td class="whitespace-nowrap px-1 py-1.5 text-right">{{ money(shift.opening_bank_balances?.[key]) }}</td><td class="whitespace-nowrap px-1 py-1.5 text-right font-semibold">{{ money(value) }}</td></tr><tr v-if="!balanceEntries(shift.closing_bank_balances).length"><td colspan="3" class="px-2 py-5 text-center text-slate-500">Ca này không ghi nhận số dư ngân hàng.</td></tr></tbody>
                             </table>

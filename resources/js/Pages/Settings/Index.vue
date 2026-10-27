@@ -712,7 +712,7 @@ const unitDisplayName = (unit) =>
                         </div>
 
                         <div class="overflow-hidden rounded-lg border border-slate-200">
-                            <table class="w-full text-sm">
+                            <table class="app-data-table w-full text-sm">
                                 <thead>
                                     <tr class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                                         <th class="px-3 py-2 text-left">

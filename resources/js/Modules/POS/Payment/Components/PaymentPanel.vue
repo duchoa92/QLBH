@@ -27,7 +27,7 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <div class="shrink-0 border-t border-slate-200/80 bg-white p-3 space-y-2.5 rounded-b-2xl shadow-sm">
+    <div class="shrink-0 bg-white px-1 space-y-2">
         <div class="flex justify-between items-center px-1">
             <button
                 type="button"

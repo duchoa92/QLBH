@@ -24,3 +24,7 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ setup.php [L]
 </IfModule>
+
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>

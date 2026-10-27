@@ -3,6 +3,8 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
+import ProductImeisModal from './ProductImeisModal.vue'
+import ProductDetailModal from './ProductDetailModal.vue'
 import { ArrowUpDown, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal } from '@/Stores/modal'
@@ -90,7 +92,7 @@ onBeforeUnmount(() => {
 const columns = [
     { key: 'id', label: 'ID', sortable: true, width: '60px' },
     { key: 'name', label: 'Tên hàng hóa', sortable: true },
-    { key: 'unit', label: 'Đơn vị', width: '130px' },
+    { key: 'unit', label: 'Đơn vị', width: '76px' },
     { key: 'sell_price', label: 'Giá bán', sortable: true },
     { key: 'stock', label: 'Tồn kho', sortable: true },
     { key: 'is_active', label: 'Trạng thái', sortable: true, width: '120px' }
@@ -152,7 +154,9 @@ const openEdit = (item) => {
 }
 
 const openProductDetail = (item) => {
-    router.visit(`/records/product/${item.id}`)
+    openModal(ProductDetailModal, {
+        props: { productId: item.id, productName: item.name },
+    })
 }
 
 
@@ -343,22 +347,20 @@ const productUnitName = (row) =>
     row.unit?.short_name || row.unit?.name || 'Cái'
 
 const productStockDisplay = (row) => {
-    const factor = Math.max(1, Number(row.conversion_factor || 1))
     const quantity = row.manage_stock_by_serial || row.imeis?.length
         ? (row.imeis || []).filter(imei => imei.status === 'in_stock').length
         : row.variants?.length
             ? row.variants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
             : Number(row.stock || 0)
 
-    if (!row.has_unit_conversion || factor === 1) {
-        return `${quantity} ${productUnitName(row)}`
-    }
+    return `${quantity} ${productUnitName(row)}`
+}
 
-    const importUnit = row.conversion_unit?.short_name
-        || row.conversion_unit?.name
-        || 'đơn vị nhập'
-
-    return `${quantity} ${productUnitName(row)} (nhập: 1 ${importUnit} = ${factor} ${productUnitName(row)})`
+const openImeiList = (row) => {
+    openModal(ProductImeisModal, {
+        props: { productId: row.id, productName: row.name },
+        onUpdated: () => router.reload({ only: ['products'] }),
+    })
 }
 
 </script>
@@ -466,8 +468,8 @@ const productStockDisplay = (row) => {
                 {{ row.name }}
             </td>
 
-            <td class="border-r p-2 text-center">
-                <div class="font-medium text-slate-700">
+            <td class="border-r px-1 py-2 text-center whitespace-nowrap">
+                <div class="font-medium text-slate-700 text-xs">
                     {{ productUnitName(row) }}
                 </div>
             </td>
@@ -514,7 +516,7 @@ const productStockDisplay = (row) => {
                         <button
                             type="button"
                             class="p-1 hover:bg-gray-200 rounded"
-                            @click="router.visit(route('product-imeis.index', row.id))"
+                            @click="openImeiList(row)"
                         >
                             <QrCode size="17" class="text-indigo-500" />
                         </button>

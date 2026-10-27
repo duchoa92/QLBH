@@ -137,7 +137,7 @@ const activeTab = ref('Tổng quan')
             class="bg-white rounded shadow p-4"
         >
 
-            <table class="w-full">
+            <table class="app-data-table w-full">
 
                 <thead>
 
@@ -193,7 +193,7 @@ const activeTab = ref('Tổng quan')
             class="bg-white rounded shadow p-4"
         >
 
-            <table class="w-full">
+            <table class="app-data-table w-full">
 
                 <thead>
 

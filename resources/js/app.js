@@ -13,9 +13,16 @@ import ModalRoot from '@/Components/ModalRoot.vue'
 import { Ziggy } from './ziggy'
 import { formatMoney, formatCurrency, formatDate, formatDateTime, getCurrencySymbol, setFormatSettings } from '@/utils/format'
 import { notifyReferenceDataChanged } from '@/Stores/referenceData'
-import { installAppPathSupport } from '@/utils/appPaths'
+import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
 
 installAppPathSupport(router)
+
+if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register(new URL('service-worker.js', appBaseUrl), {
+        scope: new URL('./', appBaseUrl).pathname,
+        updateViaCache: 'none',
+    }).catch(error => console.warn('Không thể đăng ký hỗ trợ offline.', error))
+}
 
 const app = createApp({})
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -203,7 +210,15 @@ createInertiaApp({
             printStyle.textContent = `@media print { :root { --configured-receipt-width: ${receiptWidth}; } @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: var(--configured-receipt-width) !important; } }`
         }
         applyPageSettings(props.initialPage)
-        router.on('navigate', (event) => applyPageSettings(event.detail.page))
+        router.on('navigate', (event) => {
+            const currentPage = event.detail.page
+            applyPageSettings(currentPage)
+            navigator.serviceWorker?.controller?.postMessage({
+                type: 'CACHE_OFFLINE_PAGE',
+                page: currentPage,
+                html: document.documentElement.outerHTML,
+            })
+        })
 
         app.config.globalProperties.$money = formatCurrency
         app.config.globalProperties.$currency = getCurrencySymbol

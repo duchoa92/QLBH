@@ -337,7 +337,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
             <!-- DANH SÁCH BẢNG DỮ LIỆU CÓ SORT & CLICK LỌC -->
             <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table class="w-full min-w-[850px] text-xs text-left border-collapse">
+                <table class="app-data-table w-full min-w-[850px] text-xs text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-200 select-none">
                             

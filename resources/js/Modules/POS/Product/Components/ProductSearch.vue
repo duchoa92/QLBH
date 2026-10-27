@@ -275,8 +275,8 @@ const categoryOptions = computed(() => [
     <div class="flex min-h-0 flex-1 flex-col font-sans antialiased">
         
         <!-- THANH LỌC & TÌM KIẾM SẢN PHẨM -->
-        <div class="mb-2 rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm sm:mb-3 sm:p-3.5">
-            <div class="grid gap-3 md:grid-cols-[1fr_260px] lg:grid-cols-[1fr_320px] items-center">
+        <div class="mb-2 sm:mb-3">
+            <div class="grid items-center gap-2 md:grid-cols-[1fr_260px] lg:grid-cols-[1fr_320px]">
                 
                 <!-- Ô TÌM KIẾM -->
                 <div class="relative min-w-0">

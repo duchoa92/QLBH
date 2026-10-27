@@ -17,6 +17,7 @@ class StockImportItem extends Model
         'base_quantity',
         'conversion_factor',
         'cost_price',
+        'has_vat',
         'supplier_warranty_value',
         'supplier_warranty_unit',
         'extra_info',
@@ -27,6 +28,7 @@ class StockImportItem extends Model
         'base_quantity' => 'integer',
         'conversion_factor' => 'integer',
         'cost_price' => 'decimal:2',
+        'has_vat' => 'boolean',
         'supplier_warranty_value' => 'integer',
         'extra_info' => 'array',
     ];

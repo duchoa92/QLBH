@@ -68,6 +68,7 @@ const quantity = computed({
             step="1"
             :disabled="item.imei_id"
             class="
+                quantity-input
                 w-20
                 text-center
                 border-none
@@ -96,3 +97,16 @@ const quantity = computed({
     </div>
 
 </template>
+
+<style scoped>
+.quantity-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.quantity-input::-webkit-inner-spin-button,
+.quantity-input::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+</style>

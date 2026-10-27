@@ -87,7 +87,7 @@ defineProps({
                 Danh sách IMEI
             </h2>
 
-            <table class="w-full border">
+            <table class="app-data-table w-full border">
 
                 <thead>
 

@@ -1,5 +1,6 @@
 <script setup>
 import ProductSearch from '@/Modules/POS/Product/Components/ProductSearch.vue'
+import OfflineStatus from '@/Components/OfflineStatus.vue'
 import { PackageSearch } from 'lucide-vue-next'
 
 // Bổ sung defineProps để nhận cart từ trang POS chính
@@ -20,23 +21,19 @@ const emit = defineEmits([
         <div class="flex flex-col h-full min-h-0">
 
             <!-- HEADER POS PANEL -->
-            <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2.5 bg-white sm:px-5 sm:py-3.5">
-                <div class="flex items-center gap-2.5">
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 py-2 sm:px-5 sm:py-2.5">
+                <div class="flex min-w-0 flex-1 items-center gap-2.5">
                     <div class="rounded-xl bg-indigo-50 p-1.5 text-indigo-600 sm:p-2">
                         <PackageSearch class="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
-                    <div>
-                        <h1 class="text-sm font-bold leading-tight text-slate-900 sm:text-base">
+                    <div class="min-w-0">
+                        <h1 class="truncate text-sm font-bold leading-tight text-slate-900 sm:text-base">
                             Chọn & Tìm kiếm Sản phẩm
                         </h1>
-                        <p class="text-[10px] text-slate-400 sm:text-xs">Gõ tên, mã vạch hoặc IMEI để thêm vào đơn</p>
                     </div>
                 </div>
 
-                <div class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    POS Bán hàng
-                </div>
+                <OfflineStatus />
             </div>
 
             <!-- BODY PANEL -->

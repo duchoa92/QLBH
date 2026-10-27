@@ -299,7 +299,7 @@ const confirmPayment = async (payment) => {
         <!-- BẢNG DỮ LIỆU (Chữ to, dòng thoáng hơn) -->
         <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
+                <table class="app-data-table w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50 border-b border-slate-200/80 text-xs font-bold text-slate-600 uppercase tracking-wider select-none">
                             <th @click="toggleSort('code')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">

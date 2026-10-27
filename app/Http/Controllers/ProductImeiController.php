@@ -18,10 +18,15 @@ use Inertia\Response;
 class ProductImeiController extends Controller
 {
     public function index(
+        Request $request,
         Product $product
-    ): Response {
+    ): Response|JsonResponse {
 
         $product->load('imeis');
+
+        if ($request->expectsJson()) {
+            return response()->json(['product' => $product]);
+        }
 
         return Inertia::render(
 

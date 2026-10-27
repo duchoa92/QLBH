@@ -122,6 +122,10 @@ class ProductController extends Controller
             'variants',
         ]);
 
+        if (request()->expectsJson()) {
+            return response()->json(['product' => $product]);
+        }
+
         return Inertia::render('Products/Show', [
             'product' => $product,
         ]);

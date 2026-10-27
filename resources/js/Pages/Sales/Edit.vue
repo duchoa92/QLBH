@@ -99,7 +99,7 @@ const submit = () => form.put(route('sales.update', props.sale.id))
             </div>
 
             <div class="overflow-x-auto rounded-xl border bg-white">
-                <table class="w-full min-w-[800px] text-sm">
+                <table class="app-data-table w-full min-w-[800px] text-sm">
                     <thead class="bg-slate-50 text-xs text-slate-500"><tr><th class="p-3 text-left">Mặt hàng</th><th class="p-3 w-24">Số lượng</th><th class="p-3 w-36">Đơn giá</th><th class="p-3 w-40">Giảm giá</th><th class="p-3 w-36 text-right">Thành tiền</th><th class="p-3 w-12"></th></tr></thead>
                     <tbody>
                         <tr v-for="(item, index) in form.items" :key="`${item.product_id}-${item.variant_id}`" class="border-t">

@@ -347,7 +347,7 @@ const showImport = (id) => {
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="overflow-x-auto">
 
-                <table class="w-full text-sm">
+                <table class="app-data-table w-full text-sm">
 
                     <thead
                         class="
@@ -615,7 +615,7 @@ const showImport = (id) => {
             </div>
 
             <div class="overflow-x-auto rounded-xl border border-slate-200">
-                <table class="w-full min-w-[980px] text-sm">
+                <table class="app-data-table w-full min-w-[980px] text-sm">
                     <thead>
                         <tr class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                             <th class="px-3 py-2 text-left">Sản phẩm</th>
@@ -640,6 +640,7 @@ const showImport = (id) => {
                                     <div class="mt-0.5 text-xs text-slate-500">
                                         SKU: {{ item.product?.sku || '-' }}
                                     </div>
+                                    <span v-if="item.has_vat" class="mt-1 inline-flex rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Có VAT</span>
                                     <div v-if="item.extra_info?.is_used" class="mt-1 space-y-0.5 text-[11px] text-amber-800">
                                         <div class="font-semibold">Sản phẩm đã qua sử dụng</div>
                                         <div v-if="item.extra_info.account">Tài khoản: {{ item.extra_info.account }}</div>
