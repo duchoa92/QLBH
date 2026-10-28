@@ -4,7 +4,7 @@ import { usePage } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { Wallet } from 'lucide-vue-next'
+import { Wallet, CircleHelp, RotateCcw } from 'lucide-vue-next'
 import { formatMoney as formatConfiguredMoney } from '@/utils/format'
 
 defineOptions({ layout: AdminLayout })
@@ -106,11 +106,13 @@ const cashDifferenceClass = difference => difference < 0
     <div class="space-y-3">
         <PageHeader title="Lịch sử kiểm kê" />
 
-        <section class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-[1.2fr_1.3fr_auto] lg:items-end">
+        <section class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div class="grid max-w-4xl items-end gap-2 sm:grid-cols-[minmax(220px,1fr)_minmax(250px,1fr)]">
             <FloatingSelect v-model="employeeId" label="Nhân viên" :options="employees" option-label="name" option-value="id" placeholder-text="Tất cả nhân viên" />
-            <div class="relative">
+            <div class="flex min-w-0 items-end gap-2">
+            <div class="relative min-w-0 flex-1">
                 <label class="absolute -top-2 left-3 z-10 bg-white px-1 text-xs text-slate-500">Ngày xem kết quả</label>
-                <button type="button" class="flex h-[42px] w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 pt-1 text-left text-sm text-slate-800 hover:bg-slate-50" @click="calendarOpen = !calendarOpen"><span>{{ selectDateLabel }}</span><span class="text-slate-400">▦</span></button>
+                <button type="button" class="flex h-[42px] w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 pt-1 text-left text-sm text-slate-800 hover:bg-slate-50" @click="calendarOpen = !calendarOpen"><span class="truncate">{{ selectDateLabel }}</span><span class="ml-2 shrink-0 text-slate-400">▦</span></button>
                 <div v-if="calendarOpen" class="absolute right-0 z-30 mt-2 w-[min(340px,calc(100vw-2.5rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                     <header class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
                         <button type="button" :disabled="!canGoPrevious" class="rounded-md px-2 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-30" @click="moveMonth(-1)">‹</button>
@@ -124,8 +126,14 @@ const cashDifferenceClass = difference => difference < 0
                     <footer class="flex items-center gap-2 border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500"><span class="h-2.5 w-2.5 rounded bg-emerald-100"></span>Ngày có dữ liệu · Chọn ngày để xem</footer>
                 </div>
             </div>
-            <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:col-span-2 md:col-span-1" @click="clearFilters">Xóa lọc</button>
-            <p class="text-xs text-slate-500 sm:col-span-2 md:col-span-3">Lịch sử trong tối đa 30 ngày gần nhất · {{ dateOptions.length }} ngày có dữ liệu.</p>
+            <button type="button" class="flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Xóa bộ lọc nhân viên" aria-label="Xóa bộ lọc nhân viên" @click="clearFilters"><RotateCcw :size="14" /><span class="hidden md:inline">Xóa lọc</span></button>
+            </div>
+            </div>
+            <div class="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+                <span>{{ dateOptions.length }} ngày có dữ liệu</span>
+                <span class="text-slate-300">·</span>
+                <button type="button" class="inline-flex items-center gap-1 text-slate-500 hover:text-indigo-700" title="Lịch sử hiển thị trong tối đa 30 ngày gần nhất." aria-label="Lịch sử hiển thị trong tối đa 30 ngày gần nhất"><CircleHelp :size="14" /><span class="sr-only">Lịch sử trong tối đa 30 ngày gần nhất</span></button>
+            </div>
         </section>
 
         <section class="min-w-0 space-y-3">

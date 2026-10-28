@@ -27,6 +27,7 @@ const paymentMethod = ref('cash')
 const mixedPayment = ref(false)
 const paidAmount = ref('')
 const cashReceivedAmount = ref(0)
+const bankReceivedAmount = ref('')
 const note = ref('')
 const payOldDebt = ref(false)
 const bankIntent = ref(null)
@@ -91,6 +92,7 @@ const selectedBankAccount = computed(() =>
 watch(paymentMethod, () => {
     paidAmount.value = ''
     cashReceivedAmount.value = 0
+    bankReceivedAmount.value = ''
     mixedPayment.value = false
 })
 watch(paymentMethod, async method => {
@@ -119,6 +121,16 @@ const transferAmount = computed(() => {
     return Math.min(total, Math.max(0, enteredAmount))
 })
 
+// QR amount is the requested amount. This field captures what the customer
+// actually transferred so manual payments can record an overpayment.
+const actualBankReceivedAmount = computed(() => {
+    if (!usesBankPayment.value) return 0
+    if (autoBankTracking.value && bankIntent.value) return Number(bankStatus.value?.received_amount || 0)
+    return bankReceivedAmount.value === '' || bankReceivedAmount.value === null
+        ? transferAmount.value
+        : Number(bankReceivedAmount.value || 0)
+})
+
 const usesBankPayment = computed(() => paymentMethod.value === 'bank' || mixedPayment.value)
 const autoBankEnabled = computed(() => usesBankPayment.value && Boolean(selectedBankAccount.value?.payment_auto_enabled))
 const autoBankTracking = computed(() => autoBankEnabled.value && !bankManualFallback.value)
@@ -127,9 +139,7 @@ const effectivePaidAmount = computed(() =>
     usesBankPayment.value
         ? (autoBankTracking.value && bankIntent.value
             ? Number(bankStatus.value?.received_amount || 0) + (mixedPayment.value ? Number(cashReceivedAmount.value || 0) : 0)
-            : (mixedPayment.value
-                ? Number(paidAmount.value || transferAmount.value || 0) + Number(cashReceivedAmount.value || 0)
-                : Number(paidAmount.value || transferAmount.value || 0)))
+            : actualBankReceivedAmount.value + (mixedPayment.value ? Number(cashReceivedAmount.value || 0) : 0))
         : Number(paidAmount.value || 0)
 )
 
@@ -157,6 +167,11 @@ const handleBankTransferAmountValue = (value) => {
 
 const handleCashReceivedAmountInput = (event) => {
     cashReceivedAmount.value = parseMoneyInput(event.target.value)
+    bankError.value = ''
+}
+
+const handleBankReceivedAmountInput = (event) => {
+    bankReceivedAmount.value = parseMoneyInput(event.target.value)
     bankError.value = ''
 }
 
@@ -194,6 +209,7 @@ const resetPaymentFields = () => {
     mixedPayment.value = false
     paidAmount.value = ''
     cashReceivedAmount.value = 0
+    bankReceivedAmount.value = ''
     note.value = ''
     payOldDebt.value = false
     bankStatus.value = null
@@ -355,7 +371,7 @@ const submit = () => {
             ? Number(cashReceivedAmount.value || 0)
             : (paymentMethod.value === 'cash' ? Number(paidAmount.value || 0) : 0),
         bank_received_amount: usesBankPayment.value
-            ? (autoBankTracking.value ? Number(bankStatus.value?.received_amount || 0) : transferAmount.value)
+            ? actualBankReceivedAmount.value
             : 0,
         note: note.value,
         pay_old_debt: payOldDebt.value,
@@ -496,10 +512,22 @@ const submit = () => {
                     </label>
                 </div>
 
-                <!-- Tiền nhận thủ công nằm sau QR và ngay trước ghi chú -->
+                <!-- Số tiền thực nhận từ chuyển khoản, cho phép ghi nhận tiền chuyển thừa -->
                 <div v-if="usesBankPayment">
                     <p v-if="mixedPayment" class="mt-1 text-xs text-slate-600">Tổng nhận: {{ formatMoney(effectivePaidAmount) }} / {{ formatMoney(totalNeedToPay) }}</p>
                     <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-600">{{ bankError }}</p>
+                </div>
+
+                <div v-if="usesBankPayment && !autoBankTracking" class="relative">
+                    <FloatingInput
+                        :model-value="formatMoneyInput(actualBankReceivedAmount)"
+                        @input="handleBankReceivedAmountInput"
+                        type="text"
+                        inputmode="numeric"
+                        :disabled="Boolean(bankIntent)"
+                        label="Số tiền khách chuyển khoản"
+                    />
+                    <p class="mt-1 text-[11px] text-slate-500">Nhập số tiền thực nhận để tính chính xác tiền thừa hoặc còn thiếu.</p>
                 </div>
 
                 <!-- GHI CHÚ -->

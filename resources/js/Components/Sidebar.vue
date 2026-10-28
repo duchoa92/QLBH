@@ -457,26 +457,6 @@ watch(() => props.collapsed, (val) => {
             </div>
         </nav>
 
-        <!-- 3. FOOTER (CỐ ĐỊNH ĐÁY) -->
-        <div class="shrink-0 border-t border-white/10 p-2.5 bg-cyan-950">
-            <div
-                class="flex items-center rounded-xl bg-white/5 border border-white/5"
-                :class="props.collapsed ? 'justify-center p-1.5' : 'gap-2.5 p-2'"
-            >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600/30 text-blue-300 text-xs font-bold border border-blue-400/30">
-                    {{ (page.props.auth?.user?.name || 'T').charAt(0).toUpperCase() }}
-                </div>
-
-                <div v-if="!props.collapsed" class="min-w-0 text-left">
-                    <div class="truncate text-xs font-bold text-slate-100">
-                        {{ page.props.auth?.user?.name || 'Tài khoản' }}
-                    </div>
-                    <div class="truncate text-[10px] text-slate-400">
-                        {{ page.props.auth?.user?.email || page.props.auth?.user?.username }}
-                    </div>
-                </div>
-            </div>
-        </div>
     </aside>
 </template>
 
