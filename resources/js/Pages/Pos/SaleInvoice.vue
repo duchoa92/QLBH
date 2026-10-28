@@ -1,6 +1,8 @@
 <script setup>
 import { formatDateTime, formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import { usePage } from '@inertiajs/vue3'
+import { MessageSquare } from 'lucide-vue-next'
+import { ref } from 'vue'
 
 const props = defineProps({
     sale: {
@@ -9,6 +11,24 @@ const props = defineProps({
     }
 });
 const page = usePage()
+const openWarrantyNoteId = ref(null)
+
+const toggleWarrantyNote = (item) => {
+    openWarrantyNoteId.value = openWarrantyNoteId.value === item.id ? null : item.id
+}
+
+const warrantyEndDate = (item) => {
+    const expiresAt = item.product_imei?.customer_warranty_expires_at
+    if (expiresAt) return formatDate(expiresAt)
+
+    const days = Number(item.product_imei?.customer_warranty_days ?? item.warranty_days ?? 0)
+    const saleDate = String(props.sale?.created_at || '').slice(0, 10)
+    if (days <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate)) return ''
+
+    const endDate = new Date(`${saleDate}T00:00:00Z`)
+    endDate.setUTCDate(endDate.getUTCDate() + days)
+    return formatDate(endDate.toISOString().slice(0, 10))
+}
 
 const printInvoice = () => {
     window.print();
@@ -125,10 +145,26 @@ const saleQuantityText = (item) => {
                             >
                                 IMEI: {{ item.product_imei.imei }}
                             </div>
-                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-0.5 text-xs font-semibold" :class="Number(item.product_imei.customer_warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
-                                {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
-                                    ? `Bảo hành khách đến ${formatDate(item.product_imei.customer_warranty_expires_at)}`
-                                    : 'Không áp dụng bảo hành khách' }}
+                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-0.5 inline-flex items-center gap-1.5">
+                                <span class="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold" :class="warrantyEndDate(item) ? 'text-emerald-700' : 'text-slate-500'">
+                                {{ warrantyEndDate(item)
+                                    ? `Bảo hành đến ${warrantyEndDate(item)}`
+                                    : 'Không áp dụng bảo hành' }}
+                                </span>
+                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:bg-amber-50 hover:text-amber-700 print:hidden" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click="toggleWarrantyNote(item)">
+                                    <MessageSquare :size="14" />
+                                </button>
+                            </div>
+                            <div v-else-if="(item.warranty_days !== null && item.warranty_days !== undefined) || item.warranty_note" class="mt-0.5 inline-flex items-center gap-1.5">
+                                <span v-if="item.warranty_days !== null && item.warranty_days !== undefined" class="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold" :class="Number(item.warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                                    {{ Number(item.warranty_days) > 0 && warrantyEndDate(item) ? `Bảo hành đến ${warrantyEndDate(item)}` : 'Không áp dụng bảo hành' }}
+                                </span>
+                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:bg-amber-50 hover:text-amber-700 print:hidden" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click="toggleWarrantyNote(item)">
+                                    <MessageSquare :size="14" />
+                                </button>
+                            </div>
+                            <div v-if="item.warranty_note && openWarrantyNoteId === item.id" class="mt-1 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900 whitespace-pre-line print:hidden">
+                                {{ item.warranty_note }}
                             </div>
                         </td>
 

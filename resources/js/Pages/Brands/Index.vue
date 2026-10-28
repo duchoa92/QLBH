@@ -1,6 +1,6 @@
 <script setup>
-import { router } from '@inertiajs/vue3'
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -16,6 +16,7 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import CatalogTabs from '@/Components/CatalogTabs.vue'
+import RecordDetailModal from '@/Components/RecordDetailModal.vue'
 
 
 
@@ -26,6 +27,7 @@ const props = defineProps({
     filters: Object,
     categories: Array
 })
+const page = usePage()
 
 const { categories } = useReferenceData({
     categories: props.categories,
@@ -129,6 +131,17 @@ const openEdit = (item) => {
         onUpdated: loadData
     })
 }
+
+const openEditFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const brandId = Number(url.searchParams.get('open_brand'))
+    if (!brandId) return
+    openModal(RecordDetailModal, { props: { type: 'brand', recordId: brandId } })
+    url.searchParams.delete('open_brand')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, () => nextTick(openEditFromGlobalSearch), { immediate: true })
 
 /* TRASH COUNT */
 const trashCount = ref(0)

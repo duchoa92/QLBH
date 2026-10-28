@@ -1,7 +1,7 @@
 <!-- resources/js/Components/InvoiceDetailModal.vue -->
 <script setup>
 import { formatCurrency, formatDateTime, formatDate as formatConfiguredDate, formatNumber } from '@/utils/format'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
     CheckCircle2,
     Gift,
@@ -39,6 +39,31 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'cancel', 'print'])
+const openWarrantyNoteId = ref(null)
+
+const toggleWarrantyNote = (item) => {
+    openWarrantyNoteId.value = openWarrantyNoteId.value === item.id ? null : item.id
+}
+
+const warrantyEndDate = (item) => {
+    const expiresAt = item.product_imei?.customer_warranty_expires_at
+    if (expiresAt) return formatConfiguredDate(expiresAt)
+
+    const days = Number(item.product_imei?.customer_warranty_days ?? item.warranty_days ?? 0)
+    const saleDate = String(props.invoice?.created_at || '').slice(0, 10)
+    if (days <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate)) return ''
+
+    const endDate = new Date(`${saleDate}T00:00:00Z`)
+    endDate.setUTCDate(endDate.getUTCDate() + days)
+    return formatConfiguredDate(endDate.toISOString().slice(0, 10))
+}
+
+const paymentMethodLabel = (method) => ({
+    cash: 'Tiền mặt',
+    bank: 'Chuyển khoản',
+    mixed: 'Tiền mặt + Chuyển khoản',
+    card: 'Thẻ',
+}[String(method || '').toLowerCase()] || method || 'Tiền mặt')
 
 // Format tiền tệ
 const money = formatCurrency
@@ -305,10 +330,26 @@ const cancelReason = computed(() =>
                                                 </span>
                                             </div>
 
-                                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-1 text-xs font-semibold" :class="Number(item.product_imei.customer_warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
-                                                {{ Number(item.product_imei.customer_warranty_days) > 0 && item.product_imei.customer_warranty_expires_at
-                                                    ? `Bảo hành khách đến ${formatConfiguredDate(item.product_imei.customer_warranty_expires_at)}`
-                                                    : 'Không áp dụng bảo hành khách' }}
+                                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-1 inline-flex items-center gap-1.5">
+                                                <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold" :class="warrantyEndDate(item) ? 'text-emerald-700' : 'text-slate-500'">
+                                                {{ warrantyEndDate(item)
+                                                    ? `Bảo hành đến ${warrantyEndDate(item)}`
+                                                    : 'Không áp dụng bảo hành' }}
+                                                </span>
+                                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click="toggleWarrantyNote(item)">
+                                                    <MessageSquare :size="14" />
+                                                </button>
+                                            </div>
+                                            <div v-else-if="(item.warranty_days !== null && item.warranty_days !== undefined) || item.warranty_note" class="mt-1 inline-flex items-center gap-1.5">
+                                                <span v-if="item.warranty_days !== null && item.warranty_days !== undefined" class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold" :class="Number(item.warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                                                    {{ Number(item.warranty_days) > 0 && warrantyEndDate(item) ? `Bảo hành đến ${warrantyEndDate(item)}` : 'Không áp dụng bảo hành' }}
+                                                </span>
+                                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click="toggleWarrantyNote(item)">
+                                                    <MessageSquare :size="14" />
+                                                </button>
+                                            </div>
+                                            <div v-if="item.warranty_note && openWarrantyNoteId === item.id" class="mt-1 max-w-sm rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 whitespace-pre-line">
+                                                {{ item.warranty_note }}
                                             </div>
 
                                             <div
@@ -451,7 +492,7 @@ const cancelReason = computed(() =>
 
                         <div class="flex justify-between text-[11px] uppercase text-slate-400 pt-1 border-t border-slate-100">
                             <span>Phương thức:</span>
-                            <span class="font-bold text-slate-700">{{ invoice.payment_method || 'Tiền mặt' }}</span>
+                            <span class="font-bold text-slate-700">{{ paymentMethodLabel(invoice.payment_method) }}</span>
                         </div>
                     </div>
                 </div>

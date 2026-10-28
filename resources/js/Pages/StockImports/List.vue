@@ -21,6 +21,7 @@ import {
 
 import {
     router,
+    usePage,
 } from '@inertiajs/vue3'
 
 import {
@@ -69,6 +70,7 @@ const props = defineProps({
     },
 
 })
+const page = usePage()
 
 
 /*
@@ -244,6 +246,17 @@ const showImport = (id) => {
         })
 
 }
+
+const openImportFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const importId = Number(url.searchParams.get('open_import'))
+    if (!importId) return
+    showImport(importId)
+    url.searchParams.delete('open_import')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
 </script>
 

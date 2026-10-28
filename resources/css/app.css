@@ -180,7 +180,39 @@ input.no-spinner {
 }
 
 html {
-    overflow-y: scroll;
+    overflow-x: hidden;
+}
+
+/* Keep every app scrollbar minimal and unobtrusive until its scroll area is used. */
+html * {
+    scrollbar-width: thin !important;
+    scrollbar-color: transparent transparent !important;
+}
+
+html *:hover,
+html *:focus-within {
+    scrollbar-color: #94a3b8 transparent !important;
+}
+
+html *::-webkit-scrollbar {
+    width: 4px !important;
+    height: 4px !important;
+}
+
+html *::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+html *::-webkit-scrollbar-thumb {
+    border: 0 !important;
+    border-radius: 9999px !important;
+    background: transparent !important;
+    transition: background-color 160ms ease;
+}
+
+html *:hover::-webkit-scrollbar-thumb,
+html *:focus-within::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
 }
 
 /* Custom Scrollbar nhỏ gọn */
@@ -194,12 +226,12 @@ html {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: transparent;
   border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: #94a3b8;
 }
 
 mark {

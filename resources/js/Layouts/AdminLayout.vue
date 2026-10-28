@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-<div class="h-screen w-screen overflow-hidden bg-slate-100/80 text-slate-900 flex flex-col font-sans antialiased select-none">
+<div class="h-dvh w-full max-w-full overflow-hidden bg-slate-100/80 text-slate-900 flex flex-col font-sans antialiased select-none">
 
     <!-- MOBILE OVERLAY CHO SIDEBAR -->
     <div

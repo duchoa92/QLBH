@@ -36,6 +36,7 @@ const quantity = computed({
             overflow-hidden
             h-9
             shrink-0
+            bg-white
         "
         :class="{
             'opacity-60':
@@ -47,6 +48,8 @@ const quantity = computed({
             :disabled="item.imei_id"
             class="
                 w-9
+                h-full
+                self-stretch
                 bg-gray-50
                 border-r
                 text-base
@@ -70,11 +73,16 @@ const quantity = computed({
             class="
                 quantity-input
                 w-20
+                h-full
                 text-center
                 border-none
+                bg-white
                 px-2
                 text-sm
                 font-semibold
+                outline-none
+                focus:outline-none
+                focus:ring-0
             "
         >
 
@@ -82,6 +90,8 @@ const quantity = computed({
             :disabled="item.imei_id"
             class="
                 w-9
+                h-full
+                self-stretch
                 bg-gray-50
                 border-l
                 text-base

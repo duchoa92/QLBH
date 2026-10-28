@@ -45,6 +45,8 @@ class SaleItem extends Model
         'warranty_value',
 
         'warranty_unit',
+
+        'warranty_note',
     ];
 
     protected $casts = [

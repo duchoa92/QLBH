@@ -1,12 +1,11 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Link, router } from '@inertiajs/vue3'
+import { router } from '@inertiajs/vue3'
 import { LoaderCircle, Search, X } from 'lucide-vue-next'
 import api from '@/Services/api'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 const emit = defineEmits(['selected'])
-
 const query = ref('')
 const results = ref([])
 const open = ref(false)
@@ -49,10 +48,6 @@ watch(query, value => {
     }, 180)
 })
 
-const closeIfOutside = event => {
-    if (!root.value?.contains(event.target)) open.value = false
-}
-
 const onKeydown = event => {
     if (event.key === 'Escape') {
         open.value = false
@@ -88,12 +83,17 @@ const setScannedCode = (code) => {
     open.value = true
 }
 
-onMounted(() => document.addEventListener('mousedown', closeIfOutside))
 onBeforeUnmount(() => {
     clearTimeout(timer)
     controller?.abort()
     document.removeEventListener('mousedown', closeIfOutside)
 })
+
+const closeIfOutside = event => {
+    if (!root.value?.contains(event.target)) open.value = false
+}
+
+onMounted(() => document.addEventListener('mousedown', closeIfOutside))
 </script>
 
 <template>
@@ -120,9 +120,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Popup kết quả: Đã fix left-0 right-0 w-full để nằm khớp dưới thanh search -->
-        <div 
-            v-if="open && query.trim().length >= 2" 
+        <!-- Popup kết quả tìm kiếm -->
+        <div
+            v-if="open && query.trim().length >= 2"
             class="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[70vh] w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150"
         >
             <div v-if="loading && !results.length" class="px-4 py-4 text-center text-xs font-medium text-slate-500">
@@ -135,10 +135,10 @@ onBeforeUnmount(() => {
                 <div class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     {{ results.length }} kết quả phù hợp
                 </div>
-                <Link
+                <a
                     v-for="(result, index) in results"
                     :key="`${result.type}-${result.url}-${index}`"
-                    :href="result.url"
+                    href="#"
                     class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition hover:bg-blue-50/80"
                     :class="{ 'bg-blue-50/80': activeIndex === index }"
                     @click.prevent="handleSelect(result.url)"
@@ -148,11 +148,12 @@ onBeforeUnmount(() => {
                         {{ result.type }}
                     </span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate text-xs font-bold text-slate-800 leading-tight">{{ result.label }}</span>
+                        <span class="block truncate text-xs font-bold leading-tight text-slate-800">{{ result.label }}</span>
                         <span v-if="result.detail" class="mt-0.5 block truncate text-[11px] text-slate-500">{{ result.detail }}</span>
                     </span>
-                </Link>
+                </a>
             </div>
         </div>
+
     </div>
 </template>

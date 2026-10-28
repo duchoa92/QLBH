@@ -13,10 +13,15 @@ const props = defineProps({ item: { type: Object, required: true } })
 const emit = defineEmits(['remove'])
 const activeEditor = ref(null)
 const draft = ref(null)
+const promotionError = ref('')
 
 const cloneItemForEditing = () => ({
     ...props.item,
-    gifts: (props.item.gifts || []).map(gift => ({ ...gift, imei_options: [...(gift.imei_options || [])] })),
+    gifts: (props.item.gifts || []).map(gift => ({
+        ...gift,
+        imei_options: [...(gift.imei_options || [])],
+        variant_options: [...(gift.variant_options || [])],
+    })),
     gift_keyword: '',
     gift_results: [],
 })
@@ -28,10 +33,11 @@ const openEditor = type => {
         const unit = props.item.customer_warranty_unit || (days > 0 && days % 30 === 0 ? 'month' : 'day')
         nextDraft.customer_warranty_unit = unit
         nextDraft.customer_warranty_value = props.item.customer_warranty_value ?? (days > 0 ? days / (unit === 'month' ? 30 : 1) : '')
-        nextDraft.customer_warranty_days = days || null
+        nextDraft.customer_warranty_days = days
     }
     if (type === 'promotion') nextDraft.showPromotion = true
     draft.value = nextDraft
+    promotionError.value = ''
     activeEditor.value = type
 }
 
@@ -63,23 +69,81 @@ const warrantyUnit = computed({
     },
 })
 
+const hasWarrantyDetails = computed(() => {
+    return Boolean(
+        draft.value?.customer_warranty_days
+        || draft.value?.customer_warranty_note?.trim()
+    )
+})
+const hasNote = computed(() => Boolean(draft.value?.note?.trim()))
+const hasGifts = computed(() => (draft.value?.gifts || []).length > 0)
+const hasPromotionDetails = computed(() => {
+    return hasGifts.value || Number(draft.value?.discount_value || 0) > 0
+})
+const incompleteGift = computed(() => (draft.value?.gifts || []).find(gift => {
+    return (gift.requires_imei && !gift.imei_id)
+        || (gift.requires_variant && !gift.variant_id)
+}))
+
 const { searchGiftProducts, selectGiftProduct, removeGift, deleteGift } = useCartGift()
 const { normalizeDiscount } = useCartDiscount()
 
 const saveEditor = () => {
     if (!draft.value) return
+    if (activeEditor.value === 'promotion' && incompleteGift.value) {
+        promotionError.value = incompleteGift.value.requires_imei
+            ? `Vui lòng chọn IMEI cho quà tặng ${incompleteGift.value.name}.`
+            : `Vui lòng chọn biến thể cho quà tặng ${incompleteGift.value.name}.`
+        return
+    }
+
+    promotionError.value = ''
     if (activeEditor.value === 'note') {
         props.item.note = draft.value.note || ''
     } else if (activeEditor.value === 'warranty') {
         props.item.customer_warranty_days = draft.value.customer_warranty_days
         props.item.customer_warranty_value = draft.value.customer_warranty_value
         props.item.customer_warranty_unit = draft.value.customer_warranty_unit
+        props.item.customer_warranty_note = draft.value.customer_warranty_note?.trim() || null
     } else if (activeEditor.value === 'promotion') {
-        props.item.gifts = draft.value.gifts.map(gift => ({ ...gift, imei_options: [...(gift.imei_options || [])] }))
+        props.item.gifts = draft.value.gifts.map(gift => ({
+            ...gift,
+            imei_options: [...(gift.imei_options || [])],
+            variant_options: [...(gift.variant_options || [])],
+        }))
         props.item.discount_type = draft.value.discount_type
         props.item.discount_value = draft.value.discount_value
     }
     closeEditor()
+}
+
+const clearWarranty = () => {
+    if (!draft.value) return
+
+    draft.value.customer_warranty_days = 0
+    draft.value.customer_warranty_value = null
+    draft.value.customer_warranty_unit = null
+    draft.value.customer_warranty_note = null
+    saveEditor()
+}
+
+const clearNote = () => {
+    if (!draft.value) return
+
+    draft.value.note = ''
+    saveEditor()
+}
+
+const clearPromotion = () => {
+    if (!draft.value) return
+
+    draft.value.gifts = []
+    draft.value.discount_type = null
+    draft.value.discount_value = 0
+    draft.value.gift_keyword = ''
+    draft.value.gift_results = []
+    promotionError.value = ''
+    saveEditor()
 }
 
 const editorTitle = computed(() => ({
@@ -105,7 +169,7 @@ const editorTitle = computed(() => ({
         </div>
 
         <Teleport to="body">
-        <div v-if="activeEditor" class="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm sm:p-4" style="padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom));" @click.self="closeEditor">
+        <div v-if="activeEditor" class="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm sm:p-4" style="padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom));">
             <section role="dialog" aria-modal="true" :aria-label="editorTitle" class="flex max-h-[calc(100dvh-24px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" style="max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);">
                 <header class="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
                     <div class="flex min-w-0 items-center gap-2.5">
@@ -125,27 +189,39 @@ const editorTitle = computed(() => ({
                 <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
                     <div v-if="activeEditor === 'note'" class="space-y-3">
                         <textarea v-model="draft.note" rows="4" autofocus placeholder="Nhập ghi chú cho sản phẩm..." class="w-full rounded-xl border border-slate-300 p-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-                        <button v-if="draft.note" type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-rose-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50" @click="draft.note = ''"><X class="h-4 w-4" />Xóa ghi chú</button>
                     </div>
 
-                    <div v-else-if="activeEditor === 'warranty'" class="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
-                        <label class="block text-xs font-bold text-emerald-900">Thời hạn bảo hành cho khách</label>
-                        <div class="flex items-center gap-2">
-                            <input v-model.number="warrantyValue" type="number" min="1" :max="maxWarrantyValue" step="1" aria-label="Thời hạn bảo hành" class="h-11 w-28 rounded-lg border border-emerald-200 bg-white px-3 text-center text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
-                            <select v-model="warrantyUnit" aria-label="Đơn vị thời hạn bảo hành" class="h-11 rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none"><option value="month">Tháng</option><option value="day">Ngày</option></select>
-                            <span class="min-w-0 flex-1 text-xs text-slate-500">{{ draft.customer_warranty_days ? `= ${draft.customer_warranty_days} ngày` : 'Không bảo hành' }}</span>
+                    <div v-else-if="activeEditor === 'warranty'" class="space-y-4">
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5">
+                            <div class="flex items-center justify-between gap-3">
+                                <label class="text-xs font-bold text-emerald-950">Thời hạn bảo hành cho khách</label>
+                                <span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="draft.customer_warranty_days ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-500'">{{ draft.customer_warranty_days ? `${draft.customer_warranty_days} ngày` : 'Chưa thiết lập' }}</span>
+                            </div>
+                            <div class="mt-2 flex h-11 overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm">
+                                <input v-model.number="warrantyValue" type="number" min="1" :max="maxWarrantyValue" step="1" placeholder="0" aria-label="Thời hạn bảo hành" class="min-w-0 flex-1 border-0 bg-white px-3 text-base font-bold text-slate-800 outline-none placeholder:font-medium placeholder:text-slate-400 focus:ring-0" />
+                                <select v-model="warrantyUnit" aria-label="Đơn vị thời hạn bảo hành" class="w-24 border-0 border-l border-emerald-100 bg-emerald-50 px-2 text-sm font-semibold text-emerald-900 outline-none focus:ring-0"><option value="month">Tháng</option><option value="day">Ngày</option></select>
+                            </div>
+                            <p class="mt-2 text-[11px] font-medium text-emerald-800/80">{{ draft.customer_warranty_days ? `Tương đương ${draft.customer_warranty_days} ngày bảo hành.` : 'Nhập số lượng và chọn đơn vị áp dụng.' }}</p>
                         </div>
-                        <button v-if="draft.customer_warranty_days" type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-rose-200 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50" @click="warrantyValue = ''"><X class="h-4 w-4" />Xóa bảo hành</button>
+
+                        <div>
+                            <label for="pos-warranty-note" class="mb-1.5 block text-xs font-bold text-slate-700">Ghi chú bảo hành</label>
+                            <textarea id="pos-warranty-note" v-model="draft.customer_warranty_note" rows="3" maxlength="1000" placeholder="Ví dụ: Không áp dụng với rơi vỡ, vào nước..." class="w-full resize-none rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                        </div>
                     </div>
 
                     <div v-else-if="activeEditor === 'promotion'" class="space-y-3">
-                        <CartItemGiftList v-if="draft.gifts.length" :gifts="draft.gifts" @remove="removeGift(draft, $event)" @delete="deleteGift(draft, $event)" />
                         <CartItemPromotion :item="draft" :search-gift-products="searchGiftProducts" :select-gift-product="selectGiftProduct" :normalize-discount="normalizeDiscount" />
+                        <p v-if="promotionError" role="alert" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{{ promotionError }}</p>
+                        <CartItemGiftList :gifts="draft.gifts" @remove="removeGift(draft, $event)" @delete="deleteGift(draft, $event)" />
                     </div>
                 </div>
 
                 <footer class="flex gap-2 border-t border-slate-100 p-3 sm:px-5">
-                    <button type="button" class="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="closeEditor">Hủy</button>
+                    <button v-if="activeEditor === 'warranty'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasWarrantyDetails" @click="clearWarranty"><X class="mr-1 inline h-4 w-4" />Xóa bảo hành</button>
+                    <button v-else-if="activeEditor === 'note'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasNote" @click="clearNote"><X class="mr-1 inline h-4 w-4" />Xóa ghi chú</button>
+                    <button v-else-if="activeEditor === 'promotion'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasPromotionDetails" @click="clearPromotion"><X class="mr-1 inline h-4 w-4" />Xóa</button>
+                    <button v-else type="button" class="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="closeEditor">Hủy</button>
                     <button type="button" class="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-blue-200 hover:bg-blue-700" @click="saveEditor">Lưu</button>
                 </footer>
             </section>

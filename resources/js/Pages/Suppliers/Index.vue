@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { ref, watch } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
 import { Plus, Search, SquarePen, Trash2 } from 'lucide-vue-next'
 import { formatMoney } from '@/utils/format'
 import { openModal } from '@/Stores/modal'
@@ -10,11 +10,13 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import SupplierForm from './Form.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
+import RecordDetailModal from '@/Components/RecordDetailModal.vue'
 
 const props = defineProps({
     suppliers: Object,
     filters: Object,
 })
+const page = usePage()
 
 const confirmBox = useConfirm()
 const search = ref(props.filters?.search ?? '')
@@ -72,6 +74,21 @@ const openEdit = (supplier) => {
     })
 }
 
+const openDetail = (supplier) => openModal(RecordDetailModal, {
+    props: { type: 'supplier', recordId: supplier.id },
+})
+
+const openDetailFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const supplierId = Number(url.searchParams.get('open_supplier'))
+    if (!supplierId) return
+    openDetail({ id: supplierId })
+    url.searchParams.delete('open_supplier')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
+
 const destroy = (supplier) => {
     confirmBox.show({
         title: 'Xác nhận xóa',
@@ -116,7 +133,7 @@ const destroy = (supplier) => {
                 </div>
             </template>
 
-            <BaseTable :data="suppliers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="router.visit(`/records/supplier/${$event.id}`)">
+            <BaseTable :data="suppliers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
                 <template #row="{ row }">
                     <td class="border-r p-2 font-medium text-slate-700">{{ row.code }}</td>
                     <td class="border-r p-2 font-semibold text-slate-900">{{ row.name }}</td>

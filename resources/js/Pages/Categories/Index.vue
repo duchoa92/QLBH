@@ -1,6 +1,6 @@
 <script setup>
-import { router } from '@inertiajs/vue3'
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -15,6 +15,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import CatalogTabs from '@/Components/CatalogTabs.vue'
+import RecordDetailModal from '@/Components/RecordDetailModal.vue'
 
 
 defineOptions({ layout: AdminLayout })
@@ -23,6 +24,7 @@ const props = defineProps({
     categories: Object,
     filters: Object
 })
+const page = usePage()
 
 const columns = [
     { key: 'id', label: 'ID', sortable: true, width: '60px' },
@@ -95,6 +97,17 @@ const openEdit = (item) => {
         onUpdated: loadData
     })
 }
+
+const openEditFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const categoryId = Number(url.searchParams.get('open_category'))
+    if (!categoryId) return
+    openModal(RecordDetailModal, { props: { type: 'category', recordId: categoryId } })
+    url.searchParams.delete('open_category')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, () => nextTick(openEditFromGlobalSearch), { immediate: true })
 
 /* ================= DELETE ================= */
 const destroy = (id) => {

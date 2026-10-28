@@ -15,6 +15,8 @@ class SaleItemGift extends Model
 
         'product_id',
 
+        'variant_id',
+
         'product_imei_id',
 
         'quantity',
@@ -50,5 +52,10 @@ class SaleItemGift extends Model
             ProductImei::class,
             'product_imei_id'
         );
+    }
+
+    public function variant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
     }
 }

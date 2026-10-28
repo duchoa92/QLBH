@@ -25,7 +25,7 @@ const props = defineProps({
                     item
                 )
             "
-            label="Tìm quà tặng hoặc IMEI"
+            label="Tìm quà"
         />
 
         <div

@@ -60,6 +60,8 @@ export function useCartGift() {
         const requiresImei =
             product.product_type === 'imei'
             || Boolean(product.manage_stock_by_serial)
+        const variantOptions = (product.variants || [])
+            .filter(variant => Number(variant.stock ?? 0) > 0)
 
         if (requiresImei) {
             try {
@@ -76,12 +78,34 @@ export function useCartGift() {
                     sku: product.sku,
                     quantity: 1,
                     requires_imei: true,
-                    imei_id: imeiOptions.length === 1 ? imeiOptions[0].id : null,
+                    imei_id: null,
                     imei_options: imeiOptions,
                 })
             } catch (error) {
                 console.error(error)
             }
+
+            item.gift_keyword = ''
+            item.gift_results = []
+
+            return
+        }
+
+        if (product.variants?.length) {
+            if (!variantOptions.length) {
+                return
+            }
+
+            item.gifts.push({
+                key: `gift-variant-${product.id}-${Date.now()}-${Math.random()}`,
+                id: product.id,
+                name: product.name,
+                sku: product.sku,
+                quantity: 1,
+                requires_variant: true,
+                variant_id: null,
+                variant_options: variantOptions,
+            })
 
             item.gift_keyword = ''
             item.gift_results = []

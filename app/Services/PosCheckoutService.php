@@ -300,6 +300,11 @@ class PosCheckoutService
                             ? $item['warranty_unit']
                             : null,
 
+                    'warranty_note' =>
+                        filled($item['warranty_note'] ?? null)
+                            ? trim($item['warranty_note'])
+                            : null,
+
                     'discount_amount' =>
                         $lineDiscount,
 
@@ -319,11 +324,36 @@ class PosCheckoutService
                         $giftRequiresImei =
                             $giftProduct->product_type === 'imei'
                             || (bool) $giftProduct->manage_stock_by_serial;
+                        $giftVariant = null;
 
                         if ($giftRequiresImei && empty($gift['imei_id'])) {
                             throw new \Exception(
                                 'Vui lòng chọn IMEI cho quà tặng ' . $giftProduct->name
                             );
+                        }
+
+                        if ($giftRequiresImei) {
+                            $giftImei = ProductImei::query()
+                                ->where('product_id', $giftProduct->id)
+                                ->findOrFail($gift['imei_id']);
+
+                            if ($giftImei->variant_id) {
+                                $giftVariant = ProductVariant::query()
+                                    ->where('product_id', $giftProduct->id)
+                                    ->where('is_active', true)
+                                    ->findOrFail($giftImei->variant_id);
+                            }
+                        } elseif ($giftProduct->variants()->where('is_active', true)->exists()) {
+                            if (empty($gift['variant_id'])) {
+                                throw new \Exception(
+                                    'Vui lòng chọn biến thể cho quà tặng ' . $giftProduct->name
+                                );
+                            }
+
+                            $giftVariant = ProductVariant::query()
+                                ->where('product_id', $giftProduct->id)
+                                ->where('is_active', true)
+                                ->findOrFail($gift['variant_id']);
                         }
 
                         if ($giftRequiresImei) {
@@ -333,6 +363,7 @@ class PosCheckoutService
                         SaleItemGift::create([
                             'sale_item_id' => $saleItem->id,
                             'product_id' => $gift['id'],
+                            'variant_id' => $giftVariant?->id,
                             'product_imei_id' => $gift['imei_id'] ?? null,
                             'quantity' => $giftQuantity,
                             'base_quantity' => $giftQuantity * $giftFactor,
@@ -467,13 +498,32 @@ class PosCheckoutService
                             continue;
                         }
 
+                        $giftVariant = null;
+
+                        if ($giftProduct->variants()->where('is_active', true)->exists()) {
+                            if (empty($gift['variant_id'])) {
+                                throw new \Exception(
+                                    'Vui lòng chọn biến thể cho quà tặng ' . $giftProduct->name
+                                );
+                            }
+
+                            $giftVariant = ProductVariant::query()
+                                ->lockForUpdate()
+                                ->where('product_id', $giftProduct->id)
+                                ->where('is_active', true)
+                                ->findOrFail($gift['variant_id']);
+                        }
+
                         if (! filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)
-                            && $giftProduct->stock < $giftBaseQuantity) {
+                            && ($giftVariant?->stock ?? $giftProduct->stock) < $giftBaseQuantity) {
                             throw new \Exception(
                                 'Quà tặng '
                                 . $giftProduct->name
                                 . ' không đủ tồn kho'
                             );
+                        }
+                        if ($giftVariant) {
+                            $giftVariant->decrement('stock', $giftBaseQuantity);
                         }
                         $giftProduct->decrement(
                             'stock',

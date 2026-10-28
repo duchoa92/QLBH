@@ -59,10 +59,12 @@ class PosController extends Controller
             'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'items.*.warranty_value' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'items.*.warranty_unit' => ['nullable', 'in:day,month'],
+            'items.*.warranty_note' => ['nullable', 'string', 'max:1000'],
             'items.*.note' => ['nullable', 'string', 'max:1000'],
             'items.*.gifts' => ['nullable', 'array'],
             'items.*.gifts.*.id' => ['required', 'integer', 'exists:products,id'],
             'items.*.gifts.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.gifts.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.gifts.*.imei_id' => ['nullable', 'integer', 'exists:product_imeis,id'],
             'items.*.unit_id' => ['nullable', 'integer', 'exists:units,id'],
             'items.*.unit_name' => ['nullable', 'string', 'max:100'],
@@ -296,6 +298,8 @@ class PosController extends Controller
 
             'items.*.warranty_unit' => 'nullable|in:day,month',
 
+            'items.*.warranty_note' => 'nullable|string|max:1000',
+
             'items.*.gift_product_id' => 'nullable|integer',
 
             'items.*.gifts' => 'nullable|array',
@@ -303,6 +307,8 @@ class PosController extends Controller
             'items.*.gifts.*.id' => 'required|integer|exists:products,id',
 
             'items.*.gifts.*.quantity' => 'nullable|integer|min:1',
+
+            'items.*.gifts.*.variant_id' => 'nullable|integer|exists:product_variants,id',
 
             'items.*.gifts.*.imei_id' => 'nullable|integer|exists:product_imeis,id',
 
@@ -381,6 +387,7 @@ class PosController extends Controller
                             'warranty_days' => $item->warranty_days,
                             'warranty_value' => $item->warranty_value,
                             'warranty_unit' => $item->warranty_unit,
+                            'warranty_note' => $item->warranty_note,
                             'warranty_expires_at' => $item->productImei?->customer_warranty_expires_at,
                             'variant' => $item->variant
                                 ? [

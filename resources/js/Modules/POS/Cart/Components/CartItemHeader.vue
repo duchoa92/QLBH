@@ -84,18 +84,18 @@ const emit = defineEmits([
                     {{ item.name }}
                 </div>
 
-                <div class="flex shrink-0 items-center gap-2">
-                    <button type="button" @click="emit('edit-note')" class="relative flex h-9 w-9 items-center justify-center rounded-lg transition" :class="noteCount ? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400 hover:bg-blue-50 hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
+                <div class="flex shrink-0 items-center gap-0">
+                    <button type="button" @click="emit('edit-note')" class="relative flex h-8 w-8 items-center justify-center rounded-lg transition" :class="noteCount ? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400 hover:bg-blue-50 hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
                         <PenSquare class="h-4 w-4" />
-                        <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-blue-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
+                        <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
                     </button>
-                    <button type="button" @click="emit('edit-promotion')" class="relative flex h-9 w-9 items-center justify-center rounded-lg transition" :class="giftCount || Number(item.discount_value || 0) ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-amber-50 hover:text-amber-600'" title="Quà tặng và giảm giá" aria-label="Quà tặng và giảm giá">
+                    <button type="button" @click="emit('edit-promotion')" class="relative flex h-8 w-8 items-center justify-center rounded-lg transition" :class="giftCount || Number(item.discount_value || 0) ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-amber-50 hover:text-amber-600'" title="Quà tặng và giảm giá" aria-label="Quà tặng và giảm giá">
                         <Gift class="h-4 w-4" />
-                        <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-amber-500 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
+                        <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
                     </button>
-                    <button type="button" @click="emit('edit-warranty')" class="relative flex h-9 w-9 items-center justify-center rounded-lg transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
+                    <button type="button" @click="emit('edit-warranty')" class="relative flex h-8 w-8 items-center justify-center rounded-lg transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
                         <ShieldCheck class="h-4 w-4" />
-                        <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-emerald-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
+                        <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
                     </button>
 
                     <button
@@ -105,7 +105,7 @@ const emit = defineEmits([
                                 'remove'
                             )
                         "
-                        class="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
+                        class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
                         title="Xóa sản phẩm"
                         aria-label="Xóa sản phẩm khỏi giỏ hàng"
                     >

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { History } from 'lucide-vue-next'
 
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import CartTable from '@/Modules/POS/Cart/Components/CartTable.vue'
@@ -42,13 +43,25 @@ const emit = defineEmits([
     <aside class="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-lg font-sans antialiased">
         <!-- Khối trên: Tab đơn hàng & Tìm/Chọn khách hàng -->
         <div class="shrink-0 border-b border-slate-100 bg-white p-3 space-y-2.5">
-            <CartTabs
-                :tabs="tabs"
-                :active-tab-id="activeTabId"
-                @select="$emit('select-tab', $event)"
-                @create="$emit('create-tab')"
-                @remove="$emit('remove-tab', $event)"
-            />
+            <div class="flex min-w-0 items-center gap-2">
+                <div class="min-w-0 flex-1">
+                    <CartTabs
+                        :tabs="tabs"
+                        :active-tab-id="activeTabId"
+                        @select="$emit('select-tab', $event)"
+                        @create="$emit('create-tab')"
+                        @remove="$emit('remove-tab', $event)"
+                    />
+                </div>
+                <button
+                    type="button"
+                    class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700"
+                    @click="showSaleHistory = true"
+                >
+                    <History class="h-3.5 w-3.5" />
+                    <span>Lịch sử đơn</span>
+                </button>
+            </div>
             
             <CustomerSection
                 :customer="selectedCustomer"
@@ -86,7 +99,6 @@ const emit = defineEmits([
                 :selected-customer="selectedCustomer"
                 :loading="loading"
                 @checkout="$emit('checkout', $event)"
-                @show-sale-history="showSaleHistory = true"
             />
         </div>
     </aside>

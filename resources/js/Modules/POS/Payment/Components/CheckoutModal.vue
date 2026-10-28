@@ -307,10 +307,11 @@ const startBankPayment = async () => {
             warranty_days: item.customer_warranty_days ?? item.warranty_days ?? null,
             warranty_value: item.customer_warranty_value ?? null,
             warranty_unit: item.customer_warranty_unit ?? null,
+            warranty_note: item.customer_warranty_note ?? null,
             note: item.note,
             discount_type: item.discount_type ?? null,
             discount_value: Number(item.discount_value ?? 0),
-            gifts: (item.gifts ?? []).map(gift => ({ id: gift.id, quantity: gift.quantity, imei_id: gift.imei_id ?? null })),
+            gifts: (item.gifts ?? []).map(gift => ({ id: gift.id, quantity: gift.quantity, variant_id: gift.variant_id ?? null, imei_id: gift.imei_id ?? null })),
         }))
         const { data } = await axios.post(route('pos.bank-payments.start'), {
             items,

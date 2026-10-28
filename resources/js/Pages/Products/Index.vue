@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
 import ProductImeisModal from './ProductImeisModal.vue'
@@ -40,6 +40,7 @@ const { categories, brands, units } = useReferenceData({
 })
 
 const confirmBox = useConfirm()
+const page = usePage()
 
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id || '')
@@ -189,6 +190,21 @@ const openTrash = () => {
 }
 
 
+const openFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const productId = Number(url.searchParams.get('open_product'))
+    const imeiProductId = Number(url.searchParams.get('open_imei_product'))
+    if (!productId && !imeiProductId) return
+
+    if (productId) openProductDetail({ id: productId })
+    else openImeiList({ id: imeiProductId })
+
+    url.searchParams.delete('open_product')
+    url.searchParams.delete('open_imei_product')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, () => nextTick(openFromGlobalSearch), { immediate: true })
 onMounted(loadTrashCount)
 
 /* ================= SELECT ================= */

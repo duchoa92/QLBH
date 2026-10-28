@@ -14,12 +14,13 @@ use App\Models\Supplier;
 use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RecordDetailController extends Controller
 {
-    public function show(Request $request, string $type, int $id): Response
+    public function show(Request $request, string $type, int $id): Response|JsonResponse
     {
         $permission = match ($type) {
             'product', 'imei' => 'products.view',
@@ -49,6 +50,10 @@ class RecordDetailController extends Controller
             'unit' => $this->unit($id),
             'user' => $this->user($id),
         };
+
+        if ($request->expectsJson()) {
+            return response()->json(compact('type', 'title', 'subtitle', 'rows'));
+        }
 
         return Inertia::render('Records/Show', compact('type', 'title', 'subtitle', 'rows'));
     }

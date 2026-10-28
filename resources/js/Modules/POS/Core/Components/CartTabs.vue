@@ -16,7 +16,7 @@ const emit = defineEmits(['select', 'create', 'remove'])
 </script>
 
 <template>
-    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+    <div class="cart-tabs-scroll flex w-full items-center gap-1.5 overflow-x-auto pb-2">
         <!-- Danh sách các tab đơn hàng -->
         <button
             v-for="(tab, index) in tabs"
@@ -56,12 +56,21 @@ const emit = defineEmits(['select', 'create', 'remove'])
 </template>
 
 <style scoped>
-/* Ẩn thanh cuộn cho danh sách tab */
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
+.cart-tabs-scroll {
+    scrollbar-color: #94a3b8 transparent;
+    scrollbar-width: thin;
 }
-.no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+
+.cart-tabs-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.cart-tabs-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.cart-tabs-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: #94a3b8;
 }
 </style>

@@ -1,11 +1,13 @@
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { router, useForm } from '@inertiajs/vue3'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { router, useForm, usePage } from '@inertiajs/vue3'
 import { useConfirm } from '@/Composables/useConfirm'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import RecordDetailModal from '@/Components/RecordDetailModal.vue'
+import { openModal as openGlobalModal } from '@/Stores/modal'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -35,6 +37,7 @@ const props = defineProps({
     schedule: { type: Object, default: () => ({}) },
     restore_preview: { type: Object, default: null },
 })
+const page = usePage()
 
 const activeModal = ref(null)
 const confirmBox = useConfirm()
@@ -491,6 +494,17 @@ const unitDisplayName = (unit) =>
     unit?.short_name
         ? `${unit.name} (${unit.short_name})`
         : unit?.name
+
+const openUnitDetailFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const unitId = Number(url.searchParams.get('open_unit'))
+    if (!unitId) return
+    openGlobalModal(RecordDetailModal, { props: { type: 'unit', recordId: unitId } })
+    url.searchParams.delete('open_unit')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediate: true })
 </script>
 
 <template>

@@ -3,7 +3,7 @@
 import FloatingInput
 from '@/Components/UI/FloatingInput.vue'
 import { formatNumber } from '@/utils/format'
-import { Trash2 } from 'lucide-vue-next'
+import { CircleX } from 'lucide-vue-next'
 
 defineProps({
 
@@ -76,23 +76,23 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
             @click="item.discount_value = 0; item.discount_type = null"
             class="
                 absolute
-                right-9
-                top-0
-                bottom-0
+                right-10
+                top-1/2
                 flex
-                h-9
-                w-9
+                h-8
+                w-8
+                -translate-y-1/2
                 items-center
                 justify-center
-                border-l
-                bg-rose-50
+                rounded-md
+                bg-rose-50/80
                 text-rose-600
                 hover:bg-rose-100
             "
             title="Xóa giảm giá"
             aria-label="Xóa giảm giá"
         >
-            <Trash2 class="h-4 w-4" />
+            <CircleX class="h-4 w-4" />
         </button>
 
         <button
@@ -104,16 +104,22 @@ const handleDiscountInput = (item, event, normalizeDiscount) => {
             "
             class="
                 absolute
-                right-0
-                top-0
-                bottom-0
-                px-1
-                min-w-9
-                border-l
-                bg-transparent
+                right-1
+                top-1/2
+                flex
+                h-8
+                w-8
+                -translate-y-1/2
+                items-center
+                justify-center
+                rounded-md
                 text-sm
-                font-medium
+                font-extrabold
+                shadow-sm
             "
+            :class="item.discount_type === 'percent'
+                ? 'bg-amber-500 text-white hover:bg-amber-600'
+                : 'bg-blue-600 text-white hover:bg-blue-700'"
         >
             {{ item.discount_type === 'percent' ? '%' : $currency() }}
         </button>

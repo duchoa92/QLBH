@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import { Plus, Search, SquarePen } from 'lucide-vue-next'
 import { openModal } from '@/Stores/modal'
 import { formatMoney } from '@/utils/format'
@@ -9,11 +9,13 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import CustomerFormModal from './CustomerFormModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
+import RecordDetailModal from '@/Components/RecordDetailModal.vue'
 
 const props = defineProps({
     customers: Object,
     filters: Object,
 })
+const page = usePage()
 
 const search = ref(props.filters.search || '')
 const columns = [
@@ -71,6 +73,21 @@ const openEdit = (customer) => {
     })
 }
 
+const openDetail = (customer) => openModal(RecordDetailModal, {
+    props: { type: 'customer', recordId: customer.id },
+})
+
+const openDetailFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const customerId = Number(url.searchParams.get('open_customer'))
+    if (!customerId) return
+    openDetail({ id: customerId })
+    url.searchParams.delete('open_customer')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
+
 </script>
 
 <template>
@@ -99,7 +116,7 @@ const openEdit = (customer) => {
                 </div>
             </template>
 
-            <BaseTable :data="customers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="router.visit(`/records/customer/${$event.id}`)">
+            <BaseTable :data="customers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
                 <template #row="{ row }">
                     <td class="border-r p-2 font-medium text-slate-700">{{ row.code }}</td>
                     <td class="border-r p-2 font-semibold text-slate-900">{{ row.full_name }}</td>

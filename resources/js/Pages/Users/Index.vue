@@ -1,6 +1,6 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import { Head, router } from '@inertiajs/vue3'
+import { Head, router, usePage } from '@inertiajs/vue3'
 import { Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -11,6 +11,7 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import UserFormModal from './FormModal.vue'
 import RoleManagementDialog from './RoleManagementDialog.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
+import RecordDetailModal from '@/Components/RecordDetailModal.vue'
 
 const props = defineProps({
     users: Object,
@@ -26,6 +27,7 @@ const props = defineProps({
     can_delete_users: { type: Boolean, default: false },
     filters: { type: Object, default: () => ({ search: '' }) },
 })
+const page = usePage()
 
 const confirmBox = useConfirm()
 const showRoleManager = ref(false)
@@ -102,6 +104,21 @@ const openEdit = (user) => {
     })
 }
 
+const openDetail = (user) => openModal(RecordDetailModal, {
+    props: { type: 'user', recordId: user.id },
+})
+
+const openDetailFromGlobalSearch = () => {
+    const url = new URL(window.location.href)
+    const userId = Number(url.searchParams.get('open_user'))
+    if (!userId) return
+    openDetail({ id: userId })
+    url.searchParams.delete('open_user')
+    window.history.replaceState(window.history.state, '', url)
+}
+
+watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
+
 const destroy = (user) => {
     confirmBox.show({
         title: 'Xác nhận xóa',
@@ -153,7 +170,7 @@ const destroy = (user) => {
                     </div>
                 </template>
 
-                <BaseTable :data="users" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="router.visit(`/records/user/${$event.id}`)">
+                <BaseTable :data="users" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
                     <template #row="{ row }">
                         <td class="border-r p-2 font-medium text-slate-700">{{ row.id }}</td>
                         <td class="border-r p-2 font-semibold text-slate-900">{{ row.name }}</td>
