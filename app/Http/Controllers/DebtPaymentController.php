@@ -10,6 +10,7 @@ use App\Models\Sale;
 use App\Models\StockImport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -25,6 +26,44 @@ class DebtPaymentController extends Controller
     public function suppliers(Request $request): Response
     {
         return $this->index($request, 'supplier');
+    }
+
+    public function customerOrderDetail(Sale $sale): JsonResponse
+    {
+        abort_unless($sale->status === 'completed', 404);
+
+        $sale->load([
+            'customer:id,full_name,code,phone',
+            'user:id,name',
+            'items.product.conversionUnit',
+            'items.variant',
+            'items.productImei',
+            'items.gifts.product',
+            'items.gifts.productImei',
+        ]);
+        $sale->setAttribute('old_debt_paid', (float) CustomerDebt::query()
+            ->where('source_type', Sale::class)
+            ->where('source_id', $sale->id)
+            ->where('type', 'decrease')
+            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
+            ->sum('amount'));
+
+        return response()->json($sale);
+    }
+
+    public function supplierOrderDetail(StockImport $stockImport): JsonResponse
+    {
+        abort_unless($stockImport->supplier_id, 404);
+
+        $stockImport->load([
+            'supplier:id,name,code,phone',
+            'user:id,name',
+            'items.product.conversionUnit',
+            'items.variant',
+            'items.unit',
+        ]);
+
+        return response()->json($stockImport);
     }
 
     private function index(Request $request, string $entity): Response
@@ -51,21 +90,23 @@ class DebtPaymentController extends Controller
 
         $partyIds = collect($rows->items())->pluck('id');
         $orders = $isCustomer
-            ? Sale::query()->with('customer:id,full_name,code,phone')->whereIn('customer_id', $partyIds)->where('status', 'completed')
+            ? Sale::query()->withSum(['customerDebtEntries as old_debt_paid' => fn ($debtQuery) => $debtQuery
+                    ->where('type', 'decrease')->where('note', 'like', 'Trích tiền thừa hóa đơn%')], 'amount')
+                ->with('customer:id,full_name,code,phone')->whereIn('customer_id', $partyIds)->where('status', 'completed')
                 ->whereRaw('grand_total > paid_amount')->orderBy('created_at')->get()
                 ->map(fn (Sale $sale) => [
                     'id' => $sale->id, 'code' => $sale->code, 'party_id' => $sale->customer_id,
                     'party_name' => $sale->customer?->full_name, 'date' => $sale->created_at?->format('d/m/Y H:i'),
                     'total' => (float) $sale->grand_total, 'paid' => (float) $sale->paid_amount,
-                    'due' => max(0, (float) $sale->grand_total - (float) $sale->paid_amount), 'href' => route('sales.show', $sale),
+                    'due' => max(0, (float) $sale->grand_total - (float) $sale->paid_amount),
                 ])->values()
-            : StockImport::query()->with('supplier:id,name,code,phone')->whereIn('supplier_id', $partyIds)
+            : StockImport::query()->with(['supplier:id,name,code,phone'])->whereIn('supplier_id', $partyIds)
                 ->whereRaw('grand_total > paid_amount')->orderBy('import_date')->get()
                 ->map(fn (StockImport $import) => [
                     'id' => $import->id, 'code' => $import->code, 'party_id' => $import->supplier_id,
                     'party_name' => $import->supplier?->name, 'date' => $import->import_date?->format('d/m/Y H:i'),
                     'total' => (float) $import->grand_total, 'paid' => (float) $import->paid_amount,
-                    'due' => max(0, (float) $import->grand_total - (float) $import->paid_amount), 'href' => route('stock.show', $import),
+                    'due' => max(0, (float) $import->grand_total - (float) $import->paid_amount),
                 ])->values();
 
         // Chỉ phân bổ tối đa bằng dư nợ hiện tại của từng khách/NCC. Khoản
@@ -118,10 +159,12 @@ class DebtPaymentController extends Controller
         }
 
         $history = $isCustomer
-            ? CustomerDebt::query()->with('customer:id,full_name,code')->where('type', 'decrease')->whereNotNull('payment_method')->latest()->limit(100)->get()
-                ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof Sale ? route('sales.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
+            ? CustomerDebt::query()->with('customer:id,full_name,code')->where('type', 'decrease')
+                ->where(fn ($query) => $query->whereNotNull('payment_method')->orWhere('note', 'like', 'Trích tiền thừa hóa đơn%'))
+                ->latest()->limit(100)->get()
+                ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'order_id' => $payment->source instanceof Sale ? $payment->source_id : null, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
             : SupplierDebt::query()->with('supplier:id,name,code')->where('type', 'decrease')->latest()->limit(100)->get()
-                ->map(fn (SupplierDebt $payment) => ['id' => $payment->id, 'party' => $payment->supplier?->name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof StockImport ? route('stock.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')]);
+                ->map(fn (SupplierDebt $payment) => ['id' => $payment->id, 'order_id' => $payment->source instanceof StockImport ? $payment->source_id : null, 'party' => $payment->supplier?->name, 'code' => $payment->source?->code, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')]);
 
         return Inertia::render('Debts/Index', [
             'entity' => $entity,

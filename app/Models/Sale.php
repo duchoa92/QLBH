@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use App\Models\SaleItem;
 
 class Sale extends Model
@@ -36,6 +37,11 @@ class Sale extends Model
         return $this->hasMany(
             SaleItem::class
         );
+    }
+
+    public function customerDebtEntries(): MorphMany
+    {
+        return $this->morphMany(CustomerDebt::class, 'source');
     }
 
     // Khách hàng

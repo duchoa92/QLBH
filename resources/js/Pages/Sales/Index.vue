@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import {
     Search,
@@ -86,15 +86,36 @@ const printFrameUrl = ref('')
 const printFrameKey = ref(0)
 
 watch(() => props.selectedSale, (sale) => {
-    detailSale.value = sale || null
+    const saleIdInUrl = new URL(window.location.href).searchParams.get('open_sale')
+    detailSale.value = sale && String(sale.id) === saleIdInUrl ? sale : null
 }, { immediate: true })
+
+const syncSaleDetailFromUrl = () => {
+    const saleId = new URL(window.location.href).searchParams.get('open_sale')
+    if (!saleId) detailSale.value = null
+    else if (String(detailSale.value?.id) !== saleId) {
+        detailSale.value = props.sales?.data?.find(sale => String(sale.id) === saleId) || props.selectedSale || null
+    }
+}
+window.addEventListener('popstate', syncSaleDetailFromUrl)
+onBeforeUnmount(() => window.removeEventListener('popstate', syncSaleDetailFromUrl))
 
 const closeSaleDetail = () => {
     detailSale.value = null
     const url = new URL(window.location.href)
     if (!url.searchParams.has('open_sale')) return
     url.searchParams.delete('open_sale')
-    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true })
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+const openSaleDetail = (sale) => {
+    if (!sale?.id) return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('open_sale') !== String(sale.id)) {
+        url.searchParams.set('open_sale', String(sale.id))
+        window.history.pushState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+    detailSale.value = sale
 }
 
 // --- QUẢN LÝ SORTING (SẮP XẾP BẢNG) ---
@@ -448,7 +469,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             :key="sale.id"
                             class="cursor-pointer transition-colors hover:bg-emerald-50/70"
                             title="Bấm vào dòng để xem thông tin hóa đơn"
-                            @click="detailSale = sale"
+                            @click="openSaleDetail(sale)"
                         >
                             <!-- 1. Mã HD (CLICK XEM CHI TIẾT) -->
                             <td class="px-3.5 py-2.5">

@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
+import { router } from '@inertiajs/vue3'
 
 import CustomerTabs from './Partials/CustomerTabs.vue'
 import { imageUrl } from '@/utils/imageUrl'
@@ -16,7 +17,28 @@ const tabs = [
     'Hình ảnh',
 ]
 
-const activeTab = ref('Tổng quan')
+const tabKeys = {
+    overview: 'Tổng quan',
+    devices: 'Thiết bị',
+    points: 'Điểm',
+    debts: 'Công nợ',
+    images: 'Hình ảnh',
+}
+const readActiveTab = () => tabKeys[new URL(window.location.href).searchParams.get('tab')] || 'Tổng quan'
+const activeTab = ref(readActiveTab())
+
+const selectTab = (label) => {
+    const key = Object.keys(tabKeys).find(candidate => tabKeys[candidate] === label)
+    if (!key || activeTab.value === label) return
+    activeTab.value = label
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', key)
+    router.push({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true })
+}
+
+const restoreTabFromUrl = () => { activeTab.value = readActiveTab() }
+window.addEventListener('popstate', restoreTabFromUrl)
+onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
 </script>
 
 <template>
@@ -60,7 +82,7 @@ const activeTab = ref('Tổng quan')
         <CustomerTabs
             :tabs="tabs"
             :active-tab="activeTab"
-            @change="activeTab = $event"
+            @change="selectTab"
         />
 
         <!-- TAB CONTENT -->

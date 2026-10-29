@@ -7,7 +7,7 @@ import ProductImeisModal from './ProductImeisModal.vue'
 import ProductDetailModal from './ProductDetailModal.vue'
 import { ArrowUpDown, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
-import { openModal } from '@/Stores/modal'
+import { openModal, registerUrlModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -157,8 +157,11 @@ const openEdit = (item) => {
 const openProductDetail = (item) => {
     openModal(ProductDetailModal, {
         props: { productId: item.id, productName: item.name },
+        deepLink: { type: 'product', id: item.id },
     })
 }
+
+registerUrlModal('product', ProductDetailModal, id => ({ productId: id }))
 
 
 /* ================= TRASH ================= */
@@ -196,12 +199,14 @@ const openFromGlobalSearch = () => {
     const imeiProductId = Number(url.searchParams.get('open_imei_product'))
     if (!productId && !imeiProductId) return
 
-    if (productId) openProductDetail({ id: productId })
-    else openImeiList({ id: imeiProductId })
-
     url.searchParams.delete('open_product')
     url.searchParams.delete('open_imei_product')
-    window.history.replaceState(window.history.state, '', url)
+    router.replace({
+        url: `${url.pathname}${url.search}${url.hash}`,
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: () => productId ? openProductDetail({ id: productId }) : openImeiList({ id: imeiProductId }),
+    })
 }
 
 watch(() => page.url, () => nextTick(openFromGlobalSearch), { immediate: true })

@@ -317,8 +317,10 @@ Route::middleware(['auth'])->group(function () {
         ->middlewareFor(['edit', 'update'], 'permission:customers.edit')
         ->middlewareFor('destroy', 'permission:customers.delete');
     Route::get('/debts/customers', [DebtPaymentController::class, 'customers'])->middleware('permission:customer_debts.view')->name('debts.customers');
+    Route::get('/debts/customers/orders/{sale}', [DebtPaymentController::class, 'customerOrderDetail'])->middleware('permission:customer_debts.view')->name('debts.customers.orders.show');
     Route::post('/debts/customers/{customer}/payments', [DebtPaymentController::class, 'receiveCustomerPayment'])->middleware('permission:customer_debts.pay')->name('debts.customers.payments');
     Route::get('/debts/suppliers', [DebtPaymentController::class, 'suppliers'])->middleware('permission:supplier_debts.view')->name('debts.suppliers');
+    Route::get('/debts/suppliers/orders/{stockImport}', [DebtPaymentController::class, 'supplierOrderDetail'])->middleware('permission:supplier_debts.view')->name('debts.suppliers.orders.show');
     Route::post('/debts/suppliers/{supplier}/payments', [DebtPaymentController::class, 'paySupplier'])->middleware('permission:supplier_debts.pay')->name('debts.suppliers.payments');
     Route::get('/expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses.view')->name('expenses.index');
     Route::post('/expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses.manage')->name('expenses.store');

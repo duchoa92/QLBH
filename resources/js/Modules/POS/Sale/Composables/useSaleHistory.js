@@ -5,11 +5,19 @@ export function useSaleHistory() {
 
     const invoices = ref([])
 
-    const search = ref('')
-
     const currentPage = ref(1)
 
     const lastPage = ref(1)
+
+    const total = ref(0)
+
+    const from = ref(0)
+
+    const to = ref(0)
+
+    const perPage = ref(10)
+
+    const filters = ref({ search: '', status: '', date_from: '', date_to: '' })
 
     const loading = ref(false)
 
@@ -18,22 +26,14 @@ export function useSaleHistory() {
     const showDetail = ref(false)
 
     // Phân trang
-    const loadInvoices = async (
-        page = 1
-    ) => {
+    const loadInvoices = async (page = 1) => {
 
         try {
 
             loading.value = true
 
             const response =
-                await saleService.getSales({
-
-                    page,
-
-                    search:
-                        search.value,
-                })
+                await saleService.getSales({ page, per_page: perPage.value, ...filters.value })
 
             invoices.value =
                 response.data.data
@@ -43,6 +43,10 @@ export function useSaleHistory() {
 
             lastPage.value =
                 response.data.last_page
+
+            total.value = response.data.total || 0
+            from.value = response.data.from || 0
+            to.value = response.data.to || 0
 
         } catch (error) {
 
@@ -54,44 +58,28 @@ export function useSaleHistory() {
         }
     }
 
-    // Chuyển trang
-    const changePage = async (
-        page
-    ) => {
-
-        if (
-            page < 1 ||
-            page > lastPage.value
-        ) {
-            return
-        }
-
-        await loadInvoices(page)
-    }
-
-    // hàm tìm kiếm
-    const searchInvoices = async () => {
-
-        await loadInvoices(1)
-    }
-
-
-
-    const openInvoice = async (id) => {
+    const fetchInvoice = async (id) => {
 
         try {
 
             const response =
                 await saleService.getSale(id)
 
-            selectedInvoice.value =
-                response.data
-
-            showDetail.value = true
+            return response.data
 
         } catch (error) {
 
             console.error(error)
+            return null
+        }
+    }
+
+    const openInvoice = async (id) => {
+
+        selectedInvoice.value = await fetchInvoice(id)
+
+        if (selectedInvoice.value) {
+            showDetail.value = true
         }
     }
 
@@ -99,13 +87,21 @@ export function useSaleHistory() {
 
         invoices,
 
-        search,
-
         loading,
 
         currentPage,
 
         lastPage,
+
+        total,
+
+        from,
+
+        to,
+
+        perPage,
+
+        filters,
 
         selectedInvoice,
 
@@ -113,9 +109,7 @@ export function useSaleHistory() {
 
         loadInvoices,
 
-        searchInvoices,
-
-        changePage,
+        fetchInvoice,
 
         openInvoice,
     }

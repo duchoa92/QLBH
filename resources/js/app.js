@@ -27,6 +27,31 @@ if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname
 const app = createApp({})
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
+const pageTitleFor = (page) => {
+    const titles = {
+        Dashboard: 'Dashboard',
+        'Products/Index': 'Sản phẩm', 'Products/Form': 'Thông tin sản phẩm', 'Products/Show': 'Chi tiết sản phẩm',
+        'ProductImeis/Index': 'IMEI', 'ProductImeis/Lookup': 'Tra cứu IMEI', 'ProductImeis/Show': 'Chi tiết IMEI',
+        'Categories/Index': 'Danh mục', 'Categories/Form': 'Thông tin danh mục', 'Brands/Index': 'Thương hiệu',
+        'Customers/Index': 'Khách hàng', 'Customers/Create': 'Thêm khách hàng', 'Customers/Edit': 'Sửa khách hàng', 'Customers/Show': 'Chi tiết khách hàng',
+        'Sales/Index': 'Hóa đơn bán hàng', 'Sales/Show': 'Chi tiết hóa đơn', 'Sales/Edit': 'Sửa hóa đơn', 'Sales/Receipt': 'Hóa đơn bán hàng',
+        'StockImports/Index': 'Nhập hàng', 'StockImports/List': 'Phiếu nhập hàng', 'StockImports/Show': 'Chi tiết phiếu nhập',
+        'Suppliers/Index': 'Nhà cung cấp', 'Suppliers/Create': 'Thêm nhà cung cấp', 'Suppliers/Edit': 'Sửa nhà cung cấp',
+        'Repairs/Index': 'Sửa chữa thiết bị', 'Users/Index': 'Nhân viên', 'Users/Create': 'Thêm nhân viên', 'Users/Edit': 'Sửa nhân viên',
+        'Users/RoleManagement': 'Phân quyền', 'Debts/Index': 'Quản lý công nợ', 'Expenses/Index': 'Chi phí cửa hàng',
+        'Taxes/Index': 'Khai thuế', 'Reports/Index': 'Báo cáo & Thống kê', 'WorkShifts/History': 'Lịch sử kiểm kê',
+        'Settings/Index': 'Thiết lập', 'Backups/Index': 'Sao lưu dữ liệu', 'Profile/Edit': 'Tài khoản cá nhân',
+        'Pos/Index': 'POS bán hàng', 'Pos/SaleInvoice': 'Hóa đơn POS', 'Auth/Login': 'Đăng nhập', 'Auth/Register': 'Đăng ký',
+        'Auth/ForgotPassword': 'Quên mật khẩu', 'Auth/ResetPassword': 'Đặt lại mật khẩu', 'Auth/VerifyEmail': 'Xác minh email',
+        'Auth/ConfirmPassword': 'Xác nhận mật khẩu', 'Setup/Index': 'Thiết lập ban đầu', 'Welcome': 'Trang chủ',
+    }
+    const title = page?.props?.title || titles[page?.component]
+        || page?.component?.split('/').at(-1)?.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        || 'Dashboard'
+    const shopName = page?.props?.settings?.shop_name
+    return `${title} - ${shopName || appName}`
+}
+
  // ❗ CHẶN ĐĂNG KÝ NHIỀU LẦN
 if (!window._inertiaToastRegistered) {
 
@@ -210,9 +235,11 @@ createInertiaApp({
             printStyle.textContent = `@media print { :root { --configured-receipt-width: ${receiptWidth}; } @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: var(--configured-receipt-width) !important; } }`
         }
         applyPageSettings(props.initialPage)
+        document.title = pageTitleFor(props.initialPage)
         router.on('navigate', (event) => {
             const currentPage = event.detail.page
             applyPageSettings(currentPage)
+            document.title = pageTitleFor(currentPage)
             navigator.serviceWorker?.controller?.postMessage({
                 type: 'CACHE_OFFLINE_PAGE',
                 page: currentPage,

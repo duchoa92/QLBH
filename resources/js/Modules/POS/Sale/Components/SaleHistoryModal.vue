@@ -21,15 +21,15 @@ const emit = defineEmits([
 
 <div
     v-if="show"
-    class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4"
 >
 
     <div
-        class="bg-white w-[1000px] h-[80vh] rounded-xl overflow-hidden"
+        class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
     >
 
         <div
-            class="flex justify-between items-center p-4 border-b"
+            class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3"
         >
 
             <h2 class="font-bold text-lg">
@@ -38,14 +38,16 @@ const emit = defineEmits([
 
             <button
                 @click="emit('close')"
-                class="text-red-500 font-bold"
+                type="button"
+                aria-label="Đóng lịch sử giao dịch"
+                class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800"
             >
                 X
             </button>
 
         </div>
 
-        <div class="h-[calc(90vh-65px)] overflow-auto">
+        <div class="min-h-0 flex-1 overflow-auto">
 
             <InvoiceList />
 

@@ -4,7 +4,7 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { openModal } from '@/Stores/modal'
+import { openModal, registerUrlModal } from '@/Stores/modal'
 import CategoryForm from './Form.vue'
 import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -102,10 +102,11 @@ const openEditFromGlobalSearch = () => {
     const url = new URL(window.location.href)
     const categoryId = Number(url.searchParams.get('open_category'))
     if (!categoryId) return
-    openModal(RecordDetailModal, { props: { type: 'category', recordId: categoryId } })
     url.searchParams.delete('open_category')
-    window.history.replaceState(window.history.state, '', url)
+    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true, onSuccess: () => openModal(RecordDetailModal, { props: { type: 'category', recordId: categoryId }, deepLink: { type: 'category', id: categoryId } }) })
 }
+
+registerUrlModal('category', RecordDetailModal, id => ({ type: 'category', recordId: id }))
 
 watch(() => page.url, () => nextTick(openEditFromGlobalSearch), { immediate: true })
 

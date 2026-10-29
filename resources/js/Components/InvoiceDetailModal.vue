@@ -153,7 +153,7 @@ const balanceText = computed(() => {
     if (!props.invoice || isCancelled.value) return null
 
     const total = Number(saleTotal.value || 0)
-    const paid = Number(props.invoice.paid_amount || 0)
+    const paid = Math.max(0, Number(props.invoice.paid_amount || 0) - Number(props.invoice.old_debt_paid || 0))
     const balance = paid - total
 
     if (balance < 0) {
@@ -173,9 +173,9 @@ const balanceText = computed(() => {
     }
 
     return {
-        label: 'Thanh toán đủ',
-        value: 0,
-        class: 'text-slate-600',
+        label: 'Đã thanh toán đủ',
+        value: null,
+        class: 'text-emerald-700',
     }
 })
 
@@ -336,7 +336,7 @@ const cancelReason = computed(() =>
                                                     ? `Bảo hành đến ${warrantyEndDate(item)}`
                                                     : 'Không áp dụng bảo hành' }}
                                                 </span>
-                                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click="toggleWarrantyNote(item)">
+                                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click.stop="toggleWarrantyNote(item)">
                                                     <MessageSquare :size="14" />
                                                 </button>
                                             </div>
@@ -344,7 +344,7 @@ const cancelReason = computed(() =>
                                                 <span v-if="item.warranty_days !== null && item.warranty_days !== undefined" class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold" :class="Number(item.warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
                                                     {{ Number(item.warranty_days) > 0 && warrantyEndDate(item) ? `Bảo hành đến ${warrantyEndDate(item)}` : 'Không áp dụng bảo hành' }}
                                                 </span>
-                                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click="toggleWarrantyNote(item)">
+                                                <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click.stop="toggleWarrantyNote(item)">
                                                     <MessageSquare :size="14" />
                                                 </button>
                                             </div>
@@ -477,8 +477,13 @@ const cancelReason = computed(() =>
                         </div>
 
                         <div class="flex justify-between text-slate-600 border-t border-dashed border-slate-100 pt-1">
-                            <span>Khách đã trả:</span>
-                            <span class="font-bold text-slate-800">{{ money(invoice.paid_amount) }}</span>
+                            <span>Đã thanh toán hóa đơn:</span>
+                            <span class="font-bold text-slate-800">{{ money(Math.max(0, Number(invoice.paid_amount || 0) - Number(invoice.old_debt_paid || 0))) }}</span>
+                        </div>
+
+                        <div v-if="Number(invoice.old_debt_paid || 0) > 0" class="flex justify-between text-blue-700">
+                            <span>Thanh toán nợ cũ kèm hóa đơn:</span>
+                            <span class="font-bold">{{ money(invoice.old_debt_paid) }}</span>
                         </div>
 
                         <div
@@ -487,7 +492,7 @@ const cancelReason = computed(() =>
                             :class="balanceText.class"
                         >
                             <span>{{ balanceText.label }}:</span>
-                            <span>{{ money(balanceText.value) }}</span>
+                            <span v-if="balanceText.value !== null">{{ money(balanceText.value) }}</span>
                         </div>
 
                         <div class="flex justify-between text-[11px] uppercase text-slate-400 pt-1 border-t border-slate-100">

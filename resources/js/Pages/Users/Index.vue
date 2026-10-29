@@ -4,7 +4,7 @@ import { Head, router, usePage } from '@inertiajs/vue3'
 import { Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
-import { openModal } from '@/Stores/modal'
+import { openModal, registerUrlModal } from '@/Stores/modal'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
@@ -106,15 +106,16 @@ const openEdit = (user) => {
 
 const openDetail = (user) => openModal(RecordDetailModal, {
     props: { type: 'user', recordId: user.id },
+    deepLink: { type: 'user', id: user.id },
 })
+registerUrlModal('user', RecordDetailModal, id => ({ type: 'user', recordId: id }))
 
 const openDetailFromGlobalSearch = () => {
     const url = new URL(window.location.href)
     const userId = Number(url.searchParams.get('open_user'))
     if (!userId) return
-    openDetail({ id: userId })
     url.searchParams.delete('open_user')
-    window.history.replaceState(window.history.state, '', url)
+    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true, onSuccess: () => openDetail({ id: userId }) })
 }
 
 watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, onMounted } from 'vue';
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
@@ -73,7 +73,7 @@ const openCreateFromQuery = () => {
 const openRepairFromQuery = () => {
     const url = new URL(window.location.href);
     const repairId = Number(url.searchParams.get('open_repair'));
-    if (!repairId) return;
+    if (!repairId) { detailRepair.value = null; return; }
     detailRepair.value = props.repairs?.data?.find(repair => Number(repair.id) === repairId) || null;
 };
 
@@ -82,8 +82,19 @@ const closeRepairDetail = () => {
     const url = new URL(window.location.href);
     if (!url.searchParams.has('open_repair')) return;
     url.searchParams.delete('open_repair');
-    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true });
+    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true });
 };
+
+const openRepairDetail = (repair) => {
+    if (!repair?.id) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('open_repair', String(repair.id));
+    router.push({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true });
+    detailRepair.value = repair;
+};
+
+window.addEventListener('popstate', openRepairFromQuery);
+onBeforeUnmount(() => window.removeEventListener('popstate', openRepairFromQuery));
 
 onMounted(() => { openCreateFromQuery(); openRepairFromQuery(); });
 watch(() => page.url, () => { openCreateFromQuery(); openRepairFromQuery(); });
@@ -347,7 +358,7 @@ const confirmPayment = async (payment) => {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 text-sm">
-                        <tr v-for="repair in props.repairs?.data" :key="repair.id" tabindex="0" class="cursor-pointer transition hover:bg-emerald-50/70" title="Bấm vào dòng để xem chi tiết" @click="detailRepair = repair" @keydown.enter.self="detailRepair = repair">
+                        <tr v-for="repair in props.repairs?.data" :key="repair.id" tabindex="0" class="cursor-pointer transition hover:bg-emerald-50/70" title="Bấm vào dòng để xem chi tiết" @click="openRepairDetail(repair)" @keydown.enter.self="openRepairDetail(repair)">
                             <td class="py-2.5 px-3 font-bold text-emerald-700">
                                     <span class="font-bold text-emerald-700">{{ repair.code }}</span>
                             </td>

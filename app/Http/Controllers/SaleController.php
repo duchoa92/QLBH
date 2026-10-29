@@ -287,6 +287,9 @@ class SaleController extends Controller
         };
 
         $sales = $query
+            ->withSum(['customerDebtEntries as old_debt_paid' => fn ($debtQuery) => $debtQuery
+                ->where('type', 'decrease')
+                ->where('note', 'like', 'Trích tiền thừa hóa đơn%')], 'amount')
             ->paginate($perPage)
             ->withQueryString();
 
@@ -295,10 +298,10 @@ class SaleController extends Controller
             [
                 'sales' => $sales,
                 'selectedSale' => $request->filled('open_sale')
-                    ? Sale::query()->with([
+                    ? $this->withOldDebtPaid(Sale::query()->with([
                         'customer', 'user', 'items.product.conversionUnit', 'items.variant',
                         'items.productImei', 'items.gifts.product', 'items.gifts.productImei',
-                    ])->findOrFail((int) $request->query('open_sale'))
+                    ])->findOrFail((int) $request->query('open_sale')))
                     : null,
                 'stats' => $stats,
                 'filters' => [
@@ -325,6 +328,7 @@ class SaleController extends Controller
             'items.productImei',
             'items.gifts.product',
         ]);
+        $this->withOldDebtPaid($sale);
 
         return Inertia::render('Sales/Show', [
             'sale' => $sale,
@@ -342,6 +346,7 @@ class SaleController extends Controller
             'items.productImei',
             'items.gifts.product',
         ]);
+        $this->withOldDebtPaid($sale);
 
         return Inertia::render(
             'Sales/Receipt',
@@ -349,6 +354,18 @@ class SaleController extends Controller
                 'sale' => $sale,
             ]
         );
+    }
+
+    private function withOldDebtPaid(Sale $sale): Sale
+    {
+        $sale->setAttribute('old_debt_paid', (float) CustomerDebt::query()
+            ->where('source_type', Sale::class)
+            ->where('source_id', $sale->id)
+            ->where('type', 'decrease')
+            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
+            ->sum('amount'));
+
+        return $sale;
     }
 
     /**

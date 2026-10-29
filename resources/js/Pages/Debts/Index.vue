@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { router, useForm, usePage } from '@inertiajs/vue3'
 import { Search, HandCoins, Wallet, Users, Truck, X, ChevronDown, ScanLine, History } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -9,6 +9,8 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import { formatMoney } from '@/utils/format'
 import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
+import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
+import api from '@/Services/api'
 
 defineOptions({ layout: AdminLayout })
 
@@ -28,6 +30,11 @@ const search = ref(props.filters.search || '')
 const selected = ref(null)
 const reminderParty = ref(null)
 const expandedId = ref(null)
+const detailInvoice = ref(null)
+const detailImport = ref(null)
+const detailLoading = ref(false)
+const detailError = ref('')
+let detailRequestToken = 0
 const scanCode = ref('')
 const scanMessage = ref('')
 const error = ref('')
@@ -82,6 +89,54 @@ const pay = (row, order = null) => {
     scanMessage.value = ''
     if (order) form.amount = Number(order.due).toFixed(0)
 }
+const showOrderDetail = async (order) => {
+    if (!order?.id || order.unallocated) return
+    const requestToken = ++detailRequestToken
+    const urlState = new URL(window.location.href)
+    if (urlState.searchParams.get('detail_order') !== String(order.id)) {
+        urlState.searchParams.set('detail_order', String(order.id))
+        router.push({ url: `${urlState.pathname}${urlState.search}${urlState.hash}`, preserveState: true, preserveScroll: true })
+    }
+    detailInvoice.value = null
+    detailImport.value = null
+    detailError.value = ''
+    detailLoading.value = true
+    try {
+        const url = isCustomer.value
+            ? `${route('debts.customers')}/orders/${order.id}`
+            : `${route('debts.suppliers')}/orders/${order.id}`
+        const { data } = await api.get(url)
+        if (requestToken !== detailRequestToken) return
+        if (isCustomer.value) detailInvoice.value = data
+        else detailImport.value = data
+    } catch (requestError) {
+        if (requestToken !== detailRequestToken) return
+        detailError.value = requestError.response?.data?.message || 'Không thể tải chi tiết đơn.'
+    } finally {
+        if (requestToken === detailRequestToken) detailLoading.value = false
+    }
+}
+const closeOrderDetail = () => {
+    detailRequestToken++
+    detailLoading.value = false
+    detailError.value = ''
+    detailInvoice.value = null
+    detailImport.value = null
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('detail_order')) {
+        url.searchParams.delete('detail_order')
+        router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true })
+    }
+}
+
+const restoreOrderDetail = () => {
+    const id = Number(new URL(window.location.href).searchParams.get('detail_order'))
+    if (id) showOrderDetail({ id })
+    else if (detailInvoice.value || detailImport.value || detailLoading.value) closeOrderDetail()
+}
+watch(() => page.url, restoreOrderDetail, { immediate: true })
+window.addEventListener('popstate', restoreOrderDetail)
+onBeforeUnmount(() => window.removeEventListener('popstate', restoreOrderDetail))
 const partyOrders = computed(() => selected.value ? props.orders.filter(order => Number(order.party_id) === Number(selected.value.id)) : [])
 const scanOrder = () => {
     const code = scanCode.value.trim().toLowerCase()
@@ -142,7 +197,7 @@ const submit = () => {
                                 @keydown.enter="expandedId = expandedId === row.id ? null : row.id"
                                 @keydown.space.prevent="expandedId = expandedId === row.id ? null : row.id"
                             ><td class="px-4 py-3 font-semibold text-slate-800"><span class="inline-flex items-center gap-1"><ChevronDown :size="14" class="text-slate-400 transition-transform" :class="expandedId === row.id ? 'rotate-180' : ''" />{{ nameOf(row) }}</span></td><td class="px-4 py-3 text-slate-600">{{ row.code || '—' }}</td><td class="px-4 py-3 text-slate-600">{{ row.phone || '—' }}</td><td class="px-4 py-3 text-right font-bold text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-1"><ActionButton @click.stop="pay(row)"><HandCoins :size="15" />Thanh toán nợ</ActionButton></div></td></tr>
-                            <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id || `other-${row.id}`" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><a v-if="order.href" :href="order.href" class="font-bold text-blue-700 hover:underline">{{ order.code }}</a><span v-else class="font-bold text-slate-800">{{ order.code }}</span><div v-if="!order.unallocated" class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div><div v-else class="mt-1 text-xs text-slate-500">Khoản công nợ chưa được gắn với hóa đơn/phiếu nhập cụ thể.</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có đơn nợ; khoản dư nợ sẽ được thanh toán bằng nút “Thanh toán nợ” phía trên.</p></div></td></tr>
+                            <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id || `other-${row.id}`" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><button v-if="!order.unallocated" type="button" class="font-bold text-blue-700 hover:underline" @click.stop="showOrderDetail(order)">{{ order.code }}</button><span v-else class="font-bold text-slate-800">{{ order.code }}</span><div v-if="!order.unallocated" class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div><div v-else class="mt-1 text-xs text-slate-500">Khoản công nợ chưa được gắn với hóa đơn/phiếu nhập cụ thể.</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có đơn nợ; khoản dư nợ sẽ được thanh toán bằng nút “Thanh toán nợ” phía trên.</p></div></td></tr>
                         </template>
                         <tr v-if="!rows.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
                     </tbody>
@@ -154,8 +209,35 @@ const submit = () => {
 
         <div class="space-y-3">
             <div class="flex items-center gap-2"><History :size="18" class="text-blue-600" /><h2 class="font-bold text-slate-900">Lịch sử thanh toán gần đây</h2></div>
-            <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table class="app-data-table w-full min-w-[760px] text-left text-sm"><thead class="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="item in history" :key="item.id"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><a v-if="item.code && item.href" :href="item.href" class="font-semibold text-blue-700 hover:underline">{{ item.code }}</a><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table class="app-data-table w-full min-w-[760px] text-left text-sm"><thead class="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="item in history" :key="item.id"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><button v-if="item.code && item.order_id" type="button" class="font-semibold text-blue-700 hover:underline" @click="showOrderDetail({ id: item.order_id })">{{ item.code }}</button><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', mixed: 'Tiền mặt + Chuyển khoản', card: 'Thẻ' }[item.method] || item.method || '—' }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
         </div>
+
+        <InvoiceDetailModal
+            :show="Boolean(detailInvoice)"
+            :invoice="detailInvoice"
+            @close="closeOrderDetail"
+        />
+
+        <BaseModal v-if="detailLoading || detailError" :title="detailError ? 'Không tải được chi tiết đơn' : 'Đang tải chi tiết đơn'" size="sm" @close="closeOrderDetail">
+            <p v-if="detailLoading" class="py-5 text-center text-sm text-slate-500">Đang tải dữ liệu đơn hàng…</p>
+            <p v-else class="py-3 text-sm text-rose-700">{{ detailError }}</p>
+        </BaseModal>
+
+        <BaseModal v-if="detailImport" :title="`Chi tiết phiếu nhập · ${detailImport.code}`" size="xl" body-class="space-y-4" @close="closeOrderDetail">
+            <div class="grid gap-3 sm:grid-cols-3">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Nhà cung cấp</div><div class="mt-1 font-bold text-slate-900">{{ detailImport.supplier?.name || '—' }}</div><div class="text-xs text-slate-500">{{ detailImport.supplier?.phone || '—' }}</div></div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Ngày nhập</div><div class="mt-1 font-bold text-slate-900">{{ detailImport.import_date || '—' }}</div></div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Người tạo</div><div class="mt-1 font-bold text-slate-900">{{ detailImport.user?.name || '—' }}</div></div>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="app-data-table w-full min-w-[620px] text-sm">
+                    <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2 text-left">Sản phẩm</th><th class="px-3 py-2 text-center">Số lượng</th><th class="px-3 py-2 text-right">Giá nhập</th><th class="px-3 py-2 text-right">Thành tiền</th></tr></thead>
+                    <tbody class="divide-y divide-slate-100"><tr v-for="item in detailImport.items || []" :key="item.id"><td class="px-3 py-2.5"><div class="font-semibold text-slate-900">{{ item.product?.name || '—' }}</div><div v-if="item.variant?.name" class="text-xs text-slate-500">{{ item.variant.name }}</div></td><td class="px-3 py-2.5 text-center">{{ item.quantity }} {{ item.unit_name || item.unit?.short_name || '' }}</td><td class="px-3 py-2.5 text-right">{{ formatMoney(item.cost_price) }}</td><td class="px-3 py-2.5 text-right font-bold">{{ formatMoney(Number(item.quantity || 0) * Number(item.cost_price || 0)) }}</td></tr><tr v-if="!detailImport.items?.length"><td colspan="4" class="px-3 py-6 text-center text-slate-500">Phiếu nhập không có chi tiết sản phẩm.</td></tr></tbody>
+                </table>
+            </div>
+            <div class="ml-auto grid max-w-sm gap-1 text-sm"><div class="flex justify-between"><span>Tiền hàng</span><span>{{ formatMoney(detailImport.total_amount) }}</span></div><div class="flex justify-between"><span>Giảm giá</span><span>-{{ formatMoney(detailImport.discount) }}</span></div><div class="flex justify-between border-t border-slate-200 pt-2 font-bold"><span>Tổng phiếu nhập</span><span>{{ formatMoney(detailImport.grand_total) }}</span></div><div class="flex justify-between text-emerald-700"><span>Đã thanh toán</span><span>{{ formatMoney(detailImport.paid_amount) }}</span></div><div class="flex justify-between font-bold text-rose-700"><span>Còn nợ</span><span>{{ formatMoney(Math.max(0, Number(detailImport.grand_total || 0) - Number(detailImport.paid_amount || 0))) }}</span></div></div>
+            <template #footer><div class="flex justify-end"><ActionButton variant="secondary" @click="closeOrderDetail">Đóng</ActionButton></div></template>
+        </BaseModal>
 
         <BaseModal v-if="reminderParty" :title="isCustomer ? 'Nhắc thu công nợ khách hàng' : 'Nhắc thanh toán nhà cung cấp'" size="md" @close="closeDebtReminder">
             <div class="space-y-3">

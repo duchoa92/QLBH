@@ -169,6 +169,25 @@ const printInvoice = () => {
                 </table>
             </div>
 
+            <div class="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div class="flex justify-between font-bold text-slate-900">
+                    <span>Tổng thanh toán</span>
+                    <span>{{ formatMoney(sale.grand_total) }}</span>
+                </div>
+                <div class="mt-2 flex justify-between text-slate-600">
+                    <span>Đã thanh toán hóa đơn</span>
+                    <span class="font-semibold">{{ formatMoney(Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0))) }}</span>
+                </div>
+                <div v-if="Number(sale.old_debt_paid || 0) > 0" class="mt-1 flex justify-between text-blue-700">
+                    <span>Thanh toán nợ cũ kèm hóa đơn</span>
+                    <span class="font-bold">{{ formatMoney(sale.old_debt_paid) }}</span>
+                </div>
+                <div class="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold" :class="Number(sale.grand_total || 0) > Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0)) ? 'text-rose-600' : 'text-emerald-700'">
+                    <span>Còn nợ hóa đơn</span>
+                    <span>{{ formatMoney(Math.max(0, Number(sale.grand_total || 0) - Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0)))) }}</span>
+                </div>
+            </div>
+
             <!-- Footer cảm ơn -->
             <div class="text-center pt-4 border-t border-slate-100 text-xs text-slate-400">
                 <p class="font-semibold">CẢM ƠN QUÝ KHÁCH VÀ HẸN GẶP LẠI!</p>

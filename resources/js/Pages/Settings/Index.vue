@@ -7,7 +7,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
-import { openModal as openGlobalModal } from '@/Stores/modal'
+import { openModal as openGlobalModal, registerUrlModal } from '@/Stores/modal'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -499,10 +499,11 @@ const openUnitDetailFromGlobalSearch = () => {
     const url = new URL(window.location.href)
     const unitId = Number(url.searchParams.get('open_unit'))
     if (!unitId) return
-    openGlobalModal(RecordDetailModal, { props: { type: 'unit', recordId: unitId } })
     url.searchParams.delete('open_unit')
-    window.history.replaceState(window.history.state, '', url)
+    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true, onSuccess: () => openGlobalModal(RecordDetailModal, { props: { type: 'unit', recordId: unitId }, deepLink: { type: 'unit', id: unitId } }) })
 }
+
+registerUrlModal('unit', RecordDetailModal, id => ({ type: 'unit', recordId: id }))
 
 watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediate: true })
 </script>

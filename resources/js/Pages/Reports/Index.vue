@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
-import { Head } from '@inertiajs/vue3'
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { Head, router } from '@inertiajs/vue3'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 import { formatMoney, formatDate } from '@/utils/format'
 import SimpleBarChart from '@/Components/Charts/SimpleBarChart.vue'
@@ -29,8 +29,25 @@ const tabs = [
     { key: 'debts', label: 'Công nợ', icon: Wallet },
 ]
 
-const activeTab = ref('revenue')
+const validTabKeys = tabs.map(tab => tab.key)
+const readActiveTab = () => {
+    const requested = new URL(window.location.href).searchParams.get('tab')
+    return validTabKeys.includes(requested) ? requested : 'revenue'
+}
+const activeTab = ref(readActiveTab())
 const loading = ref(false)
+
+const selectTab = (tab) => {
+    if (!validTabKeys.includes(tab) || activeTab.value === tab) return
+    activeTab.value = tab
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    router.push({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true })
+}
+
+const restoreTabFromUrl = () => { activeTab.value = readActiveTab() }
+window.addEventListener('popstate', restoreTabFromUrl)
+onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
 
 /*
 |--------------------------------------------------------------------------
@@ -365,7 +382,7 @@ onMounted(() => {
                     :class="activeTab === tab.key
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'text-slate-600 hover:bg-slate-100'"
-                    @click="activeTab = tab.key"
+                    @click="selectTab(tab.key)"
                 >
                     <component :is="tab.icon" :size="16" />
                     {{ tab.label }}

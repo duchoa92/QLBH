@@ -8,7 +8,7 @@ import BrandForm from './Form.vue'
 import { FilePlus, SquarePen, Trash2 } from 'lucide-vue-next'
 import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
-import { openModal } from '@/Stores/modal'
+import { openModal, registerUrlModal } from '@/Stores/modal'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -136,10 +136,11 @@ const openEditFromGlobalSearch = () => {
     const url = new URL(window.location.href)
     const brandId = Number(url.searchParams.get('open_brand'))
     if (!brandId) return
-    openModal(RecordDetailModal, { props: { type: 'brand', recordId: brandId } })
     url.searchParams.delete('open_brand')
-    window.history.replaceState(window.history.state, '', url)
+    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true, onSuccess: () => openModal(RecordDetailModal, { props: { type: 'brand', recordId: brandId }, deepLink: { type: 'brand', id: brandId } }) })
 }
+
+registerUrlModal('brand', RecordDetailModal, id => ({ type: 'brand', recordId: id }))
 
 watch(() => page.url, () => nextTick(openEditFromGlobalSearch), { immediate: true })
 

@@ -1,12 +1,14 @@
 <!-- resources/js/Pages/Pos/InvoiceList.vue -->
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 import { usePage } from '@inertiajs/vue3'
-import { Pencil, Undo2 } from 'lucide-vue-next'
+import { Pencil, Undo2, X, CircleCheck, CircleX, Clock3, Copy, Printer, ChevronLeft, ChevronRight, Banknote, CreditCard } from 'lucide-vue-next'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import { useSaleHistory } from '../Composables/useSaleHistory'
 
@@ -14,7 +16,14 @@ const {
     invoices,
     selectedInvoice,
     showDetail,
+    currentPage,
+    lastPage,
+    total,
+    from,
+    to,
+    filters,
     loadInvoices,
+    fetchInvoice,
     openInvoice,
 } = useSaleHistory()
 
@@ -27,10 +36,82 @@ const saleToCancel = ref(null)
 const cancelReason = ref('')
 const cancelError = ref('')
 const printPreviewUrl = ref('')
+const datePreset = ref('all')
+let searchTimer
+
+const visiblePages = computed(() => {
+    const start = Math.max(1, Math.min(currentPage.value - 1, lastPage.value - 2))
+    return Array.from({ length: Math.min(3, lastPage.value) }, (_, index) => start + index)
+})
+
+const localDateKey = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+const setDatePreset = (preset) => {
+    datePreset.value = preset
+    const now = new Date()
+    if (preset === 'today') {
+        filters.value.date_from = localDateKey(now)
+        filters.value.date_to = localDateKey(now)
+    } else if (preset === 'month') {
+        filters.value.date_from = localDateKey(new Date(now.getFullYear(), now.getMonth(), 1))
+        filters.value.date_to = localDateKey(now)
+    } else if (preset === 'all') {
+        filters.value.date_from = ''
+        filters.value.date_to = ''
+    }
+    if (preset !== 'custom') loadInvoices(1)
+}
+
+const setStatus = (status) => {
+    filters.value.status = status
+    loadInvoices(1)
+}
+
+const searchInvoices = () => {
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => loadInvoices(1), 300)
+}
+
+const onCustomDateChange = () => {
+    datePreset.value = 'custom'
+    loadInvoices(1)
+}
+
+const statusOptions = [
+    { value: 'completed', label: 'Thành công' },
+    { value: 'cancelled', label: 'Đã hủy' },
+    { value: 'pending', label: 'Đang chờ xử lý' },
+]
+const dateOptions = [
+    { value: 'all', label: 'Mọi thời gian' },
+    { value: 'today', label: 'Hôm nay' },
+    { value: 'month', label: 'Tháng này' },
+    { value: 'custom', label: 'Tùy chỉnh' },
+]
+
+const copyCode = async (code) => {
+    try {
+        await navigator.clipboard.writeText(String(code || ''))
+    } catch (error) {
+        console.error('Không thể sao chép mã hóa đơn', error)
+    }
+}
+
+const paymentLabel = (method) => ({
+    cash: 'Tiền mặt', bank: 'Chuyển khoản', mixed: 'Thanh toán hỗn hợp',
+    card: 'Thẻ', qr: 'QR', transfer: 'Chuyển khoản',
+}[String(method || '').toLowerCase()] || method || 'Tiền mặt')
 
 onMounted(() => {
     loadInvoices()
 })
+
+onBeforeUnmount(() => clearTimeout(searchTimer))
 
 const openPrintWindow = (invoice) => {
     if (!invoice?.id) return
@@ -38,8 +119,12 @@ const openPrintWindow = (invoice) => {
 }
 
 const openEdit = async (invoice) => {
-    await openInvoice(invoice.id)
-    if (selectedInvoice.value) editSale.value = selectedInvoice.value
+    showDetail.value = false
+    const detail = await fetchInvoice(invoice.id)
+    if (detail) {
+        selectedInvoice.value = detail
+        editSale.value = detail
+    }
 }
 
 const confirmCancel = (invoice) => {
@@ -75,54 +160,85 @@ const refreshInvoices = () => {
 
 <template>
     <div class="p-4">
-        <h2 class="font-bold text-lg mb-4">Danh sách hóa đơn POS</h2>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+                <div class="relative min-w-[220px] flex-1">
+                    <FloatingInput v-model="filters.search" label="Mã HĐ/Khách hàng" type="search" placeholder-text="Nhập mã HĐ hoặc tên khách hàng" input-class="!h-10 !rounded-lg !border-slate-300 !pl-3 !pr-9 focus:!border-blue-500" @input="searchInvoices" />
+                    <button v-if="filters.search" type="button" class="absolute right-3 top-3 rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Xóa tìm kiếm" @click="filters.search = ''; searchInvoices()"><X class="h-4 w-4" /></button>
+                </div>
+                <div class="min-w-[150px]">
+                    <FloatingSelect :model-value="filters.status" label="Trạng thái" placeholder-text="Tất cả" :options="statusOptions" @update:model-value="setStatus($event || '')" />
+                </div>
+                <div class="min-w-[155px]">
+                    <FloatingSelect :model-value="datePreset" label="Thời gian" :show-placeholder="false" :options="dateOptions" @update:model-value="setDatePreset" />
+                </div>
+                <div v-if="datePreset === 'custom'" class="flex min-w-[260px] flex-1 items-center gap-2">
+                    <FloatingInput v-model="filters.date_from" label="Từ ngày" type="date" input-class="!h-10 !rounded-lg !border-slate-300 focus:!border-blue-500" @change="onCustomDateChange" />
+                    <FloatingInput v-model="filters.date_to" label="Đến ngày" type="date" input-class="!h-10 !rounded-lg !border-slate-300 focus:!border-blue-500" @change="onCustomDateChange" />
+                </div>
+        </div>
 
-        <table class="w-full text-sm border">
-            <thead>
-                <tr class="bg-gray-100 text-center">
-                    <th class="p-2">Mã HĐ</th>
-                    <th>Khách hàng</th>
-                    <th>Trạng thái</th>
-                    <th>Tổng tiền</th>
-                    <th>Ngày</th>
-                    <th class="w-20 text-center">Thao tác</th>
+        <div class="overflow-x-auto rounded-lg border border-slate-200">
+        <table class="w-full min-w-[680px] table-fixed text-sm">
+            <colgroup>
+                <col class="w-[20%]" /><col class="w-[20%]" /><col class="w-[16%]" /><col class="w-[18%]" /><col class="w-[14%]" /><col class="w-[12%]" />
+            </colgroup>
+            <thead class="bg-slate-100 text-slate-600">
+                <tr class="text-center">
+                    <th class="p-2 text-left">Mã HĐ</th>
+                    <th class="p-2">Khách hàng</th>
+                    <th class="p-2">Trạng thái</th>
+                    <th class="p-2">Thanh toán</th>
+                    <th class="p-2 text-right">Tổng tiền</th>
+                    <th class="w-24 p-2 text-center">Thao tác</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-slate-100">
                 <tr
                     v-for="invoice in invoices"
                     :key="invoice.id"
-                    class="border-b hover:bg-blue-50"
+                    class="cursor-pointer text-[13px] leading-4 hover:bg-blue-50"
                     :class="{ 'bg-red-50/40': invoice.status === 'cancelled' }"
                     title="Bấm vào hóa đơn để xem chi tiết"
                     @click="openInvoice(invoice.id)"
                 >
-                    <td class="p-2 text-blue-600 font-bold">
-                        #{{ invoice.code }}
+                    <td class="px-2 py-1 text-blue-700 font-bold">
+                        <div class="group inline-flex max-w-full min-w-0 items-center gap-1">
+                            <span class="block min-w-0 truncate" :title="`#${invoice.code}`">#{{ invoice.code }}</span>
+                            <button type="button" class="shrink-0 rounded p-1 text-slate-400 opacity-100 hover:bg-blue-100 hover:text-blue-700 sm:opacity-0 sm:group-hover:opacity-100" title="Sao chép mã hóa đơn" aria-label="Sao chép mã hóa đơn" @click.stop="copyCode(invoice.code)"><Copy class="h-3.5 w-3.5" /></button>
+                        </div>
                     </td>
-                    <td class="text-center">{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</td>
-                    <td class="text-center">
+                    <td class="px-2 py-1 text-center">{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</td>
+                    <td class="px-2 py-1 text-center">
                         <span
                             v-if="invoice.status === 'cancelled'"
-                            class="px-2 py-0.5 text-xs font-bold text-red-700 bg-red-100 rounded-full"
+                            class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700"
                         >
+                            <CircleX class="h-3.5 w-3.5" />
                             Đã hủy
                         </span>
                         <span
-                            v-else
-                            class="px-2 py-0.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded-full"
+                            v-else-if="invoice.status === 'pending' || invoice.status === 'waiting'"
+                            class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800"
                         >
+                            <Clock3 class="h-3.5 w-3.5" />
+                            Đang chờ xử lý
+                        </span>
+                        <span v-else class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                            <CircleCheck class="h-3.5 w-3.5" />
                             Thành công
                         </span>
                     </td>
-                    <td class="text-right px-3 font-semibold">{{ $money(invoice.grand_total) }}</td>
-                    <td class="px-3 text-center">{{ $dateTime(invoice.created_at) }}</td>
-                    <td class="text-center" @click.stop>
+                    <td class="px-2 py-1 text-center"><span class="inline-flex items-center gap-1 text-xs text-slate-600"><Banknote v-if="['cash','mixed',''].includes(String(invoice.payment_method || '').toLowerCase())" class="h-3.5 w-3.5 text-emerald-600" /><CreditCard v-else class="h-3.5 w-3.5 text-blue-600" />{{ paymentLabel(invoice.payment_method) }}</span></td>
+                    <td class="whitespace-nowrap px-2 py-1 text-right font-semibold tabular-nums">{{ $money(invoice.grand_total) }}</td>
+                    <td class="px-2 py-1 text-center" @click.stop>
                         <div class="inline-flex items-center gap-1">
-                            <button v-if="canEditSales" type="button" class="rounded-md p-1.5 text-amber-600 hover:bg-amber-50" title="Sửa hóa đơn" @click="openEdit(invoice)">
+                            <button type="button" class="rounded-md p-1 text-slate-600 hover:bg-slate-100" title="In lại hóa đơn" aria-label="In lại hóa đơn" @click="openPrintWindow(invoice)">
+                                <Printer class="h-4 w-4" />
+                            </button>
+                            <button v-if="canEditSales" type="button" class="rounded-md p-1 text-amber-600 hover:bg-amber-50" title="Sửa hóa đơn" aria-label="Sửa hóa đơn" @click="openEdit(invoice)">
                                 <Pencil class="h-4 w-4" />
                             </button>
-                            <button v-if="canCancelSales && invoice.status !== 'cancelled'" type="button" class="rounded-md p-1.5 text-rose-600 hover:bg-rose-50" title="Hủy hóa đơn và hoàn kho" @click="confirmCancel(invoice)">
+                            <button v-if="canCancelSales && invoice.status !== 'cancelled'" type="button" class="rounded-md p-1 text-rose-600 hover:bg-rose-50" title="Hủy hóa đơn và hoàn kho" aria-label="Hủy hóa đơn và hoàn kho" @click="confirmCancel(invoice)">
                                 <Undo2 class="h-4 w-4" />
                             </button>
                         </div>
@@ -130,6 +246,16 @@ const refreshInvoices = () => {
                 </tr>
             </tbody>
         </table>
+        <div v-if="!invoices.length" class="p-6 text-center text-sm text-slate-500">Không tìm thấy hóa đơn phù hợp.</div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+            <div>Hiển thị {{ from }}-{{ to }} của {{ total }} kết quả</div>
+            <div class="flex items-center gap-1">
+                <button type="button" class="rounded-md border border-slate-300 bg-white p-1.5 disabled:opacity-40" aria-label="Trang trước" :disabled="currentPage <= 1" @click="loadInvoices(currentPage - 1)"><ChevronLeft class="h-4 w-4" /></button>
+                <button v-for="pageNumber in visiblePages" :key="pageNumber" type="button" class="min-w-8 rounded-md border px-2 py-1.5 font-semibold" :class="currentPage === pageNumber ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'" :aria-current="currentPage === pageNumber ? 'page' : undefined" @click="loadInvoices(pageNumber)">{{ pageNumber }}</button>
+                <button type="button" class="rounded-md border border-slate-300 bg-white p-1.5 disabled:opacity-40" aria-label="Trang sau" :disabled="currentPage >= lastPage" @click="loadInvoices(currentPage + 1)"><ChevronRight class="h-4 w-4" /></button>
+            </div>
+        </div>
     </div>
 
     <InvoiceDetailModal

@@ -163,8 +163,12 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
                     <span>{{ formatMoney(sale.grand_total || sale.total_amount || sale.subtotal) }}</span>
                 </div>
                 <div class="row">
-                    <span>Khách đưa:</span>
-                    <span>{{ formatMoney(sale.paid_amount || 0) }}</span>
+                    <span>Đã thanh toán hóa đơn:</span>
+                    <span>{{ formatMoney(Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0))) }}</span>
+                </div>
+                <div v-if="Number(sale.old_debt_paid || 0) > 0" class="row">
+                    <span>Thanh toán nợ cũ kèm hóa đơn:</span>
+                    <span>{{ formatMoney(sale.old_debt_paid) }}</span>
                 </div>
                 <div v-if="Number(sale.cash_received_amount || 0) > 0 && Number(sale.bank_received_amount || 0) > 0" class="row text-xs">
                     <span>Tiền mặt:</span>

@@ -584,6 +584,7 @@ class PosCheckoutService
                             'customer_id' => $customer->id,
                             'type' => 'decrease',
                             'amount' => $debtPaid,
+                            'payment_method' => $paymentMethod ?? 'cash',
                             'source_type' => Sale::class,
                             'source_id' => $sale->id,
                             'note' => 'Trích tiền thừa hóa đơn ' . $sale->code . ' để thanh toán nợ cũ',
