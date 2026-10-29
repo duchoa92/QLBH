@@ -22,6 +22,7 @@
     },
     "dependencies": {
         "@headlessui/vue": "^1.7.23",
+        "@undecaf/zbar-wasm": "^0.11.0",
         "@zxing/browser": "^0.2.0",
         "chart.js": "^4.5.1",
         "jsbarcode": "^3.12.3",

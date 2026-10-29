@@ -92,6 +92,7 @@ const menuGroups = [
                 href: '/work-shifts',
                 paths: ['/work-shifts'],
                 permission: 'pos.access',
+                requiresOpeningCount: true,
             },
             {
                 label: 'Đơn hàng & Hóa đơn',
@@ -244,7 +245,8 @@ const menuGroups = [
 ]
 
 const visibleItems = (items) => items.filter(item =>
-    item.permissions ? item.permissions.some(permission => can(permission)) : can(item.permission)
+    (!item.requiresOpeningCount || page.props.settings?.work_shift_opening_count_enabled !== false && page.props.settings?.work_shift_opening_count_enabled !== 0 && page.props.settings?.work_shift_opening_count_enabled !== '0')
+    && (item.permissions ? item.permissions.some(permission => can(permission)) : can(item.permission))
 )
 const isGroupActive = (group) => visibleItems(group.items).some(item => isActive(item.paths))
 

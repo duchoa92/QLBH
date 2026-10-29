@@ -8,11 +8,16 @@ const devHost = appEnv.VITE_DEV_HOST || new URL(appEnv.APP_URL || 'http://qlbh.t
 const appOrigin = appEnv.APP_URL ? new URL(appEnv.APP_URL).origin : `https://${devHost}`;
 const laragonCert = 'C:/laragon/etc/ssl/laragon.crt';
 const laragonKey = 'C:/laragon/etc/ssl/laragon.key';
-const hasLaragonCertificate = fs.existsSync(laragonCert) && fs.existsSync(laragonKey);
-const httpsOptions = appEnv.VITE_DEV_HTTPS === 'false'
-    ? undefined
-    : hasLaragonCertificate
-    ? { cert: fs.readFileSync(laragonCert), key: fs.readFileSync(laragonKey) }
+const devCert = appEnv.VITE_DEV_CERT || laragonCert;
+const devKey = appEnv.VITE_DEV_KEY || laragonKey;
+const httpsEnabled = appEnv.VITE_DEV_HTTPS === 'true';
+
+if (httpsEnabled && (!fs.existsSync(devCert) || !fs.existsSync(devKey))) {
+    throw new Error(`Vite HTTPS is enabled, but its certificate or key is missing (${devCert}, ${devKey}).`);
+}
+
+const httpsOptions = httpsEnabled
+    ? { cert: fs.readFileSync(devCert), key: fs.readFileSync(devKey) }
     : undefined;
 
 export default defineConfig({

@@ -50,6 +50,8 @@ class AppServiceProvider extends ServiceProvider
                 'inventory_alert_enabled' => filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_threshold' => (int) setting('inventory_alert_threshold', 5),
                 'stock_import_vat_default' => filter_var(setting('stock_import_vat_default', false), FILTER_VALIDATE_BOOLEAN),
+                'pos_cost_price_suggestion_enabled' => filter_var(setting('pos_cost_price_suggestion_enabled', true), FILTER_VALIDATE_BOOLEAN),
+                'work_shift_opening_count_enabled' => filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),

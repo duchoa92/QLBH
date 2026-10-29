@@ -15,8 +15,11 @@
 /node_modules
 /public/build
 /public/hot
+/public/qlbh-lan-ca.cer
+/public/qlbh-lan-ca.mobileconfig
 /public/storage
 /storage/*.key
+/storage/app/ssl/
 /storage/pail
 /vendor
 Homestead.json

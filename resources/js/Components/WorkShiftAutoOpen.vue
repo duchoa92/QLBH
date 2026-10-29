@@ -10,6 +10,9 @@ const page = usePage()
 const autoOpenEnabled = computed(() => page.props.settings?.work_shift_auto_open_enabled !== false
     && page.props.settings?.work_shift_auto_open_enabled !== 0
     && page.props.settings?.work_shift_auto_open_enabled !== '0')
+const openingCountEnabled = computed(() => page.props.settings?.work_shift_opening_count_enabled !== false
+    && page.props.settings?.work_shift_opening_count_enabled !== 0
+    && page.props.settings?.work_shift_opening_count_enabled !== '0')
 const denominations = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000]
 const visible = ref(false)
 const counts = ref({})
@@ -25,7 +28,7 @@ const values = computed(() => {
 const money = formatMoney
 
 const openIfNeeded = async () => {
-    if (!autoOpenEnabled.value || !(page.props.auth?.permissions || []).includes('pos.access')) return
+    if (!autoOpenEnabled.value || !openingCountEnabled.value || !(page.props.auth?.permissions || []).includes('pos.access')) return
     try {
         const { data } = await axios.get(route('pos.shifts.current'))
         if (!data.shift && !data.prompt_dismissed) {
@@ -42,10 +45,10 @@ onMounted(openIfNeeded)
 
 const handleShiftOpened = () => {
     visible.value = false
-    toast.success('Đã mở ca làm và lưu bảng kê đầu ca.')
+    toast.success(openingCountEnabled.value ? 'Đã mở ca làm và lưu bảng kê đầu ca.' : 'Đã mở ca làm.')
 }
 </script>
 
 <template>
-    <WorkShiftOpenModal v-if="visible" :denominations="denominations" :counts="counts" :balances="balances" :accounts="values" :money="money" @close="visible = false" @opened="handleShiftOpened" />
+    <WorkShiftOpenModal v-if="visible" :denominations="denominations" :counts="counts" :balances="balances" :accounts="values" :money="money" :count-enabled="openingCountEnabled" @close="visible = false" @opened="handleShiftOpened" />
 </template>

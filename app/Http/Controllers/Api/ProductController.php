@@ -37,6 +37,7 @@ class ProductController extends Controller
                             'id',
                             'product_id',
                             'variant_id',
+                            'cost_price',
                             'sell_price',
                         ]),
                 ])
@@ -49,6 +50,7 @@ class ProductController extends Controller
                 ->get()
                 ->map(function ($product) {
                     $prices = $this->availableSellPrices($product);
+                    $costPrices = $this->availableCostPrices($product);
 
                     return [
                         'id' => $product->id,
@@ -62,6 +64,8 @@ class ProductController extends Controller
                         'price_min' => $prices['min'],
                         'price_max' => $prices['max'],
                         'price_label' => $prices['label'],
+                        'cost_price_min' => $costPrices['min'],
+                        'cost_price_max' => $costPrices['max'],
                         'stock' => $product->manage_stock_by_serial || $product->product_type === 'imei'
                             ? $product->available_imei_count
                             : $product->stock,
@@ -100,6 +104,7 @@ class ProductController extends Controller
                         'id',
                         'product_id',
                         'variant_id',
+                        'cost_price',
                         'sell_price',
                     ]),
             ])
@@ -148,6 +153,7 @@ class ProductController extends Controller
             ->get()
             ->map(function ($product) {
                 $prices = $this->availableSellPrices($product);
+                $costPrices = $this->availableCostPrices($product);
 
                 return [
                     'id' => $product->id,
@@ -161,6 +167,8 @@ class ProductController extends Controller
                     'price_min' => $prices['min'],
                     'price_max' => $prices['max'],
                     'price_label' => $prices['label'],
+                    'cost_price_min' => $costPrices['min'],
+                    'cost_price_max' => $costPrices['max'],
                     'stock' => $product->manage_stock_by_serial || $product->product_type === 'imei'
                         ? $product->available_imei_count
                         : $product->stock,
@@ -236,6 +244,37 @@ class ProductController extends Controller
             'label' => $min > 0 && $max > 0 && $min !== $max
                 ? number_format($min, 0, ',', '.') . ' - ' . number_format($max, 0, ',', '.')
                 : number_format($min ?: $max, 0, ',', '.'),
+        ];
+    }
+
+    private function availableCostPrices(Product $product): array
+    {
+        if ($product->product_type === 'imei' || $product->manage_stock_by_serial) {
+            $prices = $product->imeis
+                ->map(function (ProductImei $imei) use ($product): float {
+                    if ($imei->cost_price > 0) {
+                        return (float) $imei->cost_price;
+                    }
+
+                    if ($imei->variant?->cost_price > 0) {
+                        return (float) $imei->variant->cost_price;
+                    }
+
+                    return (float) $product->cost_price;
+                });
+        } elseif ($product->relationLoaded('variants') && $product->variants->isNotEmpty()) {
+            $prices = $product->variants
+                ->filter(fn ($variant): bool => (int) ($variant->stock ?? 0) > 0)
+                ->map(fn ($variant): float => (float) ($variant->cost_price ?: $product->cost_price));
+        } else {
+            $prices = collect([(float) $product->cost_price]);
+        }
+
+        $prices = $prices->filter(fn (float $price): bool => $price > 0);
+
+        return [
+            'min' => (float) ($prices->min() ?? 0),
+            'max' => (float) ($prices->max() ?? 0),
         ];
     }
 

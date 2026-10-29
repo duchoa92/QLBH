@@ -78,8 +78,9 @@ class PosController extends Controller
             'bank_account' => ['required', 'string', 'max:50'],
         ]);
 
+        $openingCountEnabled = filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN);
         $shift = WorkShift::query()->where('user_id', $request->user()->id)->whereNull('closed_at')->latest('opened_at')->first();
-        abort_unless($shift, 422, 'Vui lòng mở ca làm trước khi nhận thanh toán.');
+        abort_if($openingCountEnabled && ! $shift, 422, 'Vui lòng mở ca làm trước khi nhận thanh toán.');
         $exists = BankPaymentIntent::query()->where('invoice_code', $data['invoice_code'])->exists();
         abort_if($exists || Sale::query()->where('code', $data['invoice_code'])->exists(), 422, 'Mã hóa đơn đã được sử dụng.');
 
@@ -121,7 +122,7 @@ class PosController extends Controller
         $intent = BankPaymentIntent::query()->create([
             'invoice_code' => $data['invoice_code'],
             'user_id' => $request->user()->id,
-            'work_shift_id' => $shift->id,
+            'work_shift_id' => $shift?->id,
             'bank_account' => $data['bank_account'],
             'expected_amount' => $expected,
             'received_amount' => 0,
@@ -262,13 +263,14 @@ class PosController extends Controller
         PosCheckoutService $service,
     )
     {
+        $openingCountEnabled = filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN);
         $workShift = WorkShift::query()
             ->where('user_id', auth()->id())
             ->whereNull('closed_at')
             ->latest('opened_at')
             ->first();
 
-        if (! $workShift) {
+        if ($openingCountEnabled && ! $workShift) {
             return response()->json(['success' => false, 'message' => 'Vui lòng mở ca làm trước khi bán hàng.'], 422);
         }
 
@@ -344,7 +346,7 @@ class PosController extends Controller
             );
 
             $sale->update([
-                'work_shift_id' => $workShift->id,
+                'work_shift_id' => $workShift?->id,
                 'bank_account' => in_array($request->payment_method, ['bank', 'mixed'], true) ? $request->bank_account : null,
             ]);
 

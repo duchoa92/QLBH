@@ -14,6 +14,10 @@ const props = defineProps({
 const emit = defineEmits([
     'add-product',
 ])
+
+const forwardProductSelection = (product, originRect = null) => {
+    emit('add-product', product, originRect)
+}
 </script>
 
 <template>
@@ -40,7 +44,7 @@ const emit = defineEmits([
             <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/40 p-2.5 sm:p-4">
                 <ProductSearch
                     :cart="cart"
-                    @selected="emit('add-product', $event)"
+                    @selected="forwardProductSelection"
                 />
             </div>
 

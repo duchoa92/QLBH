@@ -52,6 +52,8 @@ class SettingController extends Controller
                 'inventory_alert_enabled' => filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_threshold' => (int) setting('inventory_alert_threshold', 5),
                 'stock_import_vat_default' => filter_var(setting('stock_import_vat_default', false), FILTER_VALIDATE_BOOLEAN),
+                'pos_cost_price_suggestion_enabled' => filter_var(setting('pos_cost_price_suggestion_enabled', true), FILTER_VALIDATE_BOOLEAN),
+                'work_shift_opening_count_enabled' => filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
@@ -111,6 +113,8 @@ class SettingController extends Controller
             'inventory_alert_enabled' => ['sometimes', 'boolean'],
             'inventory_alert_threshold' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'stock_import_vat_default' => ['sometimes', 'boolean'],
+            'pos_cost_price_suggestion_enabled' => ['sometimes', 'boolean'],
+            'work_shift_opening_count_enabled' => ['sometimes', 'boolean'],
             'work_shift_auto_open_enabled' => ['sometimes', 'boolean'],
             'print_paper_size' => ['sometimes', 'in:a4,a5,80mm,58mm'],
             'print_orientation' => ['sometimes', 'in:portrait,landscape'],
@@ -150,7 +154,7 @@ class SettingController extends Controller
                 }
             }
         } elseif ($user->can('units.manage')) {
-            $data = array_intersect_key($data, array_flip(['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default']));
+            $data = array_intersect_key($data, array_flip(['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled', 'pos_cost_price_suggestion_enabled']));
         } else {
             $data = array_intersect_key($data, array_flip($this->bankSettingKeys));
         }

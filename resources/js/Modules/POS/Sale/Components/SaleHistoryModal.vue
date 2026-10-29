@@ -25,7 +25,7 @@ const emit = defineEmits([
 >
 
     <div
-        class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        class="flex h-[min(82dvh,42rem)] max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
     >
 
         <div
@@ -47,7 +47,7 @@ const emit = defineEmits([
 
         </div>
 
-        <div class="min-h-0 flex-1 overflow-auto">
+        <div class="min-h-0 flex-1 overflow-hidden">
 
             <InvoiceList />
 

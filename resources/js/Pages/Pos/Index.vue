@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 import { router, usePage } from '@inertiajs/vue3'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
@@ -79,6 +79,9 @@ const shiftHistory = ref([])
 const shiftHistoryLoading = ref(false)
 let shiftRefreshTimer = null
 const formatMoney = formatConfiguredMoney
+const openingCountEnabled = computed(() => page.props.settings?.work_shift_opening_count_enabled !== false
+    && page.props.settings?.work_shift_opening_count_enabled !== 0
+    && page.props.settings?.work_shift_opening_count_enabled !== '0')
 const autoOpenShiftEnabled = computed(() => page.props.settings?.work_shift_auto_open_enabled !== false
     && page.props.settings?.work_shift_auto_open_enabled !== 0
     && page.props.settings?.work_shift_auto_open_enabled !== '0')
@@ -122,7 +125,7 @@ const bankBalanceRows = balances => bankAccounts.value.map(account => ({ ...acco
 const loadShift = async () => {
     const { data } = await axios.get(route('pos.shifts.current'))
     shift.value = data.shift
-    if (!data.shift && !data.prompt_dismissed && autoOpenShiftEnabled.value) {
+    if (!data.shift && !data.prompt_dismissed && autoOpenShiftEnabled.value && openingCountEnabled.value) {
         shiftMode.value = 'open'
         shiftDenominations.value = Object.fromEntries(denominationValues.map(value => [value, 0]))
         shiftCashAmount.value = 0
@@ -308,11 +311,19 @@ onBeforeUnmount(() => {
 
 const showSelectModal = ref(false)
 const selectedProduct = ref(null)
+const selectionOriginRect = ref(null)
+const posLayout = ref(null)
 
-const handleSelectProduct = (product) => {
+const animateAddedProduct = (product, originRect = selectionOriginRect.value) => {
+    if (!originRect) return
+    nextTick(() => posLayout.value?.animateProductToCart(originRect, product?.name))
+}
+
+const handleSelectProduct = (product, originRect = null) => {
 
     if (product.scanned_variant) {
         selectedProduct.value = product
+        selectionOriginRect.value = originRect
         handleConfirmSelect({ variant: product.scanned_variant })
         return
     }
@@ -321,6 +332,7 @@ const handleSelectProduct = (product) => {
     // -> thêm thẳng vào giỏ, không cần hỏi lại
     if (product.imei_id) {
         addToCart(product)
+        animateAddedProduct(product, originRect)
         return
     }
 
@@ -333,12 +345,14 @@ const handleSelectProduct = (product) => {
     // 👉 có biến thể hoặc quản lý theo IMEI -> mở modal cho chọn
     if (hasVariants || hasImei) {
         selectedProduct.value = product
+        selectionOriginRect.value = originRect
         showSelectModal.value = true
         return
     }
 
     // 👉 sản phẩm thường
     addToCart(product)
+    animateAddedProduct(product, originRect)
 }
 
 const handleConfirmSelect = ({ variant, imei }) => {
@@ -377,7 +391,15 @@ const handleConfirmSelect = ({ variant, imei }) => {
         sell_price: price,
     })
 
+    animateAddedProduct(selectedProduct.value)
+    selectionOriginRect.value = null
+
     showSelectModal.value = false
+}
+
+const closeSelectProductModal = () => {
+    showSelectModal.value = false
+    selectionOriginRect.value = null
 }
 
 const handleCheckout = async (data) => {
@@ -509,6 +531,7 @@ const checkout = async (data) => {
 // Hiện popup thanh toán
 const showCheckoutModal = ref(false)
 const checkoutInvoiceCode = ref('')
+const checkingShiftBeforeCheckout = ref(false)
 
 const makeInvoiceCode = () => {
     const timeZone = page.props.settings?.app_timezone || 'Asia/Ho_Chi_Minh'
@@ -536,8 +559,42 @@ const openCheckoutModal = () => {
         return
     }
 
-    checkoutInvoiceCode.value = makeInvoiceCode()
-    showCheckoutModal.value = true
+    // When opening cash count is disabled, let checkout proceed without the
+    // extra shift pre-check. The normal checkout endpoint still validates its
+    // own requirements when the payment is submitted.
+    if (!openingCountEnabled.value) {
+        checkoutInvoiceCode.value = makeInvoiceCode()
+        showCheckoutModal.value = true
+        return
+    }
+
+    if (checkingShiftBeforeCheckout.value) return
+    checkingShiftBeforeCheckout.value = true
+
+    axios.get(route('pos.shifts.current'))
+        .then(({ data }) => {
+            shift.value = data.shift
+            if (!data.shift) {
+                shiftMode.value = 'open'
+                shiftResult.value = null
+                shiftCashDetail.value = false
+                shiftCashAmount.value = 0
+                shiftDenominations.value = Object.fromEntries(denominationValues.map(value => [value, 0]))
+                shiftBankBalances.value = Object.fromEntries(bankAccounts.value.map(account => [account.shift_key, 0]))
+                shiftModal.value = true
+                toast.error('Vui lòng mở ca làm trước khi thanh toán.')
+                return
+            }
+
+            checkoutInvoiceCode.value = makeInvoiceCode()
+            showCheckoutModal.value = true
+        })
+        .catch(error => {
+            toast.error(error.response?.data?.message || 'Không kiểm tra được ca làm. Vui lòng thử lại.')
+        })
+        .finally(() => {
+            checkingShiftBeforeCheckout.value = false
+        })
 }
 
 useKeyboardShortcuts({
@@ -565,7 +622,7 @@ useBarcodeScanner(
 
 <template>
 
-    <PosLayout :cart-count="cartItemCount" :grand-total="grandTotal" :shift="shift" @close="closePos" @manage-shift="manageShift" @show-shift-history="showShiftHistory">
+    <PosLayout ref="posLayout" :cart-count="cartItemCount" :grand-total="grandTotal" :shift="shift" :opening-count-enabled="openingCountEnabled" @close="closePos" @manage-shift="manageShift" @show-shift-history="showShiftHistory">
         <template #main>
             <PosMainPanel
                 :cart="cart"
@@ -629,11 +686,11 @@ useBarcodeScanner(
         :show="showSelectModal"
         :product="selectedProduct"
         :cart="cart"
-        @close="showSelectModal = false"
+        @close="closeSelectProductModal"
         @confirm="handleConfirmSelect"
     />
 
-    <WorkShiftOpenModal v-if="shiftModal && shiftMode === 'open' && !shiftResult" :denominations="denominationValues" :counts="shiftDenominations" :balances="shiftBankBalances" :accounts="bankAccounts" :money="formatMoney" @close="shiftModal = false" @opened="handleShiftOpened" />
+    <WorkShiftOpenModal v-if="shiftModal && shiftMode === 'open' && !shiftResult" :denominations="denominationValues" :counts="shiftDenominations" :balances="shiftBankBalances" :accounts="bankAccounts" :money="formatMoney" :count-enabled="openingCountEnabled" @close="shiftModal = false" @opened="handleShiftOpened" />
 
     <div v-if="shiftModal && (shiftMode === 'close' || shiftResult)" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
         <section class="flex h-[92vh] max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-2xl sm:p-5">

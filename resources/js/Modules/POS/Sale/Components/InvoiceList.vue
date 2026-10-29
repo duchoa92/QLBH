@@ -159,8 +159,9 @@ const refreshInvoices = () => {
 </script>
 
 <template>
-    <div class="p-4">
-        <div class="mb-3 flex flex-wrap items-center gap-2">
+    <div class="flex h-full min-h-0 flex-col">
+        <div class="shrink-0 border-b border-slate-200 px-3 py-3 sm:px-4">
+        <div class="flex flex-wrap items-center gap-2">
                 <div class="relative min-w-[220px] flex-1">
                     <FloatingInput v-model="filters.search" label="Mã HĐ/Khách hàng" type="search" placeholder-text="Nhập mã HĐ hoặc tên khách hàng" input-class="!h-10 !rounded-lg !border-slate-300 !pl-3 !pr-9 focus:!border-blue-500" @input="searchInvoices" />
                     <button v-if="filters.search" type="button" class="absolute right-3 top-3 rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Xóa tìm kiếm" @click="filters.search = ''; searchInvoices()"><X class="h-4 w-4" /></button>
@@ -177,12 +178,15 @@ const refreshInvoices = () => {
                 </div>
         </div>
 
-        <div class="overflow-x-auto rounded-lg border border-slate-200">
-        <table class="w-full min-w-[680px] table-fixed text-sm">
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-auto px-3 sm:px-4">
+        <div class="overflow-x-auto">
+        <table class="w-full min-w-[640px] table-fixed text-sm">
             <colgroup>
                 <col class="w-[20%]" /><col class="w-[20%]" /><col class="w-[16%]" /><col class="w-[18%]" /><col class="w-[14%]" /><col class="w-[12%]" />
             </colgroup>
-            <thead class="bg-slate-100 text-slate-600">
+            <thead class="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-[0_1px_0_0_#e2e8f0]">
                 <tr class="text-center">
                     <th class="p-2 text-left">Mã HĐ</th>
                     <th class="p-2">Khách hàng</th>
@@ -207,7 +211,7 @@ const refreshInvoices = () => {
                             <button type="button" class="shrink-0 rounded p-1 text-slate-400 opacity-100 hover:bg-blue-100 hover:text-blue-700 sm:opacity-0 sm:group-hover:opacity-100" title="Sao chép mã hóa đơn" aria-label="Sao chép mã hóa đơn" @click.stop="copyCode(invoice.code)"><Copy class="h-3.5 w-3.5" /></button>
                         </div>
                     </td>
-                    <td class="px-2 py-1 text-center">{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</td>
+                    <td class="px-2 py-1 text-center"><span class="block truncate" :title="invoice.customer?.full_name ?? 'Khách lẻ'">{{ invoice.customer?.full_name ?? 'Khách lẻ' }}</span></td>
                     <td class="px-2 py-1 text-center">
                         <span
                             v-if="invoice.status === 'cancelled'"
@@ -246,9 +250,10 @@ const refreshInvoices = () => {
                 </tr>
             </tbody>
         </table>
+        </div>
         <div v-if="!invoices.length" class="p-6 text-center text-sm text-slate-500">Không tìm thấy hóa đơn phù hợp.</div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
             <div>Hiển thị {{ from }}-{{ to }} của {{ total }} kết quả</div>
             <div class="flex items-center gap-1">
                 <button type="button" class="rounded-md border border-slate-300 bg-white p-1.5 disabled:opacity-40" aria-label="Trang trước" :disabled="currentPage <= 1" @click="loadInvoices(currentPage - 1)"><ChevronLeft class="h-4 w-4" /></button>

@@ -26,6 +26,9 @@ const emit = defineEmits([
 ])
 const page = usePage()
 const allowsNegativeStock = computed(() => Boolean(page.props.settings?.allow_negative_stock))
+const costPriceSuggestionEnabled = computed(() => page.props.settings?.pos_cost_price_suggestion_enabled !== false
+    && page.props.settings?.pos_cost_price_suggestion_enabled !== 0
+    && page.props.settings?.pos_cost_price_suggestion_enabled !== '0')
 
 const {
     keyword,
@@ -36,14 +39,14 @@ const {
     loadProducts,
 } = useProductSearch()
 
-const selectProduct = (product) => {
+const selectProduct = (product, event = null) => {
     // Kiểm tra tồn kho khả dụng trước khi chọn
     const currentStock = getDisplayStock(product)
     if (currentStock <= 0 && !canSellWithoutStock(product)) {
         toast.error('Sản phẩm/Biến thể này đã hết hàng hoặc đã được chọn hết vào giỏ!')
         return
     }
-    emit('selected', product)
+    emit('selected', product, event?.currentTarget?.getBoundingClientRect?.() ?? null)
 }
 
 const scanImei = async () => {
@@ -105,8 +108,9 @@ const onCameraScan = async (code) => {
 const formatPrice = formatCurrency
 const showingCostPriceFor = ref(null)
 
-const isShowingCostPrice = (product) => showingCostPriceFor.value === (product.variant_id ?? product.id)
+const isShowingCostPrice = (product) => costPriceSuggestionEnabled.value && showingCostPriceFor.value === (product.variant_id ?? product.id)
 const startShowingCostPrice = (product, event) => {
+    if (!costPriceSuggestionEnabled.value) return
     event.preventDefault()
     event.stopPropagation()
     showingCostPriceFor.value = product.variant_id ?? product.id
@@ -117,8 +121,18 @@ const stopShowingCostPrice = (event) => {
     showingCostPriceFor.value = null
 }
 const displayedPriceLabel = (product) => isShowingCostPrice(product)
-    ? formatPrice(product.cost_price ?? product.import_price ?? 0)
+    ? costPriceLabel(product)
     : priceLabel(product)
+
+const costPriceLabel = (product) => {
+    const min = Number(product.cost_price_min || 0)
+    const max = Number(product.cost_price_max || 0)
+    if (min > 0 && max > 0 && min !== max) {
+        return `${formatPrice(min)} - ${formatPrice(max)}`
+    }
+
+    return formatPrice(min || max || product.cost_price || product.import_price || 0)
+}
 
 const canSellWithoutStock = (product) => allowsNegativeStock.value
     && product.product_type !== 'imei'
@@ -276,7 +290,7 @@ const categoryOptions = computed(() => [
         
         <!-- THANH LỌC & TÌM KIẾM SẢN PHẨM -->
         <div class="mb-2 sm:mb-3">
-            <div class="grid items-center gap-2 md:grid-cols-[1fr_260px] lg:grid-cols-[1fr_320px]">
+            <div class="grid grid-cols-1 items-center gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_clamp(150px,20vw,220px)_40px]">
                 
                 <!-- Ô TÌM KIẾM -->
                 <div class="relative min-w-0">
@@ -291,11 +305,12 @@ const categoryOptions = computed(() => [
                 </div>
 
                 <!-- LỌC DANH MỤC & NÚT REFRESH -->
-                <div class="flex items-center gap-2">
-                    <div class="flex-1">
+                <div class="flex min-w-0 items-center gap-2 min-[480px]:contents">
+                    <div class="min-w-0 flex-1">
                         <FloatingSelect
                             v-model="categoryId"
                             label="Danh mục"
+                            :show-placeholder="false"
                             :options="categoryOptions"
                         />
                     </div>
@@ -341,7 +356,7 @@ const categoryOptions = computed(() => [
                             ? 'opacity-60 border-slate-200 bg-slate-100/50 cursor-not-allowed'
                             : 'border-slate-200/80 bg-white shadow-sm hover:border-blue-400 hover:shadow-md active:scale-[0.98]'
                     ]"
-                    @click="selectProduct(product)"
+                    @click="selectProduct(product, $event)"
                 >
                     <!-- KHU VỰC ẢNH -->
                     <div class="relative h-24 w-full shrink-0 overflow-hidden bg-slate-50 sm:h-36">
@@ -375,7 +390,7 @@ const categoryOptions = computed(() => [
                             v-else
                             class="absolute bottom-2 left-2 touch-none select-none rounded-lg bg-rose-600/90 px-2.5 py-1 text-xs font-bold text-white shadow-sm backdrop-blur-sm"
                             :class="isShowingCostPrice(product) ? 'bg-amber-600/95' : ''"
-                            title="Nhấn giữ để xem giá nhập"
+                            :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
                             @pointerdown="startShowingCostPrice(product, $event)"
                             @pointerup="stopShowingCostPrice($event)"
                             @pointercancel="stopShowingCostPrice($event)"

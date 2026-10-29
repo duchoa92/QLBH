@@ -93,7 +93,18 @@ class SaleController extends Controller
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.discount_type' => ['nullable', 'in:percent,amount'],
             'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
+            'paid_amount' => ['required', 'numeric', 'min:0', 'max:9999999999999'],
+            'payment_method' => ['required', 'in:cash,bank,mixed,card'],
+            'cash_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'bank_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
+
+        if ($data['payment_method'] === 'mixed') {
+            $splitTotal = (float) ($data['cash_received_amount'] ?? 0) + (float) ($data['bank_received_amount'] ?? 0);
+            if (abs($splitTotal - (float) $data['paid_amount']) >= 0.01) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['paid_amount' => 'Tiền mặt và chuyển khoản phải bằng tổng số tiền đã nhận.']);
+            }
+        }
 
         DB::transaction(function () use ($sale, $data): void {
             $sale = Sale::query()->lockForUpdate()->with(['items.product', 'items.variant', 'items.productImei', 'items.gifts'])->findOrFail($sale->id);
@@ -102,6 +113,7 @@ class SaleController extends Controller
 
             $oldDebt = max(0, (float) $sale->grand_total - (float) $sale->paid_amount);
             $oldCustomerId = $sale->customer_id;
+            $paidAmount = round((float) $data['paid_amount'], 2);
             $subtotal = 0.0;
             $discount = 0.0;
             $newItems = [];
@@ -180,17 +192,33 @@ class SaleController extends Controller
             }
 
             $newTotal = max(0, round($subtotal - $discount + (float) $sale->tax, 2));
-            $newDebt = max(0, $newTotal - (float) $sale->paid_amount);
+            $newDebt = max(0, $newTotal - $paidAmount);
             $newCustomerId = $data['customer_id'] ?? null;
-            if (!$newCustomerId && $newDebt > 0) {
+            if (!$newCustomerId && $paidAmount < $newTotal) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['customer_id' => 'Khách lẻ cần thanh toán đủ tiền; hãy chọn khách hàng để ghi nhận công nợ.']);
             }
+
+            $cashReceived = match ($data['payment_method']) {
+                'cash' => $paidAmount,
+                'mixed' => round((float) ($data['cash_received_amount'] ?? 0), 2),
+                default => 0,
+            };
+            $bankReceived = match ($data['payment_method']) {
+                'bank' => $paidAmount,
+                'mixed' => round((float) ($data['bank_received_amount'] ?? 0), 2),
+                default => 0,
+            };
+
             $sale->update([
                 'customer_id' => $newCustomerId,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'grand_total' => $newTotal,
-                'change_amount' => max(0, (float) $sale->paid_amount - $newTotal),
+                'paid_amount' => $paidAmount,
+                'payment_method' => $data['payment_method'],
+                'cash_received_amount' => $cashReceived,
+                'bank_received_amount' => $bankReceived,
+                'change_amount' => max(0, $paidAmount - $newTotal),
             ]);
 
             if ($oldCustomerId || $newCustomerId) {

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { usePage } from '@inertiajs/vue3'
 import { X, Check, Search, Cpu, Barcode, AlertCircle } from 'lucide-vue-next'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import { formatCurrency } from '@/utils/format'
@@ -20,12 +21,17 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'confirm'])
+const page = usePage()
+const costPriceSuggestionEnabled = computed(() => page.props.settings?.pos_cost_price_suggestion_enabled !== false
+    && page.props.settings?.pos_cost_price_suggestion_enabled !== 0
+    && page.props.settings?.pos_cost_price_suggestion_enabled !== '0')
 
 const selectedVariant = ref(null)
 const selectedImei = ref(null)
 const imeis = ref([])
 const loadingImeis = ref(false)
 const imeiKeyword = ref('')
+const showingCostPriceFor = ref('')
 
 const needsImei = computed(() =>
     props.product?.product_type === 'imei'
@@ -81,16 +87,34 @@ const imeiSellPrice = (item) =>
         ?? 0
     )
 
-const priceSourceLabel = (item) => {
-    if (item?.price_source === 'imei' || item?.sell_price > 0) return 'Giá máy'
-    if (item?.price_source === 'variant' || item?.variant?.sell_price > 0) return 'Giá biến thể'
-    return 'Giá sản phẩm'
-}
+const variantSellPrice = (variant) => Number(
+    (variant?.sell_price > 0 ? variant.sell_price : null)
+    ?? (variant?.price > 0 ? variant.price : null)
+    ?? props.product?.sell_price
+    ?? props.product?.price
+    ?? 0
+)
 
-const expectedProfit = (item) => {
-    const costPrice = Number(item?.cost_price || 0)
-    if (costPrice <= 0) return null
-    return imeiSellPrice(item) - costPrice
+const itemCostPrice = (item) => Number(
+    (item?.cost_price > 0 ? item.cost_price : null)
+    ?? (item?.variant?.cost_price > 0 ? item.variant.cost_price : null)
+    ?? props.product?.cost_price
+    ?? 0
+)
+
+const variantCostPrice = (variant) => Number((variant?.cost_price > 0 ? variant.cost_price : null) ?? props.product?.cost_price ?? 0)
+const priceKey = (type, item) => `${type}:${item?.id ?? ''}`
+const isShowingCostPrice = (type, item) => costPriceSuggestionEnabled.value && showingCostPriceFor.value === priceKey(type, item)
+const showCostPrice = (type, item, event) => {
+    if (!costPriceSuggestionEnabled.value) return
+    if (type === 'imei') selectImei(item)
+    else selectVariant(item)
+    showingCostPriceFor.value = priceKey(type, item)
+    event.currentTarget?.setPointerCapture?.(event.pointerId)
+}
+const stopShowingCostPrice = (event) => {
+    event?.stopPropagation?.()
+    showingCostPriceFor.value = ''
 }
 
 const displayVariantStock = (variant) => {
@@ -164,6 +188,7 @@ watch(
 
         selectedVariant.value = null
         selectedImei.value = null
+        showingCostPriceFor.value = ''
         imeis.value = []
         imeiKeyword.value = ''
 
@@ -259,12 +284,18 @@ const confirm = () => {
                             </div>
 
                             <div class="mt-2 flex items-center justify-between">
-                                <span class="text-xs font-extrabold text-blue-600">
-                                    {{ formatMoney(
-                                        (variant.sell_price > 0 ? variant.sell_price : null)
-                                        ?? (variant.price > 0 ? variant.price : null)
-                                        ?? product.price
-                                    ) }}
+                                <span
+                                    class="touch-none select-none text-xs font-extrabold"
+                                    :class="isShowingCostPrice('variant', variant) ? 'text-amber-700' : 'text-rose-600'"
+                                    :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
+                                    @pointerdown.prevent.stop="costPriceSuggestionEnabled && showCostPrice('variant', variant, $event)"
+                                    @pointerup="stopShowingCostPrice($event)"
+                                    @pointercancel="stopShowingCostPrice($event)"
+                                    @lostpointercapture="stopShowingCostPrice($event)"
+                                    @contextmenu.prevent.stop
+                                    @click.stop
+                                >
+                                    {{ formatMoney(isShowingCostPrice('variant', variant) ? variantCostPrice(variant) : variantSellPrice(variant)) }}
                                 </span>
 
                                 <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
@@ -323,21 +354,19 @@ const confirm = () => {
                                     {{ [item.serial, item.color, item.storage].filter(Boolean).join(' · ') }}
                                 </div>
 
-                                <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                    <span class="text-xs font-extrabold text-rose-600">
-                                        {{ formatMoney(imeiSellPrice(item)) }}
-                                    </span>
-
-                                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
-                                        {{ priceSourceLabel(item) }}
-                                    </span>
-
+                                <div class="mt-1.5">
                                     <span
-                                        v-if="expectedProfit(item) !== null"
-                                        class="text-[10px] font-semibold"
-                                        :class="expectedProfit(item) >= 0 ? 'text-emerald-600' : 'text-rose-600'"
+                                        class="touch-none select-none text-xs font-extrabold"
+                                        :class="isShowingCostPrice('imei', item) ? 'text-amber-700' : 'text-rose-600'"
+                                        :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
+                                        @pointerdown.prevent.stop="costPriceSuggestionEnabled && showCostPrice('imei', item, $event)"
+                                        @pointerup="stopShowingCostPrice($event)"
+                                        @pointercancel="stopShowingCostPrice($event)"
+                                        @lostpointercapture="stopShowingCostPrice($event)"
+                                        @contextmenu.prevent.stop
+                                        @click.stop
                                     >
-                                        Lãi: {{ formatMoney(expectedProfit(item)) }}
+                                        {{ formatMoney(isShowingCostPrice('imei', item) ? itemCostPrice(item) : imeiSellPrice(item)) }}
                                     </span>
                                 </div>
                             </div>

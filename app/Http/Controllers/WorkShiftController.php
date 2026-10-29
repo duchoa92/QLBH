@@ -70,11 +70,14 @@ class WorkShiftController extends Controller
             'bank_balances' => ['nullable', 'array', 'max:10'],
             'bank_balances.*' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
-        $denominations = $data['denominations'] ?? [];
+        $countEnabled = filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN);
+        $denominations = $countEnabled ? ($data['denominations'] ?? []) : [];
         $this->validateDenominations($denominations);
-        $openingAmount = isset($data['cash_amount']) ? (float) $data['cash_amount'] : $this->totalFromDenominations($denominations);
+        $openingAmount = $countEnabled
+            ? (isset($data['cash_amount']) ? (float) $data['cash_amount'] : $this->totalFromDenominations($denominations))
+            : 0;
 
-        $shift = DB::transaction(function () use ($data, $denominations, $openingAmount): WorkShift {
+        $shift = DB::transaction(function () use ($data, $denominations, $openingAmount, $countEnabled): WorkShift {
             WorkShift::query()
                 ->where('user_id', auth()->id())
                 ->whereNull('closed_at')
@@ -88,8 +91,8 @@ class WorkShiftController extends Controller
             return WorkShift::create([
                 'user_id' => auth()->id(),
                 'opening_amount' => $openingAmount,
-                'opening_denominations' => $denominations,
-                'opening_bank_balances' => $data['bank_balances'] ?? [],
+                'opening_denominations' => $countEnabled ? $denominations : null,
+                'opening_bank_balances' => $countEnabled ? ($data['bank_balances'] ?? []) : [],
                 'opened_at' => now(),
             ]);
         });

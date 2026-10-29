@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { Plus, Search, Save, Trash2 } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -12,6 +12,10 @@ const props = defineProps({ sale: { type: Object, required: true } })
 const emit = defineEmits(['close', 'saved'])
 const form = useForm({
     customer_id: props.sale.customer_id ?? '',
+    paid_amount: Number(props.sale.paid_amount || 0),
+    payment_method: ['cash', 'bank', 'mixed', 'card'].includes(props.sale.payment_method) ? props.sale.payment_method : 'cash',
+    cash_received_amount: Number(props.sale.cash_received_amount || 0),
+    bank_received_amount: Number(props.sale.bank_received_amount || 0),
     items: (props.sale.items || []).map(item => ({
         product_id: item.product_id,
         variant_id: item.variant_id ?? '',
@@ -44,6 +48,32 @@ const discount = computed(() => form.items.reduce((sum, row) => {
     const value = Number(row.discount_value || 0)
     return sum + (row.discount_type === 'percent' ? amount * value / 100 : row.discount_type === 'amount' ? value : 0)
 }, 0))
+const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value + Number(props.sale.tax || 0)))
+const remainingBalance = computed(() => Math.max(0, newGrandTotal.value - Number(form.paid_amount || 0)))
+const changeDue = computed(() => Math.max(0, Number(form.paid_amount || 0) - newGrandTotal.value))
+
+watch(() => form.payment_method, (method) => {
+    if (method === 'cash') {
+        form.cash_received_amount = Number(form.paid_amount || 0)
+        form.bank_received_amount = 0
+    } else if (method === 'bank') {
+        form.cash_received_amount = 0
+        form.bank_received_amount = Number(form.paid_amount || 0)
+    } else if (method === 'card') {
+        form.cash_received_amount = 0
+        form.bank_received_amount = 0
+    } else if (Math.abs(Number(form.cash_received_amount || 0) + Number(form.bank_received_amount || 0) - Number(form.paid_amount || 0)) >= 0.01) {
+        form.cash_received_amount = Number(form.paid_amount || 0)
+        form.bank_received_amount = 0
+    }
+})
+watch(() => form.paid_amount, (amount) => {
+    if (form.payment_method === 'cash') form.cash_received_amount = Number(amount || 0)
+    if (form.payment_method === 'bank') form.bank_received_amount = Number(amount || 0)
+})
+watch(() => [form.cash_received_amount, form.bank_received_amount], ([cash, bank]) => {
+    if (form.payment_method === 'mixed') form.paid_amount = Number(cash || 0) + Number(bank || 0)
+})
 
 const searchCustomers = () => {
     clearTimeout(customerTimer)
@@ -162,7 +192,33 @@ const submit = () => form.put(route('sales.update', props.sale.id), {
                             <tr v-if="!form.items.length"><td colspan="6" class="p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18"/>Chưa có mặt hàng trong hóa đơn.</td></tr>
                         </tbody>
                     </table>
-                    <div class="space-y-1 border-t bg-slate-50 px-3 py-2 text-right text-xs"><p>Tạm tính: <b>{{ formatMoney(subtotal) }}</b></p><p>Giảm giá: <b>{{ formatMoney(discount) }}</b></p><p class="text-sm">Tổng mới: <b class="text-blue-700">{{ formatMoney(Math.max(0, subtotal - discount + Number(sale.tax || 0))) }}</b></p><p class="text-[11px] text-slate-500">Đã thu {{ formatMoney(sale.paid_amount) }} · Số tiền đã thu được giữ nguyên.</p></div>
+                    <div class="space-y-1 border-t bg-slate-50 px-3 py-2 text-right text-xs"><p>Tạm tính: <b>{{ formatMoney(subtotal) }}</b></p><p>Giảm giá: <b>{{ formatMoney(discount) }}</b></p><p class="text-sm">Tổng mới: <b class="text-blue-700">{{ formatMoney(newGrandTotal) }}</b></p></div>
+                </section>
+
+                <section class="space-y-3 rounded-lg border border-slate-200 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="text-sm font-bold text-slate-800">Thanh toán</h3>
+                        <label class="flex items-center gap-2 text-xs font-medium text-slate-600">
+                            Phương thức
+                            <select v-model="form.payment_method" class="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-blue-500">
+                                <option value="cash">Tiền mặt</option>
+                                <option value="bank">Chuyển khoản</option>
+                                <option value="mixed">Tiền mặt + chuyển khoản</option>
+                                <option value="card">Thẻ</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div v-if="form.payment_method === 'mixed'" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <FloatingInput v-model.number="form.cash_received_amount" label="Tiền mặt nhận" format-thousands min="0" input-class="!h-10 !rounded-md !px-2 !pt-2 !pb-1 text-right" />
+                        <FloatingInput v-model.number="form.bank_received_amount" label="Chuyển khoản nhận" format-thousands min="0" input-class="!h-10 !rounded-md !px-2 !pt-2 !pb-1 text-right" />
+                    </div>
+                    <FloatingInput v-else v-model.number="form.paid_amount" label="Số tiền đã thanh toán" format-thousands min="0" input-class="!h-10 !rounded-md !px-2 !pt-2 !pb-1 text-right" />
+                    <p v-if="form.errors.paid_amount" class="text-xs text-rose-600">{{ form.errors.paid_amount }}</p>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="rounded-md bg-amber-50 px-3 py-2 text-amber-800">Còn nợ <b class="ml-1">{{ formatMoney(remainingBalance) }}</b></div>
+                        <div class="rounded-md bg-emerald-50 px-3 py-2 text-emerald-800">Tiền thừa <b class="ml-1">{{ formatMoney(changeDue) }}</b></div>
+                    </div>
+                    <p class="text-[11px] text-slate-500">Công nợ và tiền thừa sẽ được tính lại theo tổng hóa đơn và số tiền thanh toán mới.</p>
                 </section>
                 <div v-if="Object.keys(form.errors).length" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.sale || form.errors.items || Object.values(form.errors)[0] }}</div>
                 <div v-if="form.errors.customer_id && !selectedCustomer" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.customer_id }}</div>

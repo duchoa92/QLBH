@@ -187,6 +187,12 @@ const form = useForm({
         && props.settings.inventory_alert_enabled !== '0',
     inventory_alert_threshold: Number(props.settings.inventory_alert_threshold ?? 5),
     stock_import_vat_default: Boolean(props.settings.stock_import_vat_default),
+    pos_cost_price_suggestion_enabled: props.settings.pos_cost_price_suggestion_enabled !== false
+        && props.settings.pos_cost_price_suggestion_enabled !== 0
+        && props.settings.pos_cost_price_suggestion_enabled !== '0',
+    work_shift_opening_count_enabled: props.settings.work_shift_opening_count_enabled !== false
+        && props.settings.work_shift_opening_count_enabled !== 0
+        && props.settings.work_shift_opening_count_enabled !== '0',
     work_shift_auto_open_enabled: props.settings.work_shift_auto_open_enabled !== false
         && props.settings.work_shift_auto_open_enabled !== 0
         && props.settings.work_shift_auto_open_enabled !== '0',
@@ -526,7 +532,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                 <span class="col-span-3 text-sm leading-5 text-slate-500">Quản lý thông tin nhận chuyển khoản và VietQR.</span>
             </button>
             <button v-if="can_manage_inventory_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md" @click="openModal('inventory')">
-                <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Boxes :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Hàng hóa và kho hàng</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-amber-600" :size="19" /></span>
+                <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Boxes :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Bán hàng và kho hàng</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-amber-600" :size="19" /></span>
                 <span class="col-span-3 text-sm leading-5 text-slate-500">Quy tắc tồn kho, cảnh báo hàng sắp hết và đơn vị tính.</span>
             </button>
             <button v-if="can_edit_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md" @click="openModal('printing')">
@@ -545,7 +551,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
 
         <BaseModal
             v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings)"
-            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : 'Hàng hóa và kho hàng'"
+            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : 'Bán hàng và kho hàng'"
             size="lg"
             :body-class="activeModal === 'payments' ? 'max-h-[70vh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70vh] overflow-y-auto p-3 sm:p-4'"
             @close="closeModal"
@@ -630,24 +636,6 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                     </div>
                 </DataPanel>
 
-                <DataPanel v-if="activeModal === 'system'">
-                    <template #header>
-                        <div>
-                            <h2 class="text-sm font-bold text-slate-900">Bảng kê đầu ca</h2>
-                            <p class="mt-0.5 text-xs font-medium text-slate-500">Cài đặt cách bảng kê xuất hiện khi vào POS.</p>
-                        </div>
-                    </template>
-                    <div class="p-4">
-                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <span>
-                                <span class="block text-sm font-bold text-slate-800">Tự động mở bảng kê khi vào POS</span>
-                                <span class="mt-0.5 block text-xs text-slate-500">Tắt mục này chỉ tắt tự mở; bạn vẫn có thể mở ca và kiểm kê thủ công.</span>
-                            </span>
-                            <input v-model="form.work_shift_auto_open_enabled" type="checkbox" class="h-5 w-5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-                        </label>
-                    </div>
-                </DataPanel>
-
                 <div v-if="activeModal === 'inventory'" class="grid items-start gap-3 sm:grid-cols-2">
                 <DataPanel class="!bg-slate-50">
                 
@@ -683,6 +671,18 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                     </div>
                 </DataPanel>
 
+                <DataPanel class="!bg-violet-50">
+                    <div class="p-3">
+                        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
+                            <span>
+                                <span class="block text-sm font-bold text-slate-800">Gợi ý giá nhập trên POS</span>
+                                <span class="mt-0.5 block text-xs text-slate-500">Nhấn giữ giá sản phẩm để xem giá nhập.</span>
+                            </span>
+                            <input v-model="form.pos_cost_price_suggestion_enabled" type="checkbox" aria-label="Bật gợi ý giá nhập trên POS" class="h-5 w-5 shrink-0 rounded border-slate-300 text-violet-600 focus:ring-violet-500">
+                        </label>
+                    </div>
+                </DataPanel>
+
                 <DataPanel class="sm:col-span-2 !bg-amber-50">
                     <div class="p-3">
                         <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
@@ -706,6 +706,34 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                 </DataPanel>
 
                 </div>
+
+                <DataPanel v-if="activeModal === 'inventory'">
+                    <template #header>
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <h2 class="text-sm font-bold text-slate-900">Bảng kê đầu ca</h2>
+                                <p class="mt-0.5 text-xs font-medium text-slate-500">Cài đặt kiểm kê và cách hiển thị trong POS.</p>
+                            </div>
+                            <label class="flex shrink-0 cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700" title="Cho phép kiểm kê đầu ca">
+                                <span>Cho phép kiểm kê</span>
+                                <input v-model="form.work_shift_opening_count_enabled" type="checkbox" role="switch" aria-label="Cho phép kiểm kê đầu ca" class="peer sr-only">
+                                <span class="relative h-5 w-9 rounded-full bg-slate-300 transition peer-checked:bg-emerald-500 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2"></span>
+                            </label>
+                        </div>
+                    </template>
+                    <div v-if="form.work_shift_opening_count_enabled" class="p-4">
+                        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <span>
+                                <span class="block text-sm font-bold text-slate-800">Tự động hiện bảng kiểm kê khi vào POS</span>
+                                <span class="mt-0.5 block text-xs text-slate-500">Khi tắt, bảng kiểm kê không tự bật lên; có thể mở ca thủ công từ POS.</span>
+                            </span>
+                            <span class="flex shrink-0 items-center gap-2">
+                                <span class="text-xs font-semibold" :class="form.work_shift_auto_open_enabled ? 'text-emerald-700' : 'text-slate-500'">{{ form.work_shift_auto_open_enabled ? 'Đang bật' : 'Đang tắt' }}</span>
+                                <input v-model="form.work_shift_auto_open_enabled" type="checkbox" role="switch" aria-label="Tự động hiện bảng kiểm kê khi vào POS" class="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                            </span>
+                        </label>
+                    </div>
+                </DataPanel>
 
                 <DataPanel v-if="activeModal === 'inventory'" class="mt-3">
                     <template #header>
