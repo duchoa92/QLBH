@@ -13,6 +13,10 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    floatingLabel: {
+        type: Boolean,
+        default: true,
+    },
     placeholderText: {
         type: String,
         default: '',
@@ -101,6 +105,7 @@ const inputType = computed(() => props.formatThousands ? 'text' : props.type)
         </p>
 
         <label
+            v-if="floatingLabel"
             :for="id || name"
             :class="[
                 'pointer-events-none absolute left-3 bg-white px-1 text-gray-500 transition-all duration-200 -top-2 text-xs peer-placeholder-shown:top-2.5 peer-placeholder-shown:text-sm peer-focus:-top-2 peer-focus:text-xs peer-focus:text-blue-600',

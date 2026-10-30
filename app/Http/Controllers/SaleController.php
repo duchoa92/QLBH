@@ -34,7 +34,7 @@ class SaleController extends Controller
             })
             ->with(['variants' => fn ($query) => $query->where('is_active', true)])
             ->limit(12)
-            ->get(['id', 'name', 'sku', 'sell_price', 'stock', 'product_type', 'manage_stock_by_serial'])
+            ->get(['id', 'name', 'sku', 'sell_price', 'stock', 'product_type', 'manage_stock_by_serial', 'warranty_days'])
             ->map(fn (Product $product) => [
                 'id' => $product->id,
                 'name' => $product->name,
@@ -42,11 +42,13 @@ class SaleController extends Controller
                 'price' => (float) $product->sell_price,
                 'stock' => (int) $product->stock,
                 'is_imei' => $product->product_type === 'imei' || (bool) $product->manage_stock_by_serial,
+                'warranty_days' => (int) $product->warranty_days,
                 'variants' => $product->variants->map(fn ($variant) => [
                     'id' => $variant->id,
                     'name' => $product->name . ' · ' . collect($variant->attributes ?? [])->filter()->join(' / '),
                     'sku' => $variant->sku,
                     'barcode' => $variant->barcode,
+                    'attributes' => $variant->attributes ?? [],
                     'price' => (float) ($variant->sell_price ?: $product->sell_price),
                     'stock' => (int) $variant->stock,
                 ])->values(),
@@ -70,9 +72,53 @@ class SaleController extends Controller
             ->get();
     }
 
+    public function searchAvailableImeis(Request $request, Product $product)
+    {
+        $query = ProductImei::query()
+            ->where('product_id', $product->id)
+            ->where('status', ProductImei::STATUS_IN_STOCK);
+
+        if ($request->filled('sale_id')) {
+            $saleId = (int) $request->query('sale_id');
+            $query->orWhere(function ($imeis) use ($product, $saleId): void {
+                $imeis->where('product_id', $product->id)
+                    ->where(function ($sold) use ($saleId): void {
+                        $sold->whereHas('saleItems', fn ($items) => $items->where('sale_id', $saleId))
+                            ->orWhereHas('giftSaleItems', fn ($gifts) => $gifts->whereHas('saleItem', fn ($items) => $items->where('sale_id', $saleId)));
+                    });
+            });
+        }
+
+        return $query->with('variant:id,attributes')
+            ->orderBy('imei')
+            ->limit(100)
+            ->get(['id', 'product_id', 'variant_id', 'imei', 'serial', 'status'])
+            ->map(function (ProductImei $imei): array {
+                $variantName = collect($imei->variant?->attributes ?? [])
+                    ->map(function ($attribute): string {
+                        if (is_array($attribute)) {
+                            $attribute = $attribute['value'] ?? $attribute['label'] ?? $attribute['name'] ?? $attribute['title'] ?? $attribute['text'] ?? collect($attribute)->flatten()->filter()->join(' ');
+                        }
+
+                        return is_scalar($attribute) ? (string) $attribute : '';
+                    })
+                    ->filter()
+                    ->join(' / ');
+
+                return [
+                    'id' => $imei->id,
+                    'imei' => $imei->imei,
+                    'serial' => $imei->serial,
+                    'variant_id' => $imei->variant_id,
+                    'variant_name' => $variantName,
+                    'status' => $imei->status,
+                ];
+            });
+    }
+
     public function edit(Sale $sale): Response
     {
-        $sale->load(['customer', 'items.product.unit', 'items.variant', 'items.productImei', 'items.gifts']);
+        $sale->load(['customer', 'items.product.unit', 'items.variant', 'items.productImei', 'items.gifts.product', 'items.gifts.variant', 'items.gifts.productImei']);
         $blockedReason = $this->saleEditBlockedReason($sale);
 
         return Inertia::render('Sales/Edit', [
@@ -89,12 +135,22 @@ class SaleController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'items.*.imei_id' => ['nullable', 'integer', 'exists:product_imeis,id'],
+            'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'items.*.warranty_note' => ['nullable', 'string', 'max:1000'],
+            'items.*.note' => ['nullable', 'string', 'max:1000'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.discount_type' => ['nullable', 'in:percent,amount'],
             'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
+            'items.*.gifts' => ['nullable', 'array'],
+            'items.*.gifts.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.gifts.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'items.*.gifts.*.imei_id' => ['nullable', 'integer', 'exists:product_imeis,id'],
+            'items.*.gifts.*.quantity' => ['required', 'integer', 'min:1'],
             'paid_amount' => ['required', 'numeric', 'min:0', 'max:9999999999999'],
             'payment_method' => ['required', 'in:cash,bank,mixed,card'],
+            'bank_account' => ['nullable', 'string', 'max:50'],
             'cash_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
@@ -113,6 +169,34 @@ class SaleController extends Controller
 
             $oldDebt = max(0, (float) $sale->grand_total - (float) $sale->paid_amount);
             $oldCustomerId = $sale->customer_id;
+            $oldImeiIds = collect();
+            $imeiProductIds = collect();
+            foreach ($sale->items as $oldItem) {
+                if ($oldItem->product_imei_id) {
+                    $oldImeiIds->push($oldItem->product_imei_id);
+                    $imeiProductIds->push($oldItem->product_id);
+                }
+                foreach ($oldItem->gifts as $oldGift) {
+                    if ($oldGift->product_imei_id) {
+                        $oldImeiIds->push($oldGift->product_imei_id);
+                        $imeiProductIds->push($oldGift->product_id);
+                    }
+                }
+            }
+            if ($oldImeiIds->isNotEmpty()) {
+                ProductImei::query()->whereIn('id', $oldImeiIds->unique())->lockForUpdate()->get()->each(function (ProductImei $imei): void {
+                    $imei->update([
+                        'status' => ProductImei::STATUS_IN_STOCK,
+                        'sold_at' => null,
+                        'customer_warranty_days' => null,
+                        'customer_warranty_expires_at' => null,
+                        'customer_warranty_voided_at' => null,
+                        'customer_warranty_void_reason' => null,
+                        'customer_warranty_voided_by' => null,
+                    ]);
+                });
+                $imeiProductIds->unique()->each(fn ($id) => app(ImeiStockSynchronizer::class)->sync((int) $id));
+            }
             $paidAmount = round((float) $data['paid_amount'], 2);
             $subtotal = 0.0;
             $discount = 0.0;
@@ -120,14 +204,23 @@ class SaleController extends Controller
 
             foreach ($data['items'] as $row) {
                 $product = Product::query()->lockForUpdate()->findOrFail($row['product_id']);
-                if ($product->product_type === 'imei' || $product->manage_stock_by_serial) {
-                    throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Không thể thêm mặt hàng quản lý IMEI khi sửa hóa đơn.']);
-                }
+                $requiresImei = $product->product_type === 'imei' || (bool) $product->manage_stock_by_serial;
                 $variant = null;
                 if (!empty($row['variant_id'])) {
                     $variant = ProductVariant::query()->lockForUpdate()->where('product_id', $product->id)->where('is_active', true)->findOrFail($row['variant_id']);
                 }
                 $quantity = (int) $row['quantity'];
+                $imei = null;
+                if ($requiresImei) {
+                    if ($quantity !== 1 || empty($row['imei_id'])) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Mỗi dòng IMEI phải có đúng một thiết bị được chọn.']);
+                    $imei = ProductImei::query()->lockForUpdate()->where('product_id', $product->id)->where('status', ProductImei::STATUS_IN_STOCK)->findOrFail($row['imei_id']);
+                    if ($variant && (int) $imei->variant_id !== (int) $variant->id) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'IMEI không thuộc biến thể đã chọn.']);
+                    if (!$variant && $imei->variant_id) $variant = ProductVariant::query()->whereKey($imei->variant_id)->first();
+                    if (collect($newItems)->contains(fn ($existing) => (int) ($existing['imei']?->id ?? 0) === (int) $imei->id)) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Không thể gán cùng một IMEI cho nhiều dòng.']);
+                    $imeiProductIds->push($product->id);
+                } elseif (!empty($row['imei_id'])) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Không được gán IMEI cho sản phẩm không quản lý IMEI.']);
+                }
                 $price = round((float) $row['unit_price'], 2);
                 $lineTotal = $price * $quantity;
                 $type = $row['discount_type'] ?? null;
@@ -138,22 +231,62 @@ class SaleController extends Controller
                 }
                 $subtotal += $lineTotal;
                 $discount += $lineDiscount;
-                $newItems[] = compact('product', 'variant', 'quantity', 'price', 'type', 'value', 'lineDiscount', 'lineTotal');
+                $gifts = [];
+                foreach ($row['gifts'] ?? [] as $giftRow) {
+                    $giftProduct = Product::query()->lockForUpdate()->findOrFail($giftRow['product_id']);
+                    $giftVariant = null;
+                    if (!empty($giftRow['variant_id'])) $giftVariant = ProductVariant::query()->lockForUpdate()->where('product_id', $giftProduct->id)->where('is_active', true)->findOrFail($giftRow['variant_id']);
+                    $giftRequiresImei = $giftProduct->product_type === 'imei' || (bool) $giftProduct->manage_stock_by_serial;
+                    $giftImei = null;
+                    $giftQuantity = (int) $giftRow['quantity'];
+                    if ($giftRequiresImei) {
+                        if ($giftQuantity !== 1 || empty($giftRow['imei_id'])) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Quà tặng IMEI cần chọn đúng một thiết bị.']);
+                        $giftImei = ProductImei::query()->lockForUpdate()->where('product_id', $giftProduct->id)->where('status', ProductImei::STATUS_IN_STOCK)->findOrFail($giftRow['imei_id']);
+                        if ($giftVariant && (int) $giftImei->variant_id !== (int) $giftVariant->id) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'IMEI quà tặng không thuộc biến thể đã chọn.']);
+                        if (!$giftVariant && $giftImei->variant_id) $giftVariant = ProductVariant::query()->whereKey($giftImei->variant_id)->first();
+                        if (collect($newItems)->contains(function ($existing) use ($giftImei) { return (int) ($existing['imei']?->id ?? 0) === (int) $giftImei->id || collect($existing['gifts'])->contains(fn ($gift) => (int) ($gift['imei']?->id ?? 0) === (int) $giftImei->id); }) || collect($gifts)->contains(fn ($existing) => (int) ($existing['imei']?->id ?? 0) === (int) $giftImei->id) || ($imei && (int) $imei->id === (int) $giftImei->id)) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Không thể gán cùng một IMEI cho nhiều dòng hoặc quà tặng.']);
+                        $imeiProductIds->push($giftProduct->id);
+                    } elseif (!empty($giftRow['imei_id'])) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'IMEI quà tặng không khớp với loại sản phẩm.']);
+                    if (!$giftRequiresImei && $giftProduct->variants()->where('is_active', true)->exists() && !$giftVariant) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Vui lòng chọn biến thể cho quà tặng ' . $giftProduct->name . '.']);
+                    $gifts[] = ['product' => $giftProduct, 'variant' => $giftVariant, 'quantity' => $giftQuantity, 'imei' => $giftImei];
+                }
+                $warrantyDays = max(0, min(3650, (int) ($row['warranty_days'] ?? ($product->warranty_days ?? 0))));
+                $warranty_note = filled($row['warranty_note'] ?? null) ? trim($row['warranty_note']) : null;
+                $note = filled($row['note'] ?? null) ? trim($row['note']) : null;
+                $newItems[] = compact('product', 'variant', 'quantity', 'price', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note');
             }
 
             $oldStockDelta = [];
             $oldSoldDelta = [];
             foreach ($sale->items as $item) {
-                $key = ($item->variant_id ? 'v' . $item->variant_id : 'p' . $item->product_id);
-                $oldStockDelta[$key] = ($oldStockDelta[$key] ?? 0) + (int) ($item->base_quantity ?: $item->quantity);
                 $oldSoldDelta[$item->product_id] = ($oldSoldDelta[$item->product_id] ?? 0) + (int) $item->quantity;
+                if (!$item->product_imei_id) {
+                    $key = ($item->variant_id ? 'v' . $item->variant_id : 'p' . $item->product_id);
+                    $oldStockDelta[$key] = ($oldStockDelta[$key] ?? 0) + (int) ($item->base_quantity ?: $item->quantity);
+                }
+                foreach ($item->gifts as $gift) {
+                    $oldSoldDelta[$gift->product_id] = ($oldSoldDelta[$gift->product_id] ?? 0) + (int) $gift->quantity;
+                    if (!$gift->product_imei_id) {
+                        $giftKey = $gift->variant_id ? 'v' . $gift->variant_id : 'p' . $gift->product_id;
+                        $oldStockDelta[$giftKey] = ($oldStockDelta[$giftKey] ?? 0) + (int) ($gift->base_quantity ?: $gift->quantity);
+                    }
+                }
             }
             $newStockDelta = [];
             $newSoldDelta = [];
             foreach ($newItems as $item) {
-                $key = $item['variant'] ? 'v' . $item['variant']->id : 'p' . $item['product']->id;
-                $newStockDelta[$key] = ($newStockDelta[$key] ?? 0) + $item['quantity'];
                 $newSoldDelta[$item['product']->id] = ($newSoldDelta[$item['product']->id] ?? 0) + $item['quantity'];
+                if (!$item['imei']) {
+                    $key = $item['variant'] ? 'v' . $item['variant']->id : 'p' . $item['product']->id;
+                    $newStockDelta[$key] = ($newStockDelta[$key] ?? 0) + $item['quantity'];
+                }
+                foreach ($item['gifts'] as $gift) {
+                    $newSoldDelta[$gift['product']->id] = ($newSoldDelta[$gift['product']->id] ?? 0) + $gift['quantity'];
+                    if (!$gift['imei']) {
+                        $giftKey = $gift['variant'] ? 'v' . $gift['variant']->id : 'p' . $gift['product']->id;
+                        $newStockDelta[$giftKey] = ($newStockDelta[$giftKey] ?? 0) + $gift['quantity'];
+                    }
+                }
             }
             foreach (array_unique(array_merge(array_keys($oldStockDelta), array_keys($newStockDelta))) as $key) {
                 $delta = ($oldStockDelta[$key] ?? 0) - ($newStockDelta[$key] ?? 0);
@@ -173,11 +306,17 @@ class SaleController extends Controller
                 elseif ($soldDelta < 0) Product::query()->whereKey($productId)->update(['sold_count' => DB::raw('GREATEST(0, sold_count - ' . abs($soldDelta) . ')')]);
             }
 
+            $soldAt = now();
+            foreach ($newItems as $item) {
+                if ($item['imei']) $this->markEditedImeiSold($item['imei'], $soldAt, $item['warrantyDays']);
+                foreach ($item['gifts'] as $gift) if ($gift['imei']) $this->markEditedImeiSold($gift['imei'], $soldAt, (int) ($gift['product']->warranty_days ?? 0));
+            }
             $sale->items()->delete();
             foreach ($newItems as $item) {
-                $sale->items()->create([
+                $saleItem = $sale->items()->create([
                     'product_id' => $item['product']->id,
                     'variant_id' => $item['variant']?->id,
+                    'product_imei_id' => $item['imei']?->id,
                     'unit_id' => $item['product']->unit_id,
                     'unit_name' => $item['product']->unit?->short_name ?: $item['product']->unit?->name,
                     'quantity' => $item['quantity'],
@@ -186,10 +325,24 @@ class SaleController extends Controller
                     'unit_price' => $item['price'],
                     'discount_type' => $item['type'],
                     'discount_value' => $item['value'],
+                    'warranty_days' => $item['warrantyDays'],
+                    'warranty_note' => $item['warranty_note'],
+                    'note' => $item['note'],
                     'discount_amount' => $item['lineDiscount'],
                     'subtotal' => $item['lineTotal'] - $item['lineDiscount'],
                 ]);
+                foreach ($item['gifts'] as $gift) {
+                    $saleItem->gifts()->create([
+                        'product_id' => $gift['product']->id,
+                        'variant_id' => $gift['variant']?->id,
+                        'product_imei_id' => $gift['imei']?->id,
+                        'quantity' => $gift['quantity'],
+                        'base_quantity' => $gift['quantity'],
+                        'conversion_factor' => 1,
+                    ]);
+                }
             }
+            $imeiProductIds->unique()->each(fn ($id) => app(ImeiStockSynchronizer::class)->sync((int) $id));
 
             $newTotal = max(0, round($subtotal - $discount + (float) $sale->tax, 2));
             $newDebt = max(0, $newTotal - $paidAmount);
@@ -216,6 +369,7 @@ class SaleController extends Controller
                 'grand_total' => $newTotal,
                 'paid_amount' => $paidAmount,
                 'payment_method' => $data['payment_method'],
+                'bank_account' => in_array($data['payment_method'], ['bank', 'mixed'], true) ? ($data['bank_account'] ?? null) : null,
                 'cash_received_amount' => $cashReceived,
                 'bank_received_amount' => $bankReceived,
                 'change_amount' => max(0, $paidAmount - $newTotal),
@@ -241,11 +395,24 @@ class SaleController extends Controller
         return back()->with('success', 'Đã cập nhật hóa đơn.');
     }
 
+    private function markEditedImeiSold(ProductImei $imei, \Illuminate\Support\Carbon $soldAt, int $warrantyDays): void
+    {
+        $warrantyDays = max(0, min(3650, $warrantyDays));
+        $imei->update([
+            'status' => ProductImei::STATUS_SOLD,
+            'sold_at' => $soldAt,
+            'customer_warranty_days' => $warrantyDays,
+            'customer_warranty_expires_at' => $warrantyDays > 0 ? $soldAt->copy()->addDays($warrantyDays) : null,
+            'customer_warranty_voided_at' => null,
+            'customer_warranty_void_reason' => null,
+            'customer_warranty_voided_by' => null,
+        ]);
+    }
+
     private function saleEditBlockedReason(Sale $sale): ?string
     {
         if ($sale->status !== 'completed') return 'Chỉ có thể sửa hóa đơn đang hoàn thành.';
         if (CustomerDebt::query()->where('source_type', Sale::class)->where('source_id', $sale->id)->where('type', 'decrease')->exists()) return 'Hóa đơn đã có lịch sử thu công nợ nên không thể sửa.';
-        if ($sale->items->contains(fn ($item) => $item->product_imei_id || $item->gifts->isNotEmpty())) return 'Hóa đơn có IMEI hoặc quà tặng; hiện chưa hỗ trợ sửa loại hóa đơn này.';
         return null;
     }
 

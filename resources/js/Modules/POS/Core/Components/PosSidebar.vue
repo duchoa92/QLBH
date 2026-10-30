@@ -68,7 +68,7 @@ const emit = defineEmits([
                 @selected="$emit('customer-selected', $event)"
             />
             <p v-if="needsCustomerForWarranty" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-                Chọn khách hàng để gắn hạn bảo hành vào hồ sơ và tra cứu được khi khách quay lại.
+                Sản phẩm có bảo hành, nên điền thông tin khách hàng để thuận tiện cho việc bảo hành
             </p>
         </div>
 

@@ -87,6 +87,11 @@ class ProductImei extends Model
         );
     }
 
+    public function giftSaleItems(): HasMany
+    {
+        return $this->hasMany(SaleItemGift::class, 'product_imei_id');
+    }
+
     // Quan hệ với Variant
     public function variant()
     {

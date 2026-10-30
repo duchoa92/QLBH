@@ -15,6 +15,8 @@ const props = defineProps({
     grandTotal: Number,
     invoiceCode: { type: String, default: '' },
     selectedCustomer: Object,
+    editMode: { type: Boolean, default: false },
+    initialPayment: { type: Object, default: () => ({}) },
     cart: {
         type: Array,
         default: () => [],
@@ -38,6 +40,7 @@ const bankManualFallback = ref(false)
 const bankCartSnapshot = ref('')
 const qrPaymentSection = ref(null)
 let bankPollTimer = null
+let initializingPaymentFields = false
 
 const page = usePage()
 const refreshedPaymentSettings = ref(null)
@@ -90,6 +93,7 @@ const selectedBankAccount = computed(() =>
 )
 
 watch(paymentMethod, () => {
+    if (initializingPaymentFields) return
     paidAmount.value = ''
     cashReceivedAmount.value = 0
     bankReceivedAmount.value = ''
@@ -101,6 +105,7 @@ watch(paymentMethod, async method => {
     requestAnimationFrame(() => qrPaymentSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
 })
 watch(mixedPayment, async enabled => {
+    if (initializingPaymentFields) return
     if (!enabled) return
     paidAmount.value = ''
     await nextTick()
@@ -132,7 +137,7 @@ const actualBankReceivedAmount = computed(() => {
 })
 
 const usesBankPayment = computed(() => paymentMethod.value === 'bank' || mixedPayment.value)
-const autoBankEnabled = computed(() => usesBankPayment.value && Boolean(selectedBankAccount.value?.payment_auto_enabled))
+const autoBankEnabled = computed(() => !props.editMode && usesBankPayment.value && Boolean(selectedBankAccount.value?.payment_auto_enabled))
 const autoBankTracking = computed(() => autoBankEnabled.value && !bankManualFallback.value)
 
 const effectivePaidAmount = computed(() =>
@@ -205,11 +210,26 @@ const disableRemainingQr = () => {
 }
 
 const resetPaymentFields = () => {
+    initializingPaymentFields = true
+    const initialAccount = bankAccounts.value.find(account => String(account.bank_account) === String(props.initialPayment.bank_account))
+    if (initialAccount) selectedBankAccountId.value = String(initialAccount.id ?? initialAccount.bank_account)
     paymentMethod.value = 'cash'
-    mixedPayment.value = false
-    paidAmount.value = ''
-    cashReceivedAmount.value = 0
-    bankReceivedAmount.value = ''
+    mixedPayment.value = props.editMode && props.initialPayment.payment_method === 'mixed'
+    if (props.editMode) {
+        const method = props.initialPayment.payment_method || 'cash'
+        paymentMethod.value = ['bank', 'card'].includes(method) ? method : 'cash'
+        const oldPaid = Number(props.initialPayment.paid_amount || 0)
+        const oldCash = Number(props.initialPayment.cash_received_amount || 0)
+        const oldBank = Number(props.initialPayment.bank_received_amount || 0)
+        paidAmount.value = String(method === 'mixed' ? oldBank : oldPaid)
+        cashReceivedAmount.value = oldCash
+        bankReceivedAmount.value = method === 'bank' || method === 'mixed' ? String(oldBank || oldPaid) : ''
+    } else {
+        mixedPayment.value = false
+        paidAmount.value = ''
+        cashReceivedAmount.value = 0
+        bankReceivedAmount.value = ''
+    }
     note.value = ''
     payOldDebt.value = false
     bankStatus.value = null
@@ -217,6 +237,7 @@ const resetPaymentFields = () => {
     bankManualFallback.value = false
     bankStarting.value = false
     bankCartSnapshot.value = ''
+    nextTick(() => { initializingPaymentFields = false })
 }
 
 watch(() => props.show, shown => {
@@ -373,6 +394,7 @@ const submit = () => {
         bank_received_amount: usesBankPayment.value
             ? actualBankReceivedAmount.value
             : 0,
+        bank_account: usesBankPayment.value ? selectedBankAccount.value?.bank_account ?? null : null,
         note: note.value,
         pay_old_debt: payOldDebt.value,
     })
@@ -394,8 +416,8 @@ const submit = () => {
                         <Receipt class="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 class="text-base font-bold text-slate-900">Xác nhận thanh toán</h2>
-                        <p class="text-xs text-slate-500 font-medium">Hoàn tất đơn hàng POS</p>
+                        <h2 class="text-base font-bold text-slate-900">{{ editMode ? 'Thanh toán hóa đơn' : 'Xác nhận thanh toán' }}</h2>
+                        <p class="text-xs text-slate-500 font-medium">{{ editMode ? `Cập nhật hóa đơn ${invoiceCode}` : 'Hoàn tất đơn hàng POS' }}</p>
                     </div>
                 </div>
 
@@ -485,7 +507,8 @@ const submit = () => {
                         v-else-if="!autoBankTracking"
                         class="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center text-xs font-semibold text-amber-800"
                     >
-                        <template v-if="bankManualFallback">Không kết nối được dịch vụ đối soát. Bạn vẫn có thể nhập số tiền nhận và xác nhận thanh toán thủ công.</template>
+                        <template v-if="editMode">Thanh toán sẽ được ghi nhận vào hóa đơn sau khi xác nhận.</template>
+                        <template v-else-if="bankManualFallback">Không kết nối được dịch vụ đối soát. Bạn vẫn có thể nhập số tiền nhận và xác nhận thanh toán thủ công.</template>
                         <template v-else-if="!hasBankSettings">Chưa cấu hình tài khoản ngân hàng trong Cài đặt. Bạn vẫn có thể nhập số tiền nhận và xác nhận thủ công.</template>
                         <template v-else-if="selectedBankAccount?.payment_provider === 'apipay'">
                             ApiPay chưa đủ cấu hình. Hãy kiểm tra Bank Account Public ID, API keys và Webhook signing secret trong Cài đặt.
@@ -499,7 +522,7 @@ const submit = () => {
 
                 <!-- THANH TOÁN NỢ CŨ (NẾU CÓ) -->
                 <div
-                    v-if="selectedCustomer && Number(selectedCustomer.debt_balance) > 0"
+                    v-if="!editMode && selectedCustomer && Number(selectedCustomer.debt_balance) > 0"
                     class="rounded-xl border border-blue-100 bg-blue-50/40 p-3"
                 >
                     <label class="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-blue-900">
@@ -531,7 +554,7 @@ const submit = () => {
                 </div>
 
                 <!-- GHI CHÚ -->
-                <div>
+                <div v-if="!editMode">
                     <FloatingInput
                         v-model="note"
                         label="Ghi chú đơn hàng..."
@@ -540,8 +563,18 @@ const submit = () => {
 
                 <!-- TỔNG KẾT TÍNH TOÁN -->
                 <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-2">
+                    <template v-if="editMode">
+                        <div class="flex justify-between text-xs font-medium text-slate-600">
+                            <span>Đã thanh toán trước khi sửa</span>
+                            <span class="font-bold text-slate-800">{{ formatMoney(initialPayment.paid_amount || 0) }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs font-medium text-slate-600">
+                            <span>{{ balanceStatus.label }} sau khi sửa</span>
+                            <span :class="balanceStatus.className">{{ formatMoney(balanceStatus.amount) }}</span>
+                        </div>
+                    </template>
                     <div class="flex justify-between text-xs font-medium text-slate-600">
-                        <span>Tiền hàng</span>
+                        <span>{{ editMode ? 'Tổng hóa đơn mới' : 'Tiền hàng' }}</span>
                         <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
                     </div>
 

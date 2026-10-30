@@ -18,6 +18,9 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    currentImei: { type: Object, default: null },
+    currentVariant: { type: Object, default: null },
+    extraImeis: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['close', 'confirm'])
@@ -39,7 +42,7 @@ const needsImei = computed(() =>
 )
 
 const hasVariants = computed(() =>
-    Boolean(props.product?.variants?.length)
+    Boolean(props.product?.variants?.length || props.product?.requires_variant_selection)
 )
 
 const needsVariant = computed(() =>
@@ -144,7 +147,10 @@ const filteredImeis = computed(() => {
 
     return availableImeis.filter(item =>
         imeiDisplayCode(item).toLowerCase().includes(keyword)
-        || item.serial?.toLowerCase().includes(keyword)
+        || String(item.serial || '').toLowerCase().includes(keyword)
+        || String(item.color || '').toLowerCase().includes(keyword)
+        || String(item.storage || '').toLowerCase().includes(keyword)
+        || String(item.extra_info || '').toLowerCase().includes(keyword)
         || variantLabel(item.variant)?.toLowerCase().includes(keyword)
     )
 })
@@ -158,6 +164,12 @@ const loadImeis = async () => {
 
     try {
         imeis.value = await productService.imeis(props.product.id)
+        for (const imei of props.extraImeis) {
+            if (!imeis.value.some(item => Number(item.id) === Number(imei.id))) imeis.value.unshift(imei)
+        }
+        if (props.currentImei && !imeis.value.some(item => Number(item.id) === Number(props.currentImei.id))) {
+            imeis.value.unshift(props.currentImei)
+        }
     } catch (error) {
         console.error(error)
     } finally {
@@ -187,7 +199,8 @@ watch(
         if (!props.show) return
 
         selectedVariant.value = null
-        selectedImei.value = null
+        selectedVariant.value = props.currentVariant || null
+        selectedImei.value = props.currentImei || null
         showingCostPriceFor.value = ''
         imeis.value = []
         imeiKeyword.value = ''
@@ -303,6 +316,7 @@ const confirm = () => {
                                 </span>
                             </div>
                         </button>
+                        <p v-if="!product.variants?.length" class="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Các phiên bản của sản phẩm hiện đã hết hàng.</p>
                     </div>
                 </div>
 

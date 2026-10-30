@@ -9,8 +9,8 @@ import CartItemPromotion from './CartItemPromotion.vue'
 import { useCartGift } from '../Composables/useCartGift'
 import { useCartDiscount } from '../Composables/useCartDiscount'
 
-const props = defineProps({ item: { type: Object, required: true } })
-const emit = defineEmits(['remove'])
+const props = defineProps({ item: { type: Object, required: true }, editorOnly: { type: Boolean, default: false }, showRemove: { type: Boolean, default: true }, clickableVariant: { type: Boolean, default: false }, clickableImei: { type: Boolean, default: false } })
+const emit = defineEmits(['remove', 'editor-saved', 'select-variant', 'select-imei'])
 const activeEditor = ref(null)
 const draft = ref(null)
 const promotionError = ref('')
@@ -90,6 +90,7 @@ const { normalizeDiscount } = useCartDiscount()
 
 const saveEditor = () => {
     if (!draft.value) return
+    const savedEditor = activeEditor.value
     if (activeEditor.value === 'promotion' && incompleteGift.value) {
         promotionError.value = incompleteGift.value.requires_imei
             ? `Vui lòng chọn IMEI cho quà tặng ${incompleteGift.value.name}.`
@@ -114,6 +115,7 @@ const saveEditor = () => {
         props.item.discount_type = draft.value.discount_type
         props.item.discount_value = draft.value.discount_value
     }
+    emit('editor-saved', { item: props.item, editor: savedEditor })
     closeEditor()
 }
 
@@ -154,16 +156,21 @@ const editorTitle = computed(() => ({
 </script>
 
 <template>
-    <div class="mb-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
+    <div :class="editorOnly ? 'min-w-0' : 'mb-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm'">
         <CartItemHeader
             :item="item"
+            :show-remove="showRemove"
+            :clickable-variant="clickableVariant"
+            :clickable-imei="clickableImei"
             @edit-note="openEditor('note')"
             @edit-promotion="openEditor('promotion')"
             @edit-warranty="openEditor('warranty')"
+            @select-variant="emit('select-variant')"
+            @select-imei="emit('select-imei')"
             @remove="emit('remove', item)"
         />
 
-        <div class="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+        <div v-if="!editorOnly" class="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
             <CartItemQuantity :item="item" @remove="emit('remove', item)" />
             <CartItemPrice :item="item" />
         </div>

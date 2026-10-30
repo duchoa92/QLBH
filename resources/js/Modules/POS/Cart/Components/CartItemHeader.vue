@@ -5,6 +5,8 @@ import {
     PenSquare,
     Gift,
     ShieldCheck,
+    Cpu,
+    Layers,
 } from 'lucide-vue-next'
 
 import { computed } from 'vue'
@@ -14,6 +16,12 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    showRemove: {
+        type: Boolean,
+        default: true,
+    },
+    clickableVariant: { type: Boolean, default: false },
+    clickableImei: { type: Boolean, default: false },
 })
 
 const noteCount = computed(() => props.item.note?.trim() ? 1 : 0)
@@ -24,6 +32,8 @@ const emit = defineEmits([
     'edit-note',
     'edit-promotion',
     'edit-warranty',
+    'select-variant',
+    'select-imei',
     'remove',
 ])
 
@@ -99,6 +109,7 @@ const emit = defineEmits([
                     </button>
 
                     <button
+                        v-if="showRemove"
                         type="button"
                         @click="
                             emit(
@@ -127,28 +138,27 @@ const emit = defineEmits([
                 {{ item.unit_name ?? 'Cái' }}
             </div>
 
-            <div
-                v-if="item.variant_label"
-                class="
-                    text-[11px]
-                    text-blue-600
-                    font-medium
-                "
+            <button
+                v-if="item.is_imei || item.imei"
+                type="button"
+                class="inline-flex w-fit max-w-full items-center gap-1 text-left text-[11px] font-medium"
+                :class="clickableImei ? 'cursor-pointer rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-violet-700 transition hover:border-violet-300 hover:bg-violet-100' : 'cursor-default text-blue-600'"
+                :title="clickableImei ? 'Nhấn để đổi IMEI' : undefined"
+                @click="clickableImei && emit('select-imei')"
             >
-                {{ item.variant_label }}
-            </div>
+                <span class="truncate">IMEI: {{ item.imei || 'Chọn IMEI' }}</span><Cpu v-if="clickableImei" class="h-3 w-3 shrink-0" aria-hidden="true" />
+            </button>
 
-            <div
-                v-if="item.imei"
-                class="
-                    text-[11px]
-                    text-blue-600
-                    font-medium
-                "
+            <button
+                v-if="item.variant_label || item.variant_name"
+                type="button"
+                class="inline-flex w-fit max-w-full items-center gap-1 text-left text-[11px] font-medium"
+                :class="clickableVariant ? 'cursor-pointer rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-blue-700 transition hover:border-blue-300 hover:bg-blue-100' : 'cursor-default text-blue-600'"
+                :title="clickableVariant ? 'Nhấn để đổi biến thể' : undefined"
+                @click="clickableVariant && emit('select-variant')"
             >
-                IMEI:
-                {{ item.imei }}
-            </div>
+                <span class="truncate">Phiên bản: {{ item.variant_label || item.variant_name }}</span><Layers v-if="clickableVariant" class="h-3 w-3 shrink-0" aria-hidden="true" />
+            </button>
 
         </div>
 

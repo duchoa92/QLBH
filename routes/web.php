@@ -279,6 +279,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('sales')->name('sales.')->controller(SaleController::class)->group(function () {
         Route::get('/', 'index')->middleware('permission:sales.view')->name('index');
         Route::get('/products/search', 'searchProducts')->middleware('permission:sales.edit')->name('products.search');
+        Route::get('/products/{product}/imeis', 'searchAvailableImeis')->middleware('permission:sales.edit')->name('products.imeis');
         Route::get('/customers/search', 'searchCustomers')->middleware('permission:sales.edit')->name('customers.search');
         Route::get('/{sale}/edit', 'edit')->middleware('permission:sales.edit')->name('edit');
         Route::put('/{sale}', 'update')->middleware('permission:sales.edit')->name('update');

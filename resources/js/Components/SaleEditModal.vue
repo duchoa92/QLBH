@@ -1,45 +1,101 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { Plus, Search, Save, Trash2 } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
-import { formatMoney } from '@/utils/format'
+import { formatMoney, formatDate } from '@/utils/format'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
+import CartItem from '@/Modules/POS/Cart/Components/CartItem.vue'
+import SelectProductModal from '@/Modules/POS/Product/Components/SelectProductModal.vue'
+import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
 
-const props = defineProps({ sale: { type: Object, required: true } })
+const props = defineProps({ sale: { type: Object, required: true }, blockedReason: { type: String, default: '' } })
 const emit = defineEmits(['close', 'saved'])
+const attributeLabel = (value) => {
+    if (value === null || value === undefined || value === '') return ''
+    if (Array.isArray(value)) return value.map(attributeLabel).filter(Boolean).join(' / ')
+    if (typeof value === 'object') {
+        for (const key of ['value', 'label', 'name', 'title', 'text']) {
+            if (value[key] !== undefined && value[key] !== null && value[key] !== '') return attributeLabel(value[key])
+        }
+        return Object.values(value).map(attributeLabel).filter(Boolean).join(' / ')
+    }
+    return String(value)
+}
+const variantName = (variant) => Object.values(variant?.attributes || {}).map(attributeLabel).filter(Boolean).join(' / ') || variant?.name || variant?.sku || ''
 const form = useForm({
     customer_id: props.sale.customer_id ?? '',
     paid_amount: Number(props.sale.paid_amount || 0),
     payment_method: ['cash', 'bank', 'mixed', 'card'].includes(props.sale.payment_method) ? props.sale.payment_method : 'cash',
+    bank_account: props.sale.bank_account || '',
     cash_received_amount: Number(props.sale.cash_received_amount || 0),
     bank_received_amount: Number(props.sale.bank_received_amount || 0),
     items: (props.sale.items || []).map(item => ({
         product_id: item.product_id,
         variant_id: item.variant_id ?? '',
         name: item.product?.name || 'Sản phẩm',
-        variant_name: item.variant?.attributes ? Object.values(item.variant.attributes).filter(Boolean).join(' / ') : '',
+        variant_name: variantName(item.variant),
+        variant_label: variantName(item.variant),
+        unit_name: item.unit_name || item.product?.unit?.short_name || 'Cái',
+        image_url: item.product?.image_url || '',
         quantity: Number(item.quantity || 1),
         unit_price: Number(item.unit_price || 0),
+        price: Number(item.unit_price || 0),
         discount_type: item.discount_type || 'amount',
         discount_value: item.discount_value ? Number(item.discount_value) : '',
+        imei_id: item.product_imei_id ?? '',
+        imei: item.product_imei?.imei || '',
+        warranty_days: Number(item.warranty_days ?? item.product_imei?.customer_warranty_days ?? item.product?.warranty_days ?? 0),
+        customer_warranty_days: Number(item.warranty_days ?? item.product_imei?.customer_warranty_days ?? item.product?.warranty_days ?? 0),
+        warranty_note: item.warranty_note || '',
+        customer_warranty_note: item.warranty_note || '',
+        note: item.note || '',
+        is_imei: Boolean(item.product_imei_id || item.product?.product_type === 'imei' || item.product?.manage_stock_by_serial),
+        imei_options: item.product_imei_id ? [{ id: item.product_imei_id, imei: item.product_imei?.imei || 'IMEI đã gán', serial: item.product_imei?.serial }] : [],
+        gifts: (item.gifts || []).map(gift => ({ key: `gift-${gift.id}`, id: gift.product_id, product_id: gift.product_id, variant_id: gift.variant_id ?? null, imei_id: gift.product_imei_id ?? null, name: gift.product?.name || 'Quà tặng', sku: gift.product?.sku || '', variant_name: variantName(gift.variant), imei: gift.product_imei?.imei || '', is_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), requires_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), quantity: Number(gift.quantity || 1), imei_options: gift.product_imei_id ? [{ id: gift.product_imei_id, imei: gift.product_imei?.imei || 'IMEI đã gán', display_code: gift.product_imei?.imei || 'IMEI đã gán' }] : [], variant_options: [] })),
     })),
 })
 const selectedCustomer = ref(props.sale.customer || null)
+const showCheckoutModal = ref(false)
+const optionProduct = ref(null)
+const optionTargetIndex = ref(null)
+const optionPurpose = ref('edit')
+const showOptionModal = ref(false)
+const replacedImeisByItem = ref({})
 const customerQuery = ref('')
 const customerResults = ref([])
 const productQuery = ref('')
 const productResults = ref([])
+const giftTargetIndex = ref(null)
+const activeEditorIndex = ref(null)
+const activeEditor = ref(null)
+const editorDraft = ref(null)
+const choiceKeyword = ref('')
+const loadingImeis = ref(false)
 const searchingCustomers = ref(false)
 const searchingProducts = ref(false)
 let customerTimer
 let productTimer
+const filteredChoiceImeis = computed(() => {
+    const keyword = choiceKeyword.value.trim().toLowerCase()
+    const imeis = editorDraft.value?.imei_options || []
+    if (!keyword) return imeis
+    return imeis.filter(imei => [imei.imei, imei.serial, imei.variant_name].some(value => String(value || '').toLowerCase().includes(keyword)))
+})
+const filteredChoiceVariants = computed(() => (editorDraft.value?.variant_options || []).filter(variant => Number(variant.stock || 0) > 0 || String(variant.id) === String(editorDraft.value?.variant_id)))
+
+onMounted(async () => {
+    for (const item of form.items.filter(row => row.is_imei)) item.imei_options = (await loadImeis(item.product_id)).map(imei => ({ ...imei, display_code: imei.imei || imei.serial }))
+    for (const item of form.items) {
+        for (const gift of item.gifts.filter(row => row.is_imei)) gift.imei_options = (await loadImeis(gift.product_id)).map(imei => ({ ...imei, display_code: imei.imei || imei.serial }))
+    }
+})
 
 const blockedReason = computed(() => {
+    if (props.blockedReason) return props.blockedReason
     if (props.sale.status !== 'completed') return 'Chỉ có thể sửa hóa đơn đang hoàn thành.'
-    if ((props.sale.items || []).some(item => item.product_imei_id || (item.gifts || []).length)) return 'Hóa đơn có IMEI hoặc quà tặng; hiện chưa hỗ trợ sửa loại hóa đơn này.'
     return ''
 })
 const subtotal = computed(() => form.items.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unit_price || 0), 0))
@@ -49,8 +105,10 @@ const discount = computed(() => form.items.reduce((sum, row) => {
     return sum + (row.discount_type === 'percent' ? amount * value / 100 : row.discount_type === 'amount' ? value : 0)
 }, 0))
 const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value + Number(props.sale.tax || 0)))
-const remainingBalance = computed(() => Math.max(0, newGrandTotal.value - Number(form.paid_amount || 0)))
-const changeDue = computed(() => Math.max(0, Number(form.paid_amount || 0) - newGrandTotal.value))
+const previouslyPaid = computed(() => Number(props.sale.paid_amount || 0))
+const settlementDifference = computed(() => newGrandTotal.value - previouslyPaid.value)
+const remainingBalance = computed(() => Math.max(0, settlementDifference.value))
+const changeDue = computed(() => Math.max(0, -settlementDifference.value))
 
 watch(() => form.payment_method, (method) => {
     if (method === 'cash') {
@@ -109,13 +167,97 @@ const searchProducts = () => {
         } catch { productResults.value = [] } finally { searchingProducts.value = false }
     }, 250)
 }
-const addProduct = (product, variant = null) => {
-    if (product.is_imei) return
-    const existing = form.items.find(row => Number(row.product_id) === Number(product.id) && Number(row.variant_id || 0) === Number(variant?.id || 0))
-    if (existing) existing.quantity++
-    else form.items.push({ product_id: product.id, variant_id: variant?.id || '', name: product.name, variant_name: variant?.name || '', quantity: 1, unit_price: variant?.price ?? product.price, discount_type: 'amount', discount_value: '' })
+const loadImeis = async (productId) => {
+    loadingImeis.value = true
+    try {
+        const response = await fetch(route('sales.products.imeis', { product: productId, sale_id: props.sale.id }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+        return response.ok ? await response.json() : []
+    } catch { return [] } finally { loadingImeis.value = false }
+}
+const addProduct = async (product, variant = null, selectedImei = null) => {
+    if (giftTargetIndex.value !== null) {
+        const gift = { product_id: product.id, variant_id: variant?.id || selectedImei?.variant_id || '', name: product.name, variant_name: variantName(variant) || variant?.name || selectedImei?.variant_name || '', quantity: 1, is_imei: Boolean(product.is_imei), imei_id: selectedImei?.id || '', imei: selectedImei?.imei || selectedImei?.serial || '', imei_options: [] }
+        if (gift.is_imei) gift.imei_options = await loadImeis(product.id)
+        if (activeEditor.value === 'gifts' && activeEditorIndex.value === giftTargetIndex.value && editorDraft.value) editorDraft.value.gifts.push(gift)
+        else form.items[giftTargetIndex.value]?.gifts.push(gift)
+        if (activeEditor.value !== 'gifts') giftTargetIndex.value = null
+    } else if (product.is_imei) {
+        const imeis = await loadImeis(product.id)
+        const selected = selectedImei ? imeis.find(row => String(row.id) === String(selectedImei.id)) || selectedImei : null
+        const selectedVariant = selected?.variant || variant
+        const price = Number(selected?.effective_sell_price ?? selected?.sell_price ?? selected?.price ?? selectedVariant?.sell_price ?? selectedVariant?.price ?? product.price)
+        form.items.push({ product_id: product.id, variant_id: selectedVariant?.id || selected?.variant_id || '', name: product.name, variant_name: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', variant_label: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', unit_name: 'Cái', image_url: product.image_url || '', quantity: 1, unit_price: price, price, discount_type: 'amount', discount_value: '', is_imei: true, imei_id: selected?.id || '', imei: selected?.imei || selected?.serial || '', warranty_days: Number(product.warranty_days || 0), imei_options: imeis, gifts: [] })
+    } else {
+        const existing = form.items.find(row => !row.is_imei && Number(row.product_id) === Number(product.id) && Number(row.variant_id || 0) === Number(variant?.id || 0))
+        if (existing) existing.quantity++
+        else form.items.push({ product_id: product.id, variant_id: variant?.id || '', name: product.name, variant_name: variantName(variant) || variant?.name || '', variant_label: variantName(variant) || variant?.name || '', unit_name: 'Cái', image_url: product.image_url || '', quantity: 1, unit_price: variant?.price ?? product.price, price: variant?.price ?? product.price, discount_type: 'amount', discount_value: '', is_imei: false, imei_id: '', imei: '', warranty_days: Number(product.warranty_days || 0), imei_options: [], gifts: [] })
+    }
     productQuery.value = ''
     productResults.value = []
+}
+const toggleEditor = (index, editor) => {
+    if (activeEditorIndex.value === index && activeEditor.value === editor) {
+        closeEditor()
+        return
+    }
+    activeEditorIndex.value = index
+    activeEditor.value = editor
+    editorDraft.value = JSON.parse(JSON.stringify(form.items[index]))
+    choiceKeyword.value = ''
+    giftTargetIndex.value = editor === 'gifts' ? index : null
+    productQuery.value = ''
+    productResults.value = []
+}
+const openImeiSelector = async (index) => {
+    const item = form.items[index]
+    if (!item?.is_imei) return
+    toggleEditor(index, 'imei')
+    const available = await loadImeis(item.product_id)
+    editorDraft.value.imei_options = available.filter(imei => imei.status === 'in_stock' || String(imei.id) === String(item.imei_id))
+}
+const openVariantSelector = async (index) => {
+    const item = form.items[index]
+    if (!item) return
+    toggleEditor(index, 'variant')
+    try {
+        const response = await fetch(route('sales.products.search', { q: item.name }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+        const products = response.ok ? await response.json() : []
+        const variants = products.find(product => Number(product.id) === Number(item.product_id))?.variants || []
+        editorDraft.value.variant_options = variants.filter(variant => Number(variant.stock || 0) > 0 || String(variant.id) === String(item.variant_id))
+    } catch { editorDraft.value.variant_options = [] }
+}
+const closeEditor = () => {
+    activeEditorIndex.value = null
+    activeEditor.value = null
+    editorDraft.value = null
+    choiceKeyword.value = ''
+    giftTargetIndex.value = null
+    productQuery.value = ''
+    productResults.value = []
+}
+const saveEditor = () => {
+    if (activeEditorIndex.value === null || !editorDraft.value) return
+    Object.assign(form.items[activeEditorIndex.value], editorDraft.value)
+    closeEditor()
+}
+const removeItem = (index) => {
+    form.items.splice(index, 1)
+    if (activeEditorIndex.value === index) {
+        closeEditor()
+    } else if (activeEditorIndex.value > index) {
+        activeEditorIndex.value--
+    }
+    if (giftTargetIndex.value !== null && giftTargetIndex.value > index) giftTargetIndex.value--
+}
+const startAddingGift = (index) => {
+    if (activeEditorIndex.value !== index || activeEditor.value !== 'gifts') toggleEditor(index, 'gifts')
+    giftTargetIndex.value = index
+    productQuery.value = ''
+    productResults.value = []
+}
+const setImei = (row, value) => {
+    row.imei_id = value
+    row.imei = row.imei_options.find(imei => String(imei.id) === String(value))?.imei || ''
 }
 const scanProduct = async () => {
     const code = productQuery.value.trim()
@@ -138,10 +280,122 @@ const lineTotal = (item) => {
     const value = Number(item.discount_value || 0)
     return Math.max(0, amount - (item.discount_type === 'percent' ? amount * value / 100 : item.discount_type === 'amount' ? value : 0))
 }
-const submit = () => form.put(route('sales.update', props.sale.id), {
+const warrantyEndDate = (days) => {
+    const saleDate = String(props.sale.created_at || '').slice(0, 10)
+    if (Number(days || 0) <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate)) return ''
+    const endDate = new Date(`${saleDate}T00:00:00Z`)
+    endDate.setUTCDate(endDate.getUTCDate() + Number(days))
+    return formatDate(endDate.toISOString().slice(0, 10))
+}
+const persistSaleEdit = () => form.transform(data => ({
+    ...data,
+    items: data.items.map(item => {
+        const { price, customer_warranty_days, customer_warranty_note, ...saleItem } = item
+        return {
+            ...saleItem,
+            unit_price: price ?? item.unit_price,
+            warranty_days: customer_warranty_days ?? item.warranty_days,
+            warranty_note: customer_warranty_note ?? item.warranty_note,
+            gifts: (item.gifts || []).map(gift => ({
+                product_id: gift.product_id ?? gift.id,
+                variant_id: gift.variant_id || null,
+                imei_id: gift.imei_id || null,
+                quantity: Number(gift.quantity || 1),
+            })),
+        }
+    }),
+})).put(route('sales.update', props.sale.id), {
     preserveScroll: true,
     onSuccess: () => emit('saved'),
 })
+const submit = () => { showCheckoutModal.value = true }
+const confirmCheckoutPayment = (payment) => {
+    form.payment_method = payment.payment_method
+    form.paid_amount = Number(payment.paid_amount || 0)
+    form.cash_received_amount = Number(payment.cash_received_amount || 0)
+    form.bank_received_amount = Number(payment.bank_received_amount || 0)
+    form.bank_account = payment.bank_account || ''
+    persistSaleEdit()
+}
+const syncSharedCartEditor = ({ item }) => {
+    item.unit_price = Number(item.price ?? item.unit_price ?? 0)
+    item.warranty_days = item.customer_warranty_days ?? item.warranty_days ?? 0
+    item.warranty_note = item.customer_warranty_note || ''
+}
+const optionCart = computed(() => form.items.filter((_, index) => index !== optionTargetIndex.value))
+const addProductCart = computed(() => [
+    ...form.items,
+    ...form.items.flatMap(item => item.gifts || []),
+    ...(editorDraft.value?.gifts || []),
+])
+const openAddProductOptions = (product) => {
+    const allVariants = product.variants || []
+    const variants = allVariants.filter(variant => Number(variant.stock || 0) > 0)
+    optionProduct.value = { ...product, variants, requires_variant_selection: allVariants.length > 0, product_type: product.is_imei ? 'imei' : 'standard' }
+    optionTargetIndex.value = null
+    optionPurpose.value = 'add'
+    showOptionModal.value = true
+}
+const openItemOptions = async (index) => {
+    const item = form.items[index]
+    if (!item) return
+    try {
+        const response = await fetch(route('sales.products.search', { q: item.name }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+        const products = response.ok ? await response.json() : []
+        const product = products.find(row => Number(row.id) === Number(item.product_id))
+        if (!product) return
+        optionProduct.value = { ...product, product_type: product.is_imei ? 'imei' : 'standard' }
+        optionTargetIndex.value = index
+        optionPurpose.value = 'edit'
+        showOptionModal.value = true
+    } catch { optionProduct.value = null }
+}
+const currentSelectionImei = computed(() => {
+    const item = form.items[optionTargetIndex.value]
+    if (!item?.imei_id) return null
+    return { id: item.imei_id, imei: item.imei, serial: item.imei_options?.find(row => String(row.id) === String(item.imei_id))?.serial, variant_id: item.variant_id, variant: item.variant_id ? optionProduct.value?.variants?.find(variant => Number(variant.id) === Number(item.variant_id)) : null }
+})
+const currentSelectionVariant = computed(() => {
+    const item = form.items[optionTargetIndex.value]
+    return optionProduct.value?.variants?.find(variant => Number(variant.id) === Number(item?.variant_id)) || null
+})
+const extraSelectionImeis = computed(() => replacedImeisByItem.value[optionTargetIndex.value] || [])
+const confirmItemOptions = ({ variant, imei }) => {
+    if (optionPurpose.value === 'add') {
+        addProduct(optionProduct.value, variant, imei)
+        showOptionModal.value = false
+        return
+    }
+    const item = form.items[optionTargetIndex.value]
+    if (!item) return
+    if (item.is_imei && imei) {
+        if (item.imei_id && String(item.imei_id) !== String(imei.id)) {
+            const previousImei = item.imei_options?.find(option => String(option.id) === String(item.imei_id))
+            if (previousImei) {
+                previousImei.variant = optionProduct.value?.variants?.find(row => Number(row.id) === Number(previousImei.variant_id)) || null
+                const alternatives = replacedImeisByItem.value[optionTargetIndex.value] || []
+                if (!alternatives.some(option => String(option.id) === String(previousImei.id))) {
+                    replacedImeisByItem.value[optionTargetIndex.value] = [...alternatives, previousImei]
+                }
+            }
+        }
+        item.imei_id = imei.id
+        item.imei = imei.imei || imei.serial || ''
+        if (variant) {
+            item.variant_id = variant.id
+            item.variant_name = variantName(variant)
+            item.variant_label = item.variant_name
+        }
+        const selectedPrice = Number(imei.effective_sell_price ?? imei.sell_price ?? imei.price ?? variant?.sell_price ?? variant?.price ?? 0)
+        if (selectedPrice > 0) item.unit_price = item.price = selectedPrice
+    } else if (variant) {
+        item.variant_id = variant.id
+        item.variant_name = variantName(variant)
+        item.variant_label = item.variant_name
+        item.unit_price = item.price = Number(variant.sell_price || variant.price || item.unit_price)
+    }
+    showOptionModal.value = false
+}
 </script>
 
 <template>
@@ -165,60 +419,50 @@ const submit = () => form.put(route('sales.update', props.sale.id), {
                 </section>
 
                 <section class="relative p-1">
-                    <div class="relative"><FloatingInput v-model="productQuery" label="Thêm mặt hàng" placeholder-text="Tìm theo tên, mã hoặc barcode" input-class="!h-10 !rounded-lg !border-slate-300 !py-2 !pr-12 !pl-3 focus:!border-blue-500" @input="searchProducts" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { productQuery = code; scanProduct() }" /></div>
+                    <div class="relative"><FloatingInput v-model="productQuery" :label="giftTargetIndex !== null ? 'Thêm quà tặng' : 'Thêm mặt hàng'" :placeholder-text="giftTargetIndex !== null ? 'Tìm sản phẩm quà tặng theo tên, mã hoặc barcode' : 'Tìm theo tên, mã hoặc barcode'" input-class="!h-10 !rounded-lg !border-slate-300 !py-2 !pr-12 !pl-3 focus:!border-blue-500" @input="searchProducts" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { productQuery = code; scanProduct() }" /></div>
+                    <p v-if="giftTargetIndex !== null" class="mt-1 text-xs text-amber-700">Chọn sản phẩm quà tặng <button type="button" class="underline" @click="giftTargetIndex = null; productQuery = ''; productResults = []">Hủy</button></p>
                     <p v-if="searchingProducts" class="mt-1 text-xs text-slate-400">Đang tìm sản phẩm…</p>
                     <div v-if="productResults.length" class="absolute left-1 right-1 top-[44px] z-20 max-h-56 overflow-y-auto rounded-md border bg-white shadow-lg">
-                        <template v-for="product in productResults" :key="product.id">
-                            <button v-if="!product.is_imei && !product.variants.length" type="button" @click="addProduct(product)" class="flex w-full items-center justify-between border-b px-3 py-2 text-left text-sm hover:bg-blue-50"><span>{{ product.name }} <small class="text-slate-400">{{ product.sku }}</small></span><span>{{ formatMoney(product.price) }}</span></button>
-                            <button v-for="variant in product.variants" :key="variant.id" type="button" @click="addProduct(product, variant)" class="flex w-full items-center justify-between border-b px-3 py-2 text-left text-sm hover:bg-blue-50"><span>{{ variant.name }} <small class="text-slate-400">{{ variant.sku }}</small></span><span>{{ formatMoney(variant.price) }}</span></button>
-                        </template>
-                        <p v-if="productResults.every(product => product.is_imei)" class="p-3 text-xs text-slate-500">Các sản phẩm quản lý IMEI không thể thêm tại đây.</p>
+                        <button v-for="product in productResults" :key="product.id" type="button" @click="product.is_imei || product.variants?.length ? openAddProductOptions(product) : addProduct(product)" class="flex w-full items-center justify-between gap-3 border-b px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-blue-50">
+                            <span class="min-w-0"><span class="block truncate font-semibold text-slate-800">{{ product.name }}</span><small class="block truncate text-slate-400">{{ product.sku }} <template v-if="product.is_imei">· Chọn IMEI</template><template v-else-if="product.variants?.length">· Chọn phiên bản</template></small></span>
+                            <span class="shrink-0 text-xs font-semibold text-blue-700">{{ product.is_imei || product.variants?.length ? 'Chọn…' : formatMoney(product.price) }}</span>
+                        </button>
+                        <p v-if="loadingImeis" class="p-3 text-xs text-slate-500">Đang tải IMEI…</p>
                     </div>
                 </section>
                 </div>
 
                 <section class="overflow-x-auto rounded-lg border border-slate-200">
-                    <table class="w-full min-w-[720px] text-sm">
-                        <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="p-2.5 text-left">Mặt hàng</th><th class="w-20 p-2">SL</th><th class="w-32 p-2">Đơn giá</th><th class="w-40 p-2">Giảm giá</th><th class="w-32 p-2 text-right">Thành tiền</th><th class="w-9"></th></tr></thead>
+                    <table class="w-full min-w-[760px] table-fixed text-sm">
+                        <colgroup><col/><col class="w-16"/><col class="w-36"/><col class="w-36"/><col class="w-10"/></colgroup>
+                        <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="p-2.5 text-left">Mặt hàng</th><th class="p-2 text-center">SL</th><th class="p-2 text-right">Đơn giá</th><th class="p-2 text-right">Thành tiền</th><th></th></tr></thead>
                         <tbody>
-                            <tr v-for="(item, index) in form.items" :key="`${item.product_id}-${item.variant_id}`" class="border-t">
-                                <td class="p-2.5 font-semibold">{{ item.name }}<small v-if="item.variant_name" class="block text-slate-500">{{ item.variant_name }}</small></td>
-                                <td class="p-1.5"><FloatingInput v-model.number="item.quantity" label="Số lượng" type="number" min="1" input-class="!h-9 !rounded-md !px-1 !pt-2 !pb-1 !text-center !text-xs" /></td>
-                                <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-1 !pt-2 !pb-1 !text-right !text-xs" /></td>
-                                <td class="p-1.5"><div class="flex min-w-0 items-center"><FloatingInput v-if="item.discount_type !== 'percent'" v-model.number="item.discount_value" label="Giảm giá" format-thousands min="0" input-class="!h-9 !rounded-l-md !rounded-r-none !px-1 !pt-2 !pb-1 !text-right !text-xs" /><FloatingInput v-else v-model.number="item.discount_value" label="Giảm giá" type="number" min="0" max="100" input-class="!h-9 !rounded-l-md !rounded-r-none !px-1 !pt-2 !pb-1 !text-right !text-xs" /><select v-model="item.discount_type" aria-label="Loại giảm giá" class="h-9 w-[3.5rem] shrink-0 rounded-r-md border border-l-0 border-slate-300 bg-slate-50 px-1 text-xs font-medium outline-none focus:border-blue-500"><option value="percent">%</option><option value="amount">₫</option></select></div></td>
-                                <td class="p-2 text-right font-bold">{{ formatMoney(lineTotal(item)) }}</td>
-                                <td class="p-1"><button type="button" @click="form.items.splice(index, 1)" class="rounded p-1.5 text-rose-600 hover:bg-rose-50" title="Xóa mặt hàng"><Trash2 :size="15" /></button></td>
+                            <template v-for="(item, index) in form.items" :key="`${item.product_id}-${item.variant_id}-${index}`">
+                            <tr class="border-t">
+                                <td class="p-2.5">
+                                    <CartItem :item="item" editor-only :show-remove="false" :clickable-variant="!item.is_imei && Boolean(item.variant_id || item.variant_name)" :clickable-imei="item.is_imei" @editor-saved="syncSharedCartEditor" @select-variant="openItemOptions(index)" @select-imei="openItemOptions(index)" />
+                                </td>
+                                <td class="p-1.5"><FloatingInput v-if="!item.is_imei" v-model.number="item.quantity" label="Số lượng" :floating-label="false" type="number" min="1" input-class="!h-9 !rounded-md !px-1 !py-1 !text-center !text-xs" /><span v-else class="block text-center text-xs text-slate-600">1</span></td>
+                                <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /></td>
+                                <td class="p-2 text-right"><div class="font-bold">{{ formatMoney(lineTotal(item)) }}</div><div v-if="Number(item.discount_value || 0)" class="mt-0.5 text-[10px] font-semibold text-amber-700">Giảm {{ item.discount_type === 'percent' ? `${item.discount_value}%` : formatMoney(item.discount_value) }}</div></td>
+                                <td class="p-1"><button type="button" @click="removeItem(index)" class="rounded p-1.5 text-rose-600 hover:bg-rose-50" title="Xóa mặt hàng" aria-label="Xóa mặt hàng"><Trash2 :size="15" /></button></td>
                             </tr>
-                            <tr v-if="!form.items.length"><td colspan="6" class="p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18"/>Chưa có mặt hàng trong hóa đơn.</td></tr>
+                            </template>
+                            <tr v-if="!form.items.length"><td colspan="5" class="p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18"/>Chưa có mặt hàng trong hóa đơn.</td></tr>
                         </tbody>
                     </table>
                     <div class="space-y-1 border-t bg-slate-50 px-3 py-2 text-right text-xs"><p>Tạm tính: <b>{{ formatMoney(subtotal) }}</b></p><p>Giảm giá: <b>{{ formatMoney(discount) }}</b></p><p class="text-sm">Tổng mới: <b class="text-blue-700">{{ formatMoney(newGrandTotal) }}</b></p></div>
                 </section>
 
-                <section class="space-y-3 rounded-lg border border-slate-200 p-3">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="text-sm font-bold text-slate-800">Thanh toán</h3>
-                        <label class="flex items-center gap-2 text-xs font-medium text-slate-600">
-                            Phương thức
-                            <select v-model="form.payment_method" class="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-blue-500">
-                                <option value="cash">Tiền mặt</option>
-                                <option value="bank">Chuyển khoản</option>
-                                <option value="mixed">Tiền mặt + chuyển khoản</option>
-                                <option value="card">Thẻ</option>
-                            </select>
-                        </label>
+                <section class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                    <div class="w-full"><h3 class="text-sm font-bold text-slate-800">Đối soát thanh toán sau khi sửa</h3><p class="mt-0.5 text-xs text-slate-500">Phương thức đã dùng: {{ form.payment_method === 'mixed' ? 'Tiền mặt + chuyển khoản' : form.payment_method === 'bank' ? 'Chuyển khoản' : form.payment_method === 'card' ? 'Thẻ' : 'Tiền mặt' }}</p></div>
+                    <div class="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+                        <div><p class="text-slate-500">Tổng hóa đơn cũ</p><p class="mt-0.5 font-semibold text-slate-800">{{ formatMoney(sale.grand_total) }}</p></div>
+                        <div><p class="text-slate-500">Đã thanh toán trước sửa</p><p class="mt-0.5 font-semibold text-slate-800">{{ formatMoney(previouslyPaid) }}</p></div>
+                        <div><p class="text-slate-500">Tổng hóa đơn mới</p><p class="mt-0.5 font-semibold text-blue-700">{{ formatMoney(newGrandTotal) }}</p></div>
+                        <div><p class="text-slate-500">{{ remainingBalance > 0 ? 'Cần thu thêm' : changeDue > 0 ? 'Tiền thừa sau sửa' : 'Đối soát' }}</p><p class="mt-0.5 font-bold" :class="remainingBalance > 0 ? 'text-amber-700' : changeDue > 0 ? 'text-emerald-700' : 'text-slate-700'">{{ formatMoney(remainingBalance || changeDue) }}{{ remainingBalance > 0 ? ' cần thu' : changeDue > 0 ? ' dư' : ' Đã đủ' }}</p></div>
                     </div>
-                    <div v-if="form.payment_method === 'mixed'" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <FloatingInput v-model.number="form.cash_received_amount" label="Tiền mặt nhận" format-thousands min="0" input-class="!h-10 !rounded-md !px-2 !pt-2 !pb-1 text-right" />
-                        <FloatingInput v-model.number="form.bank_received_amount" label="Chuyển khoản nhận" format-thousands min="0" input-class="!h-10 !rounded-md !px-2 !pt-2 !pb-1 text-right" />
-                    </div>
-                    <FloatingInput v-else v-model.number="form.paid_amount" label="Số tiền đã thanh toán" format-thousands min="0" input-class="!h-10 !rounded-md !px-2 !pt-2 !pb-1 text-right" />
-                    <p v-if="form.errors.paid_amount" class="text-xs text-rose-600">{{ form.errors.paid_amount }}</p>
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div class="rounded-md bg-amber-50 px-3 py-2 text-amber-800">Còn nợ <b class="ml-1">{{ formatMoney(remainingBalance) }}</b></div>
-                        <div class="rounded-md bg-emerald-50 px-3 py-2 text-emerald-800">Tiền thừa <b class="ml-1">{{ formatMoney(changeDue) }}</b></div>
-                    </div>
-                    <p class="text-[11px] text-slate-500">Công nợ và tiền thừa sẽ được tính lại theo tổng hóa đơn và số tiền thanh toán mới.</p>
+                    <p class="w-full text-[11px] text-slate-500">Nhấn “Lưu thay đổi” để mở modal thanh toán POS. Số cần thu hoặc tiền thừa được tính dựa trên khoản đã thanh toán trước khi sửa.</p>
                 </section>
                 <div v-if="Object.keys(form.errors).length" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.sale || form.errors.items || Object.values(form.errors)[0] }}</div>
                 <div v-if="form.errors.customer_id && !selectedCustomer" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.customer_id }}</div>
@@ -228,4 +472,25 @@ const submit = () => form.put(route('sales.update', props.sale.id), {
             <div class="flex justify-end gap-2"><button type="button" @click="emit('close')" class="rounded-lg border px-3 py-2 text-sm text-slate-600">Đóng</button><button v-if="!blockedReason" type="button" :disabled="form.processing || !form.items.length" @click="submit" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save :size="15"/>{{ form.processing ? 'Đang lưu…' : 'Lưu thay đổi' }}</button></div>
         </template>
     </BaseModal>
+    <SelectProductModal
+        :show="showOptionModal"
+        :product="optionProduct"
+        :cart="optionPurpose === 'add' ? addProductCart : optionCart"
+        :current-imei="currentSelectionImei"
+        :current-variant="currentSelectionVariant"
+        :extra-imeis="extraSelectionImeis"
+        @close="showOptionModal = false"
+        @confirm="confirmItemOptions"
+    />
+    <CheckoutModal
+        :show="showCheckoutModal"
+        :loading="form.processing"
+        :edit-mode="true"
+        :invoice-code="String(sale.code || '')"
+        :grand-total="newGrandTotal"
+        :selected-customer="selectedCustomer"
+        :initial-payment="{ payment_method: sale.payment_method, bank_account: sale.bank_account, paid_amount: form.paid_amount, cash_received_amount: form.cash_received_amount, bank_received_amount: form.bank_received_amount }"
+        @close="showCheckoutModal = false"
+        @confirm="confirmCheckoutPayment"
+    />
 </template>
