@@ -132,6 +132,7 @@ class SaleController extends Controller
     {
         $data = $request->validate([
             'customer_id' => ['nullable', 'exists:customers,id'],
+            'note' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
@@ -167,7 +168,10 @@ class SaleController extends Controller
             $reason = $this->saleEditBlockedReason($sale);
             if ($reason) throw \Illuminate\Validation\ValidationException::withMessages(['sale' => $reason]);
 
-            $oldDebt = max(0, (float) $sale->grand_total - (float) $sale->paid_amount);
+            $oldInvoiceTotal = max(0, (float) $sale->grand_total);
+            $oldPaidAfterRefund = max(0, (float) $sale->paid_amount - (float) $sale->change_amount);
+            $oldRecognizedPaid = min($oldInvoiceTotal, $oldPaidAfterRefund);
+            $oldDebt = max(0, $oldInvoiceTotal - $oldRecognizedPaid);
             $oldCustomerId = $sale->customer_id;
             $oldImeiIds = collect();
             $imeiProductIds = collect();
@@ -351,19 +355,12 @@ class SaleController extends Controller
                 throw \Illuminate\Validation\ValidationException::withMessages(['customer_id' => 'Khách lẻ cần thanh toán đủ tiền; hãy chọn khách hàng để ghi nhận công nợ.']);
             }
 
-            $cashReceived = match ($data['payment_method']) {
-                'cash' => $paidAmount,
-                'mixed' => round((float) ($data['cash_received_amount'] ?? 0), 2),
-                default => 0,
-            };
-            $bankReceived = match ($data['payment_method']) {
-                'bank' => $paidAmount,
-                'mixed' => round((float) ($data['bank_received_amount'] ?? 0), 2),
-                default => 0,
-            };
+            $cashReceived = round((float) ($data['cash_received_amount'] ?? ($data['payment_method'] === 'cash' ? $paidAmount : 0)), 2);
+            $bankReceived = round((float) ($data['bank_received_amount'] ?? ($data['payment_method'] === 'bank' ? $paidAmount : 0)), 2);
 
             $sale->update([
                 'customer_id' => $newCustomerId,
+                'note' => filled($data['note'] ?? null) ? trim($data['note']) : null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'grand_total' => $newTotal,

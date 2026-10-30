@@ -1,19 +1,39 @@
 import '../css/app.css';
 import './bootstrap';
 
-import { createApp, h} from 'vue';
+import { createApp, defineAsyncComponent, h } from 'vue';
 import { createInertiaApp, router} from '@inertiajs/vue3';
 import { Toaster, toast  } from 'vue-sonner';
-import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import 'vue-sonner/style.css'
 import clickOutside from '@/Directives/clickOutside'
 import ModalRoot from '@/Components/ModalRoot.vue'
-import { Ziggy } from './ziggy'
 import { formatMoney, formatCurrency, formatDate, formatDateTime, getCurrencySymbol, setFormatSettings } from '@/utils/format'
 import { notifyReferenceDataChanged } from '@/Stores/referenceData'
 import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
+
+const AdminLayout = defineAsyncComponent(() => import('@/Layouts/AdminLayout.vue'))
+const pageComponents = import.meta.glob([
+    './Pages/**/*.vue',
+    '!./Pages/Backups/Index.vue',
+    '!./Pages/Brands/Form.vue',
+    '!./Pages/Customers/CustomerFormModal.vue',
+    '!./Pages/Customers/Partials/**/*.vue',
+    '!./Pages/ProductImeis/PriceFormModal.vue',
+    '!./Pages/Products/*Modal.vue',
+    '!./Pages/Profile/Partials/**/*.vue',
+    '!./Pages/Repairs/Repair*.vue',
+    '!./Pages/StockImports/ReplenishmentListModal.vue',
+    '!./Pages/StockImports/StockImportFormModal.vue',
+    '!./Pages/StockImports/StockImportProductModal.vue',
+    '!./Pages/StockImports/SupplierSection.vue',
+    '!./Pages/Suppliers/Form.vue',
+    '!./Pages/Suppliers/Partials/**/*.vue',
+    '!./Pages/Users/FormModal.vue',
+    '!./Pages/Users/RoleManagementDialog.vue',
+    '!./Pages/Users/RoleManagementModal.vue',
+])
 
 installAppPathSupport(router)
 
@@ -24,7 +44,6 @@ if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname
     }).catch(error => console.warn('Không thể đăng ký hỗ trợ offline.', error))
 }
 
-const app = createApp({})
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 const pageTitleFor = (page) => {
@@ -35,15 +54,15 @@ const pageTitleFor = (page) => {
         'Categories/Index': 'Danh mục', 'Categories/Form': 'Thông tin danh mục', 'Brands/Index': 'Thương hiệu',
         'Customers/Index': 'Khách hàng', 'Customers/Create': 'Thêm khách hàng', 'Customers/Edit': 'Sửa khách hàng', 'Customers/Show': 'Chi tiết khách hàng',
         'Sales/Index': 'Hóa đơn bán hàng', 'Sales/Show': 'Chi tiết hóa đơn', 'Sales/Edit': 'Sửa hóa đơn', 'Sales/Receipt': 'Hóa đơn bán hàng',
-        'StockImports/Index': 'Nhập hàng', 'StockImports/List': 'Phiếu nhập hàng', 'StockImports/Show': 'Chi tiết phiếu nhập',
+        'StockImports/List': 'Phiếu nhập hàng',
         'Suppliers/Index': 'Nhà cung cấp', 'Suppliers/Create': 'Thêm nhà cung cấp', 'Suppliers/Edit': 'Sửa nhà cung cấp',
         'Repairs/Index': 'Sửa chữa thiết bị', 'Users/Index': 'Nhân viên', 'Users/Create': 'Thêm nhân viên', 'Users/Edit': 'Sửa nhân viên',
-        'Users/RoleManagement': 'Phân quyền', 'Debts/Index': 'Quản lý công nợ', 'Expenses/Index': 'Chi phí cửa hàng',
+        'Debts/Index': 'Quản lý công nợ', 'Expenses/Index': 'Chi phí cửa hàng',
         'Taxes/Index': 'Khai thuế', 'Reports/Index': 'Báo cáo & Thống kê', 'WorkShifts/History': 'Lịch sử kiểm kê',
-        'Settings/Index': 'Thiết lập', 'Backups/Index': 'Sao lưu dữ liệu', 'Profile/Edit': 'Tài khoản cá nhân',
-        'Pos/Index': 'POS bán hàng', 'Pos/SaleInvoice': 'Hóa đơn POS', 'Auth/Login': 'Đăng nhập', 'Auth/Register': 'Đăng ký',
+        'Settings/Index': 'Thiết lập', 'Profile/Edit': 'Tài khoản cá nhân',
+        'Pos/Index': 'POS bán hàng', 'Pos/SaleInvoice': 'Hóa đơn POS', 'Auth/Login': 'Đăng nhập',
         'Auth/ForgotPassword': 'Quên mật khẩu', 'Auth/ResetPassword': 'Đặt lại mật khẩu', 'Auth/VerifyEmail': 'Xác minh email',
-        'Auth/ConfirmPassword': 'Xác nhận mật khẩu', 'Setup/Index': 'Thiết lập ban đầu', 'Welcome': 'Trang chủ',
+        'Auth/ConfirmPassword': 'Xác nhận mật khẩu', 'Setup/Index': 'Thiết lập ban đầu',
     }
     const title = page?.props?.title || titles[page?.component]
         || page?.component?.split('/').at(-1)?.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -56,8 +75,6 @@ const pageTitleFor = (page) => {
 if (!window._inertiaToastRegistered) {
 
     window._inertiaToastRegistered = true
-
-    let lastFlash = null
 
     router.on('error', (event) => {
 
@@ -81,8 +98,6 @@ if (!window._inertiaToastRegistered) {
             }
         }, 100)
     })
-
-    let shownMessages = new Set()
 
     router.on('success', (event) => {
 
@@ -112,28 +127,10 @@ if (!window._inertiaToastRegistered) {
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    resolve: (name) => {
-        const pages = import.meta.glob(
-            [
-                './Pages/**/*.vue',
-                './Modules/**/*.vue',
-            ]
-        )
-
-
-        return resolvePageComponent(
-            `./Pages/${name}.vue`,
-            pages
-        )
-        .catch(() => {
-
-            return resolvePageComponent(
-                `./${name}.vue`,
-                pages
-            )
-
-        })
-        .then((page) => {
+    resolve: (name) => resolvePageComponent(
+        `./Pages/${name}.vue`,
+        pageComponents
+    ).then((page) => {
 
 
             const adminModules = [
@@ -164,9 +161,7 @@ createInertiaApp({
 
             return page
 
-        })
-
-    },
+        }),
     setup({ el, App, props, plugin }) {
 
         const Root = {
@@ -252,9 +247,7 @@ createInertiaApp({
         app.config.globalProperties.$date = formatDate
         app.config.globalProperties.$dateTime = formatDateTime
 
-        // `@routes` renders the route table for the current request. Prefer it
-        // over the generated fallback, which may contain another machine's host.
-        app.use(ZiggyVue, window.Ziggy || Ziggy)
+        app.use(ZiggyVue, window.Ziggy)
 
             
         app.mount(el)

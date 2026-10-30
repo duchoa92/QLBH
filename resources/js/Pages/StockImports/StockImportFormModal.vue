@@ -287,7 +287,7 @@ const printPurchaseContract = () => {
     const tableRows = rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.name)}${row.variant ? `<br><small>${escapeHtml(row.variant)}</small>` : ''}${row.imei ? `<br><small>IMEI/Serial: ${escapeHtml(row.imei)}</small>` : ''}</td><td>${escapeHtml(row.unit || '')}</td><td class="num">${Number(row.quantity || 0).toLocaleString('vi-VN')}</td><td class="num">${Number(row.price || 0).toLocaleString('vi-VN')} đ</td><td class="num">${(Number(row.price || 0) * Number(row.quantity || 0)).toLocaleString('vi-VN')} đ</td></tr>`).join('')
     const settings = page.props.settings || {}
     const buyerName = settings.shop_name || page.props.auth?.user?.name || 'Cửa hàng'
-    const contractCode = `IMP-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`
+    const contractCode = `IMP-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`
     const contentTemplate = settings.purchase_contract_content ?? defaultContractContent
     const contractContent = renderContractContent(contentTemplate, {
         date: formatDate(new Date()),

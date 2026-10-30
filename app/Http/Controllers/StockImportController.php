@@ -14,6 +14,7 @@ use App\Models\Supplier;
 use App\Models\Product;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rule;
 
 class StockImportController extends Controller
@@ -390,7 +391,7 @@ class StockImportController extends Controller
     public function show(
         Request $request,
         StockImport $stockImport
-    ): Response|JsonResponse {
+    ): JsonResponse|RedirectResponse {
         $stockImport->load([
             'supplier:id,name,phone,email,address',
             'customer:id,code,full_name,phone,cccd,address',
@@ -430,8 +431,6 @@ class StockImportController extends Controller
             return response()->json($stockImport);
         }
 
-        return Inertia::render('StockImports/Show', [
-            'import' => $stockImport,
-        ]);
+        return redirect()->route('stock.index', ['open_import' => $stockImport->id]);
     }
 }

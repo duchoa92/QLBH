@@ -118,12 +118,15 @@ const totalNeedToPay = computed(() => {
         : 0
     return Number(props.grandTotal || 0) + debt
 })
+const previouslyPaidAmount = computed(() => props.editMode ? Math.max(0, Number(props.initialPayment.paid_amount || 0)) : 0)
+const remainingToCollect = computed(() => Math.max(0, totalNeedToPay.value - previouslyPaidAmount.value))
 
 const transferAmount = computed(() => {
     const total = Math.max(0, Number(totalNeedToPay.value || 0))
-    const defaultAmount = mixedPayment.value ? Math.max(0, total - Number(cashReceivedAmount.value || 0)) : total
+    const payableNow = props.editMode ? Math.max(0, total - previouslyPaidAmount.value) : total
+    const defaultAmount = mixedPayment.value ? Math.max(0, payableNow - Number(cashReceivedAmount.value || 0)) : payableNow
     const enteredAmount = paidAmount.value === '' || paidAmount.value === null ? defaultAmount : Number(paidAmount.value || 0)
-    return Math.min(total, Math.max(0, enteredAmount))
+    return Math.min(payableNow, Math.max(0, enteredAmount))
 })
 
 // QR amount is the requested amount. This field captures what the customer
@@ -132,7 +135,7 @@ const actualBankReceivedAmount = computed(() => {
     if (!usesBankPayment.value) return 0
     if (autoBankTracking.value && bankIntent.value) return Number(bankStatus.value?.received_amount || 0)
     return bankReceivedAmount.value === '' || bankReceivedAmount.value === null
-        ? transferAmount.value
+        ? (props.editMode ? 0 : transferAmount.value)
         : Number(bankReceivedAmount.value || 0)
 })
 
@@ -140,13 +143,14 @@ const usesBankPayment = computed(() => paymentMethod.value === 'bank' || mixedPa
 const autoBankEnabled = computed(() => !props.editMode && usesBankPayment.value && Boolean(selectedBankAccount.value?.payment_auto_enabled))
 const autoBankTracking = computed(() => autoBankEnabled.value && !bankManualFallback.value)
 
-const effectivePaidAmount = computed(() =>
+const additionalPaidAmount = computed(() =>
     usesBankPayment.value
         ? (autoBankTracking.value && bankIntent.value
             ? Number(bankStatus.value?.received_amount || 0) + (mixedPayment.value ? Number(cashReceivedAmount.value || 0) : 0)
             : actualBankReceivedAmount.value + (mixedPayment.value ? Number(cashReceivedAmount.value || 0) : 0))
         : Number(paidAmount.value || 0)
 )
+const effectivePaidAmount = computed(() => Number(props.editMode ? props.initialPayment.paid_amount || 0 : 0) + additionalPaidAmount.value)
 
 const balanceAmount = computed(() => {
     return effectivePaidAmount.value - totalNeedToPay.value
@@ -167,7 +171,8 @@ const handlePaidAmountInput = (event) => {
 }
 
 const handleBankTransferAmountValue = (value) => {
-    paidAmount.value = Math.min(Number(value || 0), Math.max(0, Math.round(totalNeedToPay.value)))
+    const payableNow = props.editMode ? remainingToCollect.value : Math.max(0, Math.round(totalNeedToPay.value))
+    paidAmount.value = Math.min(Number(value || 0), payableNow)
 }
 
 const handleCashReceivedAmountInput = (event) => {
@@ -194,7 +199,8 @@ const enableRemainingQr = () => {
         bankError.value = 'Nhập số tiền mặt trước để tạo mã QR cho phần còn lại.'
         return
     }
-    if (cashAmount >= totalNeedToPay.value) {
+    const remainingAmount = props.editMode ? remainingToCollect.value : Number(totalNeedToPay.value || 0)
+    if (cashAmount >= remainingAmount) {
         bankError.value = 'Tiền mặt đã đủ tổng cần thu; không còn khoản chuyển khoản để tạo QR.'
         return
     }
@@ -214,16 +220,13 @@ const resetPaymentFields = () => {
     const initialAccount = bankAccounts.value.find(account => String(account.bank_account) === String(props.initialPayment.bank_account))
     if (initialAccount) selectedBankAccountId.value = String(initialAccount.id ?? initialAccount.bank_account)
     paymentMethod.value = 'cash'
-    mixedPayment.value = props.editMode && props.initialPayment.payment_method === 'mixed'
+    mixedPayment.value = false
     if (props.editMode) {
         const method = props.initialPayment.payment_method || 'cash'
-        paymentMethod.value = ['bank', 'card'].includes(method) ? method : 'cash'
-        const oldPaid = Number(props.initialPayment.paid_amount || 0)
-        const oldCash = Number(props.initialPayment.cash_received_amount || 0)
-        const oldBank = Number(props.initialPayment.bank_received_amount || 0)
-        paidAmount.value = String(method === 'mixed' ? oldBank : oldPaid)
-        cashReceivedAmount.value = oldCash
-        bankReceivedAmount.value = method === 'bank' || method === 'mixed' ? String(oldBank || oldPaid) : ''
+        paymentMethod.value = method === 'mixed' ? 'cash' : method
+        paidAmount.value = ''
+        cashReceivedAmount.value = 0
+        bankReceivedAmount.value = ''
     } else {
         mixedPayment.value = false
         paidAmount.value = ''
@@ -383,18 +386,29 @@ const submit = () => {
         if (!bankIntent.value) startBankPayment()
         return
     }
+    const previousCash = props.editMode ? Number(props.initialPayment.cash_received_amount || 0) : 0
+    const previousBank = props.editMode ? Number(props.initialPayment.bank_received_amount || 0) : 0
+    const receivedCash = mixedPayment.value
+        ? Number(cashReceivedAmount.value || 0)
+        : (paymentMethod.value === 'cash' ? Number(paidAmount.value || 0) : 0)
+    const receivedBank = usesBankPayment.value ? actualBankReceivedAmount.value : 0
+    const totalCashReceived = previousCash + receivedCash
+    const totalBankReceived = previousBank + receivedBank
+    const finalPaymentMethod = !props.editMode
+        ? (mixedPayment.value ? 'mixed' : paymentMethod.value)
+        : (totalCashReceived > 0 && totalBankReceived > 0
+            ? 'mixed'
+            : additionalPaidAmount.value <= 0
+                ? props.initialPayment.payment_method || paymentMethod.value
+                : paymentMethod.value)
+
     emit('confirm', {
-        payment_method: mixedPayment.value ? 'mixed' : paymentMethod.value,
-        bank_account: usesBankPayment.value ? selectedBankAccount.value?.bank_account ?? null : null,
+        payment_method: finalPaymentMethod,
+        bank_account: totalBankReceived > 0 ? selectedBankAccount.value?.bank_account ?? null : null,
         invoice_code: props.invoiceCode,
         paid_amount: effectivePaidAmount.value,
-        cash_received_amount: mixedPayment.value
-            ? Number(cashReceivedAmount.value || 0)
-            : (paymentMethod.value === 'cash' ? Number(paidAmount.value || 0) : 0),
-        bank_received_amount: usesBankPayment.value
-            ? actualBankReceivedAmount.value
-            : 0,
-        bank_account: usesBankPayment.value ? selectedBankAccount.value?.bank_account ?? null : null,
+        cash_received_amount: props.editMode ? totalCashReceived : receivedCash,
+        bank_received_amount: props.editMode ? totalBankReceived : receivedBank,
         note: note.value,
         pay_old_debt: payOldDebt.value,
     })
@@ -437,9 +451,10 @@ const submit = () => {
                 <div>
                     <PaymentMethodSelect v-model="paymentMethod" :disabled="Boolean(bankIntent)" />
                 </div>
+                <p v-if="editMode" class="-mt-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] leading-relaxed text-blue-800">Đã nhận {{ formatMoney(previouslyPaidAmount) }} cho đơn cũ. Chỉ nhập khoản thu thêm; phần còn thiếu chưa thu sẽ được ghi vào công nợ của khách.</p>
 
                 <!-- SỐ TIỀN MẶT KHÁCH ĐƯA VÀ NÚT TẠO QR PHẦN CÒN LẠI -->
-                <div v-if="paymentMethod === 'cash'">
+                <div v-if="paymentMethod === 'cash' || paymentMethod === 'card'">
                     <div class="relative">
                         <FloatingInput
                             :model-value="formatMoneyInput(mixedPayment ? cashReceivedAmount : paidAmount)"
@@ -447,29 +462,30 @@ const submit = () => {
                             type="text"
                             inputmode="numeric"
                             :disabled="Boolean(bankIntent)"
-                            label="Số tiền khách đưa"
-                            input-class="pr-36"
+                            :label="editMode ? (paymentMethod === 'card' ? 'Tiền thẻ thu thêm' : 'Tiền mặt thu thêm') : 'Số tiền khách đưa'"
+                            :input-class="paymentMethod === 'cash' ? 'pr-36' : ''"
                         />
                         <button
-                            v-if="!mixedPayment"
+                            v-if="paymentMethod === 'cash' && !mixedPayment"
                             type="button"
                             :disabled="Boolean(bankIntent)"
                             class="absolute right-1 top-1.5 rounded-md bg-blue-50 px-2 py-1.5 text-[10px] font-bold leading-tight text-blue-700 hover:bg-blue-100"
                             @click="enableRemainingQr"
                         >Tạo QR phần còn lại</button>
                         <button
-                            v-else
+                            v-else-if="paymentMethod === 'cash'"
                             type="button"
                             :disabled="Boolean(bankIntent)"
                             class="absolute right-1 top-1.5 rounded-md bg-slate-100 px-2 py-1.5 text-[10px] font-bold leading-tight text-slate-700 hover:bg-slate-200"
                             @click="disableRemainingQr"
                         >Chỉ nhận tiền mặt</button>
                     </div>
+                    <p v-if="editMode" class="mt-1 text-[11px] text-slate-500">{{ paymentMethod === 'card' ? 'Nhập khoản thanh toán mới qua thẻ; số đã nhận trước đó được giữ nguyên.' : 'Nhập khoản tiền mặt thu thêm; số đã nhận trước đó được giữ nguyên.' }}</p>
                     <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-600">{{ bankError }}</p>
                 </div>
 
                 <!-- MA QR THANH TOAN -->
-                <div v-if="usesBankPayment">
+                <div v-if="usesBankPayment && (!editMode || remainingToCollect > 0)">
                     <p v-if="mixedPayment" class="mb-2 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Thanh toán kết hợp · tiền mặt + chuyển khoản</p>
                     <div v-if="bankAccounts.length" class="mb-3">
                         <label for="checkout-bank-account" class="block min-w-0 text-xs font-semibold text-slate-600">
@@ -541,16 +557,16 @@ const submit = () => {
                     <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-600">{{ bankError }}</p>
                 </div>
 
-                <div v-if="usesBankPayment && !autoBankTracking" class="relative">
+                <div v-if="usesBankPayment && !autoBankTracking && (!editMode || remainingToCollect > 0)" class="relative">
                     <FloatingInput
                         :model-value="formatMoneyInput(actualBankReceivedAmount)"
                         @input="handleBankReceivedAmountInput"
                         type="text"
                         inputmode="numeric"
                         :disabled="Boolean(bankIntent)"
-                        label="Số tiền khách chuyển khoản"
+                            :label="editMode ? 'Số tiền chuyển khoản thu thêm' : 'Số tiền khách chuyển khoản'"
                     />
-                    <p class="mt-1 text-[11px] text-slate-500">Nhập số tiền thực nhận để tính chính xác tiền thừa hoặc còn thiếu.</p>
+                    <p class="mt-1 text-[11px] text-slate-500">{{ editMode ? 'QR chỉ tạo phần còn thiếu sau khi trừ khoản đã nhận trước đó. Nhập đúng số tiền chuyển khoản vừa nhận.' : 'Nhập số tiền thực nhận để tính chính xác tiền thừa hoặc còn thiếu.' }}</p>
                 </div>
 
                 <!-- GHI CHÚ -->
@@ -567,6 +583,10 @@ const submit = () => {
                         <div class="flex justify-between text-xs font-medium text-slate-600">
                             <span>Đã thanh toán trước khi sửa</span>
                             <span class="font-bold text-slate-800">{{ formatMoney(initialPayment.paid_amount || 0) }}</span>
+                        </div>
+                        <div v-if="Number(initialPayment.refunded_change_amount || 0) > 0" class="flex justify-between text-xs font-medium text-amber-700">
+                            <span>Tiền thừa đơn cũ đã hoàn</span>
+                            <span class="font-bold">{{ formatMoney(initialPayment.refunded_change_amount) }}</span>
                         </div>
                         <div class="flex justify-between text-xs font-medium text-slate-600">
                             <span>{{ balanceStatus.label }} sau khi sửa</span>

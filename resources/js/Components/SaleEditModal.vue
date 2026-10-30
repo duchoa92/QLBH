@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue'
 import { useForm } from '@inertiajs/vue3'
-import { Plus, Search, Save, Trash2 } from 'lucide-vue-next'
+import { Plus, Search, Save, Trash2, MessageSquare, Gift } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { formatMoney, formatDate } from '@/utils/format'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -25,13 +25,30 @@ const attributeLabel = (value) => {
     return String(value)
 }
 const variantName = (variant) => Object.values(variant?.attributes || {}).map(attributeLabel).filter(Boolean).join(' / ') || variant?.name || variant?.sku || ''
+const oldInvoiceTotal = Math.max(0, Number(props.sale.grand_total || 0))
+const oldChangeRefunded = Math.min(Math.max(0, Number(props.sale.change_amount || 0)), Math.max(0, Number(props.sale.paid_amount || 0)))
+const previouslyPaidAmount = Math.min(oldInvoiceTotal, Math.max(0, Number(props.sale.paid_amount || 0) - oldChangeRefunded))
+const oldCashAmount = Math.max(0, Number(props.sale.cash_received_amount || 0))
+const oldBankAmount = Math.max(0, Number(props.sale.bank_received_amount || 0))
+const cashAfterRefund = Math.max(0, oldCashAmount - Math.min(oldCashAmount, oldChangeRefunded))
+const bankAfterRefund = Math.max(0, oldBankAmount - Math.max(0, oldChangeRefunded - oldCashAmount))
+const previousPaymentTotal = cashAfterRefund + bankAfterRefund
+const previousPaymentRatio = previousPaymentTotal > 0 ? previouslyPaidAmount / previousPaymentTotal : 0
+const previouslyPaidCash = Math.round(Math.min(previouslyPaidAmount, previousPaymentTotal > 0 ? cashAfterRefund * previousPaymentRatio : (['bank', 'card'].includes(props.sale.payment_method) ? 0 : previouslyPaidAmount)) * 100) / 100
+const previouslyPaidBank = previousPaymentTotal > 0
+    ? Math.max(0, Math.round((previouslyPaidAmount - previouslyPaidCash) * 100) / 100)
+    : (props.sale.payment_method === 'bank' ? previouslyPaidAmount : 0)
+const initialPaymentMethod = props.sale.payment_method === 'mixed' && !(previouslyPaidCash > 0 && previouslyPaidBank > 0)
+    ? (previouslyPaidBank > 0 ? 'bank' : 'cash')
+    : (['cash', 'bank', 'mixed', 'card'].includes(props.sale.payment_method) ? props.sale.payment_method : 'cash')
 const form = useForm({
     customer_id: props.sale.customer_id ?? '',
-    paid_amount: Number(props.sale.paid_amount || 0),
-    payment_method: ['cash', 'bank', 'mixed', 'card'].includes(props.sale.payment_method) ? props.sale.payment_method : 'cash',
+    note: props.sale.note || '',
+    paid_amount: previouslyPaidAmount,
+    payment_method: initialPaymentMethod,
     bank_account: props.sale.bank_account || '',
-    cash_received_amount: Number(props.sale.cash_received_amount || 0),
-    bank_received_amount: Number(props.sale.bank_received_amount || 0),
+    cash_received_amount: previouslyPaidCash,
+    bank_received_amount: previouslyPaidBank,
     items: (props.sale.items || []).map(item => ({
         product_id: item.product_id,
         variant_id: item.variant_id ?? '',
@@ -48,13 +65,15 @@ const form = useForm({
         imei_id: item.product_imei_id ?? '',
         imei: item.product_imei?.imei || '',
         warranty_days: Number(item.warranty_days ?? item.product_imei?.customer_warranty_days ?? item.product?.warranty_days ?? 0),
+        warranty_expires_at: item.product_imei?.customer_warranty_expires_at || '',
+        warranty_expiry_imei_id: item.product_imei_id ?? '',
         customer_warranty_days: Number(item.warranty_days ?? item.product_imei?.customer_warranty_days ?? item.product?.warranty_days ?? 0),
         warranty_note: item.warranty_note || '',
         customer_warranty_note: item.warranty_note || '',
         note: item.note || '',
         is_imei: Boolean(item.product_imei_id || item.product?.product_type === 'imei' || item.product?.manage_stock_by_serial),
         imei_options: item.product_imei_id ? [{ id: item.product_imei_id, imei: item.product_imei?.imei || 'IMEI đã gán', serial: item.product_imei?.serial }] : [],
-        gifts: (item.gifts || []).map(gift => ({ key: `gift-${gift.id}`, id: gift.product_id, product_id: gift.product_id, variant_id: gift.variant_id ?? null, imei_id: gift.product_imei_id ?? null, name: gift.product?.name || 'Quà tặng', sku: gift.product?.sku || '', variant_name: variantName(gift.variant), imei: gift.product_imei?.imei || '', is_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), requires_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), quantity: Number(gift.quantity || 1), imei_options: gift.product_imei_id ? [{ id: gift.product_imei_id, imei: gift.product_imei?.imei || 'IMEI đã gán', display_code: gift.product_imei?.imei || 'IMEI đã gán' }] : [], variant_options: [] })),
+        gifts: (item.gifts || []).map(gift => ({ key: `gift-${gift.id}`, id: gift.product_id, product_id: gift.product_id, variant_id: gift.variant_id ?? null, imei_id: gift.product_imei_id ?? null, name: gift.product?.name || 'Quà tặng', sku: gift.product?.sku || '', variant_name: variantName(gift.variant), imei: gift.product_imei?.imei || '', unit_price: Number(gift.product?.sell_price || gift.product?.price || gift.product?.retail_price || 0), is_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), requires_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), quantity: Number(gift.quantity || 1), imei_options: gift.product_imei_id ? [{ id: gift.product_imei_id, imei: gift.product_imei?.imei || 'IMEI đã gán', display_code: gift.product_imei?.imei || 'IMEI đã gán' }] : [], variant_options: [] })),
     })),
 })
 const selectedCustomer = ref(props.sale.customer || null)
@@ -63,6 +82,7 @@ const optionProduct = ref(null)
 const optionTargetIndex = ref(null)
 const optionPurpose = ref('edit')
 const showOptionModal = ref(false)
+const openWarrantyNoteIndex = ref(null)
 const replacedImeisByItem = ref({})
 const customerQuery = ref('')
 const customerResults = ref([])
@@ -105,7 +125,7 @@ const discount = computed(() => form.items.reduce((sum, row) => {
     return sum + (row.discount_type === 'percent' ? amount * value / 100 : row.discount_type === 'amount' ? value : 0)
 }, 0))
 const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value + Number(props.sale.tax || 0)))
-const previouslyPaid = computed(() => Number(props.sale.paid_amount || 0))
+const previouslyPaid = computed(() => previouslyPaidAmount)
 const settlementDifference = computed(() => newGrandTotal.value - previouslyPaid.value)
 const remainingBalance = computed(() => Math.max(0, settlementDifference.value))
 const changeDue = computed(() => Math.max(0, -settlementDifference.value))
@@ -287,6 +307,12 @@ const warrantyEndDate = (days) => {
     endDate.setUTCDate(endDate.getUTCDate() + Number(days))
     return formatDate(endDate.toISOString().slice(0, 10))
 }
+const itemWarrantyEndDate = (item) => {
+    if (item.warranty_expiry_imei_id && String(item.warranty_expiry_imei_id) === String(item.imei_id) && item.warranty_expires_at) {
+        return formatDate(String(item.warranty_expires_at).slice(0, 10))
+    }
+    return warrantyEndDate(item.customer_warranty_days ?? item.warranty_days)
+}
 const persistSaleEdit = () => form.transform(data => ({
     ...data,
     items: data.items.map(item => {
@@ -441,17 +467,43 @@ const confirmItemOptions = ({ variant, imei }) => {
                             <tr class="border-t">
                                 <td class="p-2.5">
                                     <CartItem :item="item" editor-only :show-remove="false" :clickable-variant="!item.is_imei && Boolean(item.variant_id || item.variant_name)" :clickable-imei="item.is_imei" @editor-saved="syncSharedCartEditor" @select-variant="openItemOptions(index)" @select-imei="openItemOptions(index)" />
+                                    <div v-if="item.customer_warranty_days !== null && item.customer_warranty_days !== undefined || item.warranty_days !== null && item.warranty_days !== undefined || item.customer_warranty_note || item.warranty_note" class="mt-1 flex flex-wrap items-center gap-1.5 pl-[60px]">
+                                        <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold" :class="Number(item.customer_warranty_days ?? item.warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">{{ Number(item.customer_warranty_days ?? item.warranty_days) > 0 && itemWarrantyEndDate(item) ? `Bảo hành đến ${itemWarrantyEndDate(item)}` : 'Không áp dụng bảo hành' }}</span>
+                                        <button v-if="item.customer_warranty_note || item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" title="Xem ghi chú bảo hành" :aria-expanded="openWarrantyNoteIndex === index" aria-label="Xem ghi chú bảo hành" @click.stop="openWarrantyNoteIndex = openWarrantyNoteIndex === index ? null : index"><MessageSquare :size="14" /></button>
+                                    </div>
+                                    <div v-if="(item.customer_warranty_note || item.warranty_note) && openWarrantyNoteIndex === index" class="ml-[60px] mt-1 max-w-sm whitespace-pre-line rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900">{{ item.customer_warranty_note || item.warranty_note }}</div>
+                                    <div v-if="item.note" class="mt-1 pl-[60px] text-xs italic text-slate-400">Ghi chú: {{ item.note }}</div>
                                 </td>
                                 <td class="p-1.5"><FloatingInput v-if="!item.is_imei" v-model.number="item.quantity" label="Số lượng" :floating-label="false" type="number" min="1" input-class="!h-9 !rounded-md !px-1 !py-1 !text-center !text-xs" /><span v-else class="block text-center text-xs text-slate-600">1</span></td>
                                 <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /></td>
                                 <td class="p-2 text-right"><div class="font-bold">{{ formatMoney(lineTotal(item)) }}</div><div v-if="Number(item.discount_value || 0)" class="mt-0.5 text-[10px] font-semibold text-amber-700">Giảm {{ item.discount_type === 'percent' ? `${item.discount_value}%` : formatMoney(item.discount_value) }}</div></td>
                                 <td class="p-1"><button type="button" @click="removeItem(index)" class="rounded p-1.5 text-rose-600 hover:bg-rose-50" title="Xóa mặt hàng" aria-label="Xóa mặt hàng"><Trash2 :size="15" /></button></td>
                             </tr>
+                            <tr v-for="(gift, giftIndex) in item.gifts || []" :key="`gift-${item.product_id}-${gift.id || giftIndex}`" class="border-t border-emerald-100 bg-emerald-50/50 text-xs">
+                                <td class="px-3 py-2 text-emerald-800">
+                                    <div class="flex items-start gap-2 pl-2"><Gift :size="14" class="mt-0.5 shrink-0 text-emerald-600"/><div class="min-w-0"><div class="font-bold">{{ gift.name || 'Quà tặng' }}</div><div v-if="gift.variant_name" class="mt-0.5 text-[11px] text-blue-700">Phiên bản: {{ gift.variant_name }}</div><div v-if="gift.imei" class="mt-0.5 font-mono text-[11px] text-blue-700">IMEI: {{ gift.imei }}</div></div><span class="ml-auto shrink-0 rounded-full border border-emerald-200 bg-emerald-100/70 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Quà tặng</span></div>
+                                </td>
+                                <td class="px-2 py-2 text-center font-semibold text-slate-700">{{ gift.quantity || 1 }}</td>
+                                <td class="px-2 py-2 text-right text-slate-400 line-through">{{ formatMoney(gift.unit_price || 0) }}</td>
+                                <td class="px-2 py-2 text-right font-bold text-emerald-700">0 đ</td>
+                                <td></td>
+                            </tr>
                             </template>
                             <tr v-if="!form.items.length"><td colspan="5" class="p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18"/>Chưa có mặt hàng trong hóa đơn.</td></tr>
                         </tbody>
                     </table>
-                    <div class="space-y-1 border-t bg-slate-50 px-3 py-2 text-right text-xs"><p>Tạm tính: <b>{{ formatMoney(subtotal) }}</b></p><p>Giảm giá: <b>{{ formatMoney(discount) }}</b></p><p class="text-sm">Tổng mới: <b class="text-blue-700">{{ formatMoney(newGrandTotal) }}</b></p></div>
+                </section>
+
+                <section class="grid gap-2.5 lg:grid-cols-[1fr_280px]">
+                    <div class="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                        <label for="sale-edit-order-note" class="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400"><MessageSquare :size="12" /> Ghi chú đơn hàng</label>
+                        <textarea id="sale-edit-order-note" v-model="form.note" rows="3" maxlength="2000" placeholder="Nhập ghi chú cho toàn đơn hàng…" class="w-full resize-y rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none placeholder:italic placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    </div>
+                    <div class="space-y-1.5 rounded-lg border border-slate-200 bg-white p-3 text-xs">
+                        <div class="flex justify-between text-slate-500"><span>Tiền hàng</span><b class="text-slate-800">{{ formatMoney(subtotal) }}</b></div>
+                        <div class="flex justify-between text-rose-600"><span>Giảm giá</span><b>{{ formatMoney(discount) }}</b></div>
+                        <div class="flex justify-between border-t border-dashed border-slate-200 pt-1.5 text-sm font-extrabold text-slate-900"><span>Tổng mới</span><b class="text-blue-700">{{ formatMoney(newGrandTotal) }}</b></div>
+                    </div>
                 </section>
 
                 <section class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
@@ -462,6 +514,7 @@ const confirmItemOptions = ({ variant, imei }) => {
                         <div><p class="text-slate-500">Tổng hóa đơn mới</p><p class="mt-0.5 font-semibold text-blue-700">{{ formatMoney(newGrandTotal) }}</p></div>
                         <div><p class="text-slate-500">{{ remainingBalance > 0 ? 'Cần thu thêm' : changeDue > 0 ? 'Tiền thừa sau sửa' : 'Đối soát' }}</p><p class="mt-0.5 font-bold" :class="remainingBalance > 0 ? 'text-amber-700' : changeDue > 0 ? 'text-emerald-700' : 'text-slate-700'">{{ formatMoney(remainingBalance || changeDue) }}{{ remainingBalance > 0 ? ' cần thu' : changeDue > 0 ? ' dư' : ' Đã đủ' }}</p></div>
                     </div>
+                    <p v-if="oldChangeRefunded > 0" class="w-full rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">Đã hoàn {{ formatMoney(oldChangeRefunded) }} tiền thừa của đơn cũ; khoản này không tính vào số đã thanh toán.</p>
                     <p class="w-full text-[11px] text-slate-500">Nhấn “Lưu thay đổi” để mở modal thanh toán POS. Số cần thu hoặc tiền thừa được tính dựa trên khoản đã thanh toán trước khi sửa.</p>
                 </section>
                 <div v-if="Object.keys(form.errors).length" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.sale || form.errors.items || Object.values(form.errors)[0] }}</div>
@@ -489,7 +542,7 @@ const confirmItemOptions = ({ variant, imei }) => {
         :invoice-code="String(sale.code || '')"
         :grand-total="newGrandTotal"
         :selected-customer="selectedCustomer"
-        :initial-payment="{ payment_method: sale.payment_method, bank_account: sale.bank_account, paid_amount: form.paid_amount, cash_received_amount: form.cash_received_amount, bank_received_amount: form.bank_received_amount }"
+        :initial-payment="{ payment_method: form.payment_method, bank_account: sale.bank_account, paid_amount: form.paid_amount, cash_received_amount: form.cash_received_amount, bank_received_amount: form.bank_received_amount, refunded_change_amount: oldChangeRefunded }"
         @close="showCheckoutModal = false"
         @confirm="confirmCheckoutPayment"
     />

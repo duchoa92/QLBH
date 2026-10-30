@@ -69,7 +69,6 @@ const currentTitle = computed(() => {
         'Sales/Index': 'Hóa đơn bán hàng',
         'Sales/Show': 'Chi tiết hóa đơn',
         'Sales/Edit': 'Sửa hóa đơn',
-        'StockImports/Index': 'Nhập hàng',
         'StockImports/List': 'Phiếu nhập hàng',
         'Suppliers/Index': 'Nhà cung cấp',
         'Suppliers/Create': 'Thêm nhà cung cấp',
@@ -78,14 +77,12 @@ const currentTitle = computed(() => {
         'Users/Index': 'Nhân viên',
         'Users/Create': 'Thêm nhân viên',
         'Users/Edit': 'Sửa nhân viên',
-        'Users/RoleManagement': 'Phân quyền',
         'Debts/Index': 'Quản lý công nợ',
         'Expenses/Index': 'Chi phí cửa hàng',
         'Taxes/Index': 'Khai thuế',
         'Reports/Index': 'Báo cáo & Thống kê',
         'WorkShifts/History': 'Lịch sử kiểm kê',
         'Settings/Index': 'Thiết lập',
-        'Backups/Index': 'Sao lưu dữ liệu',
         'Profile/Edit': 'Tài khoản cá nhân',
     }
 

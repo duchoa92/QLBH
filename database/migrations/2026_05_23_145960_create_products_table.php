@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('products', function (Blueprint $table) {
+        $supportsFullText = Schema::getConnection()->getDriverName() !== 'sqlite';
+
+        Schema::create('products', function (Blueprint $table) use ($supportsFullText) {
 
             $table->id();
 
@@ -46,7 +48,9 @@ return new class extends Migration
 
             $table->string('search_text')->nullable();
 
-            $table->fullText('search_text');
+            if ($supportsFullText) {
+                $table->fullText('search_text');
+            }
 
             $table->string('slug')
                 ->unique();

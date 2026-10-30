@@ -8,10 +8,15 @@ use Illuminate\Support\Facades\Schema;
 
 class Setting extends Model
 {
+    private const CACHE_KEY = 'settings.all';
+
     protected $fillable = ['key', 'value'];
 
     /** Cache the schema check so an unavailable database is only probed once per request. */
     protected static ?bool $settingsTableAvailable = null;
+
+    /** Keep the complete setting map in memory after the first lookup of a request. */
+    protected static ?array $settingsCache = null;
 
     // Lấy setting
     public static function get($key, $default = null)
@@ -28,19 +33,30 @@ class Setting extends Model
             return $default;
         }
 
-        return Cache::rememberForever("setting_$key", function () use ($key, $default) {
-            return self::where('key', $key)->value('value') ?? $default;
-        });
+        if (static::$settingsCache === null) {
+            static::$settingsCache = Cache::rememberForever(
+                self::CACHE_KEY,
+                fn (): array => self::query()->pluck('value', 'key')->all()
+            );
+        }
+
+        return array_key_exists($key, static::$settingsCache)
+            ? static::$settingsCache[$key]
+            : $default;
     }
 
     // Set setting
     public static function set($key, $value)
     {
-        Cache::forget("setting_$key");
-
-        return self::updateOrCreate(
+        $setting = self::updateOrCreate(
             ['key' => $key],
             ['value' => $value]
         );
+
+        static::$settingsCache = null;
+        Cache::forget(self::CACHE_KEY);
+        Cache::forget("setting_$key");
+
+        return $setting;
     }
 }
