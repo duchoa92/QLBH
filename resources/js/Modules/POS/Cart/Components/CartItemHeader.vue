@@ -20,6 +20,7 @@ const props = defineProps({
         type: Boolean,
         default: true,
     },
+    showUnit: { type: Boolean, default: true },
     clickableVariant: { type: Boolean, default: false },
     clickableImei: { type: Boolean, default: false },
 })
@@ -129,7 +130,7 @@ const emit = defineEmits([
 
             </div>
 
-            <div
+            <div v-if="showUnit"
                 class="
                     text-xs
                     text-gray-500

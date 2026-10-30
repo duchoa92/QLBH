@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Repair;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SaleItemGift;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -156,11 +157,20 @@ class DashboardController extends Controller
             ->whereBetween('sales.created_at', [$from, $to])
             ->selectRaw('
                 COALESCE(SUM(sale_items.subtotal), 0) as revenue,
-                COALESCE(SUM(sale_items.quantity * products.cost_price), 0) as cost
+                COALESCE(SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price), 0) as cost
             ')
             ->first();
 
-        $posProfit = (float) $posRow->revenue - (float) $posRow->cost;
+        $giftCost = SaleItemGift::query()
+            ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
+            ->where('sales.status', '!=', 'cancelled')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->selectRaw('COALESCE(SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price), 0) as cost')
+            ->value('cost');
+
+        $posProfit = (float) $posRow->revenue - (float) $posRow->cost - (float) $giftCost;
 
         $repairProfit = (float) Repair::query()
             ->whereIn('status', self::REPAIR_REVENUE_STATUSES)
@@ -191,7 +201,17 @@ class DashboardController extends Controller
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
-            ->selectRaw('DATE(sales.created_at) as date, SUM(sale_items.quantity * products.cost_price) as cost')
+            ->selectRaw('DATE(sales.created_at) as date, SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price) as cost')
+            ->groupBy('date')
+            ->pluck('cost', 'date');
+
+        $giftCostsByDay = SaleItemGift::query()
+            ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
+            ->where('sales.status', '!=', 'cancelled')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->selectRaw('DATE(sales.created_at) as date, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
             ->groupBy('date')
             ->pluck('cost', 'date');
 
@@ -214,7 +234,7 @@ class DashboardController extends Controller
             $key = $cursor->format('Y-m-d');
 
             $posRevenueDay = (float) ($salesByDay[$key] ?? 0);
-            $costDay = (float) ($costByDay[$key] ?? 0);
+            $costDay = (float) ($costByDay[$key] ?? 0) + (float) ($giftCostsByDay[$key] ?? 0);
             $repairRevenueDay = (float) ($repairsByDay[$key] ?? 0);
 
             $labels[] = $cursor->format('d/m');

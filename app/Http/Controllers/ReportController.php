@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SaleItemGift;
 use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
@@ -262,27 +263,46 @@ class ReportController extends Controller
         $summaryRow = (clone $base)
             ->selectRaw('
                 COALESCE(SUM(sale_items.subtotal), 0) as revenue,
-                COALESCE(SUM(sale_items.quantity * products.cost_price), 0) as cost,
+                COALESCE(SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price), 0) as cost,
                 COALESCE(SUM(sale_items.quantity), 0) as qty
             ')
             ->first();
 
         $revenue = (float) $summaryRow->revenue;
-        $cost = (float) $summaryRow->cost;
+        $giftCost = SaleItemGift::query()
+            ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
+            ->where('sales.status', '!=', 'cancelled')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->selectRaw('COALESCE(SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price), 0) as cost')
+            ->value('cost');
+        $cost = (float) $summaryRow->cost + (float) $giftCost;
         $profit = $revenue - $cost;
+
+        $giftCostsByDay = SaleItemGift::query()
+            ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
+            ->where('sales.status', '!=', 'cancelled')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->selectRaw('DATE(sales.created_at) as date, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
+            ->groupBy('date')
+            ->get()
+            ->keyBy('date');
 
         $daily = (clone $base)
             ->selectRaw('
                 DATE(sales.created_at) as date,
                 SUM(sale_items.subtotal) as revenue,
-                SUM(sale_items.quantity * products.cost_price) as cost
+                SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price) as cost
             ')
             ->groupBy('date')
             ->orderBy('date')
             ->get()
-            ->map(function ($row) {
+            ->map(function ($row) use ($giftCostsByDay) {
                 $row->revenue = (float) $row->revenue;
-                $row->cost = (float) $row->cost;
+                $row->cost = (float) $row->cost + (float) ($giftCostsByDay[$row->date]->cost ?? 0);
                 $row->profit = $row->revenue - $row->cost;
                 return $row;
             });
@@ -293,18 +313,48 @@ class ReportController extends Controller
                 products.name,
                 SUM(sale_items.quantity) as qty_sold,
                 SUM(sale_items.subtotal) as revenue,
-                SUM(sale_items.quantity * products.cost_price) as cost
+                SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price) as cost
             ')
             ->groupBy('products.id', 'products.name')
             ->orderByDesc('revenue')
             ->limit(15)
             ->get()
-            ->map(function ($row) {
+            ->keyBy('id');
+
+        $giftCostsByProduct = SaleItemGift::query()
+            ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
+            ->where('sales.status', '!=', 'cancelled')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->selectRaw('products.id, products.name, SUM(sale_item_gifts.quantity) as qty_sold, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
+            ->groupBy('products.id', 'products.name')
+            ->get();
+
+        foreach ($giftCostsByProduct as $giftRow) {
+            if ($byProduct->has($giftRow->id)) {
+                $byProduct[$giftRow->id]->cost = (float) $byProduct[$giftRow->id]->cost + (float) $giftRow->cost;
+                $byProduct[$giftRow->id]->qty_sold = (int) $byProduct[$giftRow->id]->qty_sold + (int) $giftRow->qty_sold;
+            } else {
+                $byProduct->put($giftRow->id, (object) [
+                    'id' => $giftRow->id,
+                    'name' => $giftRow->name,
+                    'qty_sold' => (int) $giftRow->qty_sold,
+                    'revenue' => 0.0,
+                    'cost' => (float) $giftRow->cost,
+                ]);
+            }
+        }
+
+        $byProduct = $byProduct->map(function ($row) {
                 $row->revenue = (float) $row->revenue;
                 $row->cost = (float) $row->cost;
                 $row->profit = $row->revenue - $row->cost;
                 return $row;
-            });
+            })
+            ->sortByDesc('revenue')
+            ->take(15)
+            ->values();
 
         return response()->json([
             'summary' => [

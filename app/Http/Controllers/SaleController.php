@@ -22,8 +22,11 @@ class SaleController extends Controller
     {
         $term = trim((string) $request->query('q', ''));
         if (mb_strlen($term) < 2) return response()->json([]);
+        $searchImeis = $request->boolean('search_imei');
+        $saleId = $request->integer('sale_id');
+        $allowNegativeStock = filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN);
 
-        return Product::query()
+        $products = Product::query()
             ->where(function ($query) use ($term): void {
                 $query->where('name', 'like', "%{$term}%")
                     ->orWhere('sku', 'like', "%{$term}%")
@@ -32,27 +35,69 @@ class SaleController extends Controller
                         ->where('barcode', $term)
                         ->orWhere('sku', 'like', "%{$term}%"));
             })
-            ->with(['variants' => fn ($query) => $query->where('is_active', true)])
+            ->when($searchImeis, function ($query) use ($term, $saleId): void {
+                $query->orWhereHas('imeis', function ($imeiQuery) use ($term, $saleId): void {
+                    $imeiQuery->where(function ($codes) use ($term): void {
+                        $codes->where('imei', 'like', "%{$term}%")
+                            ->orWhere('serial', 'like', "%{$term}%");
+                    })->where(function ($availability) use ($saleId): void {
+                        $availability->where('status', ProductImei::STATUS_IN_STOCK);
+                        if ($saleId) {
+                            $availability->orWhereHas('saleItems', fn ($items) => $items->where('sale_id', $saleId));
+                        }
+                    });
+                });
+            })
+            ->with(['unit', 'variants' => fn ($query) => $query->where('is_active', true)])
+            ->when($searchImeis, function ($query) use ($term, $saleId): void {
+                $query->with(['imeis' => function ($imeiQuery) use ($term, $saleId): void {
+                    $imeiQuery->where(function ($codes) use ($term): void {
+                        $codes->where('imei', 'like', "%{$term}%")
+                            ->orWhere('serial', 'like', "%{$term}%");
+                    })->where(function ($availability) use ($saleId): void {
+                        $availability->where('status', ProductImei::STATUS_IN_STOCK);
+                        if ($saleId) {
+                            $availability->orWhereHas('saleItems', fn ($items) => $items->where('sale_id', $saleId));
+                        }
+                    })->with('variant:id,attributes')->limit(10);
+                }]);
+            })
             ->limit(12)
-            ->get(['id', 'name', 'sku', 'sell_price', 'stock', 'product_type', 'manage_stock_by_serial', 'warranty_days'])
-            ->map(fn (Product $product) => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'price' => (float) $product->sell_price,
-                'stock' => (int) $product->stock,
-                'is_imei' => $product->product_type === 'imei' || (bool) $product->manage_stock_by_serial,
-                'warranty_days' => (int) $product->warranty_days,
-                'variants' => $product->variants->map(fn ($variant) => [
-                    'id' => $variant->id,
-                    'name' => $product->name . ' · ' . collect($variant->attributes ?? [])->filter()->join(' / '),
-                    'sku' => $variant->sku,
-                    'barcode' => $variant->barcode,
-                    'attributes' => $variant->attributes ?? [],
-                    'price' => (float) ($variant->sell_price ?: $product->sell_price),
-                    'stock' => (int) $variant->stock,
-                ])->values(),
-            ]);
+            ->get(['id', 'name', 'sku', 'sell_price', 'stock', 'unit_id', 'product_type', 'manage_stock_by_serial', 'warranty_days']);
+
+        return $products
+            ->map(function (Product $product) use ($allowNegativeStock): array {
+                $matchedImei = $product->imeis?->first();
+
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'price' => (float) $product->sell_price,
+                    'stock' => (int) $product->stock,
+                    'can_sell' => $allowNegativeStock || (int) $product->stock > 0,
+                    'unit_id' => $product->unit_id,
+                    'unit_name' => $product->unit?->short_name ?: $product->unit?->name,
+                    'is_imei' => $product->product_type === 'imei' || (bool) $product->manage_stock_by_serial,
+                    'warranty_days' => (int) $product->warranty_days,
+                    'allow_negative_stock' => $allowNegativeStock,
+                    'matching_imei' => $matchedImei ? array_merge($matchedImei->only(['id', 'imei', 'serial', 'variant_id']), [
+                        'variant_name' => collect($matchedImei->variant?->attributes ?? [])->map(fn ($value) => is_array($value) ? ($value['value'] ?? $value['label'] ?? $value['name'] ?? '') : $value)->filter()->join(' / '),
+                        'effective_sell_price' => (float) ($matchedImei->sell_price ?: 0),
+                    ]) : null,
+                    'variants' => $product->variants->map(fn ($variant) => [
+                        'id' => $variant->id,
+                        'name' => $product->name . ' · ' . collect($variant->attributes ?? [])->filter()->join(' / '),
+                        'sku' => $variant->sku,
+                        'barcode' => $variant->barcode,
+                        'attributes' => $variant->attributes ?? [],
+                        'sell_price' => (float) ($variant->sell_price ?: $product->sell_price),
+                        'price' => (float) ($variant->sell_price ?: $product->sell_price),
+                        'stock' => (int) $variant->stock,
+                        'can_sell' => $allowNegativeStock || (int) $variant->stock > 0,
+                    ])->values(),
+                ];
+            });
     }
 
     public function searchCustomers(Request $request)
@@ -112,13 +157,14 @@ class SaleController extends Controller
                     'variant_id' => $imei->variant_id,
                     'variant_name' => $variantName,
                     'status' => $imei->status,
+                    'effective_sell_price' => (float) ($imei->sell_price ?: 0),
                 ];
             });
     }
 
     public function edit(Sale $sale): Response
     {
-        $sale->load(['customer', 'items.product.unit', 'items.variant', 'items.productImei', 'items.gifts.product', 'items.gifts.variant', 'items.gifts.productImei']);
+        $sale->load(['customer', 'items.product.unit', 'items.product.variants' => fn ($query) => $query->where('is_active', true), 'items.variant', 'items.productImei', 'items.gifts.product', 'items.gifts.variant', 'items.gifts.productImei']);
         $blockedReason = $this->saleEditBlockedReason($sale);
 
         return Inertia::render('Sales/Edit', [
@@ -136,6 +182,9 @@ class SaleController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'items.*.unit_id' => ['nullable', 'integer', 'exists:units,id'],
+            'items.*.unit_name' => ['nullable', 'string', 'max:50'],
+            'items.*.conversion_factor' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'items.*.imei_id' => ['nullable', 'integer', 'exists:product_imeis,id'],
             'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'items.*.warranty_note' => ['nullable', 'string', 'max:1000'],
@@ -149,6 +198,7 @@ class SaleController extends Controller
             'items.*.gifts.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.gifts.*.imei_id' => ['nullable', 'integer', 'exists:product_imeis,id'],
             'items.*.gifts.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.gifts.*.conversion_factor' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'paid_amount' => ['required', 'numeric', 'min:0', 'max:9999999999999'],
             'payment_method' => ['required', 'in:cash,bank,mixed,card'],
             'bank_account' => ['nullable', 'string', 'max:50'],
@@ -214,6 +264,8 @@ class SaleController extends Controller
                     $variant = ProductVariant::query()->lockForUpdate()->where('product_id', $product->id)->where('is_active', true)->findOrFail($row['variant_id']);
                 }
                 $quantity = (int) $row['quantity'];
+                $conversionFactor = $requiresImei ? 1 : max(1, (int) ($row['conversion_factor'] ?? 1));
+                $baseQuantity = $quantity * $conversionFactor;
                 $imei = null;
                 if ($requiresImei) {
                     if ($quantity !== 1 || empty($row['imei_id'])) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Mỗi dòng IMEI phải có đúng một thiết bị được chọn.']);
@@ -243,6 +295,7 @@ class SaleController extends Controller
                     $giftRequiresImei = $giftProduct->product_type === 'imei' || (bool) $giftProduct->manage_stock_by_serial;
                     $giftImei = null;
                     $giftQuantity = (int) $giftRow['quantity'];
+                    $giftConversionFactor = $giftRequiresImei ? 1 : max(1, (int) ($giftRow['conversion_factor'] ?? 1));
                     if ($giftRequiresImei) {
                         if ($giftQuantity !== 1 || empty($giftRow['imei_id'])) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Quà tặng IMEI cần chọn đúng một thiết bị.']);
                         $giftImei = ProductImei::query()->lockForUpdate()->where('product_id', $giftProduct->id)->where('status', ProductImei::STATUS_IN_STOCK)->findOrFail($giftRow['imei_id']);
@@ -252,12 +305,14 @@ class SaleController extends Controller
                         $imeiProductIds->push($giftProduct->id);
                     } elseif (!empty($giftRow['imei_id'])) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'IMEI quà tặng không khớp với loại sản phẩm.']);
                     if (!$giftRequiresImei && $giftProduct->variants()->where('is_active', true)->exists() && !$giftVariant) throw \Illuminate\Validation\ValidationException::withMessages(['items' => 'Vui lòng chọn biến thể cho quà tặng ' . $giftProduct->name . '.']);
-                    $gifts[] = ['product' => $giftProduct, 'variant' => $giftVariant, 'quantity' => $giftQuantity, 'imei' => $giftImei];
+                    $gifts[] = ['product' => $giftProduct, 'variant' => $giftVariant, 'quantity' => $giftQuantity, 'baseQuantity' => $giftQuantity * $giftConversionFactor, 'conversionFactor' => $giftConversionFactor, 'imei' => $giftImei];
                 }
                 $warrantyDays = max(0, min(3650, (int) ($row['warranty_days'] ?? ($product->warranty_days ?? 0))));
                 $warranty_note = filled($row['warranty_note'] ?? null) ? trim($row['warranty_note']) : null;
                 $note = filled($row['note'] ?? null) ? trim($row['note']) : null;
-                $newItems[] = compact('product', 'variant', 'quantity', 'price', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note');
+                $unitId = $row['unit_id'] ?? $product->unit_id;
+                $unitName = filled($row['unit_name'] ?? null) ? trim($row['unit_name']) : ($product->unit?->short_name ?: $product->unit?->name);
+                $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note');
             }
 
             $oldStockDelta = [];
@@ -282,13 +337,13 @@ class SaleController extends Controller
                 $newSoldDelta[$item['product']->id] = ($newSoldDelta[$item['product']->id] ?? 0) + $item['quantity'];
                 if (!$item['imei']) {
                     $key = $item['variant'] ? 'v' . $item['variant']->id : 'p' . $item['product']->id;
-                    $newStockDelta[$key] = ($newStockDelta[$key] ?? 0) + $item['quantity'];
+                    $newStockDelta[$key] = ($newStockDelta[$key] ?? 0) + $item['baseQuantity'];
                 }
                 foreach ($item['gifts'] as $gift) {
                     $newSoldDelta[$gift['product']->id] = ($newSoldDelta[$gift['product']->id] ?? 0) + $gift['quantity'];
                     if (!$gift['imei']) {
                         $giftKey = $gift['variant'] ? 'v' . $gift['variant']->id : 'p' . $gift['product']->id;
-                        $newStockDelta[$giftKey] = ($newStockDelta[$giftKey] ?? 0) + $gift['quantity'];
+                        $newStockDelta[$giftKey] = ($newStockDelta[$giftKey] ?? 0) + $gift['baseQuantity'];
                     }
                 }
             }
@@ -321,11 +376,11 @@ class SaleController extends Controller
                     'product_id' => $item['product']->id,
                     'variant_id' => $item['variant']?->id,
                     'product_imei_id' => $item['imei']?->id,
-                    'unit_id' => $item['product']->unit_id,
-                    'unit_name' => $item['product']->unit?->short_name ?: $item['product']->unit?->name,
+                    'unit_id' => $item['unitId'],
+                    'unit_name' => $item['unitName'],
                     'quantity' => $item['quantity'],
-                    'base_quantity' => $item['quantity'],
-                    'conversion_factor' => 1,
+                    'base_quantity' => $item['baseQuantity'],
+                    'conversion_factor' => $item['conversionFactor'],
                     'unit_price' => $item['price'],
                     'discount_type' => $item['type'],
                     'discount_value' => $item['value'],
@@ -341,8 +396,8 @@ class SaleController extends Controller
                         'variant_id' => $gift['variant']?->id,
                         'product_imei_id' => $gift['imei']?->id,
                         'quantity' => $gift['quantity'],
-                        'base_quantity' => $gift['quantity'],
-                        'conversion_factor' => 1,
+                        'base_quantity' => $gift['baseQuantity'],
+                        'conversion_factor' => $gift['conversionFactor'],
                     ]);
                 }
             }
@@ -434,6 +489,7 @@ class SaleController extends Controller
                 'customer',
                 'user',
                 'items.product.conversionUnit',
+                'items.product.variants' => fn ($variants) => $variants->where('is_active', true),
                 'items.variant',
                 'items.productImei',
                 'items.gifts.product',
@@ -491,7 +547,9 @@ class SaleController extends Controller
                 'sales' => $sales,
                 'selectedSale' => $request->filled('open_sale')
                     ? $this->withOldDebtPaid(Sale::query()->with([
-                        'customer', 'user', 'items.product.conversionUnit', 'items.variant',
+                        'customer', 'user', 'items.product.conversionUnit',
+                        'items.product.variants' => fn ($variants) => $variants->where('is_active', true),
+                        'items.variant',
                         'items.productImei', 'items.gifts.product', 'items.gifts.productImei',
                     ])->findOrFail((int) $request->query('open_sale')))
                     : null,

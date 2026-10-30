@@ -71,6 +71,8 @@ const pageTitleFor = (page) => {
     return `${title} - ${shopName || appName}`
 }
 
+let resolvedDocumentTitle = `QLBH - ${appName}`
+
  // ❗ CHẶN ĐĂNG KÝ NHIỀU LẦN
 if (!window._inertiaToastRegistered) {
 
@@ -126,7 +128,7 @@ if (!window._inertiaToastRegistered) {
 }
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) => title ? `${title} - ${appName}` : resolvedDocumentTitle,
     resolve: (name) => resolvePageComponent(
         `./Pages/${name}.vue`,
         pageComponents
@@ -230,11 +232,13 @@ createInertiaApp({
             printStyle.textContent = `@media print { :root { --configured-receipt-width: ${receiptWidth}; } @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: var(--configured-receipt-width) !important; } }`
         }
         applyPageSettings(props.initialPage)
-        document.title = pageTitleFor(props.initialPage)
+        resolvedDocumentTitle = pageTitleFor(props.initialPage)
+        document.title = resolvedDocumentTitle
         router.on('navigate', (event) => {
             const currentPage = event.detail.page
             applyPageSettings(currentPage)
-            document.title = pageTitleFor(currentPage)
+            resolvedDocumentTitle = pageTitleFor(currentPage)
+            document.title = resolvedDocumentTitle
             navigator.serviceWorker?.controller?.postMessage({
                 type: 'CACHE_OFFLINE_PAGE',
                 page: currentPage,
