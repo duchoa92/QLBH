@@ -1,6 +1,7 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3'
 import { imageUrl } from '@/utils/imageUrl'
+import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
 
 const props = defineProps({
     customer: {
@@ -36,6 +37,13 @@ const form = useForm({
 
     images: [],
 })
+
+const applyIdCard = details => {
+    for (const key of ['full_name', 'birthday', 'gender', 'cccd', 'address', 'province', 'district', 'ward']) {
+        if (details[key]) form[key] = details[key]
+    }
+    if (details.street_address) form.address = details.street_address
+}
 
 /*
 |--------------------------------------------------
@@ -155,7 +163,7 @@ const submit = () => {
                 </div>
 
                 <!-- CCCD -->
-                <div>
+                <div class="relative">
 
                     <label class="block mb-1">
                         CCCD
@@ -164,8 +172,9 @@ const submit = () => {
                     <input
                         v-model="form.cccd"
                         type="text"
-                        class="w-full border rounded p-2"
+                        class="w-full border rounded p-2 pr-12"
                     />
+                    <CustomerIdCardScanner class="absolute right-1 top-7 !h-8 !w-8" @read="applyIdCard" />
 
                 </div>
 

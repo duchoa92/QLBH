@@ -292,6 +292,8 @@ Route::middleware(['auth'])->group(function () {
     // Repairs (Đã đưa các Route tĩnh lên TRƯỚC Resource)
     Route::get('/repairs/suggestions', [RepairController::class, 'suggestions'])->middleware('permission:repairs.view')->name('repairs.suggestions');
     Route::get('/repairs/customers/{customer}/devices', [RepairController::class, 'customerDevices'])->middleware('permission:repairs.view')->name('repairs.customer-devices');
+    Route::get('/repairs/customer-by-phone', [RepairController::class, 'customerByPhone'])->middleware('permission:repairs.create|repairs.edit')->name('repairs.customer-by-phone');
+    Route::get('/repairs/{repair}/credentials', [RepairController::class, 'credentials'])->middleware('permission:repairs.create|repairs.edit|repairs.complete')->name('repairs.credentials');
     Route::patch('/repairs/{repair}/status', [RepairController::class, 'updateStatus'])->middleware('permission:repairs.edit')->name('repairs.update-status');
     Route::patch('/repairs/{repair}/warranty/decline', [RepairController::class, 'declineWarranty'])->middleware('permission:repairs.edit')->name('repairs.warranty-decline');
     Route::post('/repairs/{repair}/complete', [RepairController::class, 'complete'])->middleware('permission:repairs.complete')->name('repairs.complete');

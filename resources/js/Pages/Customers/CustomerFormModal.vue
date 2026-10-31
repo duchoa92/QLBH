@@ -5,6 +5,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import api from '@/Services/api'
+import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
 
 const props = defineProps({
     customer: {
@@ -45,6 +46,13 @@ const genderOptions = [
     { label: 'Nữ', value: 'female' },
     { label: 'Khác', value: 'other' },
 ]
+
+const applyIdCard = details => {
+    for (const key of ['full_name', 'birthday', 'gender', 'cccd', 'address', 'province', 'district', 'ward']) {
+        if (details[key]) form[key] = details[key]
+    }
+    if (details.street_address) form.address = details.street_address
+}
 
 const submitViaApi = async () => {
     form.processing = true
@@ -139,11 +147,10 @@ const submit = () => {
                 :error="form.errors.gender"
             />
 
-            <FloatingInput
-                v-model="form.cccd"
-                label="CCCD"
-                :error="form.errors.cccd"
-            />
+            <div class="relative">
+                <FloatingInput v-model="form.cccd" label="CCCD" :error="form.errors.cccd" input-class="pr-12" />
+                <CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @read="applyIdCard" />
+            </div>
 
             <FloatingInput
                 v-model="form.province"

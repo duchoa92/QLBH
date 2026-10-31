@@ -95,6 +95,27 @@ export function formatDate(date) {
     return `${parts.day}/${parts.month}/${parts.year}`
 }
 
+export function formatDatePlusDays(date, days) {
+    const parsed = parseDate(date)
+    const amount = Math.trunc(Number(days || 0))
+    if (!parsed || Number.isNaN(parsed.getTime()) || amount <= 0) return ''
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        timeZone: settings.app_timezone || 'Asia/Ho_Chi_Minh',
+    }).formatToParts(parsed).reduce((result, part) => {
+        if (part.type !== 'literal') result[part.type] = Number(part.value)
+        return result
+    }, {})
+    const result = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 12))
+    result.setUTCDate(result.getUTCDate() + amount)
+    const dateKey = `${result.getUTCFullYear()}-${String(result.getUTCMonth() + 1).padStart(2, '0')}-${String(result.getUTCDate()).padStart(2, '0')}`
+
+    return formatDate(dateKey)
+}
+
 export function formatDateTime(date) {
     const parsed = parseDate(date)
     if (!parsed || Number.isNaN(parsed.getTime())) return ''

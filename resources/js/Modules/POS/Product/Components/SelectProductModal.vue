@@ -21,6 +21,8 @@ const props = defineProps({
     currentImei: { type: Object, default: null },
     currentVariant: { type: Object, default: null },
     extraImeis: { type: Array, default: () => [] },
+    quantityAware: { type: Boolean, default: false },
+    selectionQuantity: { type: Number, default: 1 },
 })
 
 const emit = defineEmits(['close', 'confirm'])
@@ -28,6 +30,7 @@ const page = usePage()
 const costPriceSuggestionEnabled = computed(() => page.props.settings?.pos_cost_price_suggestion_enabled !== false
     && page.props.settings?.pos_cost_price_suggestion_enabled !== 0
     && page.props.settings?.pos_cost_price_suggestion_enabled !== '0')
+const allowNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
 
 const selectedVariant = ref(null)
 const selectedImei = ref(null)
@@ -51,6 +54,8 @@ const needsVariant = computed(() =>
 
 const canConfirm = computed(() => {
     if (needsVariant.value && !selectedVariant.value) return false
+    if (props.quantityAware && !allowNegativeStock.value && needsVariant.value
+        && Number(selectedVariant.value?.stock || 0) < Math.max(1, Number(props.selectionQuantity || 1))) return false
     if (needsImei.value && !selectedImei.value) return false
     return true
 })
@@ -121,12 +126,15 @@ const stopShowingCostPrice = (event) => {
 }
 
 const displayVariantStock = (variant) => {
-    const quantity = Number(variant?.stock || 0)
+    const currentStock = Number(variant?.stock || 0)
+    const remainingStock = props.quantityAware
+        ? currentStock - Math.max(1, Number(props.selectionQuantity || 1))
+        : currentStock
+    const quantity = allowNegativeStock.value ? remainingStock : Math.max(0, remainingStock)
     const unit = props.product?.unit_name || ''
 
     return `${quantity}${unit ? ` ${unit}` : ''}`
 }
-
 const filteredImeis = computed(() => {
     const selectedImeiIds = new Set(
         props.cart.map(item => item.imei_id).filter(Boolean)
@@ -279,9 +287,13 @@ const confirm = () => {
                             :key="variant.id"
                             type="button"
                             class="flex flex-col justify-between rounded-xl border p-3 text-left transition-all relative overflow-hidden"
-                            :class="selectedVariant?.id === variant.id
-                                ? 'border-blue-600 bg-blue-50/40 text-blue-900 ring-2 ring-blue-600/20'
-                                : 'border-slate-200/80 hover:border-slate-300 bg-white'"
+                            :class="[
+                                selectedVariant?.id === variant.id
+                                    ? 'border-blue-600 bg-blue-50/40 text-blue-900 ring-2 ring-blue-600/20'
+                                    : 'border-slate-200/80 hover:border-slate-300 bg-white',
+                                { 'cursor-not-allowed opacity-50': quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Math.max(1, Number(selectionQuantity || 1)) },
+                            ]"
+                            :disabled="quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Math.max(1, Number(selectionQuantity || 1))"
                             @click="selectVariant(variant)"
                         >
                             <div class="flex w-full items-start justify-between">
@@ -311,7 +323,7 @@ const confirm = () => {
                                     {{ formatMoney(isShowingCostPrice('variant', variant) ? variantCostPrice(variant) : variantSellPrice(variant)) }}
                                 </span>
 
-                                <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                <span class="text-right text-[10px] font-semibold rounded px-1.5 py-0.5" :class="quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Number(selectionQuantity || 1) ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-600'">
                                     Tồn: {{ displayVariantStock(variant) }}
                                 </span>
                             </div>

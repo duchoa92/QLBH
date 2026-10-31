@@ -18,6 +18,7 @@ class RepairRequest extends FormRequest
         return [
 
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'customer_conflict_action' => ['nullable', 'in:replace,contact'],
             'intake_type' => ['nullable', 'in:repair,warranty'],
             'warranty_source_type' => ['nullable', 'required_with:warranty_source_id', 'in:sale_item,repair'],
             'warranty_source_id' => ['nullable', 'required_with:warranty_source_type', 'integer', 'min:1'],
@@ -65,6 +66,8 @@ class RepairRequest extends FormRequest
                 'string',
             ],
 
+            'screen_lock_type' => ['nullable', 'in:pin,password,pattern'],
+
             'account_type' => [
                 'nullable',
                 'string',
@@ -101,7 +104,7 @@ class RepairRequest extends FormRequest
             'images.*' => [
                 'nullable',
                 'image',
-                'max:2048',
+                'max:5120',
             ],
 
             'identity_card' => [

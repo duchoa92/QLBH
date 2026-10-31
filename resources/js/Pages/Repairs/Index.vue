@@ -22,6 +22,7 @@ const props = defineProps({
 const page = usePage();
 const permissions = computed(() => page.props.auth?.permissions || []);
 const can = (permission) => permissions.value.includes(permission);
+const canViewCredentials = computed(() => can('repairs.create') || can('repairs.edit') || can('repairs.complete'));
 const canProgress = (repair) => {
     if (repair.status === 'done') return can('repairs.return');
     if (repair.status === 'repairing') return can('repairs.complete') || can('repairs.edit');
@@ -37,6 +38,7 @@ const sortBy = ref(props.filters?.sort_by ?? 'created_at');
 const sortOrder = ref(props.filters?.sort_order ?? 'desc');
 
 const detailRepair = ref(null);
+const detailCredentials = ref(null);
 const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
@@ -73,12 +75,33 @@ const openCreateFromQuery = () => {
 const openRepairFromQuery = () => {
     const url = new URL(window.location.href);
     const repairId = Number(url.searchParams.get('open_repair'));
-    if (!repairId) { detailRepair.value = null; return; }
-    detailRepair.value = props.repairs?.data?.find(repair => Number(repair.id) === repairId) || null;
+    if (!repairId) { detailRepair.value = null; detailCredentials.value = null; return; }
+    const repair = props.repairs?.data?.find(item => Number(item.id) === repairId) || null;
+    if (Number(detailRepair.value?.id) !== repairId) {
+        detailRepair.value = repair;
+        detailCredentials.value = null;
+        loadDetailCredentials(repair);
+    }
+};
+
+let detailCredentialRequest = 0;
+const loadDetailCredentials = async (repair) => {
+    const requestId = ++detailCredentialRequest;
+    detailCredentials.value = null;
+    if (!canViewCredentials.value || !repair?.id) return;
+    try {
+        const { data } = await axios.get(route('repairs.credentials', repair.id));
+        if (requestId !== detailCredentialRequest || Number(detailRepair.value?.id) !== Number(repair.id)) return;
+        detailCredentials.value = data;
+    } catch {
+        if (requestId === detailCredentialRequest && Number(detailRepair.value?.id) === Number(repair.id)) toast.error('Không tải được thông tin bảo mật của phiếu.');
+    }
 };
 
 const closeRepairDetail = () => {
     detailRepair.value = null;
+    detailCredentials.value = null;
+    detailCredentialRequest += 1;
     const url = new URL(window.location.href);
     if (!url.searchParams.has('open_repair')) return;
     url.searchParams.delete('open_repair');
@@ -91,6 +114,7 @@ const openRepairDetail = (repair) => {
     url.searchParams.set('open_repair', String(repair.id));
     router.push({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true });
     detailRepair.value = repair;
+    loadDetailCredentials(repair);
 };
 
 window.addEventListener('popstate', openRepairFromQuery);
@@ -138,11 +162,13 @@ const detailRows = computed(() => {
         ...(repair.warranty_decline_reason ? [{ label: 'Lý do từ chối BH', value: repair.warranty_decline_reason, full: true }] : []),
         ...(Number(repair.warranty_covered_amount || 0) > 0 ? [{ label: 'Chi phí được bảo hành', value: formatCurrency(repair.warranty_covered_amount) }] : []),
         ...(repair.repair_warranty_expires_at ? [{ label: 'BH sau sửa đến', value: formatDate(repair.repair_warranty_expires_at) }] : []),
-        { label: 'Mật khẩu màn hình', value: repair.screen_password || '-' },
-        { label: 'Mẫu hình (thứ tự chấm)', value: repair.screen_pattern || '-' },
-        { label: 'Loại tài khoản', value: repair.account_type || '-' },
-        { label: 'Email / SĐT tài khoản', value: repair.account_email || '-' },
-        { label: 'Mật khẩu tài khoản', value: repair.account_password || '-' },
+        ...(canViewCredentials.value ? [
+            { label: 'Mật khẩu màn hình', value: detailCredentials.value?.screen_password || '-' },
+            { label: 'Mẫu hình (thứ tự chấm)', value: detailCredentials.value?.screen_pattern || '-' },
+            { label: 'Loại tài khoản', value: detailCredentials.value?.account_type || '-' },
+            { label: 'Email / SĐT tài khoản', value: detailCredentials.value?.account_email || '-' },
+            { label: 'Mật khẩu tài khoản', value: detailCredentials.value?.account_password || '-' },
+        ] : []),
         { label: 'Trạng thái', value: statusLabels[repair.status] || repair.status },
         { label: 'Ngày nhận', value: formatDateTime(repair.created_at) },
         { label: 'Triệu chứng', value: Array.isArray(repair.issue) ? repair.issue.join(', ') : repair.issue || '-' , full: true },
@@ -442,9 +468,9 @@ const confirmPayment = async (payment) => {
                     </div>
                 </div>
             </div>
-            <div v-if="detailRepair.screen_pattern" class="mt-4 rounded-lg border border-slate-200 p-3">
+            <div v-if="detailCredentials?.screen_pattern" class="mt-4 rounded-lg border border-slate-200 p-3">
                 <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Mẫu hình mở khóa</h3>
-                <PatternLock :model-value="detailRepair.screen_pattern" readonly />
+                <PatternLock :model-value="detailCredentials.screen_pattern" readonly />
             </div>
             <div class="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3">
                 <button v-if="can('repairs.view')" type="button" @click="printPreviewUrl = route('repairs.print', detailRepair.id)" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">In phiếu</button>

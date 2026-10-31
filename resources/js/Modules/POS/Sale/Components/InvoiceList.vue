@@ -106,6 +106,9 @@ const paymentLabel = (method) => ({
     cash: 'Tiền mặt', bank: 'Chuyển khoản', mixed: 'Thanh toán hỗn hợp',
     card: 'Thẻ', qr: 'QR', transfer: 'Chuyển khoản',
 }[String(method || '').toLowerCase()] || method || 'Tiền mặt')
+const invoicePaidAmount = (invoice) => Math.max(0, Number(invoice?.paid_amount || 0) - Number(invoice?.old_debt_paid || 0))
+const invoiceHasDebt = (invoice) => invoice?.status !== 'cancelled'
+    && Number(invoice?.grand_total || 0) - invoicePaidAmount(invoice) > 0.009
 
 onMounted(() => {
     loadInvoices()
@@ -233,7 +236,7 @@ const refreshInvoices = () => {
                         </span>
                     </td>
                     <td class="px-2 py-1 text-center"><span class="inline-flex items-center gap-1 text-xs text-slate-600"><Banknote v-if="['cash','mixed',''].includes(String(invoice.payment_method || '').toLowerCase())" class="h-3.5 w-3.5 text-emerald-600" /><CreditCard v-else class="h-3.5 w-3.5 text-blue-600" />{{ paymentLabel(invoice.payment_method) }}</span></td>
-                    <td class="whitespace-nowrap px-2 py-1 text-right font-semibold tabular-nums">{{ $money(invoice.grand_total) }}</td>
+                    <td class="whitespace-nowrap px-2 py-1 text-right font-semibold tabular-nums" :class="invoiceHasDebt(invoice) ? 'text-amber-700' : 'text-slate-800'">{{ $money(invoice.grand_total) }}</td>
                     <td class="px-2 py-1 text-center" @click.stop>
                         <div class="inline-flex items-center gap-1">
                             <button type="button" class="rounded-md p-1 text-slate-600 hover:bg-slate-100" title="In lại hóa đơn" aria-label="In lại hóa đơn" @click="openPrintWindow(invoice)">

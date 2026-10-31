@@ -365,6 +365,7 @@
 
             </div>
 
+            @if($canViewCredentials)
             <div class="item">
 
                 <div class="label">
@@ -376,6 +377,7 @@
                 </div>
 
             </div>
+            @endif
 
             <div class="item">
 

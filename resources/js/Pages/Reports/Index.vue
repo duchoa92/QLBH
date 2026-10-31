@@ -357,21 +357,6 @@ onMounted(() => {
 
         <div class="space-y-6">
 
-            <!-- HEADER -->
-            <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                <div class="text-sm font-bold uppercase tracking-wide text-blue-600">
-                    Báo cáo & Thống kê
-                </div>
-
-                <h2 class="mt-2 text-2xl font-black text-slate-950">
-                    Doanh thu · Lợi nhuận · Hàng bán chạy · Tồn kho · Công nợ
-                </h2>
-
-                <p class="mt-2 max-w-3xl text-sm text-slate-600">
-                    Theo dõi tình hình kinh doanh theo thời gian thực, giúp bạn ra quyết định nhanh và chính xác hơn.
-                </p>
-            </section>
-
             <!-- TABS -->
             <section class="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
                 <button

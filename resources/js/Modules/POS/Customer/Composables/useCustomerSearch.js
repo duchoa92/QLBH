@@ -23,6 +23,7 @@ export function useCustomerSearch(
     const keyword = ref('')
 
     const customers = ref([])
+    const identityPrefill = ref(null)
 
     let timeout = null
 
@@ -99,6 +100,12 @@ export function useCustomerSearch(
         )
     }
 
+    const onIdentityCardScanned = (details) => {
+        identityPrefill.value = details
+        keyword.value = details.cccd
+        search()
+    }
+
     /*
     |--------------------------------------------------------------------------
     | CLEAR CUSTOMER
@@ -146,6 +153,7 @@ export function useCustomerSearch(
     } = useAutocompleteKeyboard(
 
         customers,
+        identityPrefill,
 
         (customer) => {
 
@@ -180,6 +188,7 @@ export function useCustomerSearch(
         search,
 
         selectCustomer,
+        onIdentityCardScanned,
 
         clearCustomer,
 

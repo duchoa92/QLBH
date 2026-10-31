@@ -1,5 +1,5 @@
 <script setup>
-import { formatDateTime, formatCurrency, formatDate, formatNumber } from '@/utils/format'
+import { formatDateTime, formatCurrency, formatDate, formatDatePlusDays, formatNumber } from '@/utils/format'
 import { usePage } from '@inertiajs/vue3'
 import { MessageSquare } from 'lucide-vue-next'
 import { ref } from 'vue'
@@ -18,16 +18,12 @@ const toggleWarrantyNote = (item) => {
 }
 
 const warrantyEndDate = (item) => {
+    const days = Number(item.warranty_days ?? item.product_imei?.customer_warranty_days ?? 0)
+    const calculatedExpiry = formatDatePlusDays(props.sale?.created_at, days)
+    if (calculatedExpiry) return calculatedExpiry
+
     const expiresAt = item.product_imei?.customer_warranty_expires_at
-    if (expiresAt) return formatDate(expiresAt)
-
-    const days = Number(item.product_imei?.customer_warranty_days ?? item.warranty_days ?? 0)
-    const saleDate = String(props.sale?.created_at || '').slice(0, 10)
-    if (days <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate)) return ''
-
-    const endDate = new Date(`${saleDate}T00:00:00Z`)
-    endDate.setUTCDate(endDate.getUTCDate() + days)
-    return formatDate(endDate.toISOString().slice(0, 10))
+    return expiresAt ? formatDate(expiresAt) : ''
 }
 
 const printInvoice = () => {

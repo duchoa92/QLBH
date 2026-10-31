@@ -451,7 +451,11 @@ const submit = () => {
                 <div>
                     <PaymentMethodSelect v-model="paymentMethod" :disabled="Boolean(bankIntent)" />
                 </div>
-                <p v-if="editMode" class="-mt-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] leading-relaxed text-blue-800">Đã nhận {{ formatMoney(previouslyPaidAmount) }} cho đơn cũ. Chỉ nhập khoản thu thêm; phần còn thiếu chưa thu sẽ được ghi vào công nợ của khách.</p>
+                <p v-if="editMode" class="-mt-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] leading-relaxed text-blue-800">
+                    <template v-if="previouslyPaidAmount > totalNeedToPay">Đơn cũ đã thanh toán {{ formatMoney(previouslyPaidAmount) }}. Cần trả lại khách {{ formatMoney(previouslyPaidAmount - totalNeedToPay) }} tiền thừa.</template>
+                    <template v-else-if="remainingToCollect > 0">Đơn cũ đã thanh toán {{ formatMoney(previouslyPaidAmount) }}. Chỉ nhập khoản thu thêm; phần còn thiếu chưa thu sẽ được ghi vào công nợ của khách.</template>
+                    <template v-else>Đơn cũ đã thanh toán đủ {{ formatMoney(previouslyPaidAmount) }}.</template>
+                </p>
 
                 <!-- SỐ TIỀN MẶT KHÁCH ĐƯA VÀ NÚT TẠO QR PHẦN CÒN LẠI -->
                 <div v-if="paymentMethod === 'cash' || paymentMethod === 'card'">
@@ -462,7 +466,7 @@ const submit = () => {
                             type="text"
                             inputmode="numeric"
                             :disabled="Boolean(bankIntent)"
-                            :label="editMode ? (paymentMethod === 'card' ? 'Tiền thẻ thu thêm' : 'Tiền mặt thu thêm') : 'Số tiền khách đưa'"
+                            :label="editMode ? (paymentMethod === 'card' ? 'Tiền thẻ thu thêm' : 'Khách đưa') : 'Số tiền khách đưa'"
                             :input-class="paymentMethod === 'cash' ? 'pr-36' : ''"
                         />
                         <button
@@ -564,7 +568,7 @@ const submit = () => {
                         type="text"
                         inputmode="numeric"
                         :disabled="Boolean(bankIntent)"
-                            :label="editMode ? 'Số tiền chuyển khoản thu thêm' : 'Số tiền khách chuyển khoản'"
+                            :label="editMode ? 'Khách chuyển' : 'Số tiền khách chuyển khoản'"
                     />
                     <p class="mt-1 text-[11px] text-slate-500">{{ editMode ? 'QR chỉ tạo phần còn thiếu sau khi trừ khoản đã nhận trước đó. Nhập đúng số tiền chuyển khoản vừa nhận.' : 'Nhập số tiền thực nhận để tính chính xác tiền thừa hoặc còn thiếu.' }}</p>
                 </div>
@@ -581,34 +585,36 @@ const submit = () => {
                 <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-2">
                     <template v-if="editMode">
                         <div class="flex justify-between text-xs font-medium text-slate-600">
-                            <span>Đã thanh toán trước khi sửa</span>
+                            <span>Đơn cũ đã thanh toán</span>
                             <span class="font-bold text-slate-800">{{ formatMoney(initialPayment.paid_amount || 0) }}</span>
                         </div>
-                        <div v-if="Number(initialPayment.refunded_change_amount || 0) > 0" class="flex justify-between text-xs font-medium text-amber-700">
-                            <span>Tiền thừa đơn cũ đã hoàn</span>
-                            <span class="font-bold">{{ formatMoney(initialPayment.refunded_change_amount) }}</span>
-                        </div>
                         <div class="flex justify-between text-xs font-medium text-slate-600">
-                            <span>{{ balanceStatus.label }} sau khi sửa</span>
+                            <span>Tổng đơn mới</span>
+                            <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
+                        </div>
+                        <div class="flex items-center justify-between border-t border-slate-200/60 pt-2 text-sm font-extrabold text-blue-900">
+                            <span>Cần thu</span>
+                            <span class="text-base text-blue-600">{{ formatMoney(remainingToCollect) }}</span>
+                        </div>
+                        <div class="flex justify-between pt-1 text-xs font-bold">
+                            <span class="text-slate-500">{{ balanceStatus.label }}</span>
                             <span :class="balanceStatus.className">{{ formatMoney(balanceStatus.amount) }}</span>
                         </div>
                     </template>
-                    <div class="flex justify-between text-xs font-medium text-slate-600">
-                        <span>{{ editMode ? 'Tổng hóa đơn mới' : 'Tiền hàng' }}</span>
-                        <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
-                    </div>
-
-                    <div class="flex justify-between text-sm font-extrabold text-blue-900 pt-2 border-t border-slate-200/60">
-                        <span>Tổng thu</span>
-                        <span class="text-base text-blue-600">{{ formatMoney(totalNeedToPay) }}</span>
-                    </div>
-
-                    <div class="flex justify-between text-xs font-bold pt-1">
-                        <span class="text-slate-500">{{ balanceStatus.label }}</span>
-                        <span :class="balanceStatus.className">
-                            {{ formatMoney(balanceStatus.amount) }}
-                        </span>
-                    </div>
+                    <template v-else>
+                        <div class="flex justify-between text-xs font-medium text-slate-600">
+                            <span>Tiền hàng</span>
+                            <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
+                        </div>
+                        <div class="flex justify-between border-t border-slate-200/60 pt-2 text-sm font-extrabold text-blue-900">
+                            <span>Tổng thu</span>
+                            <span class="text-base text-blue-600">{{ formatMoney(totalNeedToPay) }}</span>
+                        </div>
+                        <div class="flex justify-between pt-1 text-xs font-bold">
+                            <span class="text-slate-500">{{ balanceStatus.label }}</span>
+                            <span :class="balanceStatus.className">{{ formatMoney(balanceStatus.amount) }}</span>
+                        </div>
+                    </template>
                 </div>
 
             </div>

@@ -191,17 +191,8 @@ class RepairController extends Controller
 
                 'contact_phone' => $repair->contact_phone,
 
-                'screen_password' => $repair->screen_password,
-
-                'screen_pattern' => $repair->screen_pattern,
-
                 'serial' => $repair->serial,
-
-                'account_type' => $repair->account_type,
-
-                'account_email' => $repair->account_email,
-
-                'account_password' => $repair->account_password,
+                'screen_lock_type' => $repair->screen_lock_type,
 
                 'repair_request' => $repair->repair_request,
 
@@ -389,12 +380,12 @@ class RepairController extends Controller
                 ->latest('id')
                 ->limit(10)
                 ->get([
-                    'id', 'customer_id', 'device_name', 'imei', 'serial', 'screen_password', 'screen_pattern',
-                    'account_type', 'account_email', 'account_password', 'issue', 'repair_request', 'accessories',
+                    'id', 'customer_id', 'device_name', 'imei', 'serial', 'issue', 'repair_request', 'accessories',
                     'estimated_cost', 'note', 'created_at', 'repair_warranty_expires_at',
                     'repair_warranty_voided_at', 'repair_warranty_void_reason',
                 ])
                 ->map(fn (Repair $repair): array => [
+                    'repair_id' => $repair->id,
                     'imei' => $repair->imei ?: $repair->serial,
                     'name' => $repair->device_name,
                     'source' => 'Đã sửa · ' . $repair->created_at?->format('d/m/Y'),
@@ -407,11 +398,6 @@ class RepairController extends Controller
                         'debt_balance' => (float) $repair->customer->debt_balance,
                     ] : null,
                     'device_data' => [
-                        'screen_password' => $repair->screen_password,
-                        'screen_pattern' => $repair->screen_pattern,
-                        'account_type' => $repair->account_type,
-                        'account_email' => $repair->account_email,
-                        'account_password' => $repair->account_password,
                         'issue' => $repair->issue ?? [],
                         'repair_request' => $repair->repair_request,
                         'accessories' => $repair->accessories ?? [],
@@ -646,21 +632,16 @@ class RepairController extends Controller
             ->latest('id')
             ->limit(30)
             ->get([
-                'id', 'device_name', 'imei', 'serial', 'screen_password', 'screen_pattern',
-                'account_type', 'account_email', 'account_password', 'issue', 'repair_request',
+                'id', 'device_name', 'imei', 'serial', 'issue', 'repair_request',
                 'accessories', 'estimated_cost', 'note', 'repair_warranty_started_at',
                 'repair_warranty_expires_at', 'repair_warranty_voided_at', 'repair_warranty_void_reason',
             ])
             ->map(fn (Repair $repair): array => [
                 'key' => 'repair-' . $repair->id,
+                'repair_id' => $repair->id,
                 'device_name' => $repair->device_name,
                 'imei' => $repair->imei,
                 'serial' => $repair->serial,
-                'screen_password' => $repair->screen_password,
-                'screen_pattern' => $repair->screen_pattern,
-                'account_type' => $repair->account_type,
-                'account_email' => $repair->account_email,
-                'account_password' => $repair->account_password,
                 'issue' => $repair->issue ?? [],
                 'repair_request' => $repair->repair_request,
                 'accessories' => $repair->accessories ?? [],
@@ -782,12 +763,93 @@ class RepairController extends Controller
         return response()->json(['devices' => $devices]);
     }
 
+    /** Find an exact phone match before customer details are saved. */
+    public function customerByPhone(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone' => ['required', 'string', 'max:20'],
+        ]);
+
+        $customer = $this->findCustomerByPhone(trim($validated['phone']));
+
+        return response()->json([
+            'customer' => $customer,
+        ], 200, ['Cache-Control' => 'no-store, private']);
+    }
+
+    private function findCustomerByPhone(string $phone): ?Customer
+    {
+        $normalizedPhone = preg_replace('/\\D+/', '', $phone) ?? '';
+        $query = Customer::query()->where('phone', $phone);
+        if (strlen($normalizedPhone) >= 7) {
+            $normalizedColumn = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', ''), '.', ''), '/', '')";
+            $query->orWhereRaw("{$normalizedColumn} = ?", [$normalizedPhone]);
+        }
+
+        return $query->first();
+    }
+
+    /** Require an explicit choice before a matching phone can overwrite a different customer. */
+    private function applyCustomerPhoneConflictChoice(array &$data): void
+    {
+        $phone = trim((string) ($data['customer_phone'] ?? ''));
+        if ($phone === '') return;
+
+        $existing = $this->findCustomerByPhone($phone);
+        if (!$existing) return;
+
+        $normalizeName = static fn ($value): string => mb_strtolower(preg_replace('/\\s+/u', ' ', trim((string) $value)) ?? '');
+        $normalizeId = static fn ($value): string => preg_replace('/[^[:alnum:]]/u', '', mb_strtolower(trim((string) $value))) ?? '';
+        $detailsDiffer = $normalizeName($existing->full_name) !== $normalizeName($data['customer_name'] ?? '')
+            || $normalizeId($existing->cccd) !== $normalizeId($data['identity_card'] ?? '');
+
+        if (!$detailsDiffer) {
+            $data['customer_id'] = $existing->id;
+            return;
+        }
+
+        $action = $data['customer_conflict_action'] ?? null;
+        if ($action === 'replace') {
+            $data['customer_id'] = $existing->id;
+            return;
+        }
+
+        if ($action === 'contact') {
+            $data['customer_id'] = null;
+            $data['customer_phone'] = null;
+            $data['contact_phone'] = $phone;
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'customer_phone' => 'Số điện thoại đã thuộc hồ sơ khách khác. Hãy xác nhận thay thông tin hoặc chuyển số sang SĐT liên hệ khác.',
+        ]);
+    }
+
+    /** Return sensitive device credentials only for an explicitly opened repair. */
+    public function credentials(Repair $repair): JsonResponse
+    {
+        return response()->json([
+            'screen_password' => $repair->screen_password,
+            'screen_pattern' => $repair->screen_pattern,
+            'screen_lock_type' => $repair->screen_lock_type,
+            'account_type' => $repair->account_type,
+            'account_email' => $repair->account_email,
+            'account_password' => $repair->account_password,
+        ], 200, ['Cache-Control' => 'no-store, private']);
+    }
+
     /**
      * Lưu phiếu sửa.
      */
     public function store(
         RepairRequest $request
     ): RedirectResponse {
+
+        $customerInput = $request->only([
+            'customer_id', 'customer_conflict_action', 'customer_name', 'customer_phone', 'contact_phone', 'identity_card',
+        ]);
+        $this->applyCustomerPhoneConflictChoice($customerInput);
 
         DB::beginTransaction();
 
@@ -801,24 +863,24 @@ class RepairController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $customer = $request->customer_id
-                ? Customer::query()->findOrFail($request->customer_id)
-                : ($request->filled('customer_phone')
-                    ? Customer::query()->where('phone', $request->customer_phone)->first()
+            $customer = !empty($customerInput['customer_id'])
+                ? Customer::query()->findOrFail($customerInput['customer_id'])
+                : (!empty($customerInput['customer_phone'])
+                    ? Customer::query()->where('phone', $customerInput['customer_phone'])->first()
                     : null);
 
             if (!$customer) {
                 $customer = app(\App\Services\CustomerService::class)->create([
-                    'full_name' => $request->customer_name,
-                    'phone' => $request->customer_phone,
-                    'cccd' => $request->identity_card,
+                    'full_name' => $customerInput['customer_name'],
+                    'phone' => $customerInput['customer_phone'] ?? null,
+                    'cccd' => $customerInput['identity_card'] ?? null,
                 ]);
             } else {
                 // Keep the selected customer's editable intake fields in sync with the customer record.
                 $customer->fill([
-                    'full_name' => $request->customer_name,
-                    'phone' => $request->customer_phone,
-                    'cccd' => $request->identity_card,
+                    'full_name' => $customerInput['customer_name'],
+                    'phone' => $customerInput['customer_phone'] ?? null,
+                    'cccd' => $customerInput['identity_card'] ?? null,
                 ])->save();
             }
 
@@ -849,7 +911,7 @@ class RepairController extends Controller
                         $customer->id,
 
                     'contact_phone' =>
-                        $request->contact_phone,
+                        $customerInput['contact_phone'] ?? null,
 
                     'device_name' =>
                         $request->device_name,
@@ -862,6 +924,8 @@ class RepairController extends Controller
 
                     'screen_pattern' =>
                         $request->screen_pattern,
+
+                    'screen_lock_type' => $request->screen_lock_type,
 
                     'account_type' =>
                         $request->account_type,
@@ -1556,6 +1620,10 @@ class RepairController extends Controller
             'images',
         ]);
 
+        $user = auth()->user();
+        $canViewCredentials = $user && collect(['repairs.create', 'repairs.edit', 'repairs.complete'])
+            ->contains(fn (string $permission): bool => $user->can($permission));
+
         return view(
 
             'prints.repair',
@@ -1563,6 +1631,7 @@ class RepairController extends Controller
             [
 
                 'repair' => $repair,
+                'canViewCredentials' => $canViewCredentials,
             ]
         );
     }
@@ -1578,6 +1647,7 @@ class RepairController extends Controller
         $validated = $request->validate([
 
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'customer_conflict_action' => ['nullable', 'in:replace,contact'],
             'customer_name' => ['required', 'string', 'max:255'],
             'customer_phone' => ['nullable', 'string', 'max:20', Rule::unique('customers', 'phone')->ignore($request->input('customer_id'))],
             'identity_card' => ['nullable', 'string', 'max:20'],
@@ -1600,6 +1670,7 @@ class RepairController extends Controller
             'serial' => ['nullable', 'string', 'max:255'],
             'screen_password' => ['nullable', 'string', 'max:255'],
             'screen_pattern' => ['nullable', 'string', 'max:255'],
+            'screen_lock_type' => ['nullable', 'in:pin,password,pattern'],
             'account_type' => ['nullable', 'string', 'max:255'],
             'account_email' => ['nullable', 'string', 'max:255'],
             'account_password' => ['nullable', 'string', 'max:255'],
@@ -1631,6 +1702,8 @@ class RepairController extends Controller
                 'max:5120',
             ],
         ]);
+
+        $this->applyCustomerPhoneConflictChoice($validated);
 
         DB::beginTransaction();
 
@@ -1684,6 +1757,8 @@ class RepairController extends Controller
                 'screen_password' => $validated['screen_password'] ?? null,
 
                 'screen_pattern' => $validated['screen_pattern'] ?? null,
+
+                'screen_lock_type' => $validated['screen_lock_type'] ?? null,
 
                 'account_type' => $validated['account_type'] ?? null,
 

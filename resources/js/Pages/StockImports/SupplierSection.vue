@@ -26,6 +26,7 @@ import { useSupplierSearch } from './Composables/useSupplierSearch.js'
 import { openModal } from '@/Stores/modal'
 import SupplierForm from '@/Pages/Suppliers/Form.vue'
 import CustomerFormModal from '@/Pages/Customers/CustomerFormModal.vue'
+import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
 import api from '@/Services/api'
 
 
@@ -150,7 +151,13 @@ const customerSearchRef = ref(null)
 const customerKeyword = ref('')
 const customerResults = ref([])
 const customerSearchLoading = ref(false)
+const scannedCustomerIdentity = ref(null)
 let customerSearchTimeout = null
+
+const onCustomerIdCardRead = details => {
+    scannedCustomerIdentity.value = details
+    customerKeyword.value = details.cccd
+}
 
 watch(() => props.customer, customer => {
     if (customer) customerKeyword.value = customer.full_name
@@ -197,7 +204,8 @@ const createCustomer = () => {
             title: 'Thêm khách lẻ',
             apiMode: true,
             customer: {
-                full_name: customerKeyword.value.trim(),
+                ...(scannedCustomerIdentity.value || {}),
+                full_name: scannedCustomerIdentity.value?.full_name || customerKeyword.value.trim(),
             },
         },
         onUpdated: customer => {
@@ -597,9 +605,10 @@ const handleCustomerOutsideClick = event => {
                     <button type="button" title="Bỏ chọn người bán" class="ml-2 rounded-full p-1 text-blue-500 hover:bg-white hover:text-rose-600" @click="clearCustomer"><X :size="15" /></button>
                 </div>
                 <div v-else class="relative">
-                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Tìm người bán" placeholder-text="Khách lẻ" input-class="pr-20" />
+                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Tìm khách hàng theo tên, SĐT hoặc CCCD" placeholder-text="Khách lẻ" input-class="pr-20" />
                     <LoaderCircle v-if="customerSearchLoading" class="absolute right-11 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
                     <button v-if="customerKeyword.trim()" type="button" title="Thêm khách lẻ mới" aria-label="Thêm khách lẻ mới" class="absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-700 transition hover:bg-blue-50" @click="createCustomer"><UserRoundPlus class="h-5 w-5" /></button>
+                    <CustomerIdCardScanner class="absolute right-10 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @read="onCustomerIdCardRead" @search="customerKeyword = $event" />
                     <div v-if="customerResults.length" class="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
                         <button v-for="customer in customerResults" :key="customer.id" type="button" class="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-blue-50" @mousedown.prevent="selectCustomer(customer)">
                             <span class="block text-sm font-semibold text-slate-900">{{ customer.full_name }}</span>

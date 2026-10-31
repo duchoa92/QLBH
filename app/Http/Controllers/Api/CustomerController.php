@@ -64,6 +64,7 @@ class CustomerController extends Controller
                 'id',
                 'full_name',
                 'phone',
+                'cccd',
                 'debt_balance',
             ])
 
@@ -83,6 +84,11 @@ class CustomerController extends Controller
 
                     ->orWhere(
                         'phone',
+                        'like',
+                        "%{$search}%"
+                    )
+                    ->orWhere(
+                        'cccd',
                         'like',
                         "%{$search}%"
                     );

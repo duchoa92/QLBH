@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qlbh-offline-shell-v3'
+const CACHE_NAME = 'qlbh-offline-shell-v4'
 const OFFLINE_PAGE = new URL('offline.html', self.registration.scope).href
 const APP_SHELL = new URL('__offline_app_shell__.html', self.registration.scope).href
 

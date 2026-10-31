@@ -15,6 +15,7 @@ import CreateCustomerModal from './CreateCustomerModal.vue'
 import { customerService } from '../Services/customerService'
 import { openModal } from '@/Stores/modal'
 import CustomerFormModal from '@/Pages/Customers/CustomerFormModal.vue'
+import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
 
 const emit = defineEmits([
     'selected',
@@ -23,8 +24,10 @@ const emit = defineEmits([
 const {
     keyword,
     customers,
+    identityPrefill,
     search,
     selectCustomer,
+    onIdentityCardScanned,
     clearCustomer,
     activeIndex,
     setItemRef,
@@ -167,9 +170,7 @@ const openFullCustomerModal = (
 
             customer: {
 
-                full_name: prefill?.full_name || '',
-
-                phone: prefill?.phone || '',
+                ...(prefill || identityPrefill.value || {}),
             },
         },
 
@@ -271,15 +272,17 @@ onBeforeUnmount(() => {
                         @input="search"
                         @keydown="onKeyDown"
                         type="text"
-                        label="Nhập tên hoặc SĐT khách hàng"
+                        label="Nhập tên, SĐT hoặc CCCD"
+                        input-class="pr-12"
                     />
+                    <CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @read="onIdentityCardScanned" @search="keyword = $event; search()" />
 
                     <button
                         v-if="keyword.trim()"
                         type="button"
                         title="Thêm KH mới"
-                        @click="showCreateCustomerModal = true"
-                        class="absolute right-0 top-1/2 -translate-y-1/2
+                        @click="identityPrefill ? openFullCustomerModal(identityPrefill) : showCreateCustomerModal = true"
+                        class="absolute right-10 top-1/2 -translate-y-1/2
                             px-3 py-1.5
                             text-cyan-600
                             hover:text-cyan-900

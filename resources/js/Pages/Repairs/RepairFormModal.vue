@@ -5,6 +5,7 @@ import axios from 'axios';
 import debounce from 'lodash/debounce';
 
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue';
+import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue';
 import PatternLock from '@/Components/PatternLock.vue';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
@@ -27,10 +28,13 @@ const initial = props.initialRepair;
 const searchLookupRef = ref(null);
 const issueLookupRef = ref(null);
 const securityExpanded = ref(Boolean(initial?.screen_password || initial?.screen_pattern || initial?.account_type || initial?.account_email || initial?.account_password));
+const credentialsLoading = ref(Boolean(props.initialRepair?.id));
+const credentialsLoadFailed = ref(false);
 const lightboxImage = ref(null);
 
 const form = useForm({
     customer_id: initial?.customer?.id || null,
+    customer_conflict_action: '',
     customer_name: initial?.customer?.name || 'Khách lẻ',
     customer_phone: initial?.customer?.phone || '',
     contact_phone: initial?.contact_phone || '',
@@ -41,6 +45,7 @@ const form = useForm({
     imei: initial?.imei || '',
     screen_password: initial?.screen_password || '',
     screen_pattern: initial?.screen_pattern || '',
+    screen_lock_type: initial?.screen_lock_type || '',
     account_type: initial?.account_type || '',
     account_email: initial?.account_email || '',
     account_password: initial?.account_password || '',
@@ -64,6 +69,8 @@ const selectedCustomer = ref(initial?.customer ? {
     cccd: initial.customer.identity_card,
     debt_balance: initial.customer.debt_balance,
 } : null);
+const customerPhoneConflict = ref(null);
+const customerConflictChecking = ref(false);
 const searchQuery = ref('');
 const customerDeviceSuggestions = ref([]);
 const customerDeviceLoading = ref(false);
@@ -159,6 +166,7 @@ const loadCustomerDeviceSuggestions = async (customerId) => {
 };
 
 const onSelectCustomer = (customer) => {
+    form.customer_conflict_action = '';
     if (!customer) {
         selectedCustomer.value = null;
         form.customer_id = null;
@@ -200,6 +208,7 @@ const onSelectCustomer = (customer) => {
             // A different customer may bring this device in; never carry another customer's saved credentials over.
             form.screen_password = '';
             form.screen_pattern = '';
+            form.screen_lock_type = '';
             form.account_type = '';
             form.account_email = '';
             form.account_password = '';
@@ -216,7 +225,19 @@ const onSelectCustomer = (customer) => {
     });
 };
 
+const applyScannedCustomerIdentity = (details) => {
+    selectedCustomer.value = null;
+    form.customer_id = null;
+    form.customer_name = details.full_name || form.customer_name;
+    form.identity_card = details.cccd || '';
+    form.customer_phone = details.phone || form.customer_phone;
+    form.contact_phone = form.customer_phone;
+    // Search the customer directory by the scanned ID so staff can select an existing profile.
+    searchQuery.value = details.cccd || '';
+};
+
 const clearCustomer = () => {
+    form.customer_conflict_action = '';
     selectedCustomer.value = null;
     searchQuery.value = '';
     form.customer_id = null;
@@ -232,6 +253,7 @@ const useNewCustomer = () => {
     if (!name) return;
     selectedCustomer.value = { id: null, full_name: name, phone: '', cccd: '', debt_balance: 0, is_new: true };
     form.customer_id = null;
+    form.customer_conflict_action = '';
     form.customer_name = name;
     form.customer_phone = '';
     form.contact_phone = '';
@@ -248,7 +270,7 @@ const useNewCustomer = () => {
 | Trạng thái Bảo mật (Ẩn/Hiện)
 |--------------------------------------------------------------------------
 */
-const lockType = ref(form.screen_pattern ? 'pattern' : (form.screen_password ? 'password' : ''));
+const lockType = ref(form.screen_pattern ? 'pattern' : (form.screen_lock_type || (form.screen_password ? 'password' : '')));
 const lockTypeOptions = [
     { value: 'pin', label: 'Mã PIN' },
     { value: 'password', label: 'Mật khẩu' },
@@ -257,6 +279,7 @@ const lockTypeOptions = [
 
 watch(lockType, (value) => {
     if (applyingHistoryDevice.value) return;
+    form.screen_lock_type = value || '';
     if (value !== 'pattern') form.screen_pattern = '';
     if (!['pin', 'password'].includes(value)) form.screen_password = '';
 });
@@ -268,6 +291,7 @@ watch(() => form.account_type, (value) => {
 });
 
 const applyingHistoryDevice = ref(false);
+let credentialRequest = 0;
 const applyDeviceSelection = async (device) => {
     applyingHistoryDevice.value = true;
     if (device.customer?.id && Number(device.customer.id) !== Number(form.customer_id)) {
@@ -279,22 +303,24 @@ const applyDeviceSelection = async (device) => {
         clearImagePreviews();
     }
     const details = device.device_data || device;
+    const requestId = ++credentialRequest;
     selectedDevice.value = { ...device, name, imei, source: device.source };
     isNewDevice.value = false;
     deviceSearchQuery.value = '';
     form.device_name = name;
     form.imei = imei;
-    form.screen_password = details.screen_password || '';
-    form.screen_pattern = details.screen_pattern || '';
-    form.account_type = details.account_type || ((details.account_email || details.account_password) ? 'other' : '');
-    form.account_email = details.account_email || '';
-    form.account_password = details.account_password || '';
+    form.screen_password = '';
+    form.screen_pattern = '';
+    form.screen_lock_type = '';
+    form.account_type = '';
+    form.account_email = '';
+    form.account_password = '';
     form.issue = Array.isArray(details.issue) ? [...details.issue] : (details.issue ? [details.issue] : []);
     form.repair_request = details.repair_request || '';
     form.accessories = Array.isArray(details.accessories) ? [...details.accessories] : [];
     form.estimated_cost = details.estimated_cost || '';
     form.note = details.note || '';
-    securityExpanded.value = Boolean(details.screen_password || details.screen_pattern || details.account_type || details.account_email || details.account_password);
+    securityExpanded.value = false;
     const warrantyOwnerId = device.warranty?.sale_customer_id ?? device.warranty?.source_customer_id ?? null;
     const warrantyBelongsToCustomer = !warrantyOwnerId || Number(warrantyOwnerId) === Number(form.customer_id);
     const eligibleWarranty = device.warranty?.active && warrantyBelongsToCustomer ? device.warranty : null;
@@ -302,7 +328,24 @@ const applyDeviceSelection = async (device) => {
     form.warranty_source_type = eligibleWarranty?.source_type || '';
     form.warranty_source_id = eligibleWarranty?.source_id || null;
 
-    lockType.value = details.screen_pattern ? 'pattern' : (details.screen_password ? 'password' : '');
+    lockType.value = '';
+    if (device.repair_id) {
+        try {
+            const { data: credentials } = await axios.get(route('repairs.credentials', device.repair_id));
+            if (requestId === credentialRequest && selectedDevice.value?.imei === imei) {
+                form.screen_password = credentials.screen_password || '';
+                form.screen_pattern = credentials.screen_pattern || '';
+                form.screen_lock_type = credentials.screen_lock_type || '';
+                form.account_type = credentials.account_type || '';
+                form.account_email = credentials.account_email || '';
+                form.account_password = credentials.account_password || '';
+                lockType.value = credentials.screen_lock_type || (credentials.screen_pattern ? 'pattern' : (credentials.screen_password ? 'password' : ''));
+                securityExpanded.value = Boolean(credentials.screen_password || credentials.screen_pattern || credentials.account_type || credentials.account_email || credentials.account_password);
+            }
+        } catch {
+            // Device details still load if the operator cannot access stored credentials.
+        }
+    }
     deviceFocused.value = true;
     newImeiConfirmed.value = false;
     await nextTick();
@@ -317,6 +360,14 @@ const selectCustomerDevice = (device) => applyDeviceSelection(device);
 |--------------------------------------------------------------------------
 */
 const imagePreviews = ref([]);
+const photoVideo = ref(null);
+const photoCameraOpen = ref(false);
+const photoCameraLoading = ref(false);
+const photoCameraError = ref('');
+const photoCameraFallbackInput = ref(null);
+let photoCameraStream = null;
+let photoCameraRequest = 0;
+
 const revokeImagePreviews = () => {
     imagePreviews.value.forEach((url) => URL.revokeObjectURL(url));
     imagePreviews.value = [];
@@ -327,14 +378,93 @@ const clearImagePreviews = () => {
     form.images = [];
 };
 
-const handleImages = (event) => {
-    const files = Array.from(event.target.files);
-    event.target.value = '';
+const addImageFiles = (files) => {
     if (!files.length) return;
 
-    form.images = [...form.images, ...files];
-    const newPreviews = files.map((file) => URL.createObjectURL(file));
+    const maxBytes = 5 * 1024 * 1024;
+    const validFiles = files.filter((file) => file.size <= maxBytes);
+    if (validFiles.length !== files.length) toast.error('Ảnh vượt quá giới hạn 5 MB/ảnh đã được bỏ qua.');
+    if (!validFiles.length) return;
+
+    form.images = [...form.images, ...validFiles];
+    const newPreviews = validFiles.map((file) => URL.createObjectURL(file));
     imagePreviews.value = [...imagePreviews.value, ...newPreviews];
+};
+
+const handleImages = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    addImageFiles(files);
+};
+
+const stopPhotoCamera = () => {
+    photoCameraRequest += 1;
+    photoCameraStream?.getTracks().forEach((track) => track.stop());
+    photoCameraStream = null;
+    if (photoVideo.value) photoVideo.value.srcObject = null;
+    photoCameraOpen.value = false;
+    photoCameraLoading.value = false;
+};
+
+const openPhoneCamera = () => {
+    stopPhotoCamera();
+    photoCameraFallbackInput.value?.click();
+};
+
+const startPhotoCamera = async () => {
+    if (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        toast.info('Không mở được webcam trực tiếp. Hãy chụp bằng điện thoại hoặc chọn ảnh.');
+        openPhoneCamera();
+        return;
+    }
+
+    const requestId = ++photoCameraRequest;
+    photoCameraOpen.value = true;
+    photoCameraLoading.value = true;
+    photoCameraError.value = '';
+    await nextTick();
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false,
+        });
+        if (requestId !== photoCameraRequest) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+        }
+        photoCameraStream = stream;
+        await nextTick();
+        if (photoVideo.value) {
+            photoVideo.value.srcObject = stream;
+            await photoVideo.value.play();
+        }
+    } catch {
+        if (requestId === photoCameraRequest) {
+            photoCameraError.value = 'Không mở được webcam. Hãy cấp quyền camera hoặc chụp bằng camera của điện thoại.';
+        }
+    } finally {
+        if (requestId === photoCameraRequest) photoCameraLoading.value = false;
+    }
+};
+
+const capturePhoto = () => {
+    const video = photoVideo.value;
+    if (!video?.videoWidth || !video?.videoHeight) return;
+
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 1920 / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+        if (!blob) {
+            toast.error('Không tạo được ảnh chụp. Vui lòng thử lại.');
+            return;
+        }
+        addImageFiles([new File([blob], `repair-${Date.now()}.jpg`, { type: 'image/jpeg' })]);
+        toast.success('Đã thêm ảnh chụp vào phiếu.');
+    }, 'image/jpeg', 0.84);
 };
 
 const removeImage = (index) => {
@@ -579,6 +709,7 @@ const selectDeviceForCurrentCustomer = async (device) => {
 };
 
 const prepareNewDevice = (name, imei) => {
+    credentialRequest += 1;
     clearImagePreviews();
     form.device_name = name;
     form.imei = imei;
@@ -589,6 +720,7 @@ const prepareNewDevice = (name, imei) => {
     form.warranty_source_id = null;
     form.screen_password = '';
     form.screen_pattern = '';
+    form.screen_lock_type = '';
     form.account_type = '';
     form.account_email = '';
     form.account_password = '';
@@ -625,6 +757,7 @@ const useNewDevice = () => {
 };
 
 const clearSelectedDevice = () => {
+    credentialRequest += 1;
     clearImagePreviews();
     selectedDevice.value = null;
     isNewDevice.value = false;
@@ -632,6 +765,7 @@ const clearSelectedDevice = () => {
     form.imei = '';
     form.screen_password = '';
     form.screen_pattern = '';
+    form.screen_lock_type = '';
     form.account_type = '';
     form.account_email = '';
     form.account_password = '';
@@ -678,8 +812,42 @@ const handleDocumentPointerDown = (event) => {
     if (!issueLookupRef.value?.contains(event.target)) filteredIssues.value = [];
 };
 
+const loadInitialCredentials = async () => {
+    if (!props.initialRepair?.id) return true;
+    credentialsLoading.value = true;
+    credentialsLoadFailed.value = false;
+    try {
+        const { data: credentials } = await axios.get(route('repairs.credentials', props.initialRepair.id));
+        applyingHistoryDevice.value = true;
+        form.screen_password = credentials.screen_password || '';
+        form.screen_pattern = credentials.screen_pattern || '';
+        form.screen_lock_type = credentials.screen_lock_type || '';
+        form.account_type = credentials.account_type || '';
+        form.account_email = credentials.account_email || '';
+        form.account_password = credentials.account_password || '';
+        lockType.value = credentials.screen_lock_type || (credentials.screen_pattern ? 'pattern' : (credentials.screen_password ? 'password' : ''));
+        securityExpanded.value = Boolean(credentials.screen_password || credentials.screen_pattern || credentials.account_type || credentials.account_email || credentials.account_password);
+        form.defaults('screen_password', form.screen_password);
+        form.defaults('screen_pattern', form.screen_pattern);
+        form.defaults('screen_lock_type', form.screen_lock_type);
+        form.defaults('account_type', form.account_type);
+        form.defaults('account_email', form.account_email);
+        form.defaults('account_password', form.account_password);
+        await nextTick();
+        return true;
+    } catch {
+        credentialsLoadFailed.value = true;
+        toast.error('Không tải được thông tin bảo mật của phiếu. Kiểm tra quyền truy cập rồi thử lại.');
+        return false;
+    } finally {
+        applyingHistoryDevice.value = false;
+        credentialsLoading.value = false;
+    }
+};
+
 onMounted(async () => {
     document.addEventListener('pointerdown', handleDocumentPointerDown);
+    if (props.initialRepair?.id) await loadInitialCredentials();
     try {
         const response = await axios.get(route('repairs.suggestions'));
         issueSuggestions.value = response.data.issues ?? [];
@@ -691,7 +859,10 @@ onMounted(async () => {
 onUnmounted(() => {
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
     deviceSearchSequence += 1;
+    customerPhoneCheckSequence += 1;
     runDeviceSearch.cancel();
+    debouncedCustomerPhoneCheck.cancel();
+    stopPhotoCamera();
     revokeImagePreviews();
 });
 
@@ -735,7 +906,99 @@ const addIssue = (value) => {
 | Submit form
 |--------------------------------------------------------------------------
 */
-const submit = () => {
+const normalizeCustomerName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+const normalizeCustomerIdentity = (value) => String(value || '').replace(/[^a-z0-9]/gi, '').toLocaleLowerCase();
+let customerPhoneCheckSequence = 0;
+
+const inspectCustomerPhone = async (requestId, submittedDetails) => {
+    customerConflictChecking.value = true;
+    try {
+        const { data } = await axios.get(route('repairs.customer-by-phone'), { params: { phone: submittedDetails.phone } });
+        if (requestId !== customerPhoneCheckSequence
+            || submittedDetails.phone !== String(form.customer_phone || '').trim()
+            || submittedDetails.name !== form.customer_name
+            || submittedDetails.identity !== form.identity_card) {
+            return { stale: true };
+        }
+
+        const existing = data.customer;
+        const detailsDiffer = existing && (
+            normalizeCustomerName(existing.full_name) !== normalizeCustomerName(submittedDetails.name)
+            || normalizeCustomerIdentity(existing.cccd) !== normalizeCustomerIdentity(submittedDetails.identity)
+        );
+        const alreadyConfirmed = detailsDiffer
+            && form.customer_conflict_action === 'replace'
+            && Number(form.customer_id) === Number(existing.id);
+        if (detailsDiffer && !alreadyConfirmed) {
+            customerPhoneConflict.value = existing;
+            return { conflict: existing };
+        }
+
+        return { ok: true };
+    } catch {
+        return { error: true };
+    } finally {
+        if (requestId === customerPhoneCheckSequence) customerConflictChecking.value = false;
+    }
+};
+
+const debouncedCustomerPhoneCheck = debounce((requestId, submittedDetails) => {
+    inspectCustomerPhone(requestId, submittedDetails);
+}, 350);
+
+watch(() => [form.customer_phone, form.customer_name, form.identity_card], () => {
+    const requestId = ++customerPhoneCheckSequence;
+    debouncedCustomerPhoneCheck.cancel();
+    customerConflictChecking.value = false;
+    customerPhoneConflict.value = null;
+
+    const phone = String(form.customer_phone || '').trim();
+    if (!phone) {
+        if (form.customer_conflict_action !== 'contact') form.customer_conflict_action = '';
+        return;
+    }
+
+    form.customer_conflict_action = '';
+    if (phone.replace(/\D/g, '').length < 7) return;
+    debouncedCustomerPhoneCheck(requestId, {
+        phone,
+        name: form.customer_name,
+        identity: form.identity_card,
+    });
+});
+
+const submit = async () => {
+    if (step.value === 'intake' && createdRepair.value?.id && credentialsLoadFailed.value) {
+        toast.error('Chưa lưu được vì thông tin bảo mật cũ chưa tải thành công. Hãy tải lại thông tin rồi thử lại.');
+        return;
+    }
+    if (form.processing || customerConflictChecking.value) return;
+
+    const enteredPhone = String(form.customer_phone || '').trim();
+    if (enteredPhone.replace(/\D/g, '').length >= 7) {
+        debouncedCustomerPhoneCheck.cancel();
+        const requestId = ++customerPhoneCheckSequence;
+        const result = await inspectCustomerPhone(requestId, {
+            phone: enteredPhone,
+            name: form.customer_name,
+            identity: form.identity_card,
+        });
+        if (result.error) {
+            toast.error('Không kiểm tra được số điện thoại khách hàng. Vui lòng thử lại trước khi lưu.');
+            return;
+        }
+        if (result.stale) {
+            toast.info('Thông tin khách vừa thay đổi. Bấm lưu lại để kiểm tra số điện thoại mới.');
+            return;
+        }
+        if (result.conflict) return;
+        if (!result.ok) return;
+    } else {
+        form.customer_conflict_action = '';
+    }
+
+    // Include an issue still being typed even if the user did not press Enter or comma.
+    if (issueInput.value.trim()) addIssue(issueInput.value);
     const isEditing = Boolean(createdRepair.value?.id);
     const onSuccess = (page) => {
         if (isEditing) {
@@ -756,6 +1019,7 @@ const submit = () => {
                     imei: form.imei,
                     screen_password: form.screen_password,
                     screen_pattern: form.screen_pattern,
+                    screen_lock_type: form.screen_lock_type,
                     account_type: form.account_type,
                     account_email: form.account_email,
                     account_password: form.account_password,
@@ -795,6 +1059,37 @@ const submit = () => {
         form.transform((data) => ({ ...data, _method: 'put' })).post(route('repairs.update', createdRepair.value.id), options);
     } else {
         form.transform((data) => data).post(route('repairs.store'), options);
+    }
+};
+
+const confirmCustomerPhoneConflict = async (action) => {
+    const existing = customerPhoneConflict.value;
+    if (!existing) return;
+
+    const enteredPhone = String(form.customer_phone || '').trim();
+    customerPhoneConflict.value = null;
+    if (action === 'replace') {
+        form.customer_id = existing.id;
+        form.customer_conflict_action = 'replace';
+        selectedCustomer.value = existing;
+        toast.info('Đã xác nhận thay thông tin hồ sơ. Thay đổi sẽ được lưu khi bạn bấm nút lưu phiếu.');
+    } else {
+        customerPhoneCheckSequence += 1;
+        debouncedCustomerPhoneCheck.cancel();
+        customerConflictChecking.value = false;
+        form.customer_id = null;
+        form.customer_conflict_action = 'contact';
+        form.customer_phone = '';
+        form.contact_phone = enteredPhone;
+        selectedCustomer.value = {
+            id: null,
+            full_name: form.customer_name,
+            phone: '',
+            cccd: form.identity_card,
+            debt_balance: 0,
+            is_new: true,
+        };
+        toast.info('Đã chuyển số sang SĐT liên hệ khác; hồ sơ khách cũ được giữ nguyên.');
     }
 };
 
@@ -880,6 +1175,10 @@ const selectWorkflowStep = (status) => {
             @pay="props.onPay?.($event)"
         />
         <template v-else>
+        <div v-if="credentialsLoadFailed && step === 'intake'" class="mb-3 flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            <span>Chưa tải được dữ liệu bảo mật cũ. Lưu phiếu đang tạm khóa để tránh xóa các mật khẩu hiện có.</span>
+            <button type="button" class="shrink-0 font-bold underline" :disabled="credentialsLoading" @click="loadInitialCredentials">{{ credentialsLoading ? 'Đang tải...' : 'Tải lại' }}</button>
+        </div>
         <div class="grid grid-cols-1 items-start gap-3 text-xs lg:grid-cols-12 lg:gap-4">
         <div class="space-y-3 lg:col-span-8">
             
@@ -953,7 +1252,7 @@ const selectWorkflowStep = (status) => {
                     <FloatingInput v-model="form.customer_name" label="Tên khách hàng *" placeholder-text="Khách lẻ" id="repair_customer_name" :error="form.errors.customer_name" required />
                     <FloatingInput v-model="form.customer_phone" label="Số điện thoại" id="repair_customer_phone" :error="form.errors.customer_phone" />
                     <FloatingInput v-model="form.contact_phone" label="SĐT liên hệ khác" id="repair_contact_phone" :error="form.errors.contact_phone" />
-                    <FloatingInput v-model="form.identity_card" label="CCCD / CMND" id="repair_identity_card" :error="form.errors.identity_card" />
+                    <div class="relative"><FloatingInput v-model="form.identity_card" label="CCCD / CMND" id="repair_identity_card" :error="form.errors.identity_card" input-class="pr-12" /><CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @read="applyScannedCustomerIdentity" @search="searchQuery = $event" /></div>
                 </div>
             </section>
 
@@ -1016,10 +1315,10 @@ const selectWorkflowStep = (status) => {
                     <div v-if="securityExpanded" class="space-y-3">
                         <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-2.5">
                             <FloatingSelect v-model="lockType" label="Kiểu khóa màn hình" id="repair_lock_type" :options="lockTypeOptions" />
-                            <FloatingInput v-if="['pin', 'password'].includes(lockType)" v-model="form.screen_password" :type="lockType === 'password' ? 'password' : 'text'" :inputmode="lockType === 'pin' ? 'numeric' : 'text'" :label="lockType === 'pin' ? 'Mã PIN màn hình' : 'Mật khẩu màn hình'" id="repair_screen_password" />
+                            <FloatingInput v-if="['pin', 'password'].includes(lockType)" v-model="form.screen_password" type="text" :inputmode="lockType === 'pin' ? 'numeric' : 'text'" :label="lockType === 'pin' ? 'Mã PIN màn hình' : 'Mật khẩu màn hình'" id="repair_screen_password" />
                             <FloatingSelect v-model="form.account_type" label="Loại tài khoản máy" id="repair_account_type" :options="accountTypeOptions" />
                             <FloatingInput v-if="form.account_type" v-model="form.account_email" label="Email / SĐT tài khoản" id="repair_account_email" />
-                            <FloatingInput v-if="form.account_type" v-model="form.account_password" type="password" label="Mật khẩu tài khoản" id="repair_account_password" />
+                            <FloatingInput v-if="form.account_type" v-model="form.account_password" type="text" label="Mật khẩu tài khoản" id="repair_account_password" />
                         </div>
                         <div v-if="lockType === 'pattern'" class="flex flex-col items-center border-t border-slate-100 pt-3 text-center">
                             <label class="mb-2 block text-[11px] font-semibold text-slate-600">Vẽ mẫu hình khóa màn hình</label>
@@ -1129,25 +1428,36 @@ const selectWorkflowStep = (status) => {
 
         </div>
 
-        <aside class="space-y-3 lg:col-span-4">
+        <aside class="space-y-3 lg:col-span-4 lg:sticky lg:top-20 lg:self-start">
             <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <header class="border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
                     <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">▧ Ảnh ngoại quan</h2>
                 </header>
                 <div class="p-3">
-                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 p-2.5">
+                    <div class="space-y-2.5 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 p-2.5">
                     <div class="min-w-0">
                         <p class="text-xs font-semibold text-slate-700">Ghi nhận ngoại quan</p>
-                        <p class="mt-0.5 text-[10px] text-slate-500">Chọn nhiều ảnh hoặc thêm ảnh vào danh sách hiện tại.</p>
+                        <p class="mt-0.5 text-[10px] leading-relaxed text-slate-500">Chụp trực tiếp bằng webcam hoặc điện thoại, hoặc chọn ảnh có sẵn · tối đa 5 MB/ảnh.</p>
                     </div>
-                    <label class="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700">
-                        <input type="file" multiple accept="image/*" class="hidden" @change="handleImages" />
+                    <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" class="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm transition hover:border-blue-400 hover:bg-blue-50" @click="startPhotoCamera">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7a2 2 0 012-2h2l1.2 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
                             <circle cx="12" cy="13" r="3" stroke-width="1.8" />
                         </svg>
+                        <span>Chụp ảnh</span>
+                    </button>
+                    <label class="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700">
+                        <input type="file" multiple accept="image/*" class="hidden" @change="handleImages" />
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5.75A1.75 1.75 0 015.75 4h12.5A1.75 1.75 0 0120 5.75v12.5A1.75 1.75 0 0118.25 20H5.75A1.75 1.75 0 014 18.25V5.75z" />
+                            <circle cx="8.25" cy="8.25" r="1.25" stroke-width="1.7" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m5 17 4.2-4.2a1 1 0 011.4 0l2.1 2.1 2.8-2.8a1 1 0 011.4 0L20 15.2" />
+                        </svg>
                         <span>{{ imagePreviews.length ? 'Thêm ảnh' : 'Chọn ảnh' }}</span>
                     </label>
+                    <input ref="photoCameraFallbackInput" type="file" accept="image/*" capture="environment" class="hidden" @change="handleImages" />
+                    </div>
                     </div>
                     <div v-if="imagePreviews.length" class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
                         <div v-for="(image, index) in imagePreviews" :key="index" class="group relative aspect-square overflow-hidden rounded-lg border border-slate-200">
@@ -1173,7 +1483,7 @@ const selectWorkflowStep = (status) => {
 
                     <div class="flex items-center justify-between gap-2 border-b border-slate-800 py-1.5">
                         <span class="text-slate-400">SĐT:</span>
-                        <span class="font-semibold text-slate-100">{{ form.customer_phone || '---' }}</span>
+                        <span class="font-semibold text-slate-100">{{ form.customer_phone || form.contact_phone || '---' }}</span>
                     </div>
 
                     <div class="flex items-center justify-between gap-2 border-b border-slate-800 py-1.5">
@@ -1203,6 +1513,69 @@ const selectWorkflowStep = (status) => {
             <img :src="lightboxImage" alt="Ảnh ngoại quan phóng to" class="max-h-full max-w-full rounded-lg object-contain shadow-2xl" @click.stop />
         </div>
 
+        <Teleport to="body">
+            <div v-if="photoCameraOpen" class="fixed inset-0 z-[1500] flex items-center justify-center bg-slate-950/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Chụp ảnh ngoại quan" @click.self="stopPhotoCamera">
+                <section class="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+                    <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Chụp ảnh ngoại quan</h2>
+                            <p class="mt-0.5 text-[11px] text-slate-500">Ảnh sẽ được thêm vào phiếu tiếp nhận.</p>
+                        </div>
+                        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Đóng camera" @click="stopPhotoCamera">×</button>
+                    </header>
+                    <div class="space-y-3 p-3 sm:p-4">
+                        <div class="relative aspect-video overflow-hidden rounded-xl bg-slate-950">
+                            <video ref="photoVideo" autoplay playsinline class="h-full w-full object-contain" />
+                            <div v-if="photoCameraLoading" class="absolute inset-0 flex items-center justify-center bg-slate-950/60 text-sm font-semibold text-white">Đang mở camera…</div>
+                            <div v-if="photoCameraError" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/85 p-5 text-center text-sm text-white">
+                                <p>{{ photoCameraError }}</p>
+                                <button type="button" class="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100" @click="openPhoneCamera">Chụp bằng điện thoại</button>
+                            </div>
+                        </div>
+                        <div class="flex justify-end gap-2">
+                            <button type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="stopPhotoCamera">Đóng</button>
+                            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" :disabled="photoCameraLoading || Boolean(photoCameraError) || !photoVideo?.videoWidth" @click="capturePhoto">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7a2 2 0 012-2h2l1.2 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><circle cx="12" cy="13" r="3" stroke-width="1.8"/></svg>
+                                Chụp ảnh
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div v-if="customerPhoneConflict" class="fixed inset-0 z-[1600] flex items-center justify-center bg-slate-950/60 p-3 sm:p-5" role="dialog" aria-modal="true" aria-labelledby="repair-customer-phone-conflict-title">
+                <section class="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+                    <header class="flex items-start justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-3">
+                        <div>
+                            <h2 id="repair-customer-phone-conflict-title" class="text-sm font-bold text-amber-950">Số điện thoại đã có trong hệ thống</h2>
+                            <p class="mt-1 text-xs leading-relaxed text-amber-900">Tên hoặc CCCD bạn vừa nhập khác với hồ sơ đang lưu. Chọn cách xử lý trước khi tiếp tục.</p>
+                        </div>
+                        <button type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl text-amber-700 hover:bg-amber-100" aria-label="Đóng thông báo" @click="customerPhoneConflict = null">×</button>
+                    </header>
+                    <div class="space-y-3 p-4 text-xs">
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <p class="mb-1 font-bold text-slate-800">Hồ sơ đang lưu</p>
+                            <p class="text-slate-600">{{ customerPhoneConflict.full_name }} · {{ customerPhoneConflict.phone }}</p>
+                            <p class="mt-0.5 text-slate-500">CCCD: {{ customerPhoneConflict.cccd || 'Chưa có' }}</p>
+                        </div>
+                        <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                            <p class="mb-1 font-bold text-blue-900">Thông tin vừa nhập</p>
+                            <p class="text-blue-800">{{ form.customer_name }} · {{ form.customer_phone }}</p>
+                            <p class="mt-0.5 text-blue-700">CCCD: {{ form.identity_card || 'Chưa có' }}</p>
+                        </div>
+                        <p v-if="form.contact_phone && form.contact_phone !== form.customer_phone" class="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-900">Nếu chuyển số này sang SĐT liên hệ khác, số liên hệ hiện có ({{ form.contact_phone }}) sẽ được thay bằng số đang trùng.</p>
+                    </div>
+                    <footer class="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
+                        <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50" :disabled="form.processing || customerConflictChecking" @click="customerPhoneConflict = null">Để tôi sửa lại</button>
+                        <button type="button" class="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-50 disabled:opacity-50" :disabled="form.processing || customerConflictChecking" @click="confirmCustomerPhoneConflict('contact')">Chuyển sang SĐT liên hệ</button>
+        <button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50" :disabled="form.processing || customerConflictChecking" @click="confirmCustomerPhoneConflict('replace')">Xác nhận thay hồ sơ</button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
+
         <!-- FOOTER ACTIONS -->
         </template>
         <template #footer>
@@ -1211,8 +1584,8 @@ const selectWorkflowStep = (status) => {
                     Hủy bỏ
                 </ActionButton>
 
-                <ActionButton :disabled="form.processing" @click="submit">
-                    {{ form.processing ? 'Đang lưu...' : createdRepair ? 'Lưu thay đổi' : 'Tiếp tục' }}
+                <ActionButton :disabled="form.processing || customerConflictChecking || credentialsLoading || (createdRepair?.id && credentialsLoadFailed)" @click="submit">
+                    {{ customerConflictChecking ? 'Đang kiểm tra SĐT...' : credentialsLoading ? 'Đang tải...' : form.processing ? 'Đang lưu...' : createdRepair ? 'Lưu thay đổi' : 'Tiếp tục' }}
                 </ActionButton>
             </div>
             <div v-else class="flex w-full items-center justify-between gap-2">

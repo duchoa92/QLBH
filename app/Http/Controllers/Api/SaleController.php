@@ -44,6 +44,9 @@ class SaleController extends Controller
                 'items.variant',
                 'items.productImei',
             ])
+            ->withSum(['customerDebtEntries as old_debt_paid' => fn ($debtQuery) => $debtQuery
+                ->where('type', 'decrease')
+                ->where('note', 'like', 'Trích tiền thừa hóa đơn%')], 'amount')
 
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($searchQuery) use ($search) {

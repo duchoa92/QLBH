@@ -59,7 +59,7 @@ class SaleController extends Controller
                         if ($saleId) {
                             $availability->orWhereHas('saleItems', fn ($items) => $items->where('sale_id', $saleId));
                         }
-                    })->with('variant:id,attributes')->limit(10);
+                    })->with('variant:id,attributes,sell_price')->limit(10);
                 }]);
             })
             ->limit(12)
@@ -83,7 +83,7 @@ class SaleController extends Controller
                     'allow_negative_stock' => $allowNegativeStock,
                     'matching_imei' => $matchedImei ? array_merge($matchedImei->only(['id', 'imei', 'serial', 'variant_id']), [
                         'variant_name' => collect($matchedImei->variant?->attributes ?? [])->map(fn ($value) => is_array($value) ? ($value['value'] ?? $value['label'] ?? $value['name'] ?? '') : $value)->filter()->join(' / '),
-                        'effective_sell_price' => (float) ($matchedImei->sell_price ?: 0),
+                        'effective_sell_price' => $this->effectiveImeiSellPrice($matchedImei, $product),
                     ]) : null,
                     'variants' => $product->variants->map(fn ($variant) => [
                         'id' => $variant->id,
@@ -106,10 +106,11 @@ class SaleController extends Controller
         if (mb_strlen($term) < 2) return response()->json([]);
 
         return Customer::query()
-            ->select('id', 'code', 'full_name', 'phone')
+            ->select('id', 'code', 'full_name', 'phone', 'cccd')
             ->where(function ($query) use ($term): void {
                 $query->where('full_name', 'like', "%{$term}%")
                     ->orWhere('phone', 'like', "%{$term}%")
+                    ->orWhere('cccd', 'like', "%{$term}%")
                     ->orWhere('code', 'like', "%{$term}%");
             })
             ->orderBy('full_name')
@@ -134,11 +135,11 @@ class SaleController extends Controller
             });
         }
 
-        return $query->with('variant:id,attributes')
+        return $query->with('variant:id,attributes,sell_price')
             ->orderBy('imei')
             ->limit(100)
-            ->get(['id', 'product_id', 'variant_id', 'imei', 'serial', 'status'])
-            ->map(function (ProductImei $imei): array {
+            ->get(['id', 'product_id', 'variant_id', 'imei', 'serial', 'status', 'sell_price'])
+            ->map(function (ProductImei $imei) use ($product): array {
                 $variantName = collect($imei->variant?->attributes ?? [])
                     ->map(function ($attribute): string {
                         if (is_array($attribute)) {
@@ -157,9 +158,17 @@ class SaleController extends Controller
                     'variant_id' => $imei->variant_id,
                     'variant_name' => $variantName,
                     'status' => $imei->status,
-                    'effective_sell_price' => (float) ($imei->sell_price ?: 0),
+                    'effective_sell_price' => $this->effectiveImeiSellPrice($imei, $product),
                 ];
             });
+    }
+
+    private function effectiveImeiSellPrice(ProductImei $imei, Product $product): float
+    {
+        if ((float) $imei->sell_price > 0) return (float) $imei->sell_price;
+        if ((float) ($imei->variant?->sell_price ?? 0) > 0) return (float) $imei->variant->sell_price;
+
+        return (float) $product->sell_price;
     }
 
     public function edit(Sale $sale): Response
@@ -365,7 +374,7 @@ class SaleController extends Controller
                 elseif ($soldDelta < 0) Product::query()->whereKey($productId)->update(['sold_count' => DB::raw('GREATEST(0, sold_count - ' . abs($soldDelta) . ')')]);
             }
 
-            $soldAt = now();
+            $soldAt = $sale->created_at?->copy() ?? now();
             foreach ($newItems as $item) {
                 if ($item['imei']) $this->markEditedImeiSold($item['imei'], $soldAt, $item['warrantyDays']);
                 foreach ($item['gifts'] as $gift) if ($gift['imei']) $this->markEditedImeiSold($gift['imei'], $soldAt, (int) ($gift['product']->warranty_days ?? 0));

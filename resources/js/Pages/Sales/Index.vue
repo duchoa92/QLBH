@@ -195,6 +195,9 @@ const resetFilters = () => {
 
 // Tính tổng tiền hóa đơn
 const saleTotal = (sale) => sale.grand_total ?? sale.total_amount ?? sale.subtotal ?? 0
+const salePaidAmount = (sale) => Math.max(0, Number(sale?.paid_amount || 0) - Number(sale?.old_debt_paid || 0))
+const saleHasDebt = (sale) => sale?.status !== 'cancelled'
+    && Number(saleTotal(sale) || 0) - salePaidAmount(sale) > 0.009
 
 // Lấy tên khách hàng
 const getCustomerName = (sale) => {
@@ -505,7 +508,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                             </td>
 
                             <!-- Tổng tiền (CỠ CHỮ TO ĐẬM) -->
-                            <td class="px-3.5 py-2.5 text-right font-black text-slate-900 text-sm">
+                            <td class="px-3.5 py-2.5 text-right text-sm font-black" :class="saleHasDebt(sale) ? 'text-amber-700' : 'text-slate-900'">
                                 {{ formatMoney(saleTotal(sale)) }}
                             </td>
 

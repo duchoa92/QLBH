@@ -11,6 +11,15 @@ use App\Models\Customer;
 
 class Repair extends Model
 {
+    /** @var array<int, string> */
+    protected $hidden = [
+        'screen_password',
+        'screen_pattern',
+        'account_type',
+        'account_email',
+        'account_password',
+    ];
+
     /**
      * @var array<int, string>
      */
@@ -29,6 +38,7 @@ class Repair extends Model
 
         'screen_password',
         'screen_pattern',
+        'screen_lock_type',
 
         'account_type',
         'account_email',
@@ -81,6 +91,9 @@ class Repair extends Model
     protected $casts = [
 
         'issue' => 'array',
+        'screen_password' => 'encrypted',
+        'screen_pattern' => 'encrypted',
+        'account_password' => 'encrypted',
 
         'accessories' => 'array',
 

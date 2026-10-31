@@ -3,10 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
 import { Plus, Search, Save, Trash2, MessageSquare, Gift } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
-import { formatMoney, formatDate } from '@/utils/format'
+import { formatMoney, formatDate, formatDatePlusDays } from '@/utils/format'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
+import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
 import CartItem from '@/Modules/POS/Cart/Components/CartItem.vue'
 import SelectProductModal from '@/Modules/POS/Product/Components/SelectProductModal.vue'
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
@@ -27,8 +28,20 @@ const attributeLabel = (value) => {
     return String(value)
 }
 const variantName = (variant) => Object.values(variant?.attributes || {}).map(attributeLabel).filter(Boolean).join(' / ') || variant?.name || variant?.sku || ''
+const effectiveImeiPrice = (imei, variant, product, fallback = 0) => {
+    const price = [
+        imei?.effective_sell_price,
+        imei?.sell_price,
+        imei?.price,
+        variant?.sell_price,
+        variant?.price,
+        product?.sell_price,
+        product?.price,
+    ].map(Number).find(value => Number.isFinite(value) && value > 0)
+
+    return price ?? Number(fallback || 0)
+}
 const oldInvoiceTotal = Math.max(0, Number(props.sale.grand_total || 0))
-const oldPaidTotal = Math.max(0, Number(props.sale.paid_amount || 0))
 const oldChangeRefunded = Math.min(Math.max(0, Number(props.sale.change_amount || 0)), Math.max(0, Number(props.sale.paid_amount || 0)))
 const previouslyPaidAmount = Math.min(oldInvoiceTotal, Math.max(0, Number(props.sale.paid_amount || 0) - oldChangeRefunded))
 const oldCashAmount = Math.max(0, Number(props.sale.cash_received_amount || 0))
@@ -131,9 +144,9 @@ const discount = computed(() => form.items.reduce((sum, row) => {
 }, 0))
 const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value + Number(props.sale.tax || 0)))
 const previouslyPaid = computed(() => previouslyPaidAmount)
+const oldOutstandingBalance = computed(() => Math.max(0, oldInvoiceTotal - previouslyPaid.value))
 const settlementDifference = computed(() => newGrandTotal.value - previouslyPaid.value)
 const remainingBalance = computed(() => Math.max(0, settlementDifference.value))
-const changeDue = computed(() => Math.max(0, -settlementDifference.value))
 
 watch(() => form.payment_method, (method) => {
     if (method === 'cash') {
@@ -225,12 +238,13 @@ const addProduct = async (product, variant = null, selectedImei = null) => {
         const imeis = selectedImei ? [selectedImei] : await loadImeis(product.id)
         const selected = selectedImei || null
         const selectedVariant = selected?.variant || variant
-        const price = Number(selected?.effective_sell_price ?? selected?.sell_price ?? selected?.price ?? selectedVariant?.sell_price ?? selectedVariant?.price ?? product.price)
+        const price = effectiveImeiPrice(selected, selectedVariant, product)
         form.items.push({ product_id: product.id, variant_id: selectedVariant?.id || selected?.variant_id || '', name: product.name, variant_name: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', variant_label: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: price, price, discount_type: 'amount', discount_value: '', is_imei: true, imei_id: selected?.id || '', imei: selected?.imei || selected?.serial || '', warranty_days: Number(product.warranty_days || 0), imei_options: imeis, gifts: [] })
     } else {
         const existing = form.items.find(row => !row.is_imei && Number(row.product_id) === Number(product.id) && Number(row.variant_id || 0) === Number(variant?.id || 0))
-        if (existing) existing.quantity++
-        else form.items.push({ product_id: product.id, variant_id: variant?.id || '', name: product.name, variant_name: variantName(variant) || variant?.name || '', variant_label: variantName(variant) || variant?.name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: variant?.sell_price || variant?.price || product.price, price: variant?.sell_price || variant?.price || product.price, discount_type: 'amount', discount_value: '', is_imei: false, imei_id: '', imei: '', warranty_days: Number(product.warranty_days || 0), imei_options: [], gifts: [] })
+        if (existing) {
+            existing.quantity++
+        } else form.items.push({ product_id: product.id, variant_id: variant?.id || '', name: product.name, variant_name: variantName(variant) || variant?.name || '', variant_label: variantName(variant) || variant?.name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: variant?.sell_price || variant?.price || product.price, price: variant?.sell_price || variant?.price || product.price, discount_type: 'amount', discount_value: '', is_imei: false, imei_id: '', imei: '', warranty_days: Number(product.warranty_days || 0), imei_options: [], gifts: [] })
     }
     productQuery.value = ''
     productResults.value = []
@@ -338,17 +352,15 @@ const lineTotal = (item) => {
     return Math.max(0, amount - (item.discount_type === 'percent' ? amount * value / 100 : item.discount_type === 'amount' ? value : 0))
 }
 const warrantyEndDate = (days) => {
-    const saleDate = String(props.sale.created_at || '').slice(0, 10)
-    if (Number(days || 0) <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate)) return ''
-    const endDate = new Date(`${saleDate}T00:00:00Z`)
-    endDate.setUTCDate(endDate.getUTCDate() + Number(days))
-    return formatDate(endDate.toISOString().slice(0, 10))
+    return formatDatePlusDays(props.sale.created_at, days)
 }
 const itemWarrantyEndDate = (item) => {
+    const calculatedExpiry = warrantyEndDate(item.customer_warranty_days ?? item.warranty_days)
+    if (calculatedExpiry) return calculatedExpiry
     if (item.warranty_expiry_imei_id && String(item.warranty_expiry_imei_id) === String(item.imei_id) && item.warranty_expires_at) {
         return formatDate(String(item.warranty_expires_at).slice(0, 10))
     }
-    return warrantyEndDate(item.customer_warranty_days ?? item.warranty_days)
+    return ''
 }
 const persistSaleEdit = () => form.transform(data => ({
     ...data,
@@ -424,7 +436,8 @@ const variantStocksForSale = (productId, variants, ignoredItemIndex = null) => {
 
     return new Map(variants.map(variant => {
         const id = Number(variant.id)
-        return [id, Math.max(0, Number(variant.stock || 0) + (original.get(id) || 0) - (planned.get(id) || 0))]
+        const available = Number(variant.stock || 0) + (original.get(id) || 0) - (planned.get(id) || 0)
+        return [id, allowNegativeStock.value ? available : Math.max(0, available)]
     }))
 }
 const openAddProductOptions = (product) => {
@@ -525,8 +538,8 @@ const confirmItemOptions = ({ variant, imei }) => {
             item.variant_name = variantName(variant)
             item.variant_label = item.variant_name
         }
-        const selectedPrice = Number(imei.effective_sell_price ?? imei.sell_price ?? imei.price ?? variant?.sell_price ?? variant?.price ?? 0)
-        if (selectedPrice > 0) item.unit_price = item.price = selectedPrice
+        const selectedPrice = effectiveImeiPrice(imei, variant, optionProduct.value, item.unit_price)
+        item.unit_price = item.price = selectedPrice
     } else if (variant) {
         item.variant_id = variant.id
         item.variant_name = variantName(variant)
@@ -548,7 +561,8 @@ const confirmItemOptions = ({ variant, imei }) => {
                 <section class="min-w-0 p-1">
                     <div v-if="selectedCustomer" class="flex h-10 w-full items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm"><span class="min-w-0 truncate font-semibold text-blue-900">{{ selectedCustomer.full_name }} <small class="font-normal text-blue-600">{{ selectedCustomer.phone || '' }}</small></span><button type="button" @click="clearCustomer" class="ml-2 shrink-0 text-xs text-blue-700">Đổi khách</button></div>
                     <div v-else v-click-outside="hideCustomerSearchResults" class="relative">
-                        <FloatingInput v-model="customerQuery" label="Khách hàng" placeholder-text="Khách lẻ · tìm theo tên hoặc số điện thoại" input-class="!h-10 !rounded-lg !border-slate-300 !py-2 !pl-3 focus:!border-blue-500" @focus="customerSearchOpen = true" @input="searchCustomers" />
+                        <FloatingInput v-model="customerQuery" label="Khách hàng" placeholder-text="Khách lẻ · tìm theo tên, SĐT hoặc CCCD" input-class="!h-10 !rounded-lg !border-slate-300 !py-2 !pl-3 !pr-12 focus:!border-blue-500" @focus="customerSearchOpen = true" @input="searchCustomers" />
+                        <CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @search="customerQuery = $event; customerSearchOpen = true; searchCustomers()" />
                         <div v-if="customerSearchOpen && customerResults.length" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-md border bg-white shadow-lg">
                             <button v-for="customer in customerResults" :key="customer.id" type="button" @click="chooseCustomer(customer)" class="block w-full border-b px-3 py-2 text-left text-sm hover:bg-blue-50"><b>{{ customer.full_name }}</b><span class="ml-2 text-xs text-slate-500">{{ customer.phone || customer.code }}</span></button>
                         </div>
@@ -615,19 +629,15 @@ const confirmItemOptions = ({ variant, imei }) => {
                         <div class="flex justify-between text-slate-500"><span>Tiền hàng</span><b class="text-slate-800">{{ formatMoney(subtotal) }}</b></div>
                         <div class="flex justify-between text-rose-600"><span>Giảm giá</span><b>{{ formatMoney(discount) }}</b></div>
                         <div class="flex justify-between border-t border-dashed border-slate-200 pt-1.5 text-sm font-extrabold text-slate-900"><span>Tổng mới</span><b class="text-blue-700">{{ formatMoney(newGrandTotal) }}</b></div>
+                        <div class="flex justify-between border-t border-dashed border-slate-200 pt-1.5 text-slate-600">
+                            <span>{{ oldOutstandingBalance > 0 ? 'Đơn cũ đang nợ' : 'Đơn cũ đã thanh toán' }}</span>
+                            <b :class="oldOutstandingBalance > 0 ? 'text-amber-700' : 'text-emerald-700'">{{ formatMoney(oldOutstandingBalance > 0 ? oldOutstandingBalance : previouslyPaid) }}</b>
+                        </div>
+                        <div class="flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-extrabold text-blue-900">
+                            <span>Cần thu</span>
+                            <b class="text-base text-blue-600">{{ formatMoney(remainingBalance) }}</b>
+                        </div>
                     </div>
-                </section>
-
-                <section class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                    <div class="w-full"><h3 class="text-sm font-bold text-slate-800">Đối soát thanh toán sau khi sửa</h3><p class="mt-0.5 text-xs text-slate-500">Phương thức đã dùng: {{ form.payment_method === 'mixed' ? 'Tiền mặt + chuyển khoản' : form.payment_method === 'bank' ? 'Chuyển khoản' : form.payment_method === 'card' ? 'Thẻ' : 'Tiền mặt' }}</p></div>
-                    <div class="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
-                        <div><p class="text-slate-500">Tổng hóa đơn cũ</p><p class="mt-0.5 font-semibold text-slate-800">{{ formatMoney(sale.grand_total) }}</p></div>
-                        <div><p class="text-slate-500">Đã thanh toán đơn cũ</p><p class="mt-0.5 font-semibold text-slate-800">{{ formatMoney(oldPaidTotal) }}</p></div>
-                        <div><p class="text-slate-500">Tổng hóa đơn mới</p><p class="mt-0.5 font-semibold text-blue-700">{{ formatMoney(newGrandTotal) }}</p></div>
-                        <div><p class="text-slate-500">{{ remainingBalance > 0 ? 'Cần thu thêm' : changeDue > 0 ? 'Tiền thừa sau sửa' : 'Đối soát' }}</p><p class="mt-0.5 font-bold" :class="remainingBalance > 0 ? 'text-amber-700' : changeDue > 0 ? 'text-emerald-700' : 'text-slate-700'">{{ formatMoney(remainingBalance || changeDue) }}{{ remainingBalance > 0 ? ' cần thu' : changeDue > 0 ? ' dư' : ' Đã đủ' }}</p></div>
-                    </div>
-                    <p v-if="oldChangeRefunded > 0" class="w-full rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">Trong số đã nhận của đơn cũ có {{ formatMoney(oldChangeRefunded) }} tiền thừa đã trả lại khách.</p>
-                    <p class="w-full text-[11px] text-slate-500">Nhấn “Thanh toán” để đối soát hóa đơn sau khi sửa. Số cần thu hoặc hoàn sau sửa được tính theo khoản còn giữ lại sau khi đã trả tiền thừa đơn cũ.</p>
                 </section>
                 <div v-if="Object.keys(form.errors).length" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.sale || form.errors.items || Object.values(form.errors)[0] }}</div>
                 <div v-if="form.errors.customer_id && !selectedCustomer" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ form.errors.customer_id }}</div>
@@ -644,6 +654,8 @@ const confirmItemOptions = ({ variant, imei }) => {
         :current-imei="currentSelectionImei"
         :current-variant="currentSelectionVariant"
         :extra-imeis="extraSelectionImeis"
+        :quantity-aware="optionPurpose === 'edit' && !form.items[optionTargetIndex]?.is_imei"
+        :selection-quantity="Number(form.items[optionTargetIndex]?.quantity || 1) * Number(form.items[optionTargetIndex]?.conversion_factor || 1)"
         @close="showOptionModal = false"
         @confirm="confirmItemOptions"
     />
