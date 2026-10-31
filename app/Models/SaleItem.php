@@ -32,6 +32,8 @@ class SaleItem extends Model
 
         'unit_price',
 
+        'unit_cost',
+
         'subtotal',
         
         'note',
@@ -54,6 +56,7 @@ class SaleItem extends Model
         'base_quantity' => 'integer',
         'conversion_factor' => 'integer',
         'unit_price' => 'decimal:2',
+        'unit_cost' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'discount_value' => 'decimal:2',
         'warranty_days' => 'integer',

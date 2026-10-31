@@ -190,7 +190,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
                     >
 
                         <td class="p-2">
-                            {{ item.type }}
+                            {{ item.type === 'earn' ? 'Tích điểm' : 'Điều chỉnh điểm' }}
                         </td>
 
                         <td class="p-2">

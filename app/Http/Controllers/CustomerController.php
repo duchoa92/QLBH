@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Services\CustomerImageService;
+use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
 {
@@ -49,6 +50,7 @@ class CustomerController extends Controller
 
                     $q->where('full_name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('cccd', 'like', "%{$search}%")
                         ->orWhere('code', 'like', "%{$search}%");
 
                 });
@@ -85,6 +87,7 @@ class CustomerController extends Controller
     */
     public function store(Request $request)
     {
+        $request->merge(['cccd' => Customer::normalizeCccd($request->input('cccd'))]);
         $data = $request->validate([
 
             'full_name' => ['required', 'string', 'max:255'],
@@ -95,7 +98,7 @@ class CustomerController extends Controller
 
             'gender' => ['nullable', 'string'],
 
-            'cccd' => ['nullable', 'string'],
+            'cccd' => ['nullable', 'string', 'regex:/^\\d{9,12}$/', Rule::unique('customers', 'cccd')],
 
             'province' => ['nullable', 'string'],
 
@@ -119,6 +122,9 @@ class CustomerController extends Controller
                 'max:5120',
             ],
 
+        ], [
+            'cccd.regex' => 'CCCD phải gồm 9 hoặc 12 chữ số.',
+            'cccd.unique' => 'Số CCCD này đã tồn tại trong hệ thống.',
         ]);
 
         /*
@@ -188,17 +194,21 @@ class CustomerController extends Controller
     // Cập nhật khách hàng
     public function update(Request $request, Customer $customer)
     {
+        $request->merge(['cccd' => Customer::normalizeCccd($request->input('cccd'))]);
         $data = $request->validate([
             'full_name' => ['required', 'string'],
             'phone' => ['nullable', 'string'],
             'birthday' => ['nullable', 'date'],
             'gender' => ['nullable', 'string'],
-            'cccd' => ['nullable', 'string'],
+            'cccd' => ['nullable', 'string', 'regex:/^\\d{9,12}$/', Rule::unique('customers', 'cccd')->ignore($customer->id)],
             'province' => ['nullable', 'string'],
             'district' => ['nullable', 'string'],
             'ward' => ['nullable', 'string'],
             'address' => ['nullable', 'string'],
             'note' => ['nullable', 'string'],
+        ], [
+            'cccd.regex' => 'CCCD phải gồm 9 hoặc 12 chữ số.',
+            'cccd.unique' => 'Số CCCD này đã tồn tại trong hệ thống.',
         ]);
 
         $customer->update($data);
@@ -216,7 +226,7 @@ class CustomerController extends Controller
         $customer->load([
             'images',
             'devices',
-            'points',
+            'points' => fn ($query) => $query->latest(),
             'debts',
         ]);
 

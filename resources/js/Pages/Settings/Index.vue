@@ -11,7 +11,7 @@ import { openModal as openGlobalModal, registerUrlModal } from '@/Stores/modal'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
-import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2 } from 'lucide-vue-next'
+import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
@@ -159,6 +159,7 @@ watch(() => props.active_section, (section) => {
     else if (section === 'payments' && props.can_manage_payment_accounts) activeModal.value = section
     else if (section === 'inventory' && props.can_manage_inventory_settings) activeModal.value = section
     else if (section === 'printing' && props.can_edit_settings) activeModal.value = section
+    else if (section === 'loyalty' && props.can_edit_settings) activeModal.value = section
     else if (!section) activeModal.value = null
 }, { immediate: true })
 
@@ -196,6 +197,16 @@ const form = useForm({
     work_shift_auto_open_enabled: props.settings.work_shift_auto_open_enabled !== false
         && props.settings.work_shift_auto_open_enabled !== 0
         && props.settings.work_shift_auto_open_enabled !== '0',
+    customer_points_enabled: props.settings.customer_points_enabled !== false
+        && props.settings.customer_points_enabled !== 0
+        && props.settings.customer_points_enabled !== '0',
+    customer_points_amount_per_point: Number(props.settings.customer_points_amount_per_point ?? 10000),
+    customer_points_basis: props.settings.customer_points_basis || 'revenue',
+    customer_points_debt_enabled: props.settings.customer_points_debt_enabled !== false
+        && props.settings.customer_points_debt_enabled !== 0
+        && props.settings.customer_points_debt_enabled !== '0',
+    customer_points_debt_mode: props.settings.customer_points_debt_mode || 'same',
+    customer_points_debt_percent: Number(props.settings.customer_points_debt_percent ?? 50),
     print_paper_size: props.settings.print_paper_size || 'a4',
     print_orientation: props.settings.print_orientation || 'portrait',
     print_template: props.settings.print_template || 'standard',
@@ -539,6 +550,10 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                 <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700"><Printer :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Bản in và khổ giấy</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-sky-600" :size="19" /></span>
                 <span class="col-span-3 text-sm leading-5 text-slate-500">Cài khổ giấy và hướng in cho hóa đơn, phiếu sửa chữa.</span>
             </button>
+            <button v-if="can_edit_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md" @click="openModal('loyalty')">
+                <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><Award :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Điểm khách hàng</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-emerald-600" :size="19" /></span>
+                <span class="col-span-3 text-sm leading-5 text-slate-500">Cài cách tích điểm.</span>
+            </button>
             <button v-if="can_manage_backups" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md" @click="openModal('backups')">
                 <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><DatabaseBackup :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Sao lưu và khôi phục</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-emerald-600" :size="19" /></span>
                 <span class="col-span-3 text-sm leading-5 text-slate-500">Tạo bản sao, đặt lịch tự động, kết nối đám mây và khôi phục dữ liệu.</span>
@@ -550,8 +565,8 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
         </div>
 
         <BaseModal
-            v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings)"
-            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : 'Bán hàng và kho hàng'"
+            v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings) || (activeModal === 'loyalty' && can_edit_settings)"
+            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : activeModal === 'loyalty' ? 'Điểm khách hàng' : 'Bán hàng và kho hàng'"
             size="lg"
             :body-class="activeModal === 'payments' ? 'max-h-[70vh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70vh] overflow-y-auto p-3 sm:p-4'"
             @close="closeModal"
@@ -559,6 +574,62 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
        
         <div class="grid gap-5">
             <div class="space-y-5">
+                <DataPanel v-if="activeModal === 'loyalty'">
+                    <template #header>
+                        <label class="flex cursor-pointer items-center justify-between gap-3">
+                            <h2 class="text-sm font-bold text-slate-900">Tích điểm khách hàng</h2>
+                            <input v-model="form.customer_points_enabled" type="checkbox" role="switch" aria-label="Tích điểm khách hàng" class="peer sr-only">
+                            <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full bg-slate-300 transition peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"></span>
+                        </label>
+                    </template>
+                    <div v-if="form.customer_points_enabled" class="space-y-3 p-4">
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <FloatingSelect
+                                v-model="form.customer_points_basis"
+                                name="customer_points_basis"
+                                label="Tính theo"
+                                :options="[
+                                    { value: 'revenue', label: 'Doanh thu' },
+                                    { value: 'profit', label: 'Lợi nhuận' },
+                                ]"
+                                :show-placeholder="false"
+                                :error="form.errors.customer_points_basis"
+                            />
+                            <FloatingInput v-model.number="form.customer_points_amount_per_point" name="customer_points_amount_per_point" label="Số tiền cho 1 điểm (₫)" type="number" min="1" format-thousands :error="form.errors.customer_points_amount_per_point" />
+                            <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                                <label class="flex cursor-pointer items-center justify-between gap-3">
+                                    <span class="text-sm font-semibold text-slate-800">Tích điểm đơn còn nợ</span>
+                                    <input v-model="form.customer_points_debt_enabled" type="checkbox" role="switch" aria-label="Tích điểm đơn còn nợ" class="peer sr-only">
+                                    <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full bg-slate-300 transition peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"></span>
+                                </label>
+                                <div v-if="form.customer_points_debt_enabled" class="grid gap-3 sm:grid-cols-2">
+                                    <FloatingSelect
+                                        v-model="form.customer_points_debt_mode"
+                                        name="customer_points_debt_mode"
+                                        label="Điểm đơn nợ"
+                                        :options="[
+                                            { value: 'same', label: 'Như đơn đã thanh toán' },
+                                            { value: 'half', label: '50% điểm' },
+                                            { value: 'custom', label: 'Tự đặt' },
+                                        ]"
+                                        :show-placeholder="false"
+                                        :error="form.errors.customer_points_debt_mode"
+                                    />
+                                    <FloatingInput
+                                        v-if="form.customer_points_debt_mode === 'custom'"
+                                        v-model.number="form.customer_points_debt_percent"
+                                        name="customer_points_debt_percent"
+                                        label="Tỷ lệ điểm (%)"
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        :error="form.errors.customer_points_debt_percent"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </DataPanel>
                 <DataPanel v-if="activeModal === 'printing'">
                     <template #header>
                         <div>

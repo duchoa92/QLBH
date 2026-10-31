@@ -21,6 +21,8 @@ class SaleItemGift extends Model
 
         'quantity',
 
+        'unit_cost',
+
         'base_quantity',
 
         'conversion_factor',
@@ -28,6 +30,7 @@ class SaleItemGift extends Model
 
     protected $casts = [
         'quantity' => 'integer',
+        'unit_cost' => 'decimal:2',
         'base_quantity' => 'integer',
         'conversion_factor' => 'integer',
     ];

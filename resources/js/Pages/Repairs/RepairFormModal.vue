@@ -15,12 +15,17 @@ import RepairProgressModal from './RepairProgressModal.vue';
 import RepairStatusProgress from './RepairStatusProgress.vue';
 import { toast } from 'vue-sonner';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { Barcode, KeyRound, Search, Smartphone, UserRound } from 'lucide-vue-next';
 
 const emit = defineEmits(['close', 'updated']);
 const props = defineProps({ initialRepair: { type: Object, default: null }, startAt: { type: String, default: 'repair' }, onCompleted: Function, onPay: Function });
 const step = ref(props.initialRepair ? props.startAt : 'intake');
 const createdRepair = ref(props.initialRepair || null);
 const progressModalRef = ref(null);
+const handleModalClose = () => {
+    if (progressModalRef.value?.credentialsModalOpen) return;
+    emit('close');
+};
 const workflowStage = ref('progress');
 const canOpenComplete = computed(() => createdRepair.value?.status === 'repairing'
     && (workflowStage.value === 'complete' || createdRepair.value?.waiting_mode === 'repair_now'));
@@ -28,6 +33,8 @@ const initial = props.initialRepair;
 const searchLookupRef = ref(null);
 const issueLookupRef = ref(null);
 const securityExpanded = ref(Boolean(initial?.screen_password || initial?.screen_pattern || initial?.account_type || initial?.account_email || initial?.account_password));
+const customerInfoExpanded = ref(false);
+const deviceInfoExpanded = ref(false);
 const credentialsLoading = ref(Boolean(props.initialRepair?.id));
 const credentialsLoadFailed = ref(false);
 const lightboxImage = ref(null);
@@ -86,6 +93,22 @@ const selectedWarranty = ref(initial?.warranty_source_type ? {
 let customerDeviceRequest = 0;
 
 const displayWarrantyDate = (value) => value ? formatDate(value) : 'Không có hạn';
+const customerHeaderTitle = computed(() => {
+    const name = String(form.customer_name || '').trim();
+    const phone = String(form.customer_phone || '').trim();
+    return !customerInfoExpanded.value && name && phone && selectedCustomer.value
+        ? `${name} · ${phone}`
+        : '♙ Thông tin khách hàng';
+});
+const deviceHeaderTitle = computed(() => {
+    const name = String(form.device_name || '').trim();
+    const imei = String(form.imei || '').trim();
+    if (deviceInfoExpanded.value || !name || !imei || !selectedDevice.value) return '▣ Thông tin thiết bị';
+    const warranty = selectedWarranty.value?.expires_at
+        ? ` · BH đến ${displayWarrantyDate(selectedWarranty.value.expires_at)}`
+        : '';
+    return `${name} · IMEI ${imei}${warranty}`;
+});
 
 const warrantyForDeviceSuggestion = (item) => {
     const customerId = Number(form.customer_id || selectedCustomer.value?.id || 0);
@@ -173,6 +196,8 @@ const onSelectCustomer = (customer) => {
         return loadCustomerDeviceSuggestions(null);
     }
     const existingDevice = selectedDevice.value;
+    customerInfoExpanded.value = !(String(customer.phone || customer.customer_phone || '').trim());
+    deviceInfoExpanded.value = !existingDevice;
     selectedCustomer.value = customer;
     form.customer_id = customer.id || null;
     form.customer_name = customer.full_name || customer.customer_name || customer.name || '';
@@ -226,6 +251,8 @@ const onSelectCustomer = (customer) => {
 };
 
 const applyScannedCustomerIdentity = (details) => {
+    customerInfoExpanded.value = true;
+    deviceInfoExpanded.value = true;
     selectedCustomer.value = null;
     form.customer_id = null;
     form.customer_name = details.full_name || form.customer_name;
@@ -251,6 +278,8 @@ const clearCustomer = () => {
 const useNewCustomer = () => {
     const name = searchQuery.value.trim();
     if (!name) return;
+    customerInfoExpanded.value = true;
+    deviceInfoExpanded.value = true;
     selectedCustomer.value = { id: null, full_name: name, phone: '', cccd: '', debt_balance: 0, is_new: true };
     form.customer_id = null;
     form.customer_conflict_action = '';
@@ -293,12 +322,14 @@ watch(() => form.account_type, (value) => {
 const applyingHistoryDevice = ref(false);
 let credentialRequest = 0;
 const applyDeviceSelection = async (device) => {
+    const name = device.name || device.device_name || '';
+    const imei = device.imei || device.serial || '';
+    customerInfoExpanded.value = !String(form.customer_phone || '').trim();
+    deviceInfoExpanded.value = !(String(name).trim() && String(imei).trim());
     applyingHistoryDevice.value = true;
     if (device.customer?.id && Number(device.customer.id) !== Number(form.customer_id)) {
         onSelectCustomer(device.customer);
     }
-    const name = device.name || device.device_name || '';
-    const imei = device.imei || device.serial || '';
     if (selectedDevice.value && (String(selectedDevice.value.imei || '').toLowerCase() !== String(imei || '').toLowerCase() || String(selectedDevice.value.name || selectedDevice.value.device_name || '').toLowerCase() !== String(name || '').toLowerCase())) {
         clearImagePreviews();
     }
@@ -492,6 +523,11 @@ const handleScannedImei = (code) => {
 |--------------------------------------------------------------------------
 */
 const issueInput = ref('');
+const issueSummaryCount = computed(() => {
+    const draftIssue = issueInput.value.trim();
+    const isNewDraft = draftIssue && !form.issue.some((issue) => issue.toLocaleLowerCase() === draftIssue.toLocaleLowerCase());
+    return form.issue.length + (isNewDraft ? 1 : 0);
+});
 const issueSuggestions = ref([]);
 const deviceSuggestions = ref([]);
 const customerSuggestions = ref([]);
@@ -503,11 +539,30 @@ const matchingDeviceNames = computed(() => deviceSuggestions.value.filter((devic
 const matchingImeis = computed(() => deviceSuggestions.value.filter((device) =>
     device.imei && String(device.imei).toLocaleLowerCase().includes(normalizedDeviceSearch.value)
 ));
+const searchCreationIntent = computed(() => {
+    const query = deviceSearchQuery.value.trim();
+    const digits = query.replace(/\D/g, '');
+    const explicitlyImei = /\b(imei|serial|s\/n)\b/i.test(query);
+    if (explicitlyImei || (/^[\d\s-]+$/.test(query) && digits.length >= 12)) return 'imei';
+    if (/^[+\d\s().-]+$/.test(query) && digits.length >= 8 && digits.length <= 11) return 'customer';
+    return 'device';
+});
 const deviceFocused = ref(false);
 const deviceSearching = ref(false);
 const newImeiConfirmed = ref(false);
 let lookupAfterScan = false;
 let deviceSearchSequence = 0;
+
+const runCreateAction = (type) => {
+    if (type === 'customer') return useNewCustomer();
+    if (type === 'imei') return addDeviceByImei();
+    return addDeviceByName();
+};
+const quickCreateActions = [
+    { type: 'customer', label: 'Tạo khách hàng', icon: UserRound, color: 'blue' },
+    { type: 'device', label: 'Tạo thiết bị', icon: Smartphone, color: 'emerald' },
+    { type: 'imei', label: 'Thêm IMEI / Serial', icon: Barcode, color: 'violet' },
+];
 
 const combineDeviceSuggestions = (data) => {
     const fromDevices = (data.devices || []).map((item) => ({ ...item, name: item.name || '' }));
@@ -709,6 +764,8 @@ const selectDeviceForCurrentCustomer = async (device) => {
 };
 
 const prepareNewDevice = (name, imei) => {
+    customerInfoExpanded.value = false;
+    deviceInfoExpanded.value = true;
     credentialRequest += 1;
     clearImagePreviews();
     form.device_name = name;
@@ -1135,7 +1192,7 @@ const selectWorkflowStep = (status) => {
         :title="step === 'intake' ? (createdRepair ? `Sửa thông tin phiếu · ${createdRepair.code}` : 'Tiếp nhận và sửa chữa') : `Quy trình sửa chữa · ${createdRepair?.code || ''}`"
         size="xl"
         body-class="px-4 pb-4"
-        @close="emit('close')"
+        @close="handleModalClose"
     >
         <div class="sticky top-0 z-40 -mx-4 mb-2 bg-slate-100 px-4 py-2">
             <div class="px-1 py-1">
@@ -1149,17 +1206,16 @@ const selectWorkflowStep = (status) => {
                 :workflow-stage="workflowStage"
                 @select="selectWorkflowStep"
             />
-            <div v-if="step === 'repair' && createdRepair" class="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-1">
-                <div v-if="step === 'repair' && createdRepair" class="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] sm:grid-cols-4">
-                    <div class="min-w-0 truncate"><span class="text-slate-500">Khách</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.name || createdRepair.customer_name || 'Khách lẻ' }}</strong></div>
-                    <div class="min-w-0 truncate"><span class="text-slate-500">SĐT</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.phone || createdRepair.contact_phone || '—' }}</strong></div>
-                    <div class="min-w-0 truncate"><span class="text-slate-500">Máy</span><strong class="ml-1 text-slate-800">{{ createdRepair.device_name || '—' }}</strong></div>
-                    <div class="min-w-0 truncate"><span class="text-slate-500">IMEI</span><strong class="ml-1 font-mono text-indigo-700">{{ createdRepair.imei || createdRepair.serial || '—' }}</strong></div>
+            <div v-if="step === 'repair' && createdRepair" class="mt-1 grid grid-cols-1 gap-2 border-t border-slate-100 pt-2 text-[10px] sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] xl:items-center">
+                    <div class="min-w-0 rounded-lg bg-white/70 px-2 py-1.5"><span class="text-slate-500">Khách</span><strong class="ml-1.5 text-slate-900">{{ createdRepair.customer?.name || createdRepair.customer_name || 'Khách lẻ' }}</strong><span class="mx-1.5 text-slate-300">·</span><span class="text-slate-500">SĐT</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.phone || createdRepair.contact_phone || '—' }}</strong></div>
+                    <div class="min-w-0 rounded-lg bg-white/70 px-2 py-1.5"><span class="text-slate-500">Máy</span><strong class="ml-1.5 text-slate-900">{{ createdRepair.device_name || '—' }}</strong><span class="mx-1.5 text-slate-300">·</span><span class="text-slate-500">IMEI</span><strong class="ml-1 font-mono text-indigo-700">{{ createdRepair.imei || createdRepair.serial || '—' }}</strong></div>
+                    <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] font-semibold text-indigo-800 transition hover:border-indigo-300 hover:bg-indigo-100" @click="progressModalRef?.openCredentials()">
+                        <KeyRound class="h-3.5 w-3.5" /> Xem mật khẩu máy
+                    </button>
+                    <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" @click="progressModalRef?.openHistory()">
+                        🕘 Lịch sử sửa
+                    </button>
                 </div>
-            <button v-if="step === 'repair' && createdRepair" type="button" class="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" @click="progressModalRef?.openHistory()">
-                🕘 Lịch sử sửa
-            </button>
-            </div>
             </div>
         </div>
         <RepairProgressModal
@@ -1223,12 +1279,36 @@ const selectWorkflowStep = (status) => {
                                     </button>
                                 </div>
                                 <p v-if="deviceSearching" class="px-3 py-2 text-[10px] text-slate-400">Đang tìm khách hàng và thiết bị...</p>
-                                <p v-else-if="!customerSuggestions.length && !matchingDeviceNames.length && !matchingImeis.length" class="px-3 py-2 text-[10px] text-slate-500">Chưa có kết quả phù hợp. Chọn mục muốn tạo mới ở bên dưới.</p>
+                                <div v-else-if="!customerSuggestions.length && !matchingDeviceNames.length && !matchingImeis.length" class="flex items-start gap-2.5 px-3.5 py-3 text-xs text-slate-600">
+                                    <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Search class="h-4 w-4" /></span>
+                                    <span class="min-w-0">Không tìm thấy kết quả cho <strong class="break-all rounded bg-amber-50 px-1 text-slate-900">“{{ deviceSearchQuery.trim() }}”</strong>.<span class="mt-0.5 block text-[10px] text-slate-500">Chọn nhanh loại thông tin muốn tạo:</span></span>
                                 </div>
-                                <div v-if="!deviceSearching" class="grid shrink-0 grid-cols-1 gap-1.5 border-t border-slate-200 bg-slate-50 p-2 sm:grid-cols-3">
-                                    <button type="button" class="rounded-xl border border-blue-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-blue-800 shadow-sm transition hover:border-blue-400 hover:bg-blue-50" @pointerdown.prevent="useNewCustomer"><span class="block text-[9px] font-semibold uppercase tracking-wide text-blue-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Khách “{{ deviceSearchQuery }}”</span></button>
-                                    <button type="button" class="rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-indigo-800 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50" @pointerdown.prevent="addDeviceByName"><span class="block text-[9px] font-semibold uppercase tracking-wide text-indigo-500">Tạo mới</span><span class="mt-0.5 block truncate">+ Thiết bị “{{ deviceSearchQuery }}”</span></button>
-                                    <button type="button" class="rounded-xl border border-violet-200 bg-white px-2.5 py-2 text-left text-[10px] font-bold text-violet-800 shadow-sm transition hover:border-violet-400 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-55" :disabled="isImeiBlocked(deviceSearchQuery)" @pointerdown.prevent="addDeviceByImei"><span class="block text-[9px] font-semibold uppercase tracking-wide text-violet-500">{{ isImeiBlocked(deviceSearchQuery) ? 'Đang có phiếu' : 'Tạo mới' }}</span><span class="mt-0.5 block truncate">+ IMEI “{{ deviceSearchQuery }}”</span></button>
+                                </div>
+                                <div v-if="!deviceSearching" class="shrink-0 border-t border-slate-200 bg-slate-50 p-2.5">
+                                    <button
+                                        type="button"
+                                        class="flex min-h-10 w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left text-xs font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50"
+                                        :class="searchCreationIntent === 'customer'
+                                            ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
+                                            : searchCreationIntent === 'device'
+                                                ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700'
+                                                : 'border-violet-600 bg-violet-600 text-white hover:bg-violet-700'"
+                                        :disabled="searchCreationIntent === 'imei' && isImeiBlocked(deviceSearchQuery)"
+                                        @pointerdown.prevent="runCreateAction(searchCreationIntent)"
+                                    >
+                                        <span class="flex min-w-0 items-center gap-2 truncate">
+                                            <component :is="quickCreateActions.find(action => action.type === searchCreationIntent)?.icon" class="h-4 w-4 shrink-0" />
+                                            <span class="truncate">{{ searchCreationIntent === 'customer' ? 'Tạo khách hàng' : searchCreationIntent === 'imei' ? 'Thêm IMEI / Serial' : 'Tạo thiết bị' }} <span class="font-medium opacity-90">“{{ deviceSearchQuery.trim() }}”</span></span>
+                                        </span>
+                                        <span class="shrink-0 rounded-md bg-white/15 px-2 py-1 text-[9px]">Gợi ý</span>
+                                    </button>
+                                    <div class="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 px-1 text-[10px] text-slate-500">
+                                        <span>Tạo theo mục khác:</span>
+                                        <button v-if="searchCreationIntent !== 'customer'" type="button" class="rounded px-1.5 py-1 font-semibold text-blue-700 hover:bg-blue-100" @pointerdown.prevent="runCreateAction('customer')">Khách hàng</button>
+                                        <button v-if="searchCreationIntent !== 'device'" type="button" class="rounded px-1.5 py-1 font-semibold text-emerald-700 hover:bg-emerald-100" @pointerdown.prevent="runCreateAction('device')">Thiết bị</button>
+                                        <button v-if="searchCreationIntent !== 'imei'" type="button" class="rounded px-1.5 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="isImeiBlocked(deviceSearchQuery)" @pointerdown.prevent="runCreateAction('imei')">IMEI / Serial</button>
+                                        <span v-if="isImeiBlocked(deviceSearchQuery)" class="basis-full px-1 pt-0.5 font-semibold text-rose-700">IMEI này đang có phiếu sửa chưa hoàn tất.</span>
+                                    </div>
                                 </div>
                             </div>
                     <div v-if="isImeiBlocked(deviceSearchQuery)" class="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-800">
@@ -1240,15 +1320,24 @@ const selectWorkflowStep = (status) => {
                 </div>
             </div>
 
-            <section class="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
-                <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-slate-100 bg-slate-50 px-3.5 py-2.5">
-                    <h2 class="text-[11px] font-bold uppercase tracking-wide text-slate-800">♙ Thông tin khách hàng</h2>
+            <section class="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm transition-colors" :class="!customerInfoExpanded ? 'border-blue-300 !bg-blue-100 shadow-sm' : ''">
+                <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-blue-200 bg-blue-100 px-3.5 py-2.5 transition-colors">
+                    <button type="button" class="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg text-left transition-colors hover:bg-blue-100/60" :aria-expanded="customerInfoExpanded" @click="customerInfoExpanded = !customerInfoExpanded">
+                        <span class="flex min-w-0 items-center gap-2">
+                            <UserRound class="h-4 w-4 shrink-0" :class="!customerInfoExpanded ? 'text-blue-700' : 'text-slate-500'" />
+                            <span class="min-w-0">
+                                <strong class="block truncate text-[11px] font-bold tracking-wide" :class="customerHeaderTitle.startsWith('♙') ? 'text-slate-800 uppercase' : 'text-blue-950'">{{ customerHeaderTitle.replace('♙ ', '') }}</strong>
+                                <small v-if="!customerInfoExpanded && customerHeaderTitle.startsWith('♙')" class="mt-0.5 block truncate text-[10px] text-slate-500">{{ form.customer_name || 'Khách lẻ' }}<template v-if="form.customer_phone"> · {{ form.customer_phone }}</template></small>
+                            </span>
+                        </span>
+                        <span class="shrink-0 rounded-full px-1.5 text-sm font-bold" :class="!customerInfoExpanded ? 'bg-blue-200 text-blue-800' : 'text-slate-400'">{{ customerInfoExpanded ? '−' : '+' }}</span>
+                    </button>
                     <div v-if="selectedCustomer" class="flex items-center gap-2 text-[10px]">
                         <span v-if="Number(selectedCustomer.debt_balance || 0) > 0" class="font-semibold text-rose-600">Nợ {{ $money(selectedCustomer.debt_balance) }}</span>
                         <button type="button" class="text-slate-400 hover:text-rose-600" @click="clearCustomer">Bỏ chọn</button>
                     </div>
                 </header>
-                <div class="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
+                <div v-if="customerInfoExpanded" class="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
                     <FloatingInput v-model="form.customer_name" label="Tên khách hàng *" placeholder-text="Khách lẻ" id="repair_customer_name" :error="form.errors.customer_name" required />
                     <FloatingInput v-model="form.customer_phone" label="Số điện thoại" id="repair_customer_phone" :error="form.errors.customer_phone" />
                     <FloatingInput v-model="form.contact_phone" label="SĐT liên hệ khác" id="repair_contact_phone" :error="form.errors.contact_phone" />
@@ -1257,17 +1346,21 @@ const selectWorkflowStep = (status) => {
             </section>
 
             <!-- 3. THÔNG TIN THIẾT BỊ & BẢO MẬT -->
-            <div class="relative z-20 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-visible" :class="{ 'z-40': deviceFocused }">
-                <div class="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70">
-                    <h2 class="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-                        </svg>
-                        Thông tin thiết bị
-                    </h2>
+            <div class="relative z-20 overflow-visible rounded-xl border border-slate-200/80 bg-white shadow-sm transition-colors" :class="[{ 'z-40': deviceFocused }, !deviceInfoExpanded ? 'border-indigo-300 !bg-indigo-100 shadow-sm' : '']">
+                <div class="border-b border-indigo-200 bg-indigo-100 px-3.5 py-2 transition-colors">
+                    <button type="button" class="flex w-full items-center justify-between gap-3 rounded-lg text-left transition-colors hover:bg-indigo-100/60" :aria-expanded="deviceInfoExpanded" @click="deviceInfoExpanded = !deviceInfoExpanded">
+                    <span class="min-w-0">
+                    <strong class="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-wider" :class="deviceHeaderTitle.startsWith('▣') ? 'text-slate-800 uppercase' : 'text-indigo-950'">
+                        <Smartphone class="h-4 w-4 shrink-0" :class="!deviceInfoExpanded ? 'text-indigo-700' : 'text-indigo-600'" />
+                        <span class="truncate">{{ deviceHeaderTitle.replace('▣ ', '') }}</span>
+                    </strong>
+                    <small v-if="!deviceInfoExpanded && deviceHeaderTitle.startsWith('▣')" class="mt-0.5 block truncate pl-[22px] text-[10px] text-slate-500">{{ form.device_name || 'Chưa chọn thiết bị' }}<template v-if="form.imei"> · IMEI {{ form.imei }}</template><template v-if="selectedWarranty"> · BH đến {{ displayWarrantyDate(selectedWarranty.expires_at) }}</template></small>
+                    </span>
+                    <span class="shrink-0 rounded-full px-1.5 text-sm font-bold" :class="!deviceInfoExpanded ? 'bg-indigo-200 text-indigo-800' : 'text-slate-400'">{{ deviceInfoExpanded ? '−' : '+' }}</span>
+                    </button>
                 </div>
 
-                <div class="p-3 space-y-2.5">
+                <div v-if="deviceInfoExpanded" class="space-y-2.5 p-3">
                     <div v-if="selectedWarranty" class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-[11px] text-emerald-900">
                         <strong>Thiết bị còn bảo hành</strong> đến <strong>{{ displayWarrantyDate(selectedWarranty.expires_at) }}</strong> theo HĐ: {{ selectedWarranty.invoice_code || selectedDevice?.source }}
                         
@@ -1499,7 +1592,7 @@ const selectWorkflowStep = (status) => {
                     <div class="flex items-center justify-between gap-2 py-1.5">
                         <span class="text-slate-400">Số lỗi:</span>
                         <span class="bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-bold text-[10px]">
-                            {{ form.issue.length }} lỗi
+                            {{ issueSummaryCount }} lỗi
                         </span>
                     </div>
                 </div>
@@ -1594,7 +1687,6 @@ const selectWorkflowStep = (status) => {
                 <div class="flex items-center gap-2">
                     <ActionButton v-if="progressModalRef?.footerShowBack" variant="secondary" @click="progressModalRef.returnToProgress()">Quay lại tiến trình</ActionButton>
                     <ActionButton v-if="!progressModalRef?.footerShowBack && ['pending', 'repairing', 'done'].includes(createdRepair?.status)" variant="secondary" @click="step = 'intake'">Quay lại để sửa</ActionButton>
-                    <ActionButton variant="secondary" @click="progressModalRef?.closeProgress()">Đóng</ActionButton>
                     <ActionButton v-if="progressModalRef?.footerShowSave" type="button" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.saveProgress()">{{ progressModalRef?.footerActionLabel }}</ActionButton>
                 </div>
             </div>

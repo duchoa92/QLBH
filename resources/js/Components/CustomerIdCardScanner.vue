@@ -1,7 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, ref } from 'vue'
-import { BrowserMultiFormatReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import { BrowserQRCodeReader } from '@zxing/browser'
+import { DecodeHintType } from '@zxing/library'
 import { Camera, CameraOff, ImagePlus } from 'lucide-vue-next'
 import { parseVietnameseIdCardQr } from '@/utils/vietnameseIdCard'
 
@@ -12,13 +12,15 @@ const open = ref(false)
 const video = ref(null)
 const loading = ref(false)
 const error = ref('')
-const reader = new BrowserMultiFormatReader(new Map([
-    [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]],
+const reader = new BrowserQRCodeReader(new Map([
     [DecodeHintType.TRY_HARDER, true],
-]), { delayBetweenScanAttempts: 100, delayBetweenScanSuccess: 250 })
+]), { delayBetweenScanAttempts: 100, delayBetweenScanSuccess: 180 })
 let controls = null
 let stream = null
 let session = 0
+let scanTimer = null
+let fallbackTimer = null
+let detector = null
 
 const stop = () => {
     session += 1
@@ -26,6 +28,11 @@ const stop = () => {
     try { controls?.stop() } catch (_) {}
     controls = null
     try { reader.reset() } catch (_) {}
+    if (scanTimer) clearTimeout(scanTimer)
+    scanTimer = null
+    if (fallbackTimer) clearTimeout(fallbackTimer)
+    fallbackTimer = null
+    detector = null
     stream?.getTracks?.().forEach(track => { try { track.stop() } catch (_) {} })
     stream = null
     if (video.value) {
@@ -55,6 +62,25 @@ const handleQr = raw => {
     error.value = 'Đã đọc được QR nhưng dữ liệu không đúng định dạng CCCD. Hãy thử quét lại mã QR ở mặt sau thẻ.'
 }
 
+const startZxingFallback = async currentSession => {
+    if (currentSession !== session || controls) return
+    detector = null
+    if (scanTimer) clearTimeout(scanTimer)
+    scanTimer = null
+    if (fallbackTimer) clearTimeout(fallbackTimer)
+    fallbackTimer = null
+
+    try {
+        controls = await reader.decodeFromVideoElement(video.value, result => {
+            if (currentSession === session && result) handleQr(result.getText())
+        })
+    } catch (cause) {
+        if (currentSession !== session) return
+        error.value = cause?.message || 'Không khởi động được bộ đọc QR. Hãy thử lại hoặc chọn ảnh CCCD.'
+        stop()
+    }
+}
+
 const start = async () => {
     open.value = true
     error.value = ''
@@ -65,21 +91,56 @@ const start = async () => {
         if (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
             throw new Error('Camera cần HTTPS hoặc localhost. Hãy kiểm tra quyền camera của trình duyệt.')
         }
-        controls = await reader.decodeFromConstraints({
+        const NativeDetector = globalThis.BarcodeDetector
+        let supportsNativeQr = Boolean(NativeDetector)
+        if (supportsNativeQr && NativeDetector.getSupportedFormats) {
+            try { supportsNativeQr = (await NativeDetector.getSupportedFormats()).includes('qr_code') } catch (_) { supportsNativeQr = false }
+        }
+        if (supportsNativeQr) detector = new NativeDetector({ formats: ['qr_code'] })
+
+        stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
             video: {
                 facingMode: { ideal: 'environment' },
                 width: { ideal: 1920 },
                 height: { ideal: 1080 },
+                ...(supportsNativeQr ? { frameRate: { ideal: 30 } } : {}),
             },
-        }, video.value, result => {
-            if (currentSession === session && result) handleQr(result.getText())
         })
         if (currentSession !== session) {
-            controls?.stop()
+            stream.getTracks().forEach(track => track.stop())
             return
         }
-        stream = video.value?.srcObject || null
+        video.value.srcObject = stream
+        await video.value.play()
+        const track = stream.getVideoTracks()[0]
+        try {
+            const capabilities = track.getCapabilities?.()
+            const focus = capabilities?.focusMode?.includes('continuous') ? { focusMode: 'continuous' } : {}
+            const maxZoom = capabilities?.zoom?.max
+            const zoom = maxZoom > 1 ? { zoom: Math.min(1.5, maxZoom) } : {}
+            if (Object.keys(focus).length || Object.keys(zoom).length) {
+                await track.applyConstraints({ advanced: [{ ...focus, ...zoom }] })
+            }
+        } catch (_) {}
+
+        if (detector) {
+            const scan = async () => {
+                if (currentSession !== session || !detector || !video.value || video.value.readyState < 2) return
+                try {
+                    const codes = await detector.detect(video.value)
+                    if (currentSession === session && detector && codes[0]?.rawValue) {
+                        handleQr(codes[0].rawValue)
+                        return
+                    }
+                } catch (_) { /* Keep scanning if the current frame is not decodable. */ }
+                if (currentSession === session && detector) scanTimer = setTimeout(scan, 100)
+            }
+            fallbackTimer = setTimeout(() => startZxingFallback(currentSession), 900)
+            scan()
+        } else {
+            await startZxingFallback(currentSession)
+        }
         loading.value = false
     } catch (cause) {
         if (currentSession !== session) return
@@ -136,7 +197,7 @@ onBeforeUnmount(stop)
                         <div class="pointer-events-none absolute inset-[10%] rounded-xl border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(15,23,42,0.25)]" />
                     </div>
                     <p v-if="error" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
-                    <p v-else class="text-center text-sm text-slate-600">{{ loading ? 'Đang mở bộ đọc QR…' : 'Giữ thẻ yên, đủ sáng và để QR nằm trọn trong khung.' }}</p>
+                    <p v-else class="text-center text-sm text-slate-600">{{ loading ? 'Đang mở camera…' : 'Đưa QR lại gần để chiếm phần lớn khung hình; giữ thẻ thẳng, đủ sáng và tránh lóa.' }}</p>
                     <div class="flex flex-wrap justify-center gap-2">
                         <label class="relative inline-flex cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><ImagePlus class="h-4 w-4" />Chọn ảnh CCCD<input type="file" accept="image/*" class="absolute inset-0 cursor-pointer opacity-0" @change="scanImage" /></label>
                         <button v-if="error" type="button" class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" @click="start">Quét lại</button>

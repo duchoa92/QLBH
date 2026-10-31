@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import { Plus, Search, SquarePen } from 'lucide-vue-next'
 import { openModal, registerUrlModal } from '@/Stores/modal'
@@ -10,12 +10,14 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import CustomerFormModal from './CustomerFormModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 const props = defineProps({
     customers: Object,
     filters: Object,
 })
 const page = usePage()
+const canViewCustomerDebts = computed(() => page.props.auth?.permissions?.includes('customer_debts.view') ?? false)
 
 const search = ref(props.filters.search || '')
 const columns = [
@@ -77,6 +79,10 @@ const openDetail = (customer) => openModal(RecordDetailModal, {
     props: { type: 'customer', recordId: customer.id },
     deepLink: { type: 'customer', id: customer.id },
 })
+const openDebtDetails = customer => {
+    if (!canViewCustomerDebts.value || Number(customer.debt_balance) <= 0) return
+    router.visit(route('debts.customers', { open_customer: customer.id }))
+}
 registerUrlModal('customer', RecordDetailModal, id => ({ type: 'customer', recordId: id }))
 
 const openDetailFromGlobalSearch = () => {
@@ -96,24 +102,19 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
         <PageHeader
             title="Khách hàng"
         >
-            <template #actions>
-                <ActionButton @click="openCreate">
-                    <Plus class="h-4 w-4" />
-                    Thêm khách
-                </ActionButton>
-            </template>
         </PageHeader>
 
         <DataPanel detached>
             <template #header>
-                <div class="relative max-w-md">
-                    <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                        v-model="search"
-                        type="text"
-                        placeholder="Tìm tên, SĐT..."
-                        class="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                    />
+                <div class="flex w-full items-center gap-2">
+                    <div class="relative min-w-0 flex-1 sm:max-w-xl">
+                        <Search class="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <FloatingInput v-model="search" label="Tìm khách hàng" placeholder-text="Tên, SĐT, mã KH hoặc CCCD" placeholder-class="left-9 right-2 truncate" label-class="left-9" input-class="h-10 !pl-9 !pt-2 !pb-2" />
+                    </div>
+                    <ActionButton class="shrink-0 whitespace-nowrap" @click="openCreate">
+                        <Plus class="h-4 w-4" />
+                        Thêm khách
+                    </ActionButton>
                 </div>
             </template>
 
@@ -123,9 +124,12 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
                     <td class="border-r p-2 font-semibold text-slate-900">{{ row.full_name }}</td>
                     <td class="border-r p-2 text-slate-600">{{ row.phone || '—' }}</td>
                     <td class="border-r p-2 text-center font-semibold text-emerald-700">{{ row.point_balance }}</td>
-                    <td class="border-r p-2 text-right font-semibold" :class="row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500'">{{ formatMoney(row.debt_balance) }}</td>
-                    <td class="border-r p-2 text-center text-slate-600">{{ row.customer_type }}</td>
-                    <td class="p-2 text-center" @click.stop>
+                    <td class="border-r p-2 text-right font-semibold" :class="[
+                        row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500',
+                        canViewCustomerDebts && row.debt_balance > 0 ? 'cursor-pointer underline decoration-dotted underline-offset-2 hover:text-rose-800' : '',
+                    ]" @click.stop="openDebtDetails(row)" :title="canViewCustomerDebts && row.debt_balance > 0 ? 'Xem chi tiết công nợ' : undefined">{{ formatMoney(row.debt_balance) }}</td>
+                    <td class="border-r p-2 text-center text-slate-600">{{ row.customer_type === 'retail' ? 'Khách lẻ' : row.customer_type }}</td>
+                    <td class="w-16 p-2 text-center" @click.stop>
                         <ActionButton variant="ghost" title="Sửa" @click="openEdit(row)"><SquarePen class="h-4 w-4 text-emerald-700" /></ActionButton>
                     </td>
                 </template>

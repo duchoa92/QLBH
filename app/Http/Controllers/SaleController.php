@@ -321,7 +321,8 @@ class SaleController extends Controller
                 $note = filled($row['note'] ?? null) ? trim($row['note']) : null;
                 $unitId = $row['unit_id'] ?? $product->unit_id;
                 $unitName = filled($row['unit_name'] ?? null) ? trim($row['unit_name']) : ($product->unit?->short_name ?: $product->unit?->name);
-                $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note');
+                $unitCost = (float) ($imei?->cost_price ?? $variant?->cost_price ?? $product->cost_price ?? 0);
+                $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'unitCost', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note');
             }
 
             $oldStockDelta = [];
@@ -391,6 +392,7 @@ class SaleController extends Controller
                     'base_quantity' => $item['baseQuantity'],
                     'conversion_factor' => $item['conversionFactor'],
                     'unit_price' => $item['price'],
+                    'unit_cost' => $item['unitCost'],
                     'discount_type' => $item['type'],
                     'discount_value' => $item['value'],
                     'warranty_days' => $item['warrantyDays'],
@@ -405,6 +407,7 @@ class SaleController extends Controller
                         'variant_id' => $gift['variant']?->id,
                         'product_imei_id' => $gift['imei']?->id,
                         'quantity' => $gift['quantity'],
+                        'unit_cost' => (float) ($gift['imei']?->cost_price ?? $gift['variant']?->cost_price ?? $gift['product']->cost_price ?? 0),
                         'base_quantity' => $gift['baseQuantity'],
                         'conversion_factor' => $gift['conversionFactor'],
                     ]);
@@ -451,6 +454,8 @@ class SaleController extends Controller
                     }
                 }
             }
+
+            app(\App\Services\CustomerPointService::class)->syncSale($sale);
         });
 
         return back()->with('success', 'Đã cập nhật hóa đơn.');
@@ -663,6 +668,8 @@ class SaleController extends Controller
                 'cancel_reason' => $reason,
                 'cancelled_at' => now(),
             ]);
+
+            app(\App\Services\CustomerPointService::class)->syncSale($sale);
 
             $this->reverseCancelledSaleDebt($sale);
 

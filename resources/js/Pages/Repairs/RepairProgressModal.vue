@@ -7,7 +7,9 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import RepairCompletionModal from './RepairCompletionModal.vue'
 import RepairPartsPicker from './RepairPartsPicker.vue'
+import PatternLock from '@/Components/PatternLock.vue'
 import { toast } from 'vue-sonner'
+import { Zap, PackageSearch, PauseCircle, Camera, ShieldAlert } from 'lucide-vue-next'
 
 const props = defineProps({ repair: { type: Object, required: true }, embedded: { type: Boolean, default: false } })
 const emit = defineEmits(['close', 'updated', 'completed', 'pay', 'stage-change'])
@@ -17,6 +19,8 @@ const activeTab = ref(['returned', 'cancelled'].includes(props.repair.status) ? 
 const completionStep = ref(false)
 const hasRepairProgress = ref(['repairing', 'done'].includes(props.repair.status))
 // Phiếu đang chờ khi mở lại sẽ mặc định ở chế độ tiếp tục sửa.
+// Mở lại phiếu đang chờ thì mặc định vào luồng tiếp tục sửa; thanh trạng thái
+// phía trên vẫn phản ánh waiting_mode đã lưu từ props.repair.
 const waitingMode = ref('repair_now')
 const isWaiting = computed(() => waitingMode.value !== 'repair_now')
 const completionModalRef = ref(null)
@@ -27,12 +31,24 @@ const declineWarranty = ref(false)
 const declineReason = ref('')
 const continueAsService = ref(false)
 const decliningWarranty = ref(false)
+const credentialsModalOpen = ref(false)
+const credentialsLoading = ref(false)
+const credentialsLoaded = ref(false)
+const credentialsError = ref('')
+const credentials = ref(null)
 const hasWarrantyCandidate = computed(() => {
     if (!props.repair.warranty_source_type || !props.repair.warranty_source_id || !props.repair.warranty_expires_at || props.repair.warranty_status === 'declined') return false
     const expiresAt = new Date(props.repair.warranty_expires_at)
     expiresAt.setHours(23, 59, 59, 999)
     return expiresAt.getTime() >= Date.now()
 })
+const savedProgressImages = computed(() => [
+    ...(props.repair.images || []).map((image) => ({ ...image, group: 'Ảnh lúc tiếp nhận' })),
+    ...(props.repair.timelines || []).flatMap((timeline) => (timeline.images || []).map((image) => ({
+        ...image,
+        group: timeline.title || 'Ảnh tiến trình',
+    }))),
+])
 
 const form = useForm({
     description: '',
@@ -44,6 +60,21 @@ const form = useForm({
 })
 
 const issueText = ref('')
+const openCredentials = async () => {
+    credentialsModalOpen.value = true
+    if (credentialsLoaded.value || credentialsLoading.value) return
+    credentialsLoading.value = true
+    credentialsError.value = ''
+    try {
+        const { data } = await axios.get(route('repairs.credentials', props.repair.id), { headers: { 'Cache-Control': 'no-cache' } })
+        credentials.value = data
+        credentialsLoaded.value = true
+    } catch {
+        credentialsError.value = 'Không tải được mật khẩu và tài khoản máy.'
+    } finally {
+        credentialsLoading.value = false
+    }
+}
 const updateProgressImages = (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
@@ -78,7 +109,14 @@ const submit = (targetStatus = 'repairing', { advanceToCompletion = false } = {}
         onSuccess: (page) => {
             toast.success(targetStatus === 'cancelled' ? 'Đã hủy phiếu sửa chữa' : 'Đã cập nhật tiến trình sửa chữa')
             const refreshedRepair = page.props.repairs?.data?.find((item) => Number(item.id) === Number(props.repair.id))
-            emit('updated', refreshedRepair || null)
+            emit('updated', refreshedRepair || {
+                ...props.repair,
+                status: targetStatus,
+                waiting_for_parts: targetStatus !== 'cancelled' && isWaiting.value,
+                waiting_mode: targetStatus === 'cancelled' ? 'repair_now' : waitingMode.value,
+                parts_needed: waitingMode.value === 'parts' ? form.parts_needed : null,
+                expected_days: waitingMode.value === 'parts' ? form.expected_days : null,
+            })
             if (advanceToCompletion) {
                 hasRepairProgress.value = true
                 completionStep.value = true
@@ -196,7 +234,7 @@ const openHistory = () => {
 }
 const closeProgress = () => emit('close')
 
-defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, footerShowBack: computed(() => completionStep.value), hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || Boolean(declineReason.value.trim()) || declineWarranty.value || continueAsService.value || form.images.length > 0), cancelRepair, saveProgress, returnToProgress, openCompletionStep, openProgressStep, openHistory, closeProgress })
+defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, footerShowBack: computed(() => completionStep.value), credentialsModalOpen: computed(() => credentialsModalOpen.value), hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || Boolean(declineReason.value.trim()) || declineWarranty.value || continueAsService.value || form.images.length > 0), cancelRepair, saveProgress, returnToProgress, openCompletionStep, openProgressStep, openHistory, openCredentials, closeProgress })
 </script>
 
 <template>
@@ -211,31 +249,34 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
         <Transition name="repair-step">
         <div v-show="activeTab === 'log' && !completionStep && ['pending', 'repairing'].includes(repair.status)" id="repair-progress-form" class="space-y-3">
 
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <button v-for="option in [{ value: 'repair_now', label: 'Sửa ngay', hint: 'Có thể tiếp tục xử lý' }, { value: 'parts', label: 'Chờ linh kiện', hint: 'Cần đặt linh kiện' }, { value: 'wait_repair', label: 'Tạm chờ sửa', hint: 'Chưa thể làm tiếp' }]" :key="option.value" type="button" class="rounded-xl border p-2.5 text-left transition" :class="waitingMode === option.value ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200' : 'border-slate-200 hover:bg-slate-50'" @click="selectProgressMode(option.value)"><span class="block text-xs font-bold text-slate-800">{{ option.label }}</span><span class="mt-0.5 block text-[10px] text-slate-500">{{ option.hint }}</span></button>
-            </div>
-
-            <section v-if="waitingMode === 'repair_now'" class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                <div v-if="declineWarranty" class="space-y-3 rounded-lg border border-rose-200 bg-rose-50/50 p-3">
-                    <div class="flex flex-wrap items-center gap-4">
-                        <label v-if="hasWarrantyCandidate" class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-rose-800">
-                            <input v-model="declineWarranty" type="checkbox" class="rounded border-rose-300 text-rose-600 focus:ring-rose-500" @change="continueAsService = false" />
-                            <span>Từ chối bảo hành</span>
-                        </label>
-                        <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800">
-                            <input v-model="continueAsService" type="checkbox" class="rounded border-blue-300 text-blue-600 focus:ring-blue-500" />
-                            <span>Tiếp tục sửa dịch vụ</span>
-                        </label>
+            <section v-if="hasWarrantyCandidate && waitingMode === 'repair_now'" class="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
+                <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <div class="flex items-center gap-2 text-rose-900">
+                        <ShieldAlert class="h-4 w-4 shrink-0 text-rose-600" />
+                        <span class="text-xs font-bold">Chính sách bảo hành còn hiệu lực</span>
                     </div>
-                    <FloatingInput v-model="declineReason" label="Lý do từ chối bảo hành *" id="repair_warranty_decline_reason" :error="form.errors.decline_reason" required />
-                    <p class="text-[11px] text-rose-700">Nếu không tiếp tục sửa dịch vụ, phiếu sẽ kết thúc và căn cứ bảo hành này bị vô hiệu hóa.</p>
-                </div>
-                <div v-else-if="hasWarrantyCandidate" class="flex flex-wrap items-center gap-4 rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-2.5">
-                    <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-rose-800">
+                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-100">
                         <input v-model="declineWarranty" type="checkbox" class="rounded border-rose-300 text-rose-600 focus:ring-rose-500" @change="continueAsService = false" />
                         <span>Từ chối bảo hành</span>
                     </label>
                 </div>
+            </section>
+
+            <section v-if="declineWarranty" class="space-y-3 rounded-xl border border-rose-200 bg-rose-50/60 p-3">
+                <FloatingInput v-model="declineReason" label="Lý do từ chối bảo hành *" id="repair_warranty_decline_reason" :error="form.errors.decline_reason" required />
+                <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-800">
+                    <input v-model="continueAsService" type="checkbox" class="rounded border-blue-300 text-blue-600 focus:ring-blue-500" />
+                    <span>Tiếp tục sửa dịch vụ</span>
+                </label>
+                <p class="text-[11px] text-rose-700">Nếu không chọn sửa dịch vụ, lưu sẽ kết thúc phiếu và vô hiệu hóa căn cứ bảo hành.</p>
+            </section>
+
+            <template v-if="!declineWarranty || continueAsService">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button v-for="option in [{ value: 'repair_now', label: 'Sửa ngay', hint: 'Tiếp tục xử lý', icon: Zap, tone: 'amber' }, { value: 'parts', label: 'Chờ linh kiện', hint: 'Đặt linh kiện', icon: PackageSearch, tone: 'blue' }, { value: 'wait_repair', label: 'Tạm chờ sửa', hint: 'Chưa thể xử lý', icon: PauseCircle, tone: 'slate' }]" :key="option.value" type="button" class="group flex min-h-[58px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200 shadow-sm' : option.tone === 'blue' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 shadow-sm' : 'border-slate-500 bg-slate-100 ring-2 ring-slate-200 shadow-sm') : 'border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50'" @click="selectProgressMode(option.value)"><component :is="option.icon" class="h-5 w-5 shrink-0" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'text-amber-700' : option.tone === 'blue' ? 'text-blue-700' : 'text-slate-700') : 'text-slate-500 group-hover:text-slate-700'"/><span class="min-w-0"><span class="block text-xs font-bold text-slate-900">{{ option.label }}</span><span class="mt-0.5 block text-[10px] text-slate-600">{{ option.hint }}</span></span><span v-if="waitingMode === option.value" class="ml-auto shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-700">Đang chọn</span></button>
+            </div>
+
+            <section v-if="waitingMode === 'repair_now'" class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
                 <RepairPartsPicker v-if="!declineWarranty || continueAsService" v-model="selectedParts" />
             </section>
 
@@ -255,20 +296,28 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
                     <label class="block text-xs font-semibold text-slate-700">Ảnh chụp tiến trình</label>
                     <span v-if="progressImagePreviews.length" class="text-[10px] text-slate-500">{{ progressImagePreviews.length }} ảnh</span>
                 </div>
-                <label class="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 px-3 py-2.5 text-xs font-semibold text-blue-800 transition hover:border-blue-500 hover:bg-blue-50">
+                <label class="flex min-h-[76px] cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-blue-300 bg-slate-50 px-4 py-3 text-xs font-semibold text-blue-800 transition hover:border-blue-500 hover:bg-blue-50">
                     <input class="sr-only" type="file" accept="image/*" multiple @change="updateProgressImages" />
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7a2 2 0 012-2h2l1.2 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><circle cx="12" cy="13" r="3" stroke-width="1.8"/><path stroke-linecap="round" stroke-width="1.8" d="M18 4v4m-2-2h4"/></svg>
-                    <span>{{ progressImagePreviews.length ? 'Thêm ảnh' : 'Chọn ảnh' }}</span>
-                    <span class="font-normal text-slate-500">Có thể thêm nhiều ảnh</span>
+                    <Camera class="h-7 w-7 shrink-0 text-blue-600" aria-hidden="true" />
+                    <span><span class="block text-sm font-bold">{{ progressImagePreviews.length ? 'Thêm ảnh tình trạng' : 'Chụp hoặc chọn ảnh tình trạng' }}</span><span class="mt-0.5 block text-[11px] font-normal text-slate-600">Có thể chọn nhiều ảnh · Nhấn để tải ảnh lên</span></span>
                 </label>
-                <div v-if="progressImagePreviews.length" class="mt-2 flex flex-wrap gap-2">
+                <div v-if="savedProgressImages.length || progressImagePreviews.length" class="mt-2 space-y-2">
+                    <div v-if="savedProgressImages.length" class="flex flex-wrap gap-2">
+                        <a v-for="(image, index) in savedProgressImages" :key="`saved-${image.id || image.url}-${index}`" :href="image.url" target="_blank" rel="noopener" class="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50" :title="image.group">
+                            <img :src="image.url" :alt="image.group" class="h-full w-full object-cover" />
+                            <span class="absolute inset-x-0 bottom-0 truncate bg-slate-900/70 px-1 py-0.5 text-center text-[8px] text-white">{{ image.group }}</span>
+                        </a>
+                    </div>
+                    <div v-if="progressImagePreviews.length" class="flex flex-wrap gap-2">
                     <div v-for="(preview, index) in progressImagePreviews" :key="preview.url" class="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
                         <img :src="preview.url" :alt="`Ảnh tiến trình ${index + 1}`" class="h-full w-full object-cover" />
                         <button type="button" class="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-slate-900/70 text-xs text-white opacity-0 transition group-hover:opacity-100" :aria-label="`Bỏ ảnh ${index + 1}`" @click="removeProgressImage(index)">×</button>
                     </div>
+                    </div>
                 </div>
                 <span v-if="form.errors.images" class="mt-1 block text-[11px] text-rose-600">{{ form.errors.images }}</span>
             </div>
+            </template>
             </template>
         </div>
         </Transition>
@@ -341,7 +390,6 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <ActionButton variant="secondary" @click="emit('close')">Đóng</ActionButton>
                     <ActionButton v-if="completionStep" variant="secondary" @click="returnToProgress">Quay lại tiến trình</ActionButton>
                     
                     <ActionButton 
@@ -355,6 +403,24 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
                 </div>
             </div>
         </template>
+    </BaseModal>
+
+    <BaseModal v-if="credentialsModalOpen" :title="`Mật khẩu máy & tài khoản · ${repair.code}`" size="md" @close="credentialsModalOpen = false">
+        <div v-if="credentialsLoading" class="py-8 text-center text-sm text-slate-500">Đang tải thông tin bảo mật...</div>
+        <div v-else-if="credentialsError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ credentialsError }}</div>
+        <div v-else-if="credentials" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <section class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <h3 class="font-bold text-slate-800">Khóa màn hình <span class="font-normal text-slate-500">· {{ credentials.screen_lock_type || (credentials.screen_pattern ? 'Mẫu hình' : credentials.screen_password ? 'Mật khẩu / PIN' : 'Chưa lưu') }}</span></h3>
+                <p v-if="credentials.screen_password" class="break-all"><span class="text-slate-500">Mật khẩu/PIN:</span> <strong class="select-all text-slate-900">{{ credentials.screen_password }}</strong></p>
+                <div v-if="credentials.screen_pattern" class="space-y-1"><span class="text-slate-500">Mẫu hình khóa:</span><div class="w-fit rounded-lg border border-slate-200 bg-white p-1"><PatternLock :model-value="credentials.screen_pattern" readonly /></div></div>
+                <p v-if="!credentials.screen_password && !credentials.screen_pattern" class="text-slate-500">Không có mật khẩu khóa màn hình.</p>
+            </section>
+            <section class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <h3 class="font-bold text-slate-800">Tài khoản máy <span class="font-normal text-slate-500">· {{ credentials.account_type || 'Chưa lưu' }}</span></h3>
+                <p><span class="text-slate-500">Email/SĐT:</span> <strong class="break-all text-slate-900">{{ credentials.account_email || '—' }}</strong></p>
+                <p><span class="text-slate-500">Mật khẩu:</span> <strong class="select-all break-all text-slate-900">{{ credentials.account_password || '—' }}</strong></p>
+            </section>
+        </div>
     </BaseModal>
 </template>
 

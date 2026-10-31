@@ -46,6 +46,10 @@ const openDebtReminder = () => {
     const id = Number(url.searchParams.get('open_reminder'))
     reminderParty.value = id ? props.rows?.data?.find(row => Number(row.id) === id) || null : null
 }
+const openCustomerDebtDetails = () => {
+    const id = Number(new URL(window.location.href).searchParams.get('open_customer'))
+    expandedId.value = id && props.rows?.data?.some(row => Number(row.id) === id) ? id : null
+}
 const closeDebtReminder = () => {
     reminderParty.value = null
     const url = new URL(window.location.href)
@@ -61,6 +65,8 @@ const payReminder = () => {
 
 watch(() => props.filters.search, value => { search.value = value || '' })
 watch(() => page.url, openDebtReminder, { immediate: true })
+watch(() => page.url, openCustomerDebtDetails, { immediate: true })
+watch(() => props.rows, openCustomerDebtDetails)
 watch(() => props.rows, openDebtReminder)
 watch(search, value => {
     clearTimeout(searchTimer)

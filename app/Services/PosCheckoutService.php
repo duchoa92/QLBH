@@ -281,6 +281,8 @@ class PosCheckoutService
                     'unit_price' =>
                         (float) $item['price'],
 
+                    'unit_cost' => (float) ($imei?->cost_price ?? $variant?->cost_price ?? $product->cost_price ?? 0),
+
                     'discount_type' =>
                         $item['discount_type'] ?? null,
 
@@ -366,6 +368,7 @@ class PosCheckoutService
                             'variant_id' => $giftVariant?->id,
                             'product_imei_id' => $gift['imei_id'] ?? null,
                             'quantity' => $giftQuantity,
+                            'unit_cost' => (float) ($giftImei?->cost_price ?? $giftVariant?->cost_price ?? $giftProduct->cost_price ?? 0),
                             'base_quantity' => $giftQuantity * $giftFactor,
                             'conversion_factor' => $giftFactor,
                         ]);
@@ -609,6 +612,8 @@ class PosCheckoutService
             $sale->update([
                 'change_amount' => $changeMoney,
             ]);
+
+            app(CustomerPointService::class)->syncSale($sale);
 
             return $sale;
         });

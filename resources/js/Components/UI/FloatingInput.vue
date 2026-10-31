@@ -21,6 +21,14 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    placeholderClass: {
+        type: String,
+        default: '',
+    },
+    labelClass: {
+        type: String,
+        default: '',
+    },
 
     type: {
         type: String,
@@ -98,6 +106,7 @@ const inputType = computed(() => props.formatThousands ? 'text' : props.type)
         <span
             v-if="placeholderText"
             class="pointer-events-none absolute left-3 top-2.5 hidden text-sm text-gray-400 peer-placeholder-shown:block peer-focus:hidden"
+            :class="placeholderClass"
         >{{ placeholderText }}</span>
         <!-- Lỗi-->
         <p v-if="error" class="text-red-500 text-sm mt-1">
@@ -110,6 +119,7 @@ const inputType = computed(() => props.formatThousands ? 'text' : props.type)
             :class="[
                 'pointer-events-none absolute left-3 bg-white px-1 text-gray-500 transition-all duration-200 -top-2 text-xs peer-placeholder-shown:top-2.5 peer-placeholder-shown:text-sm peer-focus:-top-2 peer-focus:text-xs peer-focus:text-blue-600',
                 placeholderText ? 'peer-placeholder-shown:opacity-0 peer-focus:opacity-100' : '',
+                labelClass,
             ]"
         >
 

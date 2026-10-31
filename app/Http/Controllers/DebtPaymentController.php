@@ -78,8 +78,10 @@ class DebtPaymentController extends Controller
             ? $request->query('sort_by') : 'debt_balance';
         $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
         $openReminderId = (int) $request->query('open_reminder', 0);
+        $openCustomerId = $isCustomer ? (int) $request->query('open_customer', 0) : 0;
 
         $rows = $model->where('debt_balance', '>', 0)
+            ->when($openCustomerId > 0, fn ($query) => $query->whereKey($openCustomerId))
             ->when($openReminderId > 0, fn ($query) => $query->whereKey($openReminderId))
             ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                 ->where($nameColumn, 'like', "%{$search}%")
@@ -212,6 +214,7 @@ class DebtPaymentController extends Controller
                 'note' => $data['note'] ?? null,
             ]);
             $locked->decrement('debt_balance', $amount);
+            if ($sale) app(\App\Services\CustomerPointService::class)->syncSale($sale);
         });
 
         return back()->with('success', 'Đã ghi nhận thu công nợ khách hàng.');

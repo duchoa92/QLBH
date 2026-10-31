@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\ReferenceDataController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\GlobalSearchController;
+use App\Http\Controllers\Api\AdministrativeUnitController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\BankTransferWebhookController;
 
@@ -18,6 +19,10 @@ Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class
 Route::middleware(['web', 'auth'])->group(function ()
 {
     Route::get('/global-search', GlobalSearchController::class);
+    Route::get('/administrative-units/provinces', [AdministrativeUnitController::class, 'provinces'])
+        ->middleware('permission:customers.create|customers.edit|pos.access|stock_imports.create');
+    Route::get('/administrative-units/provinces/{provinceCode}/wards', [AdministrativeUnitController::class, 'wards'])
+        ->middleware('permission:customers.create|customers.edit|pos.access|stock_imports.create');
     // Dữ liệu nền cho các ô chọn, luôn lấy mới mà không tải lại trang.
     Route::get('/reference-data', [ReferenceDataController::class, 'index'])
         ->middleware('permission:products.view|customers.view|suppliers.view|stock_imports.view|repairs.view|pos.access|users.create|categories.view');
@@ -49,6 +54,10 @@ Route::middleware(['web', 'auth'])->group(function ()
 
     // Tìm kiếm khách hàng
     Route::get('/customers/search', [CustomerController::class, 'search'])->middleware('permission:customers.view|pos.access|repairs.view');
+    Route::get('/customers/check-cccd', [CustomerController::class, 'checkCccd'])
+        ->middleware('permission:customers.create|customers.edit|customers.view|pos.access|stock_imports.create');
+    Route::get('/customers/check-phone', [CustomerController::class, 'checkPhone'])
+        ->middleware('permission:customers.create|customers.edit|customers.view|pos.access|stock_imports.create');
     // Thêm khách hàng mới
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('permission:customers.create|pos.access|stock_imports.create');
 

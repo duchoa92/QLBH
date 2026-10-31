@@ -45,6 +45,21 @@ class Customer extends Model
         'total_spent' => 'decimal:2',
     ];
 
+    public static function normalizeCccd(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $digits = preg_replace('/\\D+/', '', $value) ?? '';
+        return $digits === '' ? null : $digits;
+    }
+
+    public function setCccdAttribute(?string $value): void
+    {
+        $this->attributes['cccd'] = self::normalizeCccd($value);
+    }
+
     /*
     |--------------------------------------------------
     | RELATIONS

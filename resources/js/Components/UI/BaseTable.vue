@@ -9,6 +9,7 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     selectable: { type: Boolean, default: false },
     rowClickable: { type: Boolean, default: false },
+    hidePaginationWhenSinglePage: { type: Boolean, default: false },
     selectedIds: { type: Array, default: () => [] }
 })
 
@@ -47,7 +48,7 @@ const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(r
                     <th 
                         v-for="col in columns" 
                         :key="col.key"
-                        class="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-left"
+                        class="whitespace-nowrap border-r border-slate-200 px-3 py-2.5"
                         :class="col.class"
                         :style="{ width: col.width }"
                     >
@@ -67,7 +68,7 @@ const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(r
 
                     </th>
 
-                    <th class="px-3 py-2.5 text-center">Tác vụ</th>
+                    <th class="w-16 px-3 py-2.5 text-center">Tác vụ</th>
                 </tr>
             </thead>
 
@@ -108,6 +109,6 @@ const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(r
     </div>
 
     <!-- PAGINATION -->
-    <PaginationBar :data="data" :filters="filters" />
+    <PaginationBar v-if="!hidePaginationWhenSinglePage || (data?.total || 0) > (filters?.per_page || 10)" :data="data" :filters="filters" />
 </div>
 </template>
