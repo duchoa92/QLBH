@@ -265,7 +265,7 @@ const historyCount = type => type === 'all'
                             class="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-12 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             autocomplete="off"
                         >
-                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-9 !w-9" @scanned="lookupScannedCode" />
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="lookupScannedCode" />
                       </div>
                     </div>
 

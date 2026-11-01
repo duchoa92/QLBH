@@ -166,7 +166,7 @@ const removePart = (index) => {
     <div class="space-y-2">
 
         <div class="relative">
-            <div class="relative"><FloatingInput v-model="keyword" label="Nhập để tìm linh kiện" id="repair_progress_part_search" autocomplete="off" input-class="!pr-12" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-7 !w-7" @scanned="(code) => { keyword = code; scanProduct() }" /></div>
+            <div class="relative"><FloatingInput v-model="keyword" label="Nhập để tìm linh kiện" id="repair_progress_part_search" autocomplete="off" input-class="!pr-12" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => { keyword = code; scanProduct() }" /></div>
             <div v-if="keyword.trim().length >= 2" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
                 <p v-if="loading" class="p-3 text-xs text-slate-500">Đang tìm trong kho...</p>
                 <p v-else-if="!products.length" class="p-3 text-xs text-slate-500">Không tìm thấy linh kiện phù hợp.</p>

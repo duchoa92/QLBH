@@ -34,7 +34,7 @@ const quantity = computed({
             border
             rounded-lg
             overflow-hidden
-            h-9
+            h-7
             shrink-0
             bg-white
         "
@@ -47,13 +47,17 @@ const quantity = computed({
         <button
             :disabled="item.imei_id"
             class="
-                w-9
+                w-6
                 h-full
                 self-stretch
-                bg-gray-50
+                bg-slate-50
                 border-r
-                text-base
+                text-xs
                 font-bold
+                text-slate-600
+                transition-colors
+                hover:bg-blue-50
+                hover:text-blue-700
             "
             @click="
                 item.quantity > 1
@@ -72,13 +76,13 @@ const quantity = computed({
             :disabled="item.imei_id"
             class="
                 quantity-input
-                w-20
+                w-12
                 h-full
                 text-center
                 border-none
                 bg-white
                 px-2
-                text-sm
+                text-xs
                 font-semibold
                 outline-none
                 focus:outline-none
@@ -89,13 +93,17 @@ const quantity = computed({
         <button
             :disabled="item.imei_id"
             class="
-                w-9
+                w-6
                 h-full
                 self-stretch
-                bg-gray-50
+                bg-slate-50
                 border-l
-                text-base
+                text-xs
                 font-bold
+                text-slate-600
+                transition-colors
+                hover:bg-blue-50
+                hover:text-blue-700
             "
             @click="
                 item.quantity++

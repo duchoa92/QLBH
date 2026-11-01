@@ -793,13 +793,13 @@ onBeforeUnmount(() => {
                             >IMEI / Serial</label>
                             <button
                                 type="button"
-                                class="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-sky-700 transition hover:bg-sky-50"
+                                class="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                                 :aria-label="scanning ? 'Tắt camera' : 'Bật camera quét IMEI'"
                                 :title="scanning ? 'Tắt camera' : 'Bật camera quét IMEI'"
                                 @click.stop="scanning ? stopCamera() : startCamera()"
                             >
-                                <CameraOff v-if="scanning" class="h-4 w-4" />
-                                <Camera v-else class="h-4 w-4" />
+                                <CameraOff v-if="scanning" class="h-3.5 w-3.5" />
+                                <Camera v-else class="h-3.5 w-3.5" />
                             </button>
                         </div>
                     </div>

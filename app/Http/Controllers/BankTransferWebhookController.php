@@ -172,6 +172,9 @@ class BankTransferWebhookController extends Controller
                     invoiceCode: $locked->invoice_code,
                     cashReceivedAmount: (float) ($payload['cash_received_amount'] ?? 0),
                     bankReceivedAmount: (float) $received,
+                    invoiceDiscount: (float) ($payload['invoice_discount'] ?? 0),
+                    invoiceDiscountType: ($payload['invoice_discount_type'] ?? 'amount') === 'percent' ? 'percent' : 'amount',
+                    extraFee: (float) ($payload['extra_fee'] ?? 0),
                 );
                 $sale->update(['work_shift_id' => $locked->work_shift_id, 'bank_account' => $locked->bank_account]);
                 $sale->load(['items.product', 'items.variant', 'items.productImei', 'customer']);

@@ -407,7 +407,7 @@ const openImeiList = (row) => {
                 label="Tìm tên, SKU hoặc barcode..."
                 input-class="pr-12"
             />
-            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => search = code" />
+            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => search = code" />
         </div>
 
         <!-- CATEGORY -->

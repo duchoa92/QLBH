@@ -1,7 +1,10 @@
 import { computed } from 'vue'
 
 export const useCartTotals = (
-    cart
+    cart,
+    invoiceDiscount = { value: 0 },
+    extraFee = { value: 0 },
+    invoiceDiscountType = { value: 'amount' },
 ) => {
 
     /*
@@ -121,8 +124,15 @@ export const useCartTotals = (
     */
 
     const vat = computed(() => {
-
         return 0
+    })
+
+    const invoiceDiscountAmount = computed(() => {
+        const base = Math.max(0, subTotal.value - discount.value)
+        const value = Math.max(0, Number(invoiceDiscount.value || 0))
+        return invoiceDiscountType.value === 'percent'
+            ? base * Math.min(100, value) / 100
+            : Math.min(base, value)
     })
 
     /*
@@ -138,6 +148,8 @@ export const useCartTotals = (
                 subTotal.value
                 - discount.value
                 + vat.value
+                - invoiceDiscountAmount.value
+                + Math.max(0, Number(extraFee.value || 0))
             )
         })
 
@@ -150,6 +162,12 @@ export const useCartTotals = (
         discount,
 
         vat,
+
+        invoiceDiscount,
+
+        invoiceDiscountAmount,
+
+        extraFee,
 
         grandTotal,
     }

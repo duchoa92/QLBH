@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Models\StockImportItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -47,8 +48,9 @@ class ProductController extends Controller
                 ])
                 ->whereIn('id', $productIds)
                 ->where('is_active', true)
-                ->get()
-                ->map(function ($product) {
+                ->get();
+            $vatProductIds = StockImportItem::query()->whereIn('product_id', $products->pluck('id'))->where('has_vat', true)->distinct()->pluck('product_id')->map(fn ($id) => (int) $id)->all();
+            $products = $products->map(function ($product) use ($vatProductIds) {
                     $prices = $this->availableSellPrices($product);
                     $costPrices = $this->availableCostPrices($product);
 
@@ -61,6 +63,8 @@ class ProductController extends Controller
                         'price' => $product->sell_price,      // Giữ giá bán cho frontend cũ
                         'sell_price' => $product->sell_price, // 👈 BỔ SUNG RÕ RÀNG GIÁ BÁN
                         'warranty_days' => (int) $product->warranty_days,
+                        'has_vat' => in_array((int) $product->id, $vatProductIds, true),
+                        'tax_percent' => (float) ($product->tax_percent ?? 0),
                         'price_min' => $prices['min'],
                         'price_max' => $prices['max'],
                         'price_label' => $prices['label'],
@@ -150,8 +154,9 @@ class ProductController extends Controller
             ->orderByDesc('sold_count')
             ->orderByDesc('id')
             ->limit(100)
-            ->get()
-            ->map(function ($product) {
+            ->get();
+        $vatProductIds = StockImportItem::query()->whereIn('product_id', $products->pluck('id'))->where('has_vat', true)->distinct()->pluck('product_id')->map(fn ($id) => (int) $id)->all();
+        $products = $products->map(function ($product) use ($vatProductIds) {
                 $prices = $this->availableSellPrices($product);
                 $costPrices = $this->availableCostPrices($product);
 
@@ -164,6 +169,8 @@ class ProductController extends Controller
                     'price' => $product->sell_price,      // Giữ giá bán cho frontend cũ
                     'sell_price' => $product->sell_price, // 👈 BỔ SUNG RÕ RÀNG GIÁ BÁN
                     'warranty_days' => (int) $product->warranty_days,
+                    'has_vat' => in_array((int) $product->id, $vatProductIds, true),
+                    'tax_percent' => (float) ($product->tax_percent ?? 0),
                     'price_min' => $prices['min'],
                     'price_max' => $prices['max'],
                     'price_label' => $prices['label'],

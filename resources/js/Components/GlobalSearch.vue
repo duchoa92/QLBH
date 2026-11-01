@@ -116,7 +116,7 @@ onMounted(() => document.addEventListener('mousedown', closeIfOutside))
             <button v-else-if="query" type="button" class="absolute right-12 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100" aria-label="Xóa tìm kiếm" @click="clear">
                 <X class="h-3.5 w-3.5" />
             </button>
-            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-7 !w-7" @scanned="setScannedCode" />
+            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="setScannedCode" />
           </div>
         </div>
 

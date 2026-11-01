@@ -16,13 +16,13 @@ const emit = defineEmits(['select', 'create', 'remove'])
 </script>
 
 <template>
-    <div class="cart-tabs-scroll flex w-full items-center gap-1.5 overflow-x-auto pb-2">
+    <div class="cart-tabs-scroll flex w-full items-center gap-1.5 overflow-x-auto pb-0.5">
         <!-- Danh sách các tab đơn hàng -->
         <button
             v-for="(tab, index) in tabs"
             :key="tab.id || index"
             type="button"
-            class="group relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all shrink-0"
+            class="group relative flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all shrink-0"
             :class="[
                 activeTabId === tab.id
                     ? 'bg-blue-600 text-white shadow-sm'

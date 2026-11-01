@@ -1282,7 +1282,7 @@ const selectWorkflowStep = (status) => {
                 <div class="space-y-2">
                     <div class="relative w-full">
                         <input v-model="deviceSearchQuery" id="repair_unified_search" type="text" autocomplete="off" placeholder="Tra cứu khách hàng, tên máy, IMEI / Serial" class="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 pr-12 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-100" @keydown.enter.prevent="handleDeviceSearchEnter" @focus="deviceFocused = true; searchDeviceCatalog(deviceSearchQuery)" />
-                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-7 !w-7" @scanned="handleScannedImei" />
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="handleScannedImei" />
                     </div>
                             <div v-if="deviceFocused && deviceSearchQuery.trim().length >= 2" class="absolute left-0 right-0 top-full z-[200] mt-1 flex max-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-slate-900/5">
                                 <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
@@ -1380,7 +1380,7 @@ const selectWorkflowStep = (status) => {
                     <FloatingInput v-model="form.customer_name" label="Tên khách hàng *" placeholder-text="Khách lẻ" id="repair_customer_name" :error="form.errors.customer_name" required />
                     <FloatingInput v-model="form.customer_phone" label="Số điện thoại" id="repair_customer_phone" :error="form.errors.customer_phone" />
                     <FloatingInput v-model="form.contact_phone" label="SĐT liên hệ khác" id="repair_contact_phone" :error="form.errors.contact_phone" />
-                    <div class="relative"><FloatingInput v-model="form.identity_card" label="CCCD / CMND" id="repair_identity_card" :error="form.errors.identity_card" input-class="pr-12" /><CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 !h-8 !w-8" @read="applyScannedCustomerIdentity" @search="searchQuery = $event" /></div>
+                    <div class="relative"><FloatingInput v-model="form.identity_card" label="CCCD / CMND" id="repair_identity_card" :error="form.errors.identity_card" input-class="pr-12" /><CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 " @read="applyScannedCustomerIdentity" @search="searchQuery = $event" /></div>
                 </div>
             </section>
 

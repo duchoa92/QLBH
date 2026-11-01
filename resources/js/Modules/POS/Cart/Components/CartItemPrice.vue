@@ -60,7 +60,7 @@ const hasDiscount = computed(() =>
 
     <div class="text-right shrink-0">
         <div
-            class="font-semibold"
+            class="text-sm font-semibold leading-tight"
             :class="hasDiscount ? 'text-xs text-slate-400 line-through' : 'text-green-600'"
         >
             {{ $money(item.price) }}
@@ -68,14 +68,14 @@ const hasDiscount = computed(() =>
 
         <div
             v-if="hasDiscount"
-            class="text-base font-black text-green-700"
+            class="text-sm font-black leading-tight text-green-700"
         >
             {{ $money(lineTotal) }}
         </div>
 
         <div
             v-if="hasDiscount"
-            class="inline-flex items-center bg-red-100 text-red-700 text-[11px] px-2 py-1 rounded"
+            class="inline-flex items-center bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded"
         >
             -
             <span v-if="item.discount_type === 'percent'">{{ item.discount_value }}%</span>

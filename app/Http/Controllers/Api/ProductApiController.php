@@ -9,6 +9,7 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\ProductImei;
+use App\Models\StockImportItem;
 
 class ProductApiController extends Controller
 {
@@ -87,6 +88,10 @@ class ProductApiController extends Controller
             'name' => $product->name,
 
             'warranty_days' => (int) $product->warranty_days,
+
+            'has_vat' => StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->exists(),
+
+            'tax_percent' => (float) ($product->tax_percent ?? 0),
 
             'sku' => $product->sku,
 

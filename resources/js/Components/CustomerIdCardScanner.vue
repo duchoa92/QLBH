@@ -177,7 +177,7 @@ onBeforeUnmount(stop)
 </script>
 
 <template>
-    <button v-bind="$attrs" type="button" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Quét QR CCCD" aria-label="Quét QR CCCD" @click="start">
+    <button v-bind="$attrs" type="button" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100" title="Quét QR CCCD" aria-label="Quét QR CCCD" @click="start">
         <Camera class="h-4 w-4" />
     </button>
 
@@ -199,7 +199,7 @@ onBeforeUnmount(stop)
                     <p v-if="error" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
                     <p v-else class="text-center text-sm text-slate-600">{{ loading ? 'Đang mở camera…' : 'Đưa QR lại gần để chiếm phần lớn khung hình; giữ thẻ thẳng, đủ sáng và tránh lóa.' }}</p>
                     <div class="flex flex-wrap justify-center gap-2">
-                        <label class="relative inline-flex cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><ImagePlus class="h-4 w-4" />Chọn ảnh CCCD<input type="file" accept="image/*" class="absolute inset-0 cursor-pointer opacity-0" @change="scanImage" /></label>
+                        <label class="relative inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"><ImagePlus class="h-4 w-4" />Chọn ảnh CCCD<input type="file" accept="image/*" class="absolute inset-0 cursor-pointer opacity-0" @change="scanImage" /></label>
                         <button v-if="error" type="button" class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" @click="start">Quét lại</button>
                         <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="close">Đóng</button>
                     </div>

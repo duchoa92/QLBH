@@ -967,7 +967,7 @@ const confirm = () => {
                                 <X class="h-4 w-4" />
                             </button>
                         </div>
-                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { keyword = code; scanProduct() }" />
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => { keyword = code; scanProduct() }" />
 
                         <!-- Keep the results attached to the search field and above the import form. -->
                         <div

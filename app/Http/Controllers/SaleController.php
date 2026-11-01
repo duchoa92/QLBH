@@ -10,6 +10,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\User;
 use App\Models\CustomerDebt;
+use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -264,6 +265,13 @@ class SaleController extends Controller
             $paidAmount = round((float) $data['paid_amount'], 2);
             $subtotal = 0.0;
             $discount = 0.0;
+            $vatProductIds = StockImportItem::query()
+                ->whereIn('product_id', collect($data['items'])->pluck('product_id')->unique())
+                ->where('has_vat', true)
+                ->distinct()
+                ->pluck('product_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
             $newItems = [];
 
             foreach ($data['items'] as $row) {
@@ -400,6 +408,7 @@ class SaleController extends Controller
                     'warranty_note' => $item['warranty_note'],
                     'note' => $item['note'],
                     'discount_amount' => $item['lineDiscount'],
+                    'has_vat' => in_array((int) $item['product']->id, $vatProductIds, true),
                     'subtotal' => $item['lineTotal'] - $item['lineDiscount'],
                 ]);
                 foreach ($item['gifts'] as $gift) {
@@ -416,7 +425,7 @@ class SaleController extends Controller
             }
             $imeiProductIds->unique()->each(fn ($id) => app(ImeiStockSynchronizer::class)->sync((int) $id));
 
-            $newTotal = max(0, round($subtotal - $discount + (float) $sale->tax, 2));
+            $newTotal = max(0, round($subtotal - $discount - (float) $sale->invoice_discount + (float) $sale->tax + (float) $sale->extra_fee, 2));
             $newDebt = max(0, $newTotal - $paidAmount);
             $newCustomerId = $data['customer_id'] ?? null;
             if (!$newCustomerId && $paidAmount < $newTotal) {

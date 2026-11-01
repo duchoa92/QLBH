@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ClipboardList, PackageSearch, ShoppingCart, X, Store } from 'lucide-vue-next'
+import OfflineStatus from '@/Components/OfflineStatus.vue'
 
 const emit = defineEmits(['close', 'manage-shift', 'show-shift-history'])
 const props = defineProps({
@@ -94,7 +95,7 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
   <div class="fixed inset-0 z-40 flex flex-col overflow-hidden bg-slate-100">
 
     <!-- Thanh trên cùng: tiêu đề + nút đóng -->
-    <header class="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:justify-between sm:px-3">
+    <header class="relative flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:justify-between sm:px-3">
       <div class="flex shrink-0 items-center gap-2 text-sm font-extrabold text-slate-800">
         <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
           <Store class="h-4 w-4" />
@@ -112,14 +113,17 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
         <span class="hidden sm:inline">Lịch sử kiểm kê</span>
       </button>
 
-      <button
-        type="button"
-        title="Đóng POS (dữ liệu đang làm được lưu lại)"
-        class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-rose-100 hover:bg-rose-50 hover:text-rose-600 active:scale-90"
-        @click="emit('close')"
-      >
-        <X class="h-5 w-5" />
-      </button>
+      <div class="relative ml-auto flex shrink-0 items-center gap-2 pr-10 sm:static sm:pr-0">
+        <OfflineStatus />
+        <button
+          type="button"
+          title="Đóng POS (dữ liệu đang làm được lưu lại)"
+          class="absolute right-0 top-1/2 flex h-8 w-8 -translate-y-1/2 shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-rose-100 hover:bg-rose-50 hover:text-rose-600 active:scale-90 sm:static sm:translate-y-0"
+          @click="emit('close')"
+        >
+          <X class="h-5 w-5" />
+        </button>
+      </div>
     </header>
 
     <!-- Nội dung POS -->

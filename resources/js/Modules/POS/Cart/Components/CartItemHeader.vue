@@ -2,11 +2,13 @@
 
 import {
     Trash2,
-    PenSquare,
+    MessageSquareText,
     Gift,
-    ShieldCheck,
+    BadgePercent,
+    BadgeCheck,
     Cpu,
     Layers,
+    Receipt,
 } from 'lucide-vue-next'
 
 import { computed } from 'vue'
@@ -42,107 +44,18 @@ const emit = defineEmits([
 
 <template>
 
-    <div class="flex gap-3">
-
-        <div
-            class="
-                w-12
-                h-12
-                rounded-lg
-                border
-                flex
-                items-center
-                justify-center
-                shrink-0
-                bg-gray-50
-                overflow-hidden
-            "
-        >
-
-            <img
-                v-if="item.image_url"
-                :src="item.image_url"
-                class="w-full h-full object-cover"
-            >
-
-        </div>
-
-        <div
-            class="
-                flex-1
-                min-w-0
-                flex
-                flex-col
-                justify-center
-            "
-        >
-
-            <div
-                class="
-                    flex
-                    justify-between
-                    items-center
-                "
-            >
-
-                <div
-                    class="
-                        font-semibold
-                        text-sm
-                        truncate
-                    "
-                >
-                    {{ item.name }}
-                </div>
-
-                <div class="flex shrink-0 items-center gap-0">
-                    <button type="button" @click="emit('edit-note')" class="relative flex h-8 w-8 items-center justify-center rounded-lg transition" :class="noteCount ? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400 hover:bg-blue-50 hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
-                        <PenSquare class="h-4 w-4" />
-                        <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
-                    </button>
-                    <button type="button" @click="emit('edit-promotion')" class="relative flex h-8 w-8 items-center justify-center rounded-lg transition" :class="giftCount || Number(item.discount_value || 0) ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-amber-50 hover:text-amber-600'" title="Quà tặng và giảm giá" aria-label="Quà tặng và giảm giá">
-                        <Gift class="h-4 w-4" />
-                        <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
-                    </button>
-                    <button type="button" @click="emit('edit-warranty')" class="relative flex h-8 w-8 items-center justify-center rounded-lg transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-emerald-50 hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
-                        <ShieldCheck class="h-4 w-4" />
-                        <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
-                    </button>
-
-                    <button
-                        v-if="showRemove"
-                        type="button"
-                        @click="
-                            emit(
-                                'remove'
-                            )
-                        "
-                        class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
-                        title="Xóa sản phẩm"
-                        aria-label="Xóa sản phẩm khỏi giỏ hàng"
-                    >
-                        <Trash2
-                            class="w-4 h-4"
-                        />
-                    </button>
-
-                </div>
-
+    <div class="flex min-w-0 items-start gap-2">
+        <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-center gap-1.5">
+                <div class="truncate text-xs font-semibold leading-tight text-slate-900" :title="item.name">{{ item.name }}</div>
+                <span v-if="item.has_vat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Sản phẩm có VAT theo thông tin nhập hàng"><Receipt class="h-3 w-3" />VAT</span>
             </div>
-
-            <div v-if="showUnit"
-                class="
-                    text-xs
-                    text-gray-500
-                "
-            >
-                {{ item.unit_name ?? 'Cái' }}
-            </div>
+            <div v-if="showUnit" class="mt-0.5 text-[11px] leading-tight text-slate-500">{{ item.unit_name ?? 'Cái' }}</div>
 
             <button
                 v-if="item.is_imei || item.imei"
                 type="button"
-                class="inline-flex w-fit max-w-full items-center gap-1 text-left text-[11px] font-medium"
+                class="mt-0.5 flex w-fit max-w-full items-center gap-1 text-left text-[11px] font-semibold leading-tight"
                 :class="clickableImei ? 'cursor-pointer rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-violet-700 transition hover:border-violet-300 hover:bg-violet-100' : 'cursor-default text-blue-600'"
                 :title="clickableImei ? 'Nhấn để đổi IMEI' : undefined"
                 @click="clickableImei && emit('select-imei')"
@@ -153,16 +66,33 @@ const emit = defineEmits([
             <button
                 v-if="item.variant_label || item.variant_name"
                 type="button"
-                class="inline-flex w-fit max-w-full items-center gap-1 text-left text-[11px] font-medium"
-                :class="clickableVariant ? 'cursor-pointer rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-blue-700 transition hover:border-blue-300 hover:bg-blue-100' : 'cursor-default text-blue-600'"
+                class="mt-0.5 flex w-fit max-w-full items-center gap-1 text-left text-[10px] font-medium leading-tight"
+                :class="clickableVariant ? 'cursor-pointer rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-blue-700 transition hover:border-blue-300 hover:bg-blue-100' : 'cursor-default text-slate-400'"
                 :title="clickableVariant ? 'Nhấn để đổi biến thể' : undefined"
                 @click="clickableVariant && emit('select-variant')"
             >
                 <span class="truncate">Phiên bản: {{ item.variant_label || item.variant_name }}</span><Layers v-if="clickableVariant" class="h-3 w-3 shrink-0" aria-hidden="true" />
             </button>
-
         </div>
 
+        <div class="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50 p-0.5">
+            <button type="button" @click="emit('edit-note')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-blue-600" :class="noteCount ? 'text-blue-600' : ''" title="Ghi chú" aria-label="Ghi chú">
+                <MessageSquareText class="h-4 w-4" />
+                <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
+            </button>
+            <button type="button" @click="emit('edit-promotion')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-amber-600" :class="giftCount || Number(item.discount_value || 0) ? 'text-amber-600' : ''" title="Quà tặng và giảm giá" aria-label="Quà tặng và giảm giá">
+                <BadgePercent v-if="Number(item.discount_value || 0) > 0 && !(item.gifts || []).length" class="h-4 w-4" />
+                <Gift v-else class="h-4 w-4" />
+                <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
+            </button>
+            <button type="button" @click="emit('edit-warranty')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-emerald-600" :class="warrantyCount ? 'text-emerald-600' : ''" title="Bảo hành" aria-label="Bảo hành">
+                <BadgeCheck class="h-4 w-4" />
+                <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
+            </button>
+            <button v-if="showRemove" type="button" @click="emit('remove')" class="flex h-7 w-7 items-center justify-center rounded-md bg-rose-50 text-rose-500 transition hover:bg-rose-100 hover:text-rose-700" title="Xóa sản phẩm" aria-label="Xóa sản phẩm khỏi giỏ hàng">
+                <Trash2 class="h-4 w-4" />
+            </button>
+        </div>
     </div>
 
 </template>

@@ -497,8 +497,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <button v-bind="$attrs" type="button" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Quét mã bằng camera" aria-label="Quét mã bằng camera" @click="start">
-        <Camera class="h-4 w-4" />
+    <button v-bind="$attrs" type="button" class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Quét mã bằng camera" aria-label="Quét mã bằng camera" @click="start">
+        <Camera class="h-3.5 w-3.5" />
     </button>
     <Teleport to="body">
         <div v-if="open" class="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/70 p-3 sm:p-4" @click.self="close">

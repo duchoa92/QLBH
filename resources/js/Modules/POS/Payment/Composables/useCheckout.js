@@ -10,6 +10,12 @@ export function useCheckout(
     selectedCustomer,
 
     clearCart,
+
+    invoiceDiscount = { value: 0 },
+
+    extraFee = { value: 0 },
+
+    invoiceDiscountType = { value: 'amount' },
 ) {
 
 
@@ -128,6 +134,12 @@ export function useCheckout(
                     customer_id:
                         selectedCustomer.value?.id
                         || null,
+
+                    invoice_discount: Number(invoiceDiscount.value || 0),
+
+                    invoice_discount_type: invoiceDiscountType.value === 'percent' ? 'percent' : 'amount',
+
+                    extra_fee: Number(extraFee.value || 0),
 
                     paid_amount:
                         paymentData.paid_amount,

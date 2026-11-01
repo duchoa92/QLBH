@@ -35,6 +35,7 @@ class SaleItem extends Model
         'unit_cost',
 
         'subtotal',
+        'has_vat',
         
         'note',
 
@@ -58,6 +59,7 @@ class SaleItem extends Model
         'unit_price' => 'decimal:2',
         'unit_cost' => 'decimal:2',
         'subtotal' => 'decimal:2',
+        'has_vat' => 'boolean',
         'discount_value' => 'decimal:2',
         'warranty_days' => 'integer',
         'warranty_value' => 'integer',

@@ -22,6 +22,8 @@ const props = defineProps({
 
 const emit = defineEmits([
     'checkout',
+    'update:invoice-discount',
+    'update:extra-fee',
 ])
 </script>
 
@@ -34,7 +36,7 @@ const emit = defineEmits([
         >
             <Wallet class="w-4 h-4" />
             <span>Thanh toán</span>
-            <span class="rounded-md bg-white/15 px-2 py-1 text-xs font-extrabold normal-case tracking-normal">{{ $money(grandTotal) }}</span>
+            <span class="rounded-lg border border-white/30 bg-white/15 px-3 py-1 text-sm font-black normal-case tracking-normal text-white shadow-inner sm:text-base">{{ $money(grandTotal) }}</span>
         </button>
     </div>
 </template>

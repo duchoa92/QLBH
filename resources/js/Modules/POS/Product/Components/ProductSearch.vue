@@ -6,7 +6,6 @@ import { toast } from 'vue-sonner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
-import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { RotateCw, Search, PackageX, Loader2 } from 'lucide-vue-next'
 import { formatCurrency } from '@/utils/format'
 
@@ -286,14 +285,14 @@ const categoryOptions = computed(() => [
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col font-sans antialiased">
+    <div class="flex min-h-0 flex-1 flex-col gap-2 font-sans antialiased sm:gap-3">
         
         <!-- THANH LỌC & TÌM KIẾM SẢN PHẨM -->
-        <div class="mb-2 sm:mb-3">
-            <div class="grid grid-cols-1 items-center gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_clamp(150px,20vw,220px)_40px]">
+        <div class="mb-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm sm:mb-3 sm:p-3">
+            <div class="flex min-w-0 items-center gap-2">
                 
                 <!-- Ô TÌM KIẾM -->
-                <div class="relative min-w-0">
+                <div class="relative min-w-0 flex-1">
                     <FloatingInput
                         v-model="keyword"
                         @keyup.enter="scanImei"
@@ -301,35 +300,38 @@ const categoryOptions = computed(() => [
                         label="Tìm tên, SKU, barcode hoặc IMEI"
                         input-class="pr-12"
                     />
-                    <BarcodeCameraButton class="absolute right-2 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="onCameraScan" />
+                    <BarcodeCameraButton class="absolute right-2 top-1/2 z-10 -translate-y-1/2 " @scanned="onCameraScan" />
                 </div>
 
-                <!-- LỌC DANH MỤC & NÚT REFRESH -->
-                <div class="flex min-w-0 items-center gap-2 min-[480px]:contents">
-                    <div class="min-w-0 flex-1">
-                        <FloatingSelect
-                            v-model="categoryId"
-                            label="Danh mục"
-                            :show-placeholder="false"
-                            :options="categoryOptions"
-                        />
-                    </div>
+                <button
+                    type="button"
+                    @click="refreshProducts"
+                    title="Tải lại danh sách"
+                    class="h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 active:scale-95 transition-all"
+                >
+                    <RotateCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
+                </button>
+            </div>
 
-                    <button
-                        type="button"
-                        @click="refreshProducts"
-                        title="Tải lại danh sách"
-                        class="h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 active:scale-95 transition-all"
-                    >
-                        <RotateCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
-                    </button>
-                </div>
-
+            <!-- LỌC DANH MỤC DẠNG CHIP -->
+            <div class="pos-category-scroll mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" aria-label="Lọc theo danh mục">
+                <button
+                    v-for="category in categoryOptions"
+                    :key="category.value || 'all'"
+                    type="button"
+                    class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors"
+                    :class="String(categoryId || '') === String(category.value || '')
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'"
+                    @click="categoryId = category.value"
+                >
+                    {{ category.label }}
+                </button>
             </div>
         </div>
 
         <!-- DANH SÁCH SẢN PHẨM -->
-        <div class="min-h-0 flex-1 overflow-auto pr-1 custom-scrollbar">
+        <div class="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-2 pr-1 custom-scrollbar sm:p-3">
             
             <!-- LOADING -->
             <div
@@ -343,23 +345,23 @@ const categoryOptions = computed(() => [
             <!-- CARD SẢN PHẨM -->
             <div
                 v-else-if="products.length"
-                class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4 2xl:grid-cols-5"
+                class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4 2xl:grid-cols-5"
             >
                 <button
                     v-for="product in products"
                     :key="product.id"
                     type="button"
                     :disabled="getDisplayStock(product) <= 0 && !canSellWithoutStock(product)"
-                    class="group relative text-left overflow-hidden rounded-2xl border transition-all duration-200 flex flex-col justify-between"
+                    class="group relative text-left overflow-hidden rounded-xl border transition-all duration-200 flex flex-col justify-between"
                     :class="[
                         getDisplayStock(product) <= 0 && !canSellWithoutStock(product)
                             ? 'opacity-60 border-slate-200 bg-slate-100/50 cursor-not-allowed'
-                            : 'border-slate-200/80 bg-white shadow-sm hover:border-blue-400 hover:shadow-md active:scale-[0.98]'
+                            : 'border-slate-200 bg-white shadow-sm hover:border-blue-400 hover:shadow-md active:scale-[0.98]'
                     ]"
                     @click="selectProduct(product, $event)"
                 >
                     <!-- KHU VỰC ẢNH -->
-                    <div class="relative h-24 w-full shrink-0 overflow-hidden bg-slate-50 sm:h-36">
+                    <div class="relative h-24 w-full shrink-0 overflow-hidden bg-slate-100 sm:h-32">
                         <img
                             v-if="product.image_url"
                             :src="product.image_url"
@@ -388,7 +390,7 @@ const categoryOptions = computed(() => [
                         <!-- BADGE GIÁ -->
                         <div
                             v-else
-                            class="absolute bottom-2 left-2 touch-none select-none rounded-lg bg-rose-600/90 px-2.5 py-1 text-xs font-bold text-white shadow-sm backdrop-blur-sm"
+                            class="absolute bottom-2 left-2 touch-none select-none rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm"
                             :class="isShowingCostPrice(product) ? 'bg-amber-600/95' : ''"
                             :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
                             @pointerdown="startShowingCostPrice(product, $event)"
@@ -418,7 +420,7 @@ const categoryOptions = computed(() => [
                     </div>
 
                     <!-- THÔNG TIN TÊN & TỒN KHO -->
-                    <div class="flex flex-1 flex-col justify-between bg-white p-2 sm:p-3">
+                    <div class="flex flex-1 flex-col justify-between bg-white p-2.5 sm:p-3">
                         <div
                             class="line-clamp-2 min-h-[32px] text-[11px] font-semibold leading-snug transition-colors sm:min-h-[36px] sm:text-xs"
                             :class="getDisplayStock(product) > 0 ? 'text-slate-800 group-hover:text-blue-600' : 'text-slate-400'"
@@ -459,6 +461,8 @@ const categoryOptions = computed(() => [
 </template>
 
 <style scoped>
+.pos-category-scroll { scrollbar-width: none; }
+.pos-category-scroll::-webkit-scrollbar { display: none; }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 </style>

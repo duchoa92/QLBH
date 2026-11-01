@@ -170,7 +170,19 @@ const printInvoice = () => {
             </div>
 
             <div class="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div class="flex justify-between font-bold text-slate-900">
+                <div class="flex justify-between text-slate-600">
+                    <span>Tạm tính</span>
+                    <span>{{ formatMoney(sale.subtotal) }}</span>
+                </div>
+                <div v-if="Number(sale.discount || 0) > 0" class="flex justify-between text-rose-600">
+                    <span>Chiết khấu sản phẩm</span><span>-{{ formatMoney(sale.discount) }}</span>
+                </div>
+                <div v-if="Number(sale.invoice_discount || 0) > 0" class="flex justify-between text-rose-600">
+                    <span>Chiết khấu đơn</span><span>-{{ formatMoney(sale.invoice_discount) }}</span>
+                </div>
+                <div v-if="Number(sale.tax || 0) > 0" class="flex justify-between text-emerald-700"><span>VAT</span><span>{{ formatMoney(sale.tax) }}</span></div>
+                <div v-if="Number(sale.extra_fee || 0) > 0" class="flex justify-between text-slate-600"><span>Phí phụ thu</span><span>{{ formatMoney(sale.extra_fee) }}</span></div>
+                <div class="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
                     <span>Tổng thanh toán</span>
                     <span>{{ formatMoney(sale.grand_total) }}</span>
                 </div>

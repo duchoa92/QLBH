@@ -43,6 +43,9 @@ const makeDefaultTab = () => ({
     name: 'Đơn 1',
     cart: [],
     customer: null,
+    invoice_discount: 0,
+    invoice_discount_type: 'amount',
+    extra_fee: 0,
 })
 
 // Dữ liệu cũ trong localStorage có thể hỏng/thiếu -> chuẩn hoá để POS luôn mở được
@@ -59,6 +62,9 @@ const normalizeTabs = (raw) => {
             name: tab.name || tab.default_name || 'Đơn',
             cart: Array.isArray(tab.cart) ? tab.cart : [],
             customer: tab.customer ?? null,
+            invoice_discount: Number(tab.invoice_discount || 0),
+            invoice_discount_type: tab.invoice_discount_type === 'percent' ? 'percent' : 'amount',
+            extra_fee: Number(tab.extra_fee || 0),
         }))
 
     return tabs.length ? tabs : [makeDefaultTab()]
@@ -125,6 +131,19 @@ export function useCart() {
 
             currentTab.value.cart = value
         },
+    })
+
+    const invoiceDiscount = computed({
+        get: () => Number(currentTab.value.invoice_discount || 0),
+        set: value => { currentTab.value.invoice_discount = Math.max(0, Number(value || 0)) },
+    })
+    const invoiceDiscountType = computed({
+        get: () => currentTab.value.invoice_discount_type === 'percent' ? 'percent' : 'amount',
+        set: value => { currentTab.value.invoice_discount_type = value === 'percent' ? 'percent' : 'amount' },
+    })
+    const extraFee = computed({
+        get: () => Number(currentTab.value.extra_fee || 0),
+        set: value => { currentTab.value.extra_fee = Math.max(0, Number(value || 0)) },
     })
 
 
@@ -213,7 +232,7 @@ export function useCart() {
 
         grandTotal,
 
-    } = useCartTotals(cart)
+    } = useCartTotals(cart, invoiceDiscount, extraFee, invoiceDiscountType)
 
     /*
     |--------------------------------------------------------------------------
@@ -499,6 +518,9 @@ export function useCart() {
                 name:
                     product.name,
 
+                has_vat: Boolean(product.has_vat),
+                tax_percent: Number(product.tax_percent || 0),
+
                 warranty_days:
                     Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
@@ -583,6 +605,9 @@ export function useCart() {
                 name:
                     product.name,
 
+                has_vat: Boolean(product.has_vat),
+                tax_percent: Number(product.tax_percent || 0),
+
                 warranty_days:
                     Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
@@ -659,6 +684,9 @@ export function useCart() {
 
             name:
                 product.name,
+
+            has_vat: Boolean(product.has_vat),
+            tax_percent: Number(product.tax_percent || 0),
 
             warranty_days:
                 Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
@@ -769,6 +797,9 @@ export function useCart() {
 
         currentTab.value.cart = []
         currentTab.value.customer = null
+        invoiceDiscount.value = 0
+        invoiceDiscountType.value = 'amount'
+        extraFee.value = 0
     }
 
 
@@ -804,6 +835,12 @@ export function useCart() {
         vat,
 
         grandTotal,
+
+        invoiceDiscount,
+
+        invoiceDiscountType,
+
+        extraFee,
 
         addToCart,
 

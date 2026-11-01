@@ -73,6 +73,9 @@ class PosController extends Controller
             'pay_old_debt' => ['required', 'boolean'],
             'invoice_code' => ['required', 'string', 'regex:/^INV-[0-9]{14}$/'],
             'expected_amount' => ['required', 'integer', 'min:1', 'max:9999999999999'],
+            'invoice_discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'invoice_discount_type' => ['nullable', 'in:amount,percent'],
+            'extra_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'total_amount' => ['required', 'integer', 'min:1', 'max:9999999999999'],
             'cash_received_amount' => ['nullable', 'integer', 'min:0', 'max:9999999999999'],
             'bank_account' => ['required', 'string', 'max:50'],
@@ -108,7 +111,16 @@ class PosController extends Controller
                 ? $line * (float) ($item['discount_value'] ?? 0) / 100
                 : (($item['discount_type'] ?? null) === 'amount' ? (float) ($item['discount_value'] ?? 0) : 0);
         });
-        $checkoutTotal = (int) round(max(0, $subtotal - $discount));
+        $invoiceDiscountBase = max(0, $subtotal - $discount);
+        $invoiceDiscountType = ($data['invoice_discount_type'] ?? 'amount') === 'percent' ? 'percent' : 'amount';
+        $invoiceDiscountValue = max(0, (float) ($data['invoice_discount'] ?? 0));
+        abort_if($invoiceDiscountType === 'percent' && $invoiceDiscountValue > 100, 422, 'Chiết khấu phần trăm không được vượt quá 100%.');
+        $invoiceDiscount = $invoiceDiscountType === 'percent'
+            ? $invoiceDiscountBase * $invoiceDiscountValue / 100
+            : min($invoiceDiscountBase, $invoiceDiscountValue);
+        $tax = 0;
+        $extraFee = max(0, (float) ($data['extra_fee'] ?? 0));
+        $checkoutTotal = (int) round(max(0, $subtotal - $discount - $invoiceDiscount + $tax + $extraFee));
         if ($data['pay_old_debt']) {
             $customer = Customer::query()->findOrFail($data['customer_id'] ?? null);
             $checkoutTotal += (int) round((float) $customer->debt_balance);
@@ -131,6 +143,9 @@ class PosController extends Controller
                 'customer_id' => $data['customer_id'] ?? null,
                 'pay_old_debt' => $data['pay_old_debt'],
                 'cash_received_amount' => $cashReceivedAmount,
+                'invoice_discount' => $invoiceDiscount,
+                'invoice_discount_type' => $invoiceDiscountType,
+                'extra_fee' => $extraFee,
             ],
             'status' => 'waiting',
             'expires_at' => now()->addMinutes(15),
@@ -284,6 +299,9 @@ class PosController extends Controller
             'cash_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'paid_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'invoice_discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'invoice_discount_type' => ['nullable', 'in:amount,percent'],
+            'extra_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'invoice_code' => ['nullable', 'string', 'regex:/^INV-[0-9]{14}$/', 'unique:sales,code'],
 
             'items.*.discount_type' => 'nullable|string',
@@ -326,6 +344,13 @@ class PosController extends Controller
             'payment_method.required' => 'Vui lòng chọn phương thức thanh toán.',
         ]);
 
+        abort_if(
+            $request->input('invoice_discount_type') === 'percent'
+                && (float) $request->input('invoice_discount', 0) > 100,
+            422,
+            'Chiết khấu phần trăm không được vượt quá 100%.'
+        );
+
         if ($request->payment_method === 'mixed') {
             $splitTotal = (float) ($request->cash_received_amount ?? 0) + (float) ($request->bank_received_amount ?? 0);
             abort_unless(abs($splitTotal - (float) ($request->paid_amount ?? 0)) < 0.01, 422, 'Tổng tiền mặt và chuyển khoản không khớp số tiền đã nhận.');
@@ -343,6 +368,9 @@ class PosController extends Controller
                 invoiceCode: $request->input('invoice_code'),
                 cashReceivedAmount: $request->input('cash_received_amount') !== null ? (float) $request->input('cash_received_amount') : null,
                 bankReceivedAmount: $request->input('bank_received_amount') !== null ? (float) $request->input('bank_received_amount') : null,
+                invoiceDiscount: (float) ($request->input('invoice_discount') ?? 0),
+                invoiceDiscountType: ($request->input('invoice_discount_type') ?? 'amount') === 'percent' ? 'percent' : 'amount',
+                extraFee: (float) ($request->input('extra_fee') ?? 0),
             );
 
             $sale->update([

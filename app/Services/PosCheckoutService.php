@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Customer;
 use App\Models\CustomerDebt;
 use App\Models\SaleItemGift;
+use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
 
 class PosCheckoutService
@@ -26,6 +27,9 @@ class PosCheckoutService
         ?string $invoiceCode = null,
         ?float $cashReceivedAmount = null,
         ?float $bankReceivedAmount = null,
+        float $invoiceDiscount = 0,
+        string $invoiceDiscountType = 'amount',
+        float $extraFee = 0,
     ): Sale {
 
         return DB::transaction(function () use (
@@ -38,6 +42,9 @@ class PosCheckoutService
             $invoiceCode,
             $cashReceivedAmount,
             $bankReceivedAmount,
+            $invoiceDiscount,
+            $invoiceDiscountType,
+            $extraFee,
         ): Sale {
 
             /*
@@ -85,7 +92,20 @@ class PosCheckoutService
                     return 0;
                 });
 
-            $grandTotal = $subtotal - $discount;
+            $invoiceDiscountBase = max(0, $subtotal - $discount);
+            $invoiceDiscount = $invoiceDiscountType === 'percent'
+                ? $invoiceDiscountBase * min(100, max(0, $invoiceDiscount)) / 100
+                : min($invoiceDiscountBase, max(0, $invoiceDiscount));
+            $extraFee = max(0, $extraFee);
+            $tax = 0;
+            $vatProductIds = StockImportItem::query()
+                ->whereIn('product_id', collect($items)->pluck('id')->unique())
+                ->where('has_vat', true)
+                ->distinct()
+                ->pluck('product_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $grandTotal = max(0, $subtotal - $discount - $invoiceDiscount + $tax + $extraFee);
 
             // Nếu không có khách hàng và tiền thanh toán chưa đủ thì báo lỗi
             if (!$customerId && $paidAmount < $grandTotal) {
@@ -107,6 +127,9 @@ class PosCheckoutService
                 'user_id' => $userId,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'invoice_discount' => $invoiceDiscount,
+                'tax' => $tax,
+                'extra_fee' => $extraFee,
                 'grand_total' => $grandTotal,
                 'paid_amount' => $paidAmount,
                 'cash_received_amount' => $cashReceivedAmount,
@@ -309,6 +332,8 @@ class PosCheckoutService
 
                     'discount_amount' =>
                         $lineDiscount,
+
+                    'has_vat' => in_array((int) $product->id, $vatProductIds, true),
 
                     'subtotal' =>
                         $lineTotal - $lineDiscount,

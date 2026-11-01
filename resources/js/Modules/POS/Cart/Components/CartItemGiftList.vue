@@ -36,14 +36,14 @@ const variantLabel = (variant) => {
 </script>
 
 <template>
-    <section class="w-full rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+    <section class="w-full">
         <div class="mb-2 flex items-center justify-between gap-2">
             <span class="text-xs font-bold text-amber-950">Quà tặng đã chọn</span>
             <span v-if="totalQuantity" class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-800">{{ totalQuantity }} món</span>
         </div>
 
         <div v-if="gifts.length" class="space-y-2">
-            <div v-for="gift in gifts" :key="gift.key || gift.id" class="rounded-lg border border-amber-100 bg-white p-2.5 shadow-sm">
+            <div v-for="gift in gifts" :key="gift.key || gift.id" class="rounded-lg border border-slate-200 bg-white p-2.5">
                 <div class="flex min-w-0 items-center gap-2">
                     <div class="min-w-0 flex-1">
                         <p class="break-words text-xs font-semibold leading-5 text-slate-800">{{ gift.name }}</p>
@@ -65,6 +65,6 @@ const variantLabel = (variant) => {
                 </select>
             </div>
         </div>
-        <p v-else class="rounded-lg border border-dashed border-amber-200 bg-white/70 px-3 py-3 text-center text-xs font-medium text-amber-800">Chưa chọn quà nào</p>
+        <p v-else class="rounded-lg border border-dashed border-amber-300 px-3 py-4 text-center text-xs font-medium text-amber-800">Chưa chọn quà nào</p>
     </section>
 </template>

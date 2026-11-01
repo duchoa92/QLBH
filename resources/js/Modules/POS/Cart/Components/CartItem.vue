@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { Gift, MessageSquareText, ShieldCheck, X } from 'lucide-vue-next'
+import { BadgeCheck, Gift, MessageSquareText, X } from 'lucide-vue-next'
 import CartItemHeader from './CartItemHeader.vue'
 import CartItemQuantity from './CartItemQuantity.vue'
 import CartItemGiftList from './CartItemGiftList.vue'
@@ -68,6 +68,11 @@ const warrantyUnit = computed({
         draft.value.customer_warranty_days = currentDays || null
     },
 })
+
+const setQuickWarranty = months => {
+    warrantyUnit.value = 'month'
+    warrantyValue.value = months
+}
 
 const hasWarrantyDetails = computed(() => {
     return Boolean(
@@ -156,7 +161,7 @@ const editorTitle = computed(() => ({
 </script>
 
 <template>
-    <div :class="editorOnly ? 'min-w-0' : 'mb-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm'">
+    <div :class="editorOnly ? 'min-w-0' : 'mb-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm transition-shadow hover:shadow-md'">
         <CartItemHeader
             :item="item"
             :show-remove="showRemove"
@@ -171,27 +176,27 @@ const editorTitle = computed(() => ({
             @remove="emit('remove', item)"
         />
 
-        <div v-if="!editorOnly" class="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+        <div v-if="!editorOnly" class="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-1.5">
             <CartItemQuantity :item="item" @remove="emit('remove', item)" />
             <CartItemPrice :item="item" />
         </div>
 
         <Teleport to="body">
-        <div v-if="activeEditor" class="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm sm:p-4" style="padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom));">
-            <section role="dialog" aria-modal="true" :aria-label="editorTitle" class="flex max-h-[calc(100dvh-24px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" style="max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);">
-                <header class="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
+        <div v-if="activeEditor" class="fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4" style="padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom));">
+            <section role="dialog" aria-modal="true" :aria-label="editorTitle" class="relative flex max-h-[calc(100dvh-24px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" style="max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);">
+                <header class="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3 pr-12 sm:px-5 sm:pr-5">
                     <div class="flex min-w-0 items-center gap-2.5">
                         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" :class="activeEditor === 'note' ? 'bg-blue-50 text-blue-600' : activeEditor === 'promotion' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'">
                             <MessageSquareText v-if="activeEditor === 'note'" class="h-5 w-5" />
                             <Gift v-else-if="activeEditor === 'promotion'" class="h-5 w-5" />
-                            <ShieldCheck v-else class="h-5 w-5" />
+                            <BadgeCheck v-else class="h-5 w-5" />
                         </span>
                         <div class="min-w-0">
                             <h3 class="text-sm font-bold text-slate-900">{{ editorTitle }}</h3>
                             <p class="truncate text-xs text-slate-500">{{ item.name }}</p>
                         </div>
                     </div>
-                    <button type="button" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Đóng" @click="closeEditor"><X class="h-5 w-5" /></button>
+                    <button type="button" class="absolute right-2 top-2 z-10 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 sm:static sm:ml-2" aria-label="Đóng" @click="closeEditor"><X class="h-5 w-5" /></button>
                 </header>
 
                 <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
@@ -212,6 +217,10 @@ const editorTitle = computed(() => ({
                             <p class="mt-2 text-[11px] font-medium text-emerald-800/80">{{ draft.customer_warranty_days ? `Tương đương ${draft.customer_warranty_days} ngày bảo hành.` : 'Nhập số lượng và chọn đơn vị áp dụng.' }}</p>
                         </div>
 
+                        <div class="grid grid-cols-4 gap-1.5">
+                            <button v-for="months in [1, 6, 12, 24]" :key="months" type="button" class="rounded-lg border px-2 py-2 text-xs font-semibold transition" :class="warrantyUnit === 'month' && Number(warrantyValue) === months ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-200 hover:bg-emerald-50'" @click="setQuickWarranty(months)">{{ months }} Tháng</button>
+                        </div>
+
                         <div>
                             <label for="pos-warranty-note" class="mb-1.5 block text-xs font-bold text-slate-700">Ghi chú bảo hành</label>
                             <textarea id="pos-warranty-note" v-model="draft.customer_warranty_note" rows="3" maxlength="1000" placeholder="Ví dụ: Không áp dụng với rơi vỡ, vào nước..." class="w-full resize-none rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
@@ -225,7 +234,7 @@ const editorTitle = computed(() => ({
                     </div>
                 </div>
 
-                <footer class="flex gap-2 border-t border-slate-100 p-3 sm:px-5">
+                <footer class="flex gap-2 border-t border-slate-200 bg-slate-50/70 p-3 sm:px-5">
                     <button v-if="activeEditor === 'warranty'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasWarrantyDetails" @click="clearWarranty"><X class="mr-1 inline h-4 w-4" />Xóa bảo hành</button>
                     <button v-else-if="activeEditor === 'note'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasNote" @click="clearNote"><X class="mr-1 inline h-4 w-4" />Xóa ghi chú</button>
                     <button v-else-if="activeEditor === 'promotion'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasPromotionDetails" @click="clearPromotion"><X class="mr-1 inline h-4 w-4" />Xóa</button>

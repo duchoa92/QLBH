@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Models\StockImportItem;
 use Illuminate\Http\Request;
 
 class PosScanController extends Controller
@@ -64,6 +65,8 @@ class PosScanController extends Controller
                     'id' => $imei->product->id,
                     'name' => $imei->product->name,
                     'warranty_days' => (int) $imei->product->warranty_days,
+                    'has_vat' => StockImportItem::query()->where('product_id', $imei->product->id)->where('has_vat', true)->exists(),
+                    'tax_percent' => (float) ($imei->product->tax_percent ?? 0),
                     'sell_price' => $effectiveSellPrice,
                     'price' => $effectiveSellPrice,
                     'image_url' => $imei->product->image_url,
@@ -122,6 +125,8 @@ class PosScanController extends Controller
                     'id' => $product->id,
                     'name' => $product->name,
                     'warranty_days' => (int) $product->warranty_days,
+                    'has_vat' => StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->exists(),
+                    'tax_percent' => (float) ($product->tax_percent ?? 0),
                     'sell_price' => $product->sell_price,
                     'price' => $product->sell_price,
                     'unit_id' => $product->unit_id,

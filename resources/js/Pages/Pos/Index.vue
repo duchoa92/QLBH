@@ -31,7 +31,14 @@ const {
     cart,
     selectedCustomer,
     selectedCartIndex,
+    totalQuantity,
+    subTotal,
+    discount,
+    vat,
     grandTotal,
+    invoiceDiscount,
+    invoiceDiscountType,
+    extraFee,
     addToCart,
     removeItem,
     clearCart,
@@ -44,6 +51,9 @@ const {
     cart,
     selectedCustomer,
     clearCart,
+    invoiceDiscount,
+    extraFee,
+    invoiceDiscountType,
 )
 
 // tab đang chọn
@@ -437,6 +447,9 @@ const handleCheckout = async (data) => {
                 })),
                 customer_id: selectedCustomer.value?.id || null,
                 paid_amount: Number(data.paid_amount || 0),
+                invoice_discount: invoiceDiscount.value,
+                invoice_discount_type: invoiceDiscountType.value,
+                extra_fee: extraFee.value,
                 cash_received_amount: Number(data.cash_received_amount ?? data.paid_amount ?? 0),
                 bank_received_amount: 0,
                 payment_method: 'cash', bank_account: null,
@@ -637,6 +650,16 @@ useBarcodeScanner(
                 :cart="cart"
                 :selected-customer="selectedCustomer"
                 :grand-total="grandTotal"
+                :total-quantity="totalQuantity"
+                :sub-total="subTotal"
+                :discount="discount"
+                :vat="vat"
+                :invoice-discount="invoiceDiscount"
+                :invoice-discount-type="invoiceDiscountType"
+                :extra-fee="extraFee"
+                @update:invoice-discount="invoiceDiscount = $event"
+                @update:invoice-discount-type="invoiceDiscountType = $event"
+                @update:extra-fee="extraFee = $event"
                 :loading="loading"
                 @select-tab="selectTab"
                 @create-tab="createTab"
@@ -655,6 +678,9 @@ useBarcodeScanner(
         :invoice-code="checkoutInvoiceCode"
         :cart="cart"
         :grand-total="grandTotal"
+        :invoice-discount="invoiceDiscount"
+        :invoice-discount-type="invoiceDiscountType"
+        :extra-fee="extraFee"
         :selected-customer="selectedCustomer"
         @close="showCheckoutModal = false"
         @confirm="checkout($event)"
