@@ -15,7 +15,8 @@ import RepairProgressModal from './RepairProgressModal.vue';
 import RepairStatusProgress from './RepairStatusProgress.vue';
 import { toast } from 'vue-sonner';
 import { formatCurrency, formatDate } from '@/utils/format';
-import { Barcode, KeyRound, Search, Smartphone, UserRound } from 'lucide-vue-next';
+import { imageUrl } from '@/utils/imageUrl';
+import { Barcode, History, KeyRound, Search, ShieldAlert, Smartphone, Trash2, UserRound } from 'lucide-vue-next';
 
 const emit = defineEmits(['close', 'updated']);
 const props = defineProps({ initialRepair: { type: Object, default: null }, startAt: { type: String, default: 'repair' }, onCompleted: Function, onPay: Function });
@@ -23,7 +24,15 @@ const step = ref(props.initialRepair ? props.startAt : 'intake');
 const createdRepair = ref(props.initialRepair || null);
 const progressModalRef = ref(null);
 const handleModalClose = () => {
-    if (progressModalRef.value?.credentialsModalOpen) return;
+    if (lightboxImage.value) {
+        lightboxImage.value = null;
+        return;
+    }
+    if (photoCameraOpen.value) {
+        stopPhotoCamera();
+        return;
+    }
+    if (progressModalRef.value?.credentialsModalOpen || progressModalRef.value?.historyModalOpen || progressModalRef.value?.imageViewerOpen || progressModalRef.value?.cameraOpen) return;
     emit('close');
 };
 const workflowStage = ref('progress');
@@ -391,6 +400,8 @@ const selectCustomerDevice = (device) => applyDeviceSelection(device);
 |--------------------------------------------------------------------------
 */
 const imagePreviews = ref([]);
+const savedIntakeImages = computed(() => (createdRepair.value?.images || []).map((image) => ({ ...image, url: imageUrl(image.url || image.image_path) })));
+const deletingSavedImageId = ref(null);
 const photoVideo = ref(null);
 const photoCameraOpen = ref(false);
 const photoCameraLoading = ref(false);
@@ -502,6 +513,26 @@ const removeImage = (index) => {
     URL.revokeObjectURL(imagePreviews.value[index]);
     form.images.splice(index, 1);
     imagePreviews.value.splice(index, 1);
+    if (lightboxImage.value?.previewIndex === index) lightboxImage.value = null;
+};
+
+const deleteSavedIntakeImage = async (image) => {
+    if (!image?.id || deletingSavedImageId.value || !window.confirm('Bạn có chắc muốn xóa ảnh này khỏi phiếu sửa chữa?')) return;
+    deletingSavedImageId.value = image.id;
+    try {
+        await axios.delete(route('repairs.images.destroy', { repair: createdRepair.value.id, image: image.id }));
+        createdRepair.value = {
+            ...createdRepair.value,
+            images: (createdRepair.value.images || []).filter((item) => Number(item.id) !== Number(image.id)),
+        };
+        lightboxImage.value = null;
+        emit('updated');
+        toast.success('Đã xóa ảnh khỏi phiếu.');
+    } catch (error) {
+        toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể xóa ảnh khỏi phiếu.');
+    } finally {
+        deletingSavedImageId.value = null;
+    }
 };
 
 /*
@@ -1191,32 +1222,40 @@ const selectWorkflowStep = (status) => {
     <BaseModal
         :title="step === 'intake' ? (createdRepair ? `Sửa thông tin phiếu · ${createdRepair.code}` : 'Tiếp nhận và sửa chữa') : `Quy trình sửa chữa · ${createdRepair?.code || ''}`"
         size="xl"
+        modal-class="h-[min(88dvh,820px)]"
         body-class="px-4 pb-4"
         @close="handleModalClose"
     >
         <div class="sticky top-0 z-40 -mx-4 mb-2 bg-slate-100 px-4 py-2">
             <div class="px-1 py-1">
-            <RepairStatusProgress
-                class="min-w-0"
-                :status="createdRepair?.status || 'pending'"
-                :waiting-for-parts="createdRepair?.waiting_for_parts || false"
-                :waiting-mode="createdRepair?.waiting_mode || 'repair_now'"
-                :can-open-repair="Boolean(createdRepair)"
-                :can-open-complete="canOpenComplete"
-                :workflow-stage="workflowStage"
-                @select="selectWorkflowStep"
-            />
-            <div v-if="step === 'repair' && createdRepair" class="mt-1 grid grid-cols-1 gap-2 border-t border-slate-100 pt-2 text-[10px] sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] xl:items-center">
-                    <div class="min-w-0 rounded-lg bg-white/70 px-2 py-1.5"><span class="text-slate-500">Khách</span><strong class="ml-1.5 text-slate-900">{{ createdRepair.customer?.name || createdRepair.customer_name || 'Khách lẻ' }}</strong><span class="mx-1.5 text-slate-300">·</span><span class="text-slate-500">SĐT</span><strong class="ml-1 text-slate-800">{{ createdRepair.customer?.phone || createdRepair.contact_phone || '—' }}</strong></div>
-                    <div class="min-w-0 rounded-lg bg-white/70 px-2 py-1.5"><span class="text-slate-500">Máy</span><strong class="ml-1.5 text-slate-900">{{ createdRepair.device_name || '—' }}</strong><span class="mx-1.5 text-slate-300">·</span><span class="text-slate-500">IMEI</span><strong class="ml-1 font-mono text-indigo-700">{{ createdRepair.imei || createdRepair.serial || '—' }}</strong></div>
-                    <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] font-semibold text-indigo-800 transition hover:border-indigo-300 hover:bg-indigo-100" @click="progressModalRef?.openCredentials()">
-                        <KeyRound class="h-3.5 w-3.5" /> Xem mật khẩu máy
+                <div class="flex min-w-0 items-center gap-2">
+                    <RepairStatusProgress
+                        class="min-w-0 flex-1"
+                        :status="createdRepair?.status || 'pending'"
+                        :waiting-for-parts="createdRepair?.waiting_for_parts || false"
+                        :waiting-mode="createdRepair?.waiting_mode || 'repair_now'"
+                        :can-open-repair="Boolean(createdRepair)"
+                        :can-open-complete="canOpenComplete"
+                        :workflow-stage="workflowStage"
+                        :repair-step-active="step === 'repair'"
+                        @select="selectWorkflowStep"
+                    />
+                </div>
+            <div v-if="step === 'repair' && createdRepair" class="mt-1.5 space-y-1 border-t border-slate-200/80 pt-1.5">
+                <div class="flex min-w-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 px-1 text-center text-[10px] leading-4 text-slate-600">
+                    <span class="min-w-0 max-w-full truncate"><span class="text-slate-400">Khách:</span> <strong class="font-semibold text-slate-800">{{ createdRepair.customer?.name || createdRepair.customer_name || 'Khách lẻ' }}</strong><span v-if="createdRepair.customer?.phone || createdRepair.contact_phone" class="text-slate-500"> · {{ createdRepair.customer?.phone || createdRepair.contact_phone }}</span></span>
+                    <span aria-hidden="true" class="text-slate-300">|</span>
+                    <span class="min-w-0 max-w-full truncate"><span class="text-slate-400">Máy:</span> <strong class="font-semibold text-slate-800">{{ createdRepair.device_name || '—' }}</strong><span v-if="createdRepair.imei || createdRepair.serial" class="font-mono text-indigo-700"> · {{ createdRepair.imei || createdRepair.serial }}</span></span>
+                    <span v-if="progressModalRef?.canDeclineWarranty" class="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-700"><ShieldAlert class="h-3.5 w-3.5" /> Hạn BH: {{ formatDate(createdRepair.warranty_expires_at) }}</span>
+                    <button v-if="progressModalRef?.canDeclineWarranty" type="button" class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition" :class="progressModalRef?.declineWarranty ? 'border-rose-300 bg-rose-100 text-rose-800' : 'border-rose-200 bg-white text-rose-700 hover:bg-rose-50'" :aria-pressed="Boolean(progressModalRef?.declineWarranty)" @click="progressModalRef?.toggleDeclineWarranty()">
+                        <ShieldAlert class="h-3.5 w-3.5" /> {{ progressModalRef?.declineWarranty ? 'Đang từ chối BH' : 'Từ chối BH' }}
                     </button>
-                    <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" @click="progressModalRef?.openHistory()">
-                        🕘 Lịch sử sửa
+                    <button v-if="createdRepair.has_device_password" type="button" class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 text-[10px] font-semibold text-indigo-800 transition hover:bg-indigo-100" title="Xem mật khẩu máy" @click="progressModalRef?.openCredentials()">
+                        <KeyRound class="h-3.5 w-3.5" /> <span>Mật khẩu máy</span>
                     </button>
                 </div>
             </div>
+        </div>
         </div>
         <RepairProgressModal
             v-if="step === 'repair' && createdRepair"
@@ -1320,9 +1359,9 @@ const selectWorkflowStep = (status) => {
                 </div>
             </div>
 
-            <section class="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm transition-colors" :class="!customerInfoExpanded ? 'border-blue-300 !bg-blue-100 shadow-sm' : ''">
-                <header class="flex items-center justify-between gap-2 rounded-t-xl border-b border-blue-200 bg-blue-100 px-3.5 py-2.5 transition-colors">
-                    <button type="button" class="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg text-left transition-colors hover:bg-blue-100/60" :aria-expanded="customerInfoExpanded" @click="customerInfoExpanded = !customerInfoExpanded">
+            <section class="overflow-visible rounded-xl border bg-white shadow-sm transition-colors" :class="customerInfoExpanded ? 'border-slate-200' : 'border-blue-200/80'">
+                <header class="flex items-center justify-between gap-2 px-3.5 py-2.5 transition-colors" :class="customerInfoExpanded ? 'rounded-t-xl border-b border-slate-100 bg-slate-50/70' : 'rounded-xl bg-gradient-to-r from-blue-50/80 to-white'">
+                    <button type="button" class="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" :aria-expanded="customerInfoExpanded" @click="customerInfoExpanded = !customerInfoExpanded">
                         <span class="flex min-w-0 items-center gap-2">
                             <UserRound class="h-4 w-4 shrink-0" :class="!customerInfoExpanded ? 'text-blue-700' : 'text-slate-500'" />
                             <span class="min-w-0">
@@ -1346,9 +1385,9 @@ const selectWorkflowStep = (status) => {
             </section>
 
             <!-- 3. THÔNG TIN THIẾT BỊ & BẢO MẬT -->
-            <div class="relative z-20 overflow-visible rounded-xl border border-slate-200/80 bg-white shadow-sm transition-colors" :class="[{ 'z-40': deviceFocused }, !deviceInfoExpanded ? 'border-indigo-300 !bg-indigo-100 shadow-sm' : '']">
-                <div class="border-b border-indigo-200 bg-indigo-100 px-3.5 py-2 transition-colors">
-                    <button type="button" class="flex w-full items-center justify-between gap-3 rounded-lg text-left transition-colors hover:bg-indigo-100/60" :aria-expanded="deviceInfoExpanded" @click="deviceInfoExpanded = !deviceInfoExpanded">
+            <div class="relative z-20 overflow-visible rounded-xl border bg-white shadow-sm transition-colors" :class="[{ 'z-40': deviceFocused }, deviceInfoExpanded ? 'border-slate-200' : 'border-indigo-200/80']">
+                <div class="px-3.5 py-2.5 transition-colors" :class="deviceInfoExpanded ? 'rounded-t-xl border-b border-slate-100 bg-slate-50/70' : 'rounded-xl bg-gradient-to-r from-indigo-50/70 to-white'">
+                    <button type="button" class="flex w-full items-center justify-between gap-3 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300" :aria-expanded="deviceInfoExpanded" @click="deviceInfoExpanded = !deviceInfoExpanded">
                     <span class="min-w-0">
                     <strong class="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-wider" :class="deviceHeaderTitle.startsWith('▣') ? 'text-slate-800 uppercase' : 'text-indigo-950'">
                         <Smartphone class="h-4 w-4 shrink-0" :class="!deviceInfoExpanded ? 'text-indigo-700' : 'text-indigo-600'" />
@@ -1552,10 +1591,17 @@ const selectWorkflowStep = (status) => {
                     <input ref="photoCameraFallbackInput" type="file" accept="image/*" capture="environment" class="hidden" @change="handleImages" />
                     </div>
                     </div>
-                    <div v-if="imagePreviews.length" class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        <div v-for="(image, index) in imagePreviews" :key="index" class="group relative aspect-square overflow-hidden rounded-lg border border-slate-200">
-                            <img :src="image" alt="Ảnh ngoại quan máy" class="h-full w-full cursor-zoom-in object-cover" @click="lightboxImage = image" />
-                            <button type="button" @click.stop="removeImage(index)" class="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow group-hover:opacity-100" aria-label="Xóa ảnh">×</button>
+                    <div v-if="savedIntakeImages.length || imagePreviews.length" class="mt-2 space-y-1.5">
+                        <p v-if="savedIntakeImages.length" class="text-[10px] font-semibold text-slate-500">Ảnh đã lưu trong phiếu</p>
+                        <div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                            <button v-for="(image, index) in savedIntakeImages" :key="`saved-intake-${image.id || index}`" type="button" class="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-50" :aria-label="`Xem ảnh đã lưu ${index + 1}`" @click="lightboxImage = { ...image, group: 'Ảnh ngoại quan đã lưu', saved: true }">
+                                <img :src="image.url" alt="Ảnh ngoại quan đã lưu" class="h-full w-full object-cover" />
+                                <span class="absolute inset-x-0 bottom-0 bg-slate-900/65 px-1 py-0.5 text-center text-[8px] font-semibold text-white">Đã lưu</span>
+                            </button>
+                            <div v-for="(image, index) in imagePreviews" :key="`draft-${index}`" class="group relative aspect-square overflow-hidden rounded-lg border border-blue-200 bg-slate-50">
+                                <button type="button" class="h-full w-full" :aria-label="`Xem ảnh mới ${index + 1}`" @click="lightboxImage = { url: image, group: 'Ảnh mới', previewIndex: index }"><img :src="image" alt="Ảnh ngoại quan mới" class="h-full w-full object-cover" /></button>
+                                <button type="button" @click.stop="removeImage(index)" class="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 shadow transition group-hover:opacity-100" aria-label="Bỏ ảnh mới">×</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1601,10 +1647,14 @@ const selectWorkflowStep = (status) => {
         </aside>
         </div>
 
-        <div v-if="lightboxImage" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-6" @click.self="lightboxImage = null">
-            <button type="button" class="absolute right-5 top-5 rounded-full bg-white/15 px-3 py-2 text-xl text-white hover:bg-white/25" aria-label="Đóng ảnh xem trước" @click="lightboxImage = null">×</button>
-            <img :src="lightboxImage" alt="Ảnh ngoại quan phóng to" class="max-h-full max-w-full rounded-lg object-contain shadow-2xl" @click.stop />
-        </div>
+        <Teleport to="body">
+            <div v-if="lightboxImage" class="fixed inset-0 z-[1800] flex flex-col items-center justify-center gap-3 bg-slate-950/90 p-4 sm:p-6" role="dialog" aria-modal="true" aria-label="Xem ảnh ngoại quan" @click.self="lightboxImage = null">
+                <button type="button" class="absolute right-5 top-5 rounded-full bg-white/15 px-3 py-2 text-xl text-white hover:bg-white/25" aria-label="Đóng ảnh xem trước" @click="lightboxImage = null">×</button>
+                <img :src="lightboxImage.url" :alt="lightboxImage.group || 'Ảnh ngoại quan máy'" class="max-h-[78dvh] max-w-full rounded-lg object-contain shadow-2xl" @click.stop />
+                <button v-if="lightboxImage.saved" type="button" class="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50" :disabled="Boolean(deletingSavedImageId)" @click="deleteSavedIntakeImage(lightboxImage)"><Trash2 class="h-4 w-4" /> {{ deletingSavedImageId ? 'Đang xóa…' : 'Xóa ảnh' }}</button>
+                <button v-else-if="Number.isInteger(lightboxImage.previewIndex)" type="button" class="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700" @click="removeImage(lightboxImage.previewIndex)"><Trash2 class="h-4 w-4" /> Bỏ ảnh</button>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div v-if="photoCameraOpen" class="fixed inset-0 z-[1500] flex items-center justify-center bg-slate-950/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Chụp ảnh ngoại quan" @click.self="stopPhotoCamera">
@@ -1682,8 +1732,10 @@ const selectWorkflowStep = (status) => {
                 </ActionButton>
             </div>
             <div v-else class="flex w-full items-center justify-between gap-2">
-                <button v-if="progressModalRef?.footerShowCancel" type="button" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.cancelRepair()">Hủy phiếu</button>
-                <span v-else />
+                <div class="flex items-center gap-1">
+                    <button v-if="progressModalRef?.footerShowCancel" type="button" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.cancelRepair()">Hủy phiếu</button>
+                    <button v-if="createdRepair" type="button" class="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700" @click="progressModalRef?.openHistory()"><History class="h-3.5 w-3.5" /> Lịch sử</button>
+                </div>
                 <div class="flex items-center gap-2">
                     <ActionButton v-if="progressModalRef?.footerShowBack" variant="secondary" @click="progressModalRef.returnToProgress()">Quay lại tiến trình</ActionButton>
                     <ActionButton v-if="!progressModalRef?.footerShowBack && ['pending', 'repairing', 'done'].includes(createdRepair?.status)" variant="secondary" @click="step = 'intake'">Quay lại để sửa</ActionButton>

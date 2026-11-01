@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import axios from 'axios'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -8,14 +8,16 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import RepairCompletionModal from './RepairCompletionModal.vue'
 import RepairPartsPicker from './RepairPartsPicker.vue'
 import PatternLock from '@/Components/PatternLock.vue'
+import { imageUrl } from '@/utils/imageUrl'
 import { toast } from 'vue-sonner'
-import { Zap, PackageSearch, PauseCircle, Camera, ShieldAlert } from 'lucide-vue-next'
+import { Zap, PackageSearch, PauseCircle, Camera, ImagePlus, Trash2 } from 'lucide-vue-next'
 
 const props = defineProps({ repair: { type: Object, required: true }, embedded: { type: Boolean, default: false } })
 const emit = defineEmits(['close', 'updated', 'completed', 'pay', 'stage-change'])
 
 // Quy trình hiện tại và lịch sử sửa chữa.
-const activeTab = ref(['returned', 'cancelled'].includes(props.repair.status) ? 'history' : 'log')
+const activeTab = ref('log')
+const historyModalOpen = ref(['returned', 'cancelled'].includes(props.repair.status))
 const completionStep = ref(false)
 const hasRepairProgress = ref(['repairing', 'done'].includes(props.repair.status))
 // Phiếu đang chờ khi mở lại sẽ mặc định ở chế độ tiếp tục sửa.
@@ -27,6 +29,15 @@ const completionModalRef = ref(null)
 const selectedParts = ref([])
 const payImmediately = ref(true)
 const progressImagePreviews = ref([])
+const progressImageInput = ref(null)
+const progressCameraFallbackInput = ref(null)
+const progressPhotoVideo = ref(null)
+const progressCameraOpen = ref(false)
+const progressCameraLoading = ref(false)
+const progressCameraError = ref('')
+const imageViewer = ref(null)
+let progressCameraStream = null
+let progressCameraRequest = 0
 const declineWarranty = ref(false)
 const declineReason = ref('')
 const continueAsService = ref(false)
@@ -42,10 +53,17 @@ const hasWarrantyCandidate = computed(() => {
     expiresAt.setHours(23, 59, 59, 999)
     return expiresAt.getTime() >= Date.now()
 })
+const canDeclineWarranty = computed(() => hasWarrantyCandidate.value)
+const toggleDeclineWarranty = () => {
+    if (!canDeclineWarranty.value) return
+    declineWarranty.value = !declineWarranty.value
+    if (declineWarranty.value) continueAsService.value = false
+}
 const savedProgressImages = computed(() => [
-    ...(props.repair.images || []).map((image) => ({ ...image, group: 'Ảnh lúc tiếp nhận' })),
+    ...(props.repair.images || []).map((image) => ({ ...image, url: imageUrl(image.image_path || image.url), group: 'Ảnh lúc tiếp nhận' })),
     ...(props.repair.timelines || []).flatMap((timeline) => (timeline.images || []).map((image) => ({
         ...image,
+        url: imageUrl(image.image_path || image.url),
         group: timeline.title || 'Ảnh tiến trình',
     }))),
 ])
@@ -75,26 +93,114 @@ const openCredentials = async () => {
         credentialsLoading.value = false
     }
 }
+const addProgressImageFiles = (files) => {
+    if (!files.length) return
+    const validFiles = files.filter((file) => file.size <= 5 * 1024 * 1024)
+    if (validFiles.length !== files.length) toast.error('Ảnh vượt quá giới hạn 5 MB/ảnh đã được bỏ qua.')
+    if (!validFiles.length) return
+    form.images = [...form.images, ...validFiles]
+    progressImagePreviews.value = [
+        ...progressImagePreviews.value,
+        ...validFiles.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    ]
+}
 const updateProgressImages = (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
-    if (!files.length) return
-    form.images = [...form.images, ...files]
-    progressImagePreviews.value = [
-        ...progressImagePreviews.value,
-        ...files.map((file) => ({ file, url: URL.createObjectURL(file) })),
-    ]
+    addProgressImageFiles(files)
 }
 const removeProgressImage = (index) => {
     const [preview] = progressImagePreviews.value.splice(index, 1)
     if (preview) URL.revokeObjectURL(preview.url)
+    if (imageViewer.value?.previewIndex === index) imageViewer.value = null
     form.images = progressImagePreviews.value.map((item) => item.file)
+}
+const stopProgressCamera = () => {
+    progressCameraRequest += 1
+    progressCameraStream?.getTracks().forEach((track) => track.stop())
+    progressCameraStream = null
+    if (progressPhotoVideo.value) progressPhotoVideo.value.srcObject = null
+    progressCameraOpen.value = false
+    progressCameraLoading.value = false
+}
+const usePhoneCamera = () => {
+    stopProgressCamera()
+    progressCameraFallbackInput.value?.click()
+}
+const startProgressCamera = async () => {
+    if (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        toast.info('Không mở được camera trực tiếp. Hãy chụp bằng điện thoại hoặc chọn ảnh.')
+        usePhoneCamera()
+        return
+    }
+
+    const requestId = ++progressCameraRequest
+    progressCameraOpen.value = true
+    progressCameraLoading.value = true
+    progressCameraError.value = ''
+    await nextTick()
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+        if (requestId !== progressCameraRequest) {
+            stream.getTracks().forEach((track) => track.stop())
+            return
+        }
+        progressCameraStream = stream
+        await nextTick()
+        if (progressPhotoVideo.value) {
+            progressPhotoVideo.value.srcObject = stream
+            await progressPhotoVideo.value.play()
+        }
+    } catch {
+        if (requestId === progressCameraRequest) progressCameraError.value = 'Không mở được camera. Hãy cấp quyền camera hoặc chụp bằng camera của điện thoại.'
+    } finally {
+        if (requestId === progressCameraRequest) progressCameraLoading.value = false
+    }
+}
+const captureProgressPhoto = () => {
+    const video = progressPhotoVideo.value
+    if (!video?.videoWidth || !video?.videoHeight) return
+    const canvas = document.createElement('canvas')
+    const scale = Math.min(1, 1920 / video.videoWidth)
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob((blob) => {
+        if (!blob) {
+            toast.error('Không tạo được ảnh chụp. Vui lòng thử lại.')
+            return
+        }
+        addProgressImageFiles([new File([blob], `repair-progress-${Date.now()}.jpg`, { type: 'image/jpeg' })])
+        toast.success('Đã thêm ảnh chụp vào tiến trình.')
+    }, 'image/jpeg', 0.84)
+}
+const deleteSavedProgressImage = async (image) => {
+    if (!image?.id || !window.confirm('Bạn có chắc muốn xóa ảnh này khỏi phiếu sửa chữa?')) return
+    try {
+        await axios.delete(route('repairs.images.destroy', { repair: props.repair.id, image: image.id }))
+        const updatedRepair = {
+            ...props.repair,
+            images: (props.repair.images || []).filter((item) => Number(item.id) !== Number(image.id)),
+            timelines: (props.repair.timelines || []).map((timeline) => ({
+                ...timeline,
+                images: (timeline.images || []).filter((item) => Number(item.id) !== Number(image.id)),
+            })),
+        }
+        imageViewer.value = null
+        emit('updated', updatedRepair)
+        toast.success('Đã xóa ảnh khỏi phiếu.')
+    } catch (error) {
+        toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể xóa ảnh khỏi phiếu.')
+    }
 }
 const clearProgressImagePreviews = () => {
     progressImagePreviews.value.forEach((preview) => URL.revokeObjectURL(preview.url))
     progressImagePreviews.value = []
 }
-onUnmounted(clearProgressImagePreviews)
+onUnmounted(() => {
+    clearProgressImagePreviews()
+    stopProgressCamera()
+})
 watch(waitingMode, (value) => {
     form.waiting_for_parts = value !== 'repair_now'
 })
@@ -229,12 +335,10 @@ const openProgressStep = () => {
     activeTab.value = 'log'
     emit('stage-change', 'progress')
 }
-const openHistory = () => {
-    activeTab.value = 'history'
-}
+const openHistory = () => { historyModalOpen.value = true }
 const closeProgress = () => emit('close')
 
-defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, footerShowBack: computed(() => completionStep.value), credentialsModalOpen: computed(() => credentialsModalOpen.value), hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || Boolean(declineReason.value.trim()) || declineWarranty.value || continueAsService.value || form.images.length > 0), cancelRepair, saveProgress, returnToProgress, openCompletionStep, openProgressStep, openHistory, openCredentials, closeProgress })
+defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, footerShowBack: computed(() => completionStep.value), credentialsModalOpen: computed(() => credentialsModalOpen.value), historyModalOpen: computed(() => historyModalOpen.value), imageViewerOpen: computed(() => Boolean(imageViewer.value)), cameraOpen: computed(() => progressCameraOpen.value), canDeclineWarranty, declineWarranty: computed(() => declineWarranty.value), toggleDeclineWarranty, hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || Boolean(declineReason.value.trim()) || declineWarranty.value || continueAsService.value || form.images.length > 0), cancelRepair, saveProgress, returnToProgress, openCompletionStep, openProgressStep, openHistory, openCredentials, closeProgress })
 </script>
 
 <template>
@@ -248,19 +352,6 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
         <!-- Bước cập nhật tiến trình; bước hoàn tất được chọn từ thanh tiến trình phía trên -->
         <Transition name="repair-step">
         <div v-show="activeTab === 'log' && !completionStep && ['pending', 'repairing'].includes(repair.status)" id="repair-progress-form" class="space-y-3">
-
-            <section v-if="hasWarrantyCandidate && waitingMode === 'repair_now'" class="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
-                <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
-                    <div class="flex items-center gap-2 text-rose-900">
-                        <ShieldAlert class="h-4 w-4 shrink-0 text-rose-600" />
-                        <span class="text-xs font-bold">Chính sách bảo hành còn hiệu lực</span>
-                    </div>
-                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-100">
-                        <input v-model="declineWarranty" type="checkbox" class="rounded border-rose-300 text-rose-600 focus:ring-rose-500" @change="continueAsService = false" />
-                        <span>Từ chối bảo hành</span>
-                    </label>
-                </div>
-            </section>
 
             <section v-if="declineWarranty" class="space-y-3 rounded-xl border border-rose-200 bg-rose-50/60 p-3">
                 <FloatingInput v-model="declineReason" label="Lý do từ chối bảo hành *" id="repair_warranty_decline_reason" :error="form.errors.decline_reason" required />
@@ -276,48 +367,52 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
                 <button v-for="option in [{ value: 'repair_now', label: 'Sửa ngay', hint: 'Tiếp tục xử lý', icon: Zap, tone: 'amber' }, { value: 'parts', label: 'Chờ linh kiện', hint: 'Đặt linh kiện', icon: PackageSearch, tone: 'blue' }, { value: 'wait_repair', label: 'Tạm chờ sửa', hint: 'Chưa thể xử lý', icon: PauseCircle, tone: 'slate' }]" :key="option.value" type="button" class="group flex min-h-[58px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200 shadow-sm' : option.tone === 'blue' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 shadow-sm' : 'border-slate-500 bg-slate-100 ring-2 ring-slate-200 shadow-sm') : 'border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50'" @click="selectProgressMode(option.value)"><component :is="option.icon" class="h-5 w-5 shrink-0" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'text-amber-700' : option.tone === 'blue' ? 'text-blue-700' : 'text-slate-700') : 'text-slate-500 group-hover:text-slate-700'"/><span class="min-w-0"><span class="block text-xs font-bold text-slate-900">{{ option.label }}</span><span class="mt-0.5 block text-[10px] text-slate-600">{{ option.hint }}</span></span><span v-if="waitingMode === option.value" class="ml-auto shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-700">Đang chọn</span></button>
             </div>
 
-            <section v-if="waitingMode === 'repair_now'" class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                <RepairPartsPicker v-if="!declineWarranty || continueAsService" v-model="selectedParts" />
-            </section>
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-12">
+                <div class="space-y-3 md:col-span-7">
+                    <section v-if="waitingMode === 'repair_now'" class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <RepairPartsPicker v-model="selectedParts" />
+                    </section>
 
-            <template v-if="!declineWarranty || continueAsService">
-            <div v-if="waitingMode === 'parts'" class="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
-                <FloatingInput v-model="form.parts_needed" label="Tên linh kiện cần chờ *" id="repair_progress_parts" :error="form.errors.parts_needed" required />
-                <FloatingInput v-model="form.expected_days" type="number" min="0" max="365" step="1" label="Dự kiến chờ (ngày) *" id="repair_progress_days" />
-            </div>
+                    <div v-if="waitingMode === 'parts'" class="grid grid-cols-1 gap-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3 sm:grid-cols-2">
+                        <FloatingInput v-model="form.parts_needed" label="Tên linh kiện cần chờ *" id="repair_progress_parts" :error="form.errors.parts_needed" required />
+                        <FloatingInput v-model="form.expected_days" type="number" min="0" max="365" step="1" label="Dự kiến chờ (ngày) *" id="repair_progress_days" />
+                    </div>
 
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <FloatingInput v-model="issueText" label="Lỗi phát sinh (nếu có, phân cách dấu phẩy)" id="repair_progress_issue" :error="form.errors.issue" />
-                <FloatingInput v-model="form.description" :label="waitingMode === 'wait_repair' ? 'Lý do chờ / ghi chú (không bắt buộc)' : 'Ghi chú công việc đã làm... '" id="repair_progress_note" :error="form.errors.description" />
-            </div>
-
-            <div>
-                <div class="mb-1 flex items-center justify-between gap-2">
-                    <label class="block text-xs font-semibold text-slate-700">Ảnh chụp tiến trình</label>
-                    <span v-if="progressImagePreviews.length" class="text-[10px] text-slate-500">{{ progressImagePreviews.length }} ảnh</span>
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <FloatingInput v-model="issueText" label="Lỗi phát sinh" id="repair_progress_issue" :error="form.errors.issue" />
+                        <FloatingInput v-model="form.description" :label="waitingMode === 'wait_repair' ? 'Ghi chú' : 'Ghi chú công việc đã làm...'" id="repair_progress_note" :error="form.errors.description" />
+                    </div>
                 </div>
-                <label class="flex min-h-[76px] cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-blue-300 bg-slate-50 px-4 py-3 text-xs font-semibold text-blue-800 transition hover:border-blue-500 hover:bg-blue-50">
-                    <input class="sr-only" type="file" accept="image/*" multiple @change="updateProgressImages" />
-                    <Camera class="h-7 w-7 shrink-0 text-blue-600" aria-hidden="true" />
-                    <span><span class="block text-sm font-bold">{{ progressImagePreviews.length ? 'Thêm ảnh tình trạng' : 'Chụp hoặc chọn ảnh tình trạng' }}</span><span class="mt-0.5 block text-[11px] font-normal text-slate-600">Có thể chọn nhiều ảnh · Nhấn để tải ảnh lên</span></span>
-                </label>
-                <div v-if="savedProgressImages.length || progressImagePreviews.length" class="mt-2 space-y-2">
-                    <div v-if="savedProgressImages.length" class="flex flex-wrap gap-2">
-                        <a v-for="(image, index) in savedProgressImages" :key="`saved-${image.id || image.url}-${index}`" :href="image.url" target="_blank" rel="noopener" class="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50" :title="image.group">
+
+                <aside class="space-y-2 rounded-xl border border-slate-200 bg-white p-3 md:col-span-5">
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="block text-xs font-semibold text-slate-700">Ảnh chụp tiến trình</label>
+                        <span v-if="progressImagePreviews.length" class="text-[10px] text-slate-500">{{ progressImagePreviews.length }} ảnh mới</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50/50 p-2">
+                        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm transition hover:border-blue-400 hover:bg-blue-50" @click="startProgressCamera">
+                            <Camera class="h-4 w-4" /> Chụp ảnh
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700" @click="progressImageInput?.click()">
+                            <ImagePlus class="h-4 w-4" /> Chọn ảnh
+                        </button>
+                        <input ref="progressImageInput" class="hidden" type="file" accept="image/*" multiple @change="updateProgressImages" />
+                        <input ref="progressCameraFallbackInput" class="hidden" type="file" accept="image/*" capture="environment" @change="updateProgressImages" />
+                    </div>
+                    <p class="text-[10px] text-slate-500">Ảnh đã lưu vẫn được giữ; có thể bổ sung ảnh tiến trình · tối đa 5 MB/ảnh.</p>
+                    <div v-if="savedProgressImages.length || progressImagePreviews.length" class="flex flex-wrap gap-2">
+                        <button v-for="(image, index) in savedProgressImages" :key="`saved-${image.id || image.url}-${index}`" type="button" class="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50" :title="`Xem ${image.group}`" @click="imageViewer = { ...image, saved: true }">
                             <img :src="image.url" :alt="image.group" class="h-full w-full object-cover" />
                             <span class="absolute inset-x-0 bottom-0 truncate bg-slate-900/70 px-1 py-0.5 text-center text-[8px] text-white">{{ image.group }}</span>
-                        </a>
+                        </button>
+                        <div v-for="(preview, index) in progressImagePreviews" :key="preview.url" class="group relative h-20 w-20 overflow-hidden rounded-lg border border-blue-200 bg-slate-50">
+                            <button type="button" class="h-full w-full" :aria-label="`Xem ảnh tiến trình ${index + 1}`" @click="imageViewer = { url: preview.url, group: `Ảnh tiến trình ${index + 1}`, previewIndex: index }"><img :src="preview.url" :alt="`Ảnh tiến trình ${index + 1}`" class="h-full w-full object-cover" /></button>
+                            <button type="button" class="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-slate-900/70 text-xs text-white opacity-0 transition group-hover:opacity-100" :aria-label="`Bỏ ảnh ${index + 1}`" @click="removeProgressImage(index)">×</button>
+                        </div>
                     </div>
-                    <div v-if="progressImagePreviews.length" class="flex flex-wrap gap-2">
-                    <div v-for="(preview, index) in progressImagePreviews" :key="preview.url" class="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                        <img :src="preview.url" :alt="`Ảnh tiến trình ${index + 1}`" class="h-full w-full object-cover" />
-                        <button type="button" class="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-slate-900/70 text-xs text-white opacity-0 transition group-hover:opacity-100" :aria-label="`Bỏ ảnh ${index + 1}`" @click="removeProgressImage(index)">×</button>
-                    </div>
-                    </div>
-                </div>
-                <span v-if="form.errors.images" class="mt-1 block text-[11px] text-rose-600">{{ form.errors.images }}</span>
+                    <span v-if="form.errors.images" class="block text-[11px] text-rose-600">{{ form.errors.images }}</span>
+                </aside>
             </div>
-            </template>
             </template>
         </div>
         </Transition>
@@ -348,8 +443,8 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
             <ActionButton class="mt-3 w-full justify-center" @click="startPayment">Thanh toán & Trả máy cho khách</ActionButton>
         </div>
 
-        <!-- Tab lịch sử cập nhật -->
-        <div v-if="activeTab === 'history'" class="space-y-3">
+        <BaseModal v-if="historyModalOpen" :title="`Lịch sử sửa · ${repair.code}`" size="lg" @close="historyModalOpen = false">
+        <div class="space-y-3">
             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Lịch sử tiến trình sửa chữa</p>
             <div v-if="repair.timelines?.length" class="relative space-y-3 pl-4 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-slate-200">
                 <article v-for="timeline in repair.timelines" :key="timeline.id" class="relative rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -364,14 +459,41 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
                         <strong>{{ timeline.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : 'Chờ linh kiện' }}:</strong><template v-if="timeline.parts_needed"> {{ timeline.parts_needed }}</template><span v-if="timeline.expected_days !== null"> · Dự kiến {{ timeline.expected_days }} ngày</span>
                     </p>
                     <div v-if="timeline.images?.length" class="mt-2 flex flex-wrap gap-2">
-                        <a v-for="image in timeline.images" :key="image.id" :href="image.url" target="_blank" rel="noopener" class="h-16 w-16 overflow-hidden rounded-lg border border-slate-200">
-                            <img :src="image.url" alt="Ảnh tiến trình sửa chữa" class="h-full w-full object-cover" />
-                        </a>
+                        <button v-for="image in timeline.images" :key="image.id" type="button" class="h-16 w-16 overflow-hidden rounded-lg border border-slate-200" aria-label="Xem ảnh tiến trình sửa chữa" @click="imageViewer = { ...image, url: imageUrl(image.image_path || image.url), group: timeline.title || 'Ảnh tiến trình', saved: true }">
+                            <img :src="imageUrl(image.image_path || image.url)" alt="Ảnh tiến trình sửa chữa" class="h-full w-full object-cover" />
+                        </button>
                     </div>
                 </article>
             </div>
             <div v-else class="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chưa có lịch sử cập nhật.</div>
         </div>
+        </BaseModal>
+
+        <BaseModal v-if="imageViewer" :title="imageViewer.group || 'Xem ảnh sửa chữa'" size="xl" @close="imageViewer = null">
+            <div class="flex flex-col items-center gap-3">
+                <img :src="imageViewer.url" :alt="imageViewer.group || 'Ảnh sửa chữa'" class="max-h-[68dvh] max-w-full rounded-lg object-contain" />
+                <button v-if="imageViewer.saved" type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100" @click="deleteSavedProgressImage(imageViewer)"><Trash2 class="h-4 w-4" /> Xóa ảnh</button>
+                <button v-else-if="Number.isInteger(imageViewer.previewIndex)" type="button" class="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100" @click="removeProgressImage(imageViewer.previewIndex)"><Trash2 class="h-4 w-4" /> Bỏ ảnh</button>
+            </div>
+        </BaseModal>
+
+        <BaseModal v-if="progressCameraOpen" title="Chụp ảnh tiến trình" size="lg" @close="stopProgressCamera">
+            <div class="space-y-3">
+                <p class="text-xs text-slate-500">Ảnh chụp sẽ được thêm vào tiến trình sửa chữa.</p>
+                <div class="relative aspect-video overflow-hidden rounded-xl bg-slate-950">
+                    <video ref="progressPhotoVideo" autoplay playsinline class="h-full w-full object-contain" />
+                    <div v-if="progressCameraLoading" class="absolute inset-0 flex items-center justify-center bg-slate-950/60 text-sm font-semibold text-white">Đang mở camera…</div>
+                    <div v-if="progressCameraError" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/85 p-5 text-center text-sm text-white">
+                        <p>{{ progressCameraError }}</p>
+                        <button type="button" class="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100" @click="usePhoneCamera">Chụp bằng điện thoại</button>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="stopProgressCamera">Đóng</button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" :disabled="progressCameraLoading || Boolean(progressCameraError) || !progressPhotoVideo?.videoWidth" @click="captureProgressPhoto"><Camera class="h-4 w-4" /> Chụp ảnh</button>
+                </div>
+            </div>
+        </BaseModal>
 
         <!-- FOOTER ĐIỀU HƯỚNG -->
         <template v-if="!embedded" #footer>

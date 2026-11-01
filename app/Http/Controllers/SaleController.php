@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\CustomerDebt;
 use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -483,11 +484,14 @@ class SaleController extends Controller
     }
 
     // Danh sách hóa đơn bán hàng
-    public function index(Request $request): Response
+    public function index(Request $request): Response|JsonResponse
     {
         $search = trim((string) $request->query('search', ''));
         $status = in_array($request->query('status'), ['completed', 'cancelled'], true)
             ? $request->query('status')
+            : '';
+        $paymentStatus = in_array($request->query('payment_status'), ['paid', 'debt'], true)
+            ? $request->query('payment_status')
             : '';
         $dateFrom = (string) $request->query('date_from', '');
         $dateTo = (string) $request->query('date_to', '');
@@ -524,6 +528,14 @@ class SaleController extends Controller
                 });
             })
             ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($paymentStatus !== '', function ($query) use ($paymentStatus): void {
+                $oldDebtPaidSql = "COALESCE((SELECT SUM(customer_debts.amount) FROM customer_debts WHERE customer_debts.source_type = ? AND customer_debts.source_id = sales.id AND customer_debts.type = ? AND customer_debts.note LIKE ?), 0)";
+                $operator = $paymentStatus === 'debt' ? '>' : '<=';
+                $query->where('sales.status', 'completed')->whereRaw(
+                    "sales.grand_total + {$oldDebtPaidSql} {$operator} sales.paid_amount + 0.009",
+                    [Sale::class, 'decrease', 'Trích tiền thừa hóa đơn%']
+                );
+            })
             ->when($dateFrom !== '', fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($query) => $query->whereDate('created_at', '<=', $dateTo));
 
@@ -555,6 +567,25 @@ class SaleController extends Controller
             ->paginate($perPage)
             ->withQueryString();
 
+        $filters = [
+            'search' => $search,
+            'status' => $status,
+            'payment_status' => $paymentStatus,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'sort_by' => $sortBy,
+            'sort_order' => $sortOrder,
+            'per_page' => $perPage,
+        ];
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'sales' => $sales,
+                'stats' => $stats,
+                'filters' => $filters,
+            ]);
+        }
+
         return Inertia::render(
             'Sales/Index',
             [
@@ -568,15 +599,7 @@ class SaleController extends Controller
                     ])->findOrFail((int) $request->query('open_sale')))
                     : null,
                 'stats' => $stats,
-                'filters' => [
-                    'search' => $search,
-                    'status' => $status,
-                    'date_from' => $dateFrom,
-                    'date_to' => $dateTo,
-                    'sort_by' => $sortBy,
-                    'sort_order' => $sortOrder,
-                    'per_page' => $perPage,
-                ],
+                'filters' => $filters,
             ]
         );
     }

@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Response;
 use App\Models\RepairTimeline;
@@ -193,6 +194,9 @@ class RepairController extends Controller
 
                 'serial' => $repair->serial,
                 'screen_lock_type' => $repair->screen_lock_type,
+                'has_device_password' => filled($repair->getRawOriginal('screen_password'))
+                    || filled($repair->getRawOriginal('screen_pattern'))
+                    || filled($repair->getRawOriginal('account_password')),
 
                 'repair_request' => $repair->repair_request,
 
@@ -225,7 +229,7 @@ class RepairController extends Controller
 
                 'images' => $repair->images->whereNull('timeline_id')->map(fn ($image) => [
                     'id' => $image->id,
-                    'url' => url('storage/' . $image->image_path),
+                    'url' => route('repairs.images.show', ['repair' => $repair->id, 'image' => $image->id], false),
                 ]),
 
                 'timelines' => $repair->timelines->map(fn ($timeline) => [
@@ -240,7 +244,7 @@ class RepairController extends Controller
                     'expected_days' => $timeline->expected_days,
                     'images' => $timeline->images->map(fn ($image) => [
                         'id' => $image->id,
-                        'url' => url('storage/' . $image->image_path),
+                        'url' => route('repairs.images.show', ['repair' => $repair->id, 'image' => $image->id], false),
                     ]),
                     'created_at' => $timeline->created_at?->format('d/m/Y H:i'),
                     'user' => $timeline->user?->name,
@@ -293,6 +297,35 @@ class RepairController extends Controller
         );
 
         }
+
+    /**
+     * Phục vụ ảnh sửa chữa từ public disk, không phụ thuộc storage symlink.
+     */
+    public function image(Repair $repair, RepairImage $image): \Symfony\Component\HttpFoundation\Response
+    {
+        abort_unless((int) $image->repair_id === (int) $repair->id, 404);
+
+        $disk = Storage::disk('public');
+        abort_unless($disk->exists($image->image_path), 404);
+
+        return $disk->response($image->image_path, null, [
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
+    }
+
+    public function destroyImage(Repair $repair, RepairImage $image): JsonResponse
+    {
+        abort_unless((int) $image->repair_id === (int) $repair->id, 404);
+
+        $disk = Storage::disk('public');
+        if ($disk->exists($image->image_path) && ! $disk->delete($image->image_path)) {
+            return response()->json(['message' => 'Không thể xóa tệp ảnh.'], 500);
+        }
+
+        $image->delete();
+
+        return response()->json(['deleted' => true]);
+    }
 
     /**
      * Gợi ý dữ liệu.
@@ -1220,6 +1253,7 @@ class RepairController extends Controller
 
             $repair->parts()->delete();
             $partsTotal = 0.0;
+            $allowNegativeStock = filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN);
             foreach ($data['parts'] ?? [] as $line) {
                 $product = Product::query()->lockForUpdate()->findOrFail($line['product_id']);
                 if (! $product->is_active || $product->product_type === 'imei' || $product->manage_stock_by_serial) {
@@ -1231,7 +1265,7 @@ class RepairController extends Controller
                 $variant = null;
                 if ($variantId) {
                     $variant = ProductVariant::query()->where('product_id', $product->id)->where('is_active', true)->lockForUpdate()->findOrFail($variantId);
-                    if ($variant->stock < $line['quantity'] || $product->stock < $line['quantity']) {
+                    if (! $allowNegativeStock && ($variant->stock < $line['quantity'] || $product->stock < $line['quantity'])) {
                         throw ValidationException::withMessages(['parts' => "Tồn kho của {$product->name} không đủ."]);
                     }
                     $variant->decrement('stock', $line['quantity']);
@@ -1240,7 +1274,7 @@ class RepairController extends Controller
                     if ($hasVariants) {
                         throw ValidationException::withMessages(['parts' => "Vui lòng chọn phân loại cho {$product->name}."]);
                     }
-                    if ($product->stock < $line['quantity']) {
+                    if (! $allowNegativeStock && $product->stock < $line['quantity']) {
                         throw ValidationException::withMessages(['parts' => "Tồn kho của {$product->name} không đủ."]);
                     }
                     $product->decrement('stock', $line['quantity']);

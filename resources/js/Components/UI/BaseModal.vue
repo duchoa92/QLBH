@@ -16,6 +16,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    modalClass: {
+        type: String,
+        default: '',
+    },
     embedded: {
         type: Boolean,
         default: false,
@@ -55,13 +59,13 @@ onBeforeUnmount(() => {
             role="dialog"
             aria-modal="true"
             class="relative flex min-h-0 max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:max-h-[calc(100dvh-2.5rem)]"
-            :class="{
+            :class="[modalClass, {
                 'max-w-md': size === 'sm',
                 'max-w-xl': size === 'md',
                 'max-w-3xl': size === 'lg',
                 'max-w-4xl': size === 'xl',
                 'max-w-6xl': size === '2xl'
-            }"
+            }]"
         >
             <!-- HEADER -->
             <div class="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3" :class="headerClass">

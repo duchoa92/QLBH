@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
-import { formatCurrency } from '@/utils/format'
+import { usePage } from '@inertiajs/vue3'
 import axios from 'axios'
 import debounce from 'lodash/debounce'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -10,6 +10,8 @@ import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 
 const props = defineProps({ modelValue: { type: Array, default: () => [] } })
 const emit = defineEmits(['update:modelValue'])
+const page = usePage()
+const allowNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
 
 const keyword = ref('')
 const products = ref([])
@@ -18,8 +20,41 @@ const parts = computed({
     get: () => props.modelValue,
     set: (value) => emit('update:modelValue', value),
 })
-const money = formatCurrency
 let searchSequence = 0
+
+const attributeValueText = (value) => {
+    if (value === null || value === undefined) return ''
+    if (Array.isArray(value)) return value.map(attributeValueText).filter(Boolean).join(' / ')
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+    if (typeof value === 'object') {
+        const displayValue = value.value ?? value.label ?? value.name ?? value.title
+        if (displayValue !== undefined) return attributeValueText(displayValue)
+        return Object.values(value).map(attributeValueText).filter(Boolean).join(' / ')
+    }
+    return ''
+}
+
+const variantAttributeText = (attributes) => {
+    if (!attributes) return ''
+    if (Array.isArray(attributes)) {
+        return attributes.map((attribute) => {
+            if (!attribute || typeof attribute !== 'object') return attributeValueText(attribute)
+            const name = attribute.name || attribute.key || ''
+            const value = attributeValueText(attribute.value ?? attribute.values ?? attribute.label)
+            if (!value) return ''
+            return name && name !== value ? `${name}: ${value}` : value
+        }).filter(Boolean).join(' · ')
+    }
+    if (typeof attributes === 'object') {
+        return Object.entries(attributes).map(([name, value]) => {
+            const text = attributeValueText(value)
+            return text ? `${name}: ${text}` : ''
+        }).filter(Boolean).join(' · ')
+    }
+    return attributeValueText(attributes)
+}
+
+const firstPositivePrice = (...values) => Number(values.find((value) => Number(value) > 0) ?? 0)
 
 const runSearch = debounce(async (term, sequence) => {
     loading.value = true
@@ -58,7 +93,7 @@ const addPart = (product, variant = null) => {
     const existingIndex = parts.value.findIndex((line) => line.product_id === product.id && line.variant_id === variantId)
     if (existingIndex >= 0) {
         const current = parts.value[existingIndex]
-        if (Number(current.quantity) >= stock) {
+        if (!allowNegativeStock.value && Number(current.quantity) >= stock) {
             closeSuggestions()
             return toast.warning('Số lượng linh kiện đã chọn bằng số tồn kho')
         }
@@ -66,14 +101,14 @@ const addPart = (product, variant = null) => {
         closeSuggestions()
         return
     }
-    if (stock <= 0) {
+    if (stock <= 0 && !allowNegativeStock.value) {
         closeSuggestions()
         return toast.warning('Linh kiện này đã hết hàng')
     }
 
-    const variantName = variant ? Object.values(variant.attributes || {}).join(' / ') : ''
-    const sellPrice = Number(variant?.sell_price ?? product.sell_price ?? product.price ?? 0)
-    const costPrice = Number(variant?.cost_price ?? product.cost_price ?? 0)
+    const variantName = variantAttributeText(variant?.attributes)
+    const sellPrice = firstPositivePrice(variant?.sell_price, variant?.price, product.sell_price, product.price)
+    const costPrice = firstPositivePrice(variant?.cost_price, product.cost_price)
     parts.value = [...parts.value, {
         product_id: product.id,
         variant_id: variantId,
@@ -116,6 +151,12 @@ const updatePart = (index, key, value) => {
     parts.value = parts.value.map((part, partIndex) => partIndex === index ? { ...part, [key]: value } : part)
 }
 
+const updatePartQuantity = (index, value) => {
+    const quantity = Math.max(1, Number(value || 1))
+    const part = parts.value[index]
+    updatePart(index, 'quantity', allowNegativeStock.value ? quantity : Math.min(quantity, Number(part.stock)))
+}
+
 const removePart = (index) => {
     parts.value = parts.value.filter((_, partIndex) => partIndex !== index)
 }
@@ -125,21 +166,21 @@ const removePart = (index) => {
     <div class="space-y-2">
 
         <div class="relative">
-            <div class="relative"><FloatingInput v-model="keyword" label="Nhập để tìm linh kiện" id="repair_progress_part_search" autocomplete="off" class="pr-12" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @scanned="(code) => { keyword = code; scanProduct() }" /></div>
+            <div class="relative"><FloatingInput v-model="keyword" label="Nhập để tìm linh kiện" id="repair_progress_part_search" autocomplete="off" input-class="!pr-12" @keydown.enter.prevent="scanProduct" /><BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-7 !w-7" @scanned="(code) => { keyword = code; scanProduct() }" /></div>
             <div v-if="keyword.trim().length >= 2" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
                 <p v-if="loading" class="p-3 text-xs text-slate-500">Đang tìm trong kho...</p>
                 <p v-else-if="!products.length" class="p-3 text-xs text-slate-500">Không tìm thấy linh kiện phù hợp.</p>
                 <div v-for="product in products" :key="product.id" class="border-b border-slate-100 p-2 last:border-0">
-                    <button v-if="!product.variants?.length" type="button" class="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="Number(product.stock || 0) < 1" @click="addPart(product)">
-                        <span class="min-w-0"><strong class="block truncate text-sm text-slate-800">{{ product.name }}</strong><small class="block text-slate-500">{{ product.sku || 'Không mã' }} · Tồn {{ product.stock }}</small></span>
-                        <span class="shrink-0 text-right"><strong class="block text-xs text-blue-800">Bán {{ money(product.sell_price ?? product.price) }}</strong><small class="block text-[10px] text-slate-400">Nhập {{ money(product.cost_price) }}</small></span>
+                    <button v-if="!product.variants?.length" type="button" class="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="Number(product.stock || 0) < 1 && !allowNegativeStock" @click="addPart(product)">
+                        <span class="min-w-0"><strong class="block truncate text-sm text-slate-800">{{ product.name }}</strong></span>
+                        <span class="shrink-0 text-[11px] font-semibold text-slate-600">SL còn {{ product.stock }}</span>
                     </button>
                     <div v-else>
                         <p class="px-2 pb-1 text-sm font-semibold text-slate-800">{{ product.name }}</p>
                         <div class="space-y-1">
-                            <button v-for="variant in product.variants" :key="variant.id" type="button" class="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="Number(variant.stock || 0) < 1" @click="addPart(product, variant)">
-                                <span class="min-w-0"><span class="block truncate font-medium">{{ Object.values(variant.attributes || {}).join(' / ') || variant.sku }}</span><small class="text-slate-500">{{ variant.sku || product.sku || 'Không mã' }} · Tồn {{ variant.stock }}</small></span>
-                                <span class="shrink-0 text-right"><strong class="block text-blue-800">Bán {{ money(variant.sell_price) }}</strong><small class="block text-[10px] text-slate-400">Nhập {{ money(variant.cost_price) }}</small></span>
+                            <button v-for="variant in product.variants" :key="variant.id" type="button" class="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="Number(variant.stock || 0) < 1 && !allowNegativeStock" @click="addPart(product, variant)">
+                                <span class="min-w-0"><span class="block truncate font-semibold text-slate-800">{{ variantAttributeText(variant.attributes) || variant.sku || product.name }}</span></span>
+                                <span class="shrink-0 font-semibold text-slate-600">SL còn {{ variant.stock }}</span>
                             </button>
                         </div>
                     </div>
@@ -149,13 +190,11 @@ const removePart = (index) => {
 
         <div v-if="parts.length" class="overflow-x-auto rounded-lg border border-blue-100 bg-white">
             <table class="w-full text-xs">
-                <thead class="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th class="p-2 text-left">Linh kiện</th><th class="w-20 p-2">SL</th><th class="p-2 text-right">Giá bán</th><th class="p-2 text-right font-normal text-slate-400">Giá nhập</th><th class="w-8"></th></tr></thead>
+                <thead class="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th class="p-2 text-left">Linh kiện</th><th class="w-20 p-2">SL</th><th class="w-8"></th></tr></thead>
                 <tbody class="divide-y divide-slate-100">
                     <tr v-for="(part, index) in parts" :key="`${part.product_id}-${part.variant_id}`">
-                        <td class="p-2"><strong class="block text-slate-800">{{ part.product_name }}</strong><small class="text-slate-500">{{ part.sku }} · Tồn {{ part.stock }}</small></td>
-                        <td class="p-2"><input :value="part.quantity" type="number" min="1" :max="part.stock" class="w-16 rounded-md border-slate-300 px-1.5 py-1 text-center text-xs" @input="updatePart(index, 'quantity', Math.min(Math.max(1, Number($event.target.value || 1)), Number(part.stock)))" /></td>
-                        <td class="p-2 text-right font-semibold text-blue-800">{{ money(part.unit_price) }}</td>
-                        <td class="p-2 text-right text-slate-400">{{ money(part.cost_price) }}</td>
+                        <td class="p-2"><strong class="block text-slate-800">{{ part.product_name }}</strong></td>
+                        <td class="p-2"><input :value="part.quantity" type="number" min="1" :max="allowNegativeStock ? undefined : part.stock" class="w-16 rounded-md border-slate-300 px-1.5 py-1 text-center text-xs" @input="updatePartQuantity(index, $event.target.value)" /></td>
                         <td class="p-2 text-center"><button type="button" class="text-rose-500 hover:text-rose-700" aria-label="Bỏ linh kiện" @click="removePart(index)">×</button></td>
                     </tr>
                 </tbody>

@@ -16,6 +16,12 @@ import {
     ArrowUp,
     ArrowDown,
     Pencil,
+    LoaderCircle,
+    Clock,
+    Phone,
+    ChevronRight,
+    SlidersHorizontal,
+    X,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -28,6 +34,7 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
+import api from '@/Services/api'
 
 defineOptions({
     layout: AdminLayout
@@ -52,6 +59,11 @@ const props = defineProps({
 const page = usePage()
 const canCancelSales = computed(() => page.props.auth?.permissions?.includes('sales.cancel') ?? false)
 const canEditSales = computed(() => page.props.auth?.permissions?.includes('sales.edit') ?? false)
+const salesData = ref(props.sales)
+const statsData = ref(props.stats)
+
+watch(() => props.sales, value => { salesData.value = value })
+watch(() => props.stats, value => { statsData.value = value })
 
 // Cập nhật lại các ref khi props.filters thay đổi từ Server gửi về
 watch(
@@ -60,6 +72,7 @@ watch(
         if (newFilters) {
             search.value = newFilters.search ?? ''
             status.value = newFilters.status ?? ''
+            paymentStatus.value = newFilters.payment_status ?? ''
             dateFrom.value = newFilters.date_from ?? newFilters.start_date ?? ''
             dateTo.value = newFilters.date_to ?? newFilters.end_date ?? ''
             sortKey.value = newFilters.sort_by ?? 'created_at'
@@ -73,8 +86,10 @@ watch(
 // Lấy giá trị khởi tạo từ URL / Props
 const search = ref(props.filters?.search ?? '')
 const status = ref(props.filters?.status ?? '')
+const paymentStatus = ref(props.filters?.payment_status ?? '')
 const dateFrom = ref(props.filters?.date_from ?? '')
 const dateTo = ref(props.filters?.date_to ?? '')
+const datePreset = ref(dateFrom.value || dateTo.value ? 'custom' : 'all')
 const perPage = ref(Number(props.filters?.per_page ?? 10))
 
 const detailSale = ref(null)
@@ -94,7 +109,7 @@ const syncSaleDetailFromUrl = () => {
     const saleId = new URL(window.location.href).searchParams.get('open_sale')
     if (!saleId) detailSale.value = null
     else if (String(detailSale.value?.id) !== saleId) {
-        detailSale.value = props.sales?.data?.find(sale => String(sale.id) === saleId) || props.selectedSale || null
+        detailSale.value = salesData.value?.data?.find(sale => String(sale.id) === saleId) || props.selectedSale || null
     }
 }
 window.addEventListener('popstate', syncSaleDetailFromUrl)
@@ -121,21 +136,68 @@ const openSaleDetail = (sale) => {
 // --- QUẢN LÝ SORTING (SẮP XẾP BẢNG) ---
 const sortKey = ref(props.filters?.sort_by ?? 'created_at')
 const sortOrder = ref(props.filters?.sort_order ?? 'desc')
+let searchTimeout = null
+let salesRequestController = null
+let salesRequestId = 0
+const loadingSales = ref(false)
+const isFilterExpanded = ref(Boolean(status.value || dateFrom.value || dateTo.value))
+onBeforeUnmount(() => {
+    clearTimeout(searchTimeout)
+    salesRequestController?.abort()
+})
 
-const requestSales = () => router.get(
-    route('sales.index'),
-    {
+const syncFilterUrl = (filters) => {
+    const url = new URL(window.location.href)
+    const values = {
+        search: filters.search,
+        status: filters.status,
+        payment_status: filters.payment_status,
+        date_from: filters.date_from,
+        date_to: filters.date_to,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order,
+        per_page: filters.per_page,
+    }
+    Object.entries(values).forEach(([key, value]) => {
+        if (value === '' || value === null || value === undefined) url.searchParams.delete(key)
+        else url.searchParams.set(key, String(value))
+    })
+    url.searchParams.delete('page')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+const requestSales = async () => {
+    salesRequestController?.abort()
+    const requestId = ++salesRequestId
+    salesRequestController = new AbortController()
+    loadingSales.value = true
+    const params = {
         search: search.value || undefined,
         status: status.value || undefined,
+        payment_status: paymentStatus.value || undefined,
         date_from: dateFrom.value || undefined,
         date_to: dateTo.value || undefined,
         sort_by: sortKey.value,
         sort_order: sortOrder.value,
         per_page: perPage.value,
         page: 1,
-    },
-    { preserveState: true, preserveScroll: true, replace: true }
-)
+    }
+
+    try {
+        const { data } = await api.get(route('sales.index'), {
+            params,
+            signal: salesRequestController.signal,
+        })
+        if (requestId !== salesRequestId) return
+        salesData.value = data.sales
+        statsData.value = data.stats
+        syncFilterUrl(data.filters || params)
+    } catch (error) {
+        if (error.name !== 'CanceledError' && requestId === salesRequestId) console.error(error)
+    } finally {
+        if (requestId === salesRequestId) loadingSales.value = false
+    }
+}
 
 const handleSort = (key) => {
     if (sortKey.value === key) {
@@ -163,47 +225,109 @@ const filterByCashier = (cashierName) => {
 
 const filterByStatus = (statusValue) => {
     status.value = statusValue
+    paymentStatus.value = ''
     handleFilterChange()
 }
 
-// Danh sách options cho bộ lọc Trạng thái
+const applyPaymentStatus = (value) => {
+    paymentStatus.value = value
+    status.value = ''
+    clearTimeout(searchTimeout)
+    requestSales()
+}
+
+const handleStatusFilterChange = () => {
+    paymentStatus.value = ''
+    handleFilterChange()
+}
+
+const clearSearch = () => {
+    search.value = ''
+    clearTimeout(searchTimeout)
+    requestSales()
+}
+
 const statusOptions = [
     { label: 'Tất cả trạng thái', value: '' },
     { label: 'Hoàn thành', value: 'completed' },
-    { label: 'Đã hủy', value: 'cancelled' }
+    { label: 'Đã hủy', value: 'cancelled' },
+]
+const datePresetOptions = [
+    { label: 'Toàn thời gian', value: 'all' },
+    { label: 'Hôm nay', value: 'today' },
+    { label: 'Hôm qua', value: 'yesterday' },
+    { label: 'Tháng này', value: 'this_month' },
+    { label: 'Tùy chỉnh', value: 'custom' },
 ]
 
-let searchTimeout = null
+const dateInputValue = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+const applyDatePreset = () => {
+    const today = new Date()
+    if (datePreset.value === 'all') {
+        dateFrom.value = ''
+        dateTo.value = ''
+    } else if (datePreset.value === 'today') {
+        dateFrom.value = dateInputValue(today)
+        dateTo.value = dateInputValue(today)
+    } else if (datePreset.value === 'yesterday') {
+        const yesterday = new Date(today)
+        yesterday.setDate(today.getDate() - 1)
+        dateFrom.value = dateInputValue(yesterday)
+        dateTo.value = dateInputValue(yesterday)
+    } else if (datePreset.value === 'this_month') {
+        dateFrom.value = dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1))
+        dateTo.value = dateInputValue(today)
+    }
+    clearTimeout(searchTimeout)
+    requestSales()
+}
+
+const applyCustomDate = () => {
+    datePreset.value = 'custom'
+    handleFilterChange()
+}
 
 // Hàm kích hoạt lọc (chỉ gửi request khi có thay đổi)
 const handleFilterChange = () => {
     clearTimeout(searchTimeout)
-    searchTimeout = setTimeout(requestSales, 350)
+    searchTimeout = setTimeout(requestSales, 180)
 }
 
 // Reset toàn bộ lọc
 const resetFilters = () => {
     search.value = ''
     status.value = ''
+    paymentStatus.value = ''
     dateFrom.value = ''
     dateTo.value = ''
+    datePreset.value = 'all'
     sortKey.value = 'created_at'
     sortOrder.value = 'desc'
     clearTimeout(searchTimeout)
-    router.get(route('sales.index'), {}, { preserveState: true, preserveScroll: true, replace: true })
+    requestSales()
 }
 
 // Tính tổng tiền hóa đơn
 const saleTotal = (sale) => sale.grand_total ?? sale.total_amount ?? sale.subtotal ?? 0
 const salePaidAmount = (sale) => Math.max(0, Number(sale?.paid_amount || 0) - Number(sale?.old_debt_paid || 0))
+const saleDebtAmount = (sale) => sale?.status === 'cancelled'
+    ? 0
+    : Math.max(0, Number(saleTotal(sale) || 0) - salePaidAmount(sale))
 const saleHasDebt = (sale) => sale?.status !== 'cancelled'
-    && Number(saleTotal(sale) || 0) - salePaidAmount(sale) > 0.009
+    && saleDebtAmount(sale) > 0.009
 
 // Lấy tên khách hàng
 const getCustomerName = (sale) => {
     if (!sale?.customer) return 'Khách lẻ'
     return sale.customer.full_name || sale.customer.name || 'Khách lẻ'
 }
+const getCustomerPhone = (sale) => sale?.customer?.phone || 'Không có SĐT'
 
 // In hóa đơn
 const openPrintWindow = (saleId) => {
@@ -283,14 +407,86 @@ const defaultReasons = [
 ]
 
 const predefinedCancelReasons = computed(() => {
-    const existingReasons = (props.sales?.data || [])
+    const existingReasons = (salesData.value?.data || [])
         .map(s => s.cancel_reason || s.reason)
         .filter(Boolean)
 
     return Array.from(new Set([...defaultReasons, ...existingReasons]))
 })
 
-const sortedSalesData = computed(() => props.sales?.data || [])
+const sortedSalesData = computed(() => salesData.value?.data || [])
+const hasActiveSearch = computed(() => search.value.trim().length > 0)
+const activeFilters = computed(() => ({
+    search: search.value,
+    status: status.value,
+    payment_status: paymentStatus.value,
+    date_from: dateFrom.value,
+    date_to: dateTo.value,
+    sort_by: sortKey.value,
+    sort_order: sortOrder.value,
+    per_page: perPage.value,
+}))
+const searchableText = (value) => {
+    const text = String(value || '')
+    let normalized = ''
+    const sourceIndexes = []
+
+    Array.from(text).forEach((character, sourceIndex) => {
+        const folded = character
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/đ/g, 'd')
+            .replace(/Đ/g, 'D')
+            .toLocaleLowerCase('vi-VN')
+
+        Array.from(folded).forEach((foldedCharacter) => {
+            normalized += foldedCharacter
+            sourceIndexes.push(sourceIndex)
+        })
+    })
+
+    return { text, normalized, sourceIndexes }
+}
+const normalizeSearchText = (value) => searchableText(value).normalized
+const saleSearchMatches = (sale) => {
+    const keyword = normalizeSearchText(search.value.trim())
+    if (!keyword) return []
+
+    const candidates = [
+        { label: 'Số điện thoại', text: sale.customer?.phone || '' },
+        ...(sale.items || []).flatMap(item => [
+            { label: 'Sản phẩm', text: item.product?.name || '' },
+            { label: 'IMEI', text: item.product_imei?.imei || '' },
+            { label: 'Serial', text: item.product_imei?.serial || '' },
+        ]),
+    ]
+    const seen = new Set()
+
+    return candidates.filter(candidate => {
+        const key = `${candidate.label}:${candidate.text}`
+        if (!candidate.text || seen.has(key) || !normalizeSearchText(candidate.text).includes(keyword)) return false
+        seen.add(key)
+        return true
+    }).slice(0, 3)
+}
+const highlightedSearchSegments = (value) => {
+    const searchable = searchableText(value)
+    const keyword = normalizeSearchText(search.value.trim())
+    if (!keyword) return [{ text: searchable.text, match: false }]
+
+    const normalizedStart = searchable.normalized.indexOf(keyword)
+    if (normalizedStart < 0) return [{ text: searchable.text, match: false }]
+
+    const start = searchable.sourceIndexes[normalizedStart]
+    const endIndex = normalizedStart + keyword.length - 1
+    const end = (searchable.sourceIndexes[endIndex] ?? start) + 1
+
+    return [
+        { text: searchable.text.slice(0, start), match: false },
+        { text: searchable.text.slice(start, end), match: true },
+        { text: searchable.text.slice(end), match: false },
+    ].filter(segment => segment.text)
+}
 </script>
 
 <template>
@@ -298,117 +494,71 @@ const sortedSalesData = computed(() => props.sales?.data || [])
     <div class="space-y-3 font-sans text-slate-800">
         <PageHeader title="Hóa đơn bán hàng" />
         
-        <!-- 1. THỐNG KÊ TÀI CHÍNH NHANH (TĂNG CỠ CHỮ CHÚT ÍT) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Doanh thu theo bộ lọc</div>
-                    <div class="text-xl font-black text-slate-900 mt-0.5">
-                        {{ formatMoney(Number(stats?.totalRevenue ?? 0)) }}
-                    </div>
+                    <div class="mt-0.5 text-xl font-black text-slate-900">{{ formatMoney(Number(statsData?.totalRevenue ?? 0)) }}</div>
                 </div>
-                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                    <DollarSign :size="20" />
-                </div>
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><DollarSign :size="20" /></div>
             </div>
 
             <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng số đơn hàng</div>
-                    <div class="text-xl font-black text-slate-900 mt-0.5">
-                        {{ Number(stats?.totalOrders ?? 0) }} <span class="text-xs font-semibold text-slate-500">hóa đơn</span>
-                    </div>
+                    <div class="mt-0.5 text-xl font-black text-slate-900">{{ Number(statsData?.totalOrders ?? 0) }} <span class="text-xs font-semibold text-slate-500">hóa đơn</span></div>
                 </div>
-                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <FileText :size="20" />
-                </div>
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><FileText :size="20" /></div>
             </div>
 
             <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
                 <div>
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng công nợ gối đầu</div>
-                    <div class="text-xl font-black text-rose-600 mt-0.5">
-                        {{ formatMoney(Number(stats?.totalDebt ?? 0)) }}
-                    </div>
+                    <div class="mt-0.5 text-xl font-black text-rose-600">{{ formatMoney(Number(statsData?.totalDebt ?? 0)) }}</div>
                 </div>
-                <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                    <CreditCard :size="20" />
-                </div>
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600"><CreditCard :size="20" /></div>
             </div>
         </div>
 
-        <!-- 2. BẢNG DỮ LIỆU VÀ BỘ LỌC -->
+        <div class="pt-2">
         <DataPanel detached>
             <template #header>
-                <div class="w-full">
-                    <div class="flex flex-wrap items-center gap-2 w-full">
-                        
-                        <!-- FloatingInput: Ô tìm kiếm hóa đơn -->
-                        <div class="flex-1 min-w-[260px]">
-                            <FloatingInput
-                                v-model="search"
-                                label="Tìm Mã HD, Tên KH, SĐT, IMEI..."
-                                name="search"
-                                @input="handleFilterChange"
-                            />
+                <div class="w-full space-y-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4">
+                    <div class="flex flex-col items-stretch gap-2.5 lg:flex-row lg:items-center">
+                        <div class="relative min-w-[260px] flex-1">
+                            <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input id="sales-search" v-model="search" type="text" autocomplete="off" placeholder="Tìm Mã HĐ, Tên KH, SĐT, sản phẩm, Serial/IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" @input="handleFilterChange" />
+                            <LoaderCircle v-if="loadingSales" class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" />
+                            <button v-else-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
                         </div>
 
-                        <!-- FloatingSelect: Ô lọc trạng thái -->
-                        <div class="w-44 shrink-0">
-                            <FloatingSelect
-                                v-model="status"
-                                label="Trạng thái"
-                                name="status"
-                                :options="statusOptions"
-                                :show-placeholder="false"
-                                option-label="label"
-                                option-value="value"
-                                @update:modelValue="handleFilterChange"
-                            />
+                        <div class="flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                            <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === '' && status === '' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'" @click="applyPaymentStatus('')">Tất cả</button>
+                            <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === 'paid' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'" @click="applyPaymentStatus('paid')">Đã thanh toán</button>
+                            <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === 'debt' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'" @click="applyPaymentStatus('debt')">Còn nợ</button>
                         </div>
 
-                        <!-- FloatingInput: Từ ngày -->
-                        <div class="w-36 shrink-0">
-                            <FloatingInput
-                                v-model="dateFrom"
-                                label="Từ ngày"
-                                type="date"
-                                name="date_from"
-                                @change="handleFilterChange"
-                            />
-                        </div>
-
-                        <!-- FloatingInput: Đến ngày -->
-                        <div class="w-36 shrink-0">
-                            <FloatingInput
-                                v-model="dateTo"
-                                label="Đến ngày"
-                                type="date"
-                                name="date_to"
-                                @change="handleFilterChange"
-                            />
-                        </div>
-
-                        <!-- Nút Reset Lọc -->
-                        <button
-                            type="button"
-                            @click="resetFilters"
-                            class="inline-flex h-[38px] w-[38px] items-center justify-center rounded-lg border border-gray-300 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition active:scale-95 shrink-0"
-                            title="Làm mới bộ lọc"
-                        >
-                            <RefreshCw :size="16" />
+                        <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-xs font-semibold transition" :class="isFilterExpanded ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'" @click="isFilterExpanded = !isFilterExpanded">
+                            <SlidersHorizontal class="h-3.5 w-3.5" /> {{ isFilterExpanded ? 'Ẩn lọc' : 'Lọc nâng cao' }}
                         </button>
+                    </div>
 
+                    <div v-if="isFilterExpanded" class="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto]">
+                        <FloatingSelect v-model="status" label="Trạng thái đơn" name="status" :options="statusOptions" :show-placeholder="false" option-label="label" option-value="value" @update:modelValue="handleStatusFilterChange" />
+                        <FloatingSelect v-model="datePreset" label="Thời gian" name="date_preset" :options="datePresetOptions" :show-placeholder="false" option-label="label" option-value="value" @update:modelValue="applyDatePreset" />
+                        <FloatingInput v-model="dateFrom" label="Từ ngày" type="date" name="date_from" @change="applyCustomDate" />
+                        <FloatingInput v-model="dateTo" label="Đến ngày" type="date" name="date_to" @change="applyCustomDate" />
+                        <button type="button" class="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100" @click="resetFilters"><RefreshCw class="h-3.5 w-3.5" /> Đặt lại</button>
                     </div>
                 </div>
             </template>
 
             <!-- DANH SÁCH BẢNG DỮ LIỆU CÓ SORT & CLICK LỌC -->
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div class="overflow-x-auto">
-                <table class="app-data-table w-full min-w-[850px] text-xs text-left border-collapse">
+                <div class="hidden overflow-x-auto md:block">
+                <table class="app-data-table w-full min-w-[850px] border-collapse text-left text-xs">
                     <thead>
-                        <tr class="bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-200 select-none">
+                        <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                             
                             <!-- Mã HĐ Sort -->
                             <th class="px-3.5 py-2.5 cursor-pointer hover:bg-slate-100 transition" @click="handleSort('code')">
@@ -466,7 +616,7 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                         </tr>
                     </thead>
 
-                    <tbody class="divide-y divide-slate-100 font-medium text-xs">
+                    <tbody class="divide-y divide-slate-100 text-xs font-medium">
                         <tr
                             v-for="sale in sortedSalesData"
                             :key="sale.id"
@@ -481,8 +631,40 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     class="cursor-pointer text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline"
                                     title="Bấm vào dòng để xem hóa đơn"
                                 >
-                                    #{{ sale.code }}
+                                    <template
+                                        v-for="(segment, segmentIndex) in highlightedSearchSegments(`#${sale.code || ''}`)"
+                                        :key="segmentIndex"
+                                    >
+                                        <mark
+                                            v-if="segment.match"
+                                            class="rounded bg-amber-200 px-0.5 font-bold text-amber-950"
+                                        >{{ segment.text }}</mark>
+                                        <span v-else>{{ segment.text }}</span>
+                                    </template>
                                 </button>
+                                <div
+                                    v-if="hasActiveSearch && saleSearchMatches(sale).length"
+                                    class="mt-1 max-w-[260px] space-y-0.5 text-[10px] font-medium text-slate-500"
+                                >
+                                    <div
+                                        v-for="match in saleSearchMatches(sale)"
+                                        :key="`${match.label}-${match.text}`"
+                                        class="truncate"
+                                        :title="`${match.label}: ${match.text}`"
+                                    >
+                                        <span>{{ match.label }}: </span>
+                                        <template
+                                            v-for="(segment, segmentIndex) in highlightedSearchSegments(match.text)"
+                                            :key="segmentIndex"
+                                        >
+                                            <mark
+                                                v-if="segment.match"
+                                                class="rounded bg-amber-200 px-0.5 font-bold text-amber-950"
+                                            >{{ segment.text }}</mark>
+                                            <span v-else>{{ segment.text }}</span>
+                                        </template>
+                                    </div>
+                                </div>
                             </td>
 
                             <!-- 2. Khách Hàng (CLICK ĐỂ LỌC KH) -->
@@ -492,8 +674,24 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     title="Bấm để lọc theo khách hàng này"
                                     @click.stop="filterByCustomer(getCustomerName(sale))"
                                 >
-                                    {{ getCustomerName(sale) }}
+                                    <template
+                                        v-for="(segment, segmentIndex) in highlightedSearchSegments(getCustomerName(sale))"
+                                        :key="segmentIndex"
+                                    >
+                                        <mark
+                                            v-if="segment.match"
+                                            class="rounded bg-amber-200 px-0.5 font-bold text-amber-950"
+                                        >{{ segment.text }}</mark>
+                                        <span v-else>{{ segment.text }}</span>
+                                    </template>
                                 </span>
+                                <div class="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                                    <Phone class="h-3 w-3" />
+                                    <template v-for="(segment, segmentIndex) in highlightedSearchSegments(getCustomerPhone(sale))" :key="segmentIndex">
+                                        <mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark>
+                                        <span v-else>{{ segment.text }}</span>
+                                    </template>
+                                </div>
                             </td>
 
                             <!-- 3. Thu ngân (CLICK ĐỂ LỌC THU NGÂN) -->
@@ -503,32 +701,50 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                                     title="Bấm để lọc theo thu ngân này"
                                     @click.stop="filterByCashier(sale.user?.name)"
                                 >
-                                    {{ sale.user?.name || '-' }}
+                                    <template
+                                        v-for="(segment, segmentIndex) in highlightedSearchSegments(sale.user?.name || '-')"
+                                        :key="segmentIndex"
+                                    >
+                                        <mark
+                                            v-if="segment.match"
+                                            class="rounded bg-amber-200 px-0.5 font-bold text-amber-950"
+                                        >{{ segment.text }}</mark>
+                                        <span v-else>{{ segment.text }}</span>
+                                    </template>
                                 </span>
                             </td>
 
                             <!-- Tổng tiền (CỠ CHỮ TO ĐẬM) -->
-                            <td class="px-3.5 py-2.5 text-right text-sm font-black" :class="saleHasDebt(sale) ? 'text-amber-700' : 'text-slate-900'">
-                                {{ formatMoney(saleTotal(sale)) }}
+                            <td class="px-3.5 py-2.5 text-right">
+                                <div class="text-sm font-black text-slate-900">{{ formatMoney(saleTotal(sale)) }}</div>
+                                <div v-if="saleHasDebt(sale)" class="mt-0.5 text-[10px] font-bold text-rose-500">Nợ: {{ formatMoney(saleDebtAmount(sale)) }}</div>
                             </td>
 
                             <!-- 4. Trạng thái (CLICK ĐỂ LỌC TRẠNG THÁI) -->
                             <td class="px-3.5 py-2.5 text-center">
                                 <span
                                     v-if="sale.status === 'cancelled'"
-                                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 cursor-pointer hover:bg-rose-100"
+                                    class="inline-flex cursor-pointer items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100"
                                     title="Bấm để lọc các đơn đã hủy"
                                     @click.stop="filterByStatus('cancelled')"
                                 >
                                     <XCircle :size="12" /> Đã hủy
                                 </span>
                                 <span
+                                    v-else-if="saleHasDebt(sale)"
+                                    class="inline-flex cursor-pointer items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100"
+                                    title="Hóa đơn còn công nợ"
+                                    @click.stop="filterByStatus('completed')"
+                                >
+                                    <Clock :size="12" /> Còn nợ
+                                </span>
+                                <span
                                     v-else
-                                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
+                                    class="inline-flex cursor-pointer items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 hover:bg-emerald-100"
                                     title="Bấm để lọc các đơn hoàn thành"
                                     @click.stop="filterByStatus('completed')"
                                 >
-                                    <CheckCircle2 :size="12" /> Hoàn thành
+                                    <CheckCircle2 :size="12" /> Đã thanh toán
                                 </span>
                             </td>
 
@@ -539,40 +755,41 @@ const sortedSalesData = computed(() => props.sales?.data || [])
 
                             <!-- Thao tác -->
                             <td class="px-3.5 py-2.5 text-center">
-                                <div class="flex items-center justify-center gap-0.5">
+                                <div class="flex items-center justify-center gap-1">
                                     <button
                                         v-if="canEditSales"
                                         type="button"
-                                        class="rounded-md p-1.5 hover:bg-amber-50"
+                                        class="rounded-lg p-2 hover:bg-amber-50"
                                         title="Sửa hóa đơn"
                                         @click.stop="editSale = sale"
                                     >
-                                        <Pencil class="h-3.5 w-3.5 text-amber-600" />
+                                        <Pencil class="h-4 w-4 text-amber-600" />
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-md p-1.5 text-emerald-700 hover:bg-emerald-50"
+                                        class="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
                                         title="In hóa đơn"
                                         @click.stop="openPrintWindow(sale.id)"
                                     >
-                                        <Printer class="h-3.5 w-3.5" />
+                                        <Printer class="h-4 w-4" />
                                     </button>
 
                                     <button
-                                        v-if="canCancelSales && sale.status !== 'cancelled'"
                                         type="button"
-                                        class="rounded-md p-1.5 text-rose-600 hover:bg-rose-50"
-                                        title="Hủy hóa đơn & Hoàn kho"
+                                        class="rounded-lg p-2 transition"
+                                        :class="canCancelSales && sale.status !== 'cancelled' ? 'text-rose-600 hover:bg-rose-50' : 'cursor-not-allowed text-slate-300 opacity-60'"
+                                        :disabled="!canCancelSales || sale.status === 'cancelled'"
+                                        :title="sale.status === 'cancelled' ? 'Hóa đơn đã hủy' : (canCancelSales ? 'Trả hàng / Hủy hóa đơn & hoàn kho' : 'Bạn không có quyền trả hàng')"
                                         @click.stop="confirmCancel(sale)"
                                     >
-                                        <Undo2 class="h-3.5 w-3.5" />
+                                        <Undo2 class="h-4 w-4" />
                                     </button>
                                 </div>
                             </td>
                         </tr>
 
                         <!-- Bảng trống -->
-                        <tr v-if="!sales.data || !sales.data.length">
+                        <tr v-if="!salesData?.data || !salesData.data.length">
                             <td colspan="7" class="px-4 py-12 text-center">
                                 <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 mb-3">
                                     <FileText :size="24" />
@@ -584,9 +801,64 @@ const sortedSalesData = computed(() => props.sales?.data || [])
                     </tbody>
                 </table>
                 </div>
-                <PaginationBar :data="sales" :filters="filters" />
+
+                <div class="divide-y divide-slate-100 md:hidden">
+                    <article v-for="sale in sortedSalesData" :key="`mobile-${sale.id}`" class="cursor-pointer space-y-2.5 p-4 transition active:bg-slate-100" @click="openSaleDetail(sale)">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="text-sm font-bold text-slate-900">
+                                <template v-for="(segment, segmentIndex) in highlightedSearchSegments(`#${sale.code || ''}`)" :key="segmentIndex">
+                                    <mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark>
+                                    <span v-else>{{ segment.text }}</span>
+                                </template>
+                            </div>
+                            <span v-if="sale.status === 'cancelled'" class="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-600"><XCircle class="h-3 w-3" /> Đã hủy</span>
+                            <span v-else-if="saleHasDebt(sale)" class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700"><Clock class="h-3 w-3" /> Còn nợ</span>
+                            <span v-else class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700"><CheckCircle2 class="h-3 w-3" /> Đã thanh toán</span>
+                        </div>
+
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="truncate text-sm font-bold text-slate-800">
+                                    <template v-for="(segment, segmentIndex) in highlightedSearchSegments(getCustomerName(sale))" :key="segmentIndex">
+                                        <mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark>
+                                        <span v-else>{{ segment.text }}</span>
+                                    </template>
+                                </div>
+                                <div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><Phone class="h-3 w-3" /> {{ getCustomerPhone(sale) }} · {{ sale.user?.name || '-' }}</div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <div class="text-sm font-extrabold text-slate-900">{{ formatMoney(saleTotal(sale)) }}</div>
+                                <div v-if="saleHasDebt(sale)" class="text-[10px] font-bold text-rose-500">Nợ: {{ formatMoney(saleDebtAmount(sale)) }}</div>
+                            </div>
+                        </div>
+
+                        <div v-if="hasActiveSearch && saleSearchMatches(sale).length" class="space-y-0.5 text-[10px] font-medium text-slate-500">
+                            <div v-for="match in saleSearchMatches(sale)" :key="`mobile-${match.label}-${match.text}`" class="truncate">
+                                {{ match.label }}:
+                                <template v-for="(segment, segmentIndex) in highlightedSearchSegments(match.text)" :key="segmentIndex">
+                                    <mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark>
+                                    <span v-else>{{ segment.text }}</span>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                            <span>{{ formatDateTime(sale.created_at) }}</span>
+                            <span class="inline-flex items-center gap-0.5 font-semibold text-emerald-600">Xem chi tiết <ChevronRight class="h-3 w-3" /></span>
+                        </div>
+                    </article>
+
+                    <div v-if="!salesData?.data?.length" class="p-10 text-center">
+                        <FileText class="mx-auto mb-3 h-9 w-9 text-slate-300" />
+                        <p class="text-sm font-bold text-slate-700">Không tìm thấy hóa đơn phù hợp</p>
+                        <p class="mt-1 text-xs text-slate-400">Thử thay đổi từ khóa hoặc điều kiện lọc</p>
+                    </div>
+                </div>
+
+                <PaginationBar :data="salesData" :filters="activeFilters" />
             </div>
         </DataPanel>
+        </div>
 
         <!-- MODAL CHI TIẾT HÓA ĐƠN -->
         <InvoiceDetailModal

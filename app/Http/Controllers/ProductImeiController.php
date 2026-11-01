@@ -224,6 +224,7 @@ class ProductImeiController extends Controller
             ],
             'imports' => $importHistories->map(fn (ProductImeiHistory $history) => [
                 'id' => $history->id,
+                'reference_id' => $history->reference_id,
                 'code' => $history->meta['import_code'] ?? null,
                 'cost_price' => $history->cost_price,
                 'sell_price' => $history->sell_price,
@@ -233,6 +234,7 @@ class ProductImeiController extends Controller
             ])->values(),
             'sales' => $saleItems->map(fn (SaleItem $item) => [
                 'id' => $item->id,
+                'sale_id' => $item->sale?->id,
                 'code' => $item->sale?->code,
                 'customer_name' => $item->sale?->customer?->full_name,
                 'customer_phone' => $item->sale?->customer?->phone,
