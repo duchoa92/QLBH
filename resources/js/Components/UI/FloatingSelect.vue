@@ -33,6 +33,7 @@ const props = defineProps({
     inputClass: { type: String, default: '' },
     placeholderText: { type: String, default: 'Chọn...' },
     showPlaceholder: { type: Boolean, default: true },
+    floatOnValue: { type: Boolean, default: false },
     createLabel: { type: String, default: '' },
 
 })
@@ -100,7 +101,6 @@ const handleChange = (event) => {
                 border
                 border-gray-300
                 rounded-lg
-                px-2 pt-2.5 pb-2
                 bg-white
                 text-sm
                 focus:border-blue-500
@@ -108,7 +108,12 @@ const handleChange = (event) => {
                 disabled:cursor-not-allowed
                 disabled:bg-gray-100
             "
-            :class="inputClass"
+            :class="[
+                inputClass,
+                floatOnValue
+                    ? (modelValue !== '' && modelValue !== null && modelValue !== undefined ? 'px-2 pt-2.5 pb-2' : 'px-2 py-2')
+                    : 'px-2 pt-2.5 pb-2',
+            ]"
         >
 
             <option v-if="showPlaceholder" value="">{{ placeholderText }}</option>
@@ -141,16 +146,12 @@ const handleChange = (event) => {
         </button>
 
         <label
-            class="
-                absolute
-                left-3
-                bg-white
-                px-1
-                text-gray-500
-                transition-all
-                -top-2
-                text-xs
-            "
+            class="absolute left-3 bg-white px-1 text-gray-500 transition-all"
+            :class="floatOnValue
+                ? (modelValue !== '' && modelValue !== null && modelValue !== undefined
+                    ? '-top-2 text-xs'
+                    : 'top-2.5 text-sm peer-focus:-top-2 peer-focus:text-xs peer-focus:text-blue-600')
+                : '-top-2 text-xs'"
         >
             {{ label }}
         </label>

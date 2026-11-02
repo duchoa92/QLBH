@@ -115,7 +115,7 @@ const openPriceEditor = (imei) => {
 
         <div class="border rounded overflow-hidden">
 
-            <table class="app-data-table w-full">
+            <table class="app-data-table hidden w-full md:table">
 
                 <thead class="bg-gray-100">
 
@@ -238,6 +238,15 @@ const openPriceEditor = (imei) => {
                     </tr>
                 </tbody>
             </table>
+            <div class="divide-y divide-slate-200 md:hidden">
+                <article v-for="imei in product.imeis" :key="`mobile-imei-${imei.id}`" class="space-y-2 p-3.5">
+                    <div class="flex items-start justify-between gap-3"><Link :href="route('product-imeis.show', imei.id)" class="min-w-0 break-all font-bold text-blue-700">{{ imei.imei }}</Link><span class="shrink-0 text-sm font-bold text-slate-900">{{ money(imei.sell_price) }}</span></div>
+                    <div class="flex items-center justify-between gap-2"><span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{{ imei.status === 'in_stock' || imei.status === 0 ? 'Còn hàng' : imei.status === 'sold' || imei.status === 1 ? 'Đã bán' : imei.status === 2 ? 'Đang sửa' : imei.status === 3 ? 'Đã trả' : '—' }}</span><button v-if="imei.status === 'in_stock' || imei.status === 0" type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50" @click="openPriceEditor(imei)">Sửa giá</button></div>
+                    <div v-if="hasExtraInfo(imei) && imei.extra_info?.note" class="text-xs text-slate-500">{{ imei.extra_info.note }}</div>
+                    <a v-if="extraInfoImageUrl(imei)" :href="extraInfoImageUrl(imei)" target="_blank" class="text-xs font-semibold text-blue-600">Xem ảnh</a>
+                </article>
+                <div v-if="!product.imeis.length" class="p-6 text-center text-sm text-slate-500">Chưa có IMEI</div>
+            </div>
         </div>
     </div>
 </template>

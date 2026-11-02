@@ -358,7 +358,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
             <!-- TABLE -->
 
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div class="overflow-x-auto">
+            <div class="hidden overflow-x-auto md:block">
 
                 <table class="app-data-table w-full text-sm">
 
@@ -539,6 +539,14 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
             </div>
 
+            <div class="divide-y divide-slate-200 md:hidden">
+                <article v-for="item in props.imports.data" :key="`mobile-import-${item.id}`" class="cursor-pointer space-y-2.5 p-3.5 active:bg-slate-50" @click="showImport(item.id)">
+                    <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">{{ item.code }}</div><div class="mt-0.5 truncate text-xs text-slate-500">{{ item.party_name || item.customer?.full_name || item.supplier?.name || '—' }}</div><div class="text-xs text-slate-500">{{ item.party_phone || item.customer?.phone || item.supplier?.phone || '' }}</div></div><span class="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">{{ statusLabel(item.status) }}</span></div>
+                    <div class="flex items-center justify-between border-t border-slate-100 pt-2 text-xs"><span class="text-slate-500">{{ formatDate(item.import_date) }} · {{ item.items_count }} dòng</span><span class="font-bold text-slate-900">{{ money(item.grand_total) }}</span></div>
+                    <div class="text-right text-[11px] font-semibold text-emerald-700">Xem chi tiết ›</div>
+                </article>
+                <div v-if="!props.imports.data?.length" class="p-8 text-center text-sm text-slate-500">{{ search ? `Không tìm thấy phiếu nhập phù hợp với “${search}”` : 'Chưa có đơn nhập hàng' }}</div>
+            </div>
             <PaginationBar :data="props.imports" :filters="props.filters" />
             </div>
 

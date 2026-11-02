@@ -972,12 +972,15 @@ onBeforeUnmount(() => {
             <!-- KHU VỰC 2: DANH SÁCH BẢNG HIỂN THỊ (LIST ZONE) -->
 
             <!-- BẢNG IMEI -->
-            <div v-if="entryModal.mode === 'imei'" class="order-2">
-                <div v-if="entryModal.item?.imeis?.length" class="mb-1.5 flex items-center justify-between gap-2 px-1">
-                    <h3 class="text-xs font-bold text-slate-800">IMEI đã thêm</h3>
-                    <span class="text-[10px] text-slate-500">Bấm vào dòng để nạp lại biểu mẫu bên dưới</span>
+            <div v-if="entryModal.mode === 'imei'" class="order-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 sm:p-3">
+                <div v-if="entryModal.item?.imeis?.length" class="mb-2 flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-xs font-bold text-slate-800">IMEI đã thêm</h3>
+                        <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ entryModal.item.imeis.length }}</span>
+                    </div>
+                    <span class="text-[10px] text-slate-500">Chọn một mục để sửa</span>
                 </div>
-                <div v-if="entryModal.item?.imeis?.length" class="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white">
+                <div v-if="entryModal.item?.imeis?.length" class="hidden max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white md:block">
                     <table class="w-full min-w-[720px] table-fixed text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
@@ -1056,6 +1059,47 @@ onBeforeUnmount(() => {
                     </table>
                 </div>
 
+                <div v-if="entryModal.item?.imeis?.length" class="space-y-2 md:hidden">
+                    <button
+                        v-for="(row, index) in entryModal.item.imeis"
+                        :key="`mobile-imei-${index}`"
+                        type="button"
+                        class="w-full rounded-xl border p-3 text-left shadow-sm transition"
+                        :class="editingEntryIndex === index ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-white hover:border-blue-300'"
+                        @click="selectImeiEntry(index)"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">IMEI / Serial · {{ index + 1 }}</div>
+                                <div class="mt-0.5 break-all font-mono text-sm font-bold text-slate-900">{{ typeof row === 'string' ? row : row.imei }}</div>
+                            </div>
+                            <button type="button" class="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa IMEI" @click.stop="removeImei(entryModal.item, index)">
+                                <Trash2 class="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div v-if="entryModal.item?.type === 'imei_variant'" class="mt-2 rounded-lg bg-slate-50 px-2.5 py-2">
+                            <div class="text-[10px] font-semibold uppercase text-slate-500">Biến thể</div>
+                            <div class="mt-0.5 break-words text-xs font-medium text-slate-800">{{ imeiVariantLabel(row) }}</div>
+                        </div>
+                        <div class="mt-2 grid grid-cols-2 gap-2">
+                            <label class="min-w-0 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] font-semibold text-slate-500" @click.stop>
+                                Giá nhập
+                                <input v-if="typeof row !== 'string'" :value="formatPrice(row.cost_price)" type="text" inputmode="numeric" class="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-medium text-slate-800 outline-none focus:border-blue-500" @input="updateRowMoney(row, 'cost_price', $event)" />
+                                <span v-else class="mt-1 block text-right text-xs font-medium text-slate-800">{{ formatPrice(entryModal.item.cost_price) }} {{ $currency() }}</span>
+                            </label>
+                            <label class="min-w-0 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] font-semibold text-slate-500" @click.stop>
+                                Giá bán
+                                <input v-if="typeof row !== 'string'" :value="formatPrice(row.sell_price)" type="text" inputmode="numeric" class="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-medium text-slate-800 outline-none focus:border-blue-500" @input="updateRowMoney(row, 'sell_price', $event)" />
+                                <span v-else class="mt-1 block text-right text-xs font-medium text-slate-800">{{ formatPrice(entryModal.item.sell_price) }} {{ $currency() }}</span>
+                            </label>
+                        </div>
+                        <div class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px]">
+                            <span class="text-slate-500">BH NCC: <strong class="text-slate-700">{{ typeof row !== 'string' && row.warranty_duration_value ? `${row.warranty_duration_value} ${row.warranty_duration_unit === 'days' ? 'ngày' : 'tháng'}` : '-' }}</strong></span>
+                            <span v-if="typeof row !== 'string' && row.extra_info?.customer_warranty_duration_value" class="text-blue-700">BH khách: {{ row.extra_info.customer_warranty_duration_value }} {{ row.extra_info.customer_warranty_duration_unit === 'days' ? 'ngày' : 'tháng' }}</span>
+                        </div>
+                    </button>
+                </div>
+
                 <!-- EMPTY STATE IMEI -->
                 <div v-else class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center">
                     <div class="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
@@ -1067,12 +1111,15 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- BẢNG BIẾN THỂ -->
-            <div v-if="entryModal.mode === 'variant'" class="order-2">
-                <div v-if="entryModal.item?.rows?.length" class="mb-1.5 flex items-center justify-between gap-2 px-1">
-                    <h3 class="text-xs font-bold text-slate-800">Biến thể đã thêm</h3>
-                    <span class="text-[10px] text-slate-500">Bấm vào dòng để nạp lại biểu mẫu bên dưới</span>
+            <div v-if="entryModal.mode === 'variant'" class="order-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 sm:p-3">
+                <div v-if="entryModal.item?.rows?.length" class="mb-2 flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-xs font-bold text-slate-800">Biến thể đã thêm</h3>
+                        <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ entryModal.item.rows.length }}</span>
+                    </div>
+                    <span class="text-[10px] text-slate-500">Chọn một mục để sửa</span>
                 </div>
-                <div v-if="entryModal.item?.rows?.length" class="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white">
+                <div v-if="entryModal.item?.rows?.length" class="hidden max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white md:block">
                     <table class="w-full text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
@@ -1127,6 +1174,41 @@ onBeforeUnmount(() => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <div v-if="entryModal.item?.rows?.length" class="space-y-2 md:hidden">
+                    <button
+                        v-for="(row, index) in entryModal.item.rows"
+                        :key="`mobile-variant-${row.variant_id}`"
+                        type="button"
+                        class="w-full rounded-xl border p-3 text-left shadow-sm transition"
+                        :class="editingEntryIndex === index ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-white hover:border-blue-300'"
+                        @click="selectVariantEntry(index)"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Biến thể · {{ index + 1 }}</div>
+                                <div class="mt-0.5 break-words text-sm font-bold text-slate-900">{{ variantLabel(row.variant) }}</div>
+                            </div>
+                            <button type="button" class="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa biến thể" @click.stop="removeVariantRow(entryModal.item, index)">
+                                <Trash2 class="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div class="mt-2 grid grid-cols-3 gap-2">
+                            <label class="min-w-0 rounded-lg bg-slate-50 px-2 py-2 text-[10px] font-semibold text-slate-500" @click.stop>
+                                Số lượng
+                                <input v-model.number="row.quantity" type="number" min="1" class="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-center text-xs font-medium text-slate-800 outline-none focus:border-blue-500" />
+                            </label>
+                            <label class="min-w-0 rounded-lg bg-slate-50 px-2 py-2 text-[10px] font-semibold text-slate-500" @click.stop>
+                                Giá nhập
+                                <input :value="formatPrice(row.cost_price)" type="text" inputmode="numeric" class="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-1.5 text-right text-xs font-medium text-slate-800 outline-none focus:border-blue-500" @input="updateRowMoney(row, 'cost_price', $event)" />
+                            </label>
+                            <label class="min-w-0 rounded-lg bg-slate-50 px-2 py-2 text-[10px] font-semibold text-slate-500" @click.stop>
+                                Giá bán
+                                <input :value="formatPrice(row.sell_price)" type="text" inputmode="numeric" class="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-1.5 text-right text-xs font-medium text-slate-800 outline-none focus:border-blue-500" @input="updateRowMoney(row, 'sell_price', $event)" />
+                            </label>
+                        </div>
+                    </button>
                 </div>
 
                 <!-- EMPTY STATE VARIANT -->

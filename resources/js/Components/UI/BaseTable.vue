@@ -22,12 +22,22 @@ const emit = defineEmits([
 
 const rows = computed(() => props.data?.data || [])
 const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(row => props.selectedIds?.includes(row.id)))
+const displayValue = (value, key = '') => {
+    if (value === null || value === undefined || value === '') return '—'
+    if (typeof value === 'boolean') return key === 'is_active' ? (value ? 'Hoạt động' : 'Ngừng') : (value ? 'Có' : 'Không')
+    if (Array.isArray(value)) return value.map(item => typeof item === 'object' ? (item.name || item.label || '') : item).filter(Boolean).join(', ') || '—'
+    if (typeof value === 'object') return value.name || value.full_name || value.label || value.code || '—'
+    if (typeof value === 'number' && /price|amount|total|balance|debt/i.test(key)) return `${value.toLocaleString('vi-VN')} đ`
+    if (typeof value === 'number' && (key === 'is_active' || key === 'status')) return value ? 'Hoạt động' : 'Ngừng'
+    return String(value)
+}
+const primaryValue = row => row?.name || row?.full_name || row?.description || row?.code || row?.[props.columns[0]?.key]
 
 </script>
 
 <template>
 <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-    <div class="overflow-x-auto">
+    <div class="hidden overflow-x-auto md:block">
         <table class="app-data-table min-w-[500px] w-full text-sm">
 
             <!-- HEADER -->
@@ -106,6 +116,30 @@ const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(r
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <div class="divide-y divide-slate-200 md:hidden">
+        <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 p-3.5 transition active:bg-slate-50" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
+            <div class="flex items-start gap-2">
+                <input v-if="selectable" type="checkbox" class="mt-1 shrink-0" :checked="selectedIds.includes(row.id)" @click.stop @change="$emit('toggleOne', row.id)" />
+                <div class="min-w-0 flex-1">
+                    <slot name="mobile-title" :row="row">
+                    <div class="break-words text-sm font-bold text-slate-900">{{ displayValue(primaryValue(row)) }}</div>
+                    </slot>
+                    <div v-if="rowClickable" class="mt-0.5 text-[11px] font-semibold text-emerald-700">Xem chi tiết ›</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2 pl-6 text-xs">
+                <template v-for="col in columns.slice(1)" :key="col.key">
+                    <div class="min-w-0">
+                        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{{ col.label }}</div>
+                        <div class="mt-0.5 break-words font-medium text-slate-700" :class="col.class">{{ displayValue(row[col.key], col.key) }}</div>
+                    </div>
+                </template>
+            </div>
+            <slot name="mobile-actions" :row="row" />
+        </article>
+        <div v-if="rows.length === 0" class="p-8 text-center text-sm text-slate-500">Không có dữ liệu</div>
     </div>
 
     <!-- PAGINATION -->

@@ -191,7 +191,7 @@ const submit = () => {
                 <label class="relative block sm:w-80"><Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" :size="16" /><input v-model="search" class="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại' : 'Tìm nhà cung cấp, mã hoặc số điện thoại'" /></label>
             </div>
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div class="overflow-x-auto">
+            <div class="hidden overflow-x-auto md:block">
                 <table class="app-data-table w-full min-w-[720px] text-left text-sm">
                     <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600"><tr><th class="px-4 py-3"><button type="button" class="hover:text-emerald-700" @click="sort(isCustomer ? 'full_name' : 'name')">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }} ↕</button></th><th class="px-4 py-3"><button type="button" class="hover:text-emerald-700" @click="sort('code')">Mã ↕</button></th><th class="px-4 py-3">Điện thoại</th><th class="px-4 py-3 text-right"><button type="button" class="hover:text-emerald-700" @click="sort('debt_balance')">Còn nợ ↕</button></th><th class="px-4 py-3 text-right">Thao tác</th></tr></thead>
                     <tbody class="divide-y divide-slate-100">
@@ -208,6 +208,20 @@ const submit = () => {
                         <tr v-if="!rows.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
                     </tbody>
                 </table>
+            </div>
+            <div class="divide-y divide-slate-200 md:hidden">
+                <article v-for="row in rows.data" :key="`mobile-debt-${row.id}`" class="space-y-2.5 p-3.5" @click="expandedId = expandedId === row.id ? null : row.id">
+                    <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">{{ nameOf(row) }}</div><div class="mt-0.5 text-xs text-slate-500">{{ row.code || '—' }} · {{ row.phone || '—' }}</div></div><div class="shrink-0 text-right"><div class="text-[10px] font-semibold uppercase text-slate-400">Còn nợ</div><div class="font-bold text-rose-600">{{ formatMoney(row.debt_balance) }}</div></div></div>
+                    <div class="flex items-center justify-between gap-2"><button type="button" class="text-xs font-semibold text-blue-700" @click.stop="expandedId = expandedId === row.id ? null : row.id">{{ expandedId === row.id ? 'Ẩn đơn nợ' : 'Xem đơn nợ' }} <ChevronDown :size="13" class="inline" :class="expandedId === row.id ? 'rotate-180' : ''" /></button><ActionButton @click.stop="pay(row)"><HandCoins :size="15" />Thanh toán nợ</ActionButton></div>
+                    <div v-if="expandedId === row.id" class="space-y-2 border-t border-slate-100 pt-2">
+                        <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div>
+                        <div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id || `mobile-other-${row.id}`" class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-2.5">
+                            <div class="min-w-0"><button v-if="!order.unallocated" type="button" class="truncate text-left text-xs font-bold text-blue-700" @click.stop="showOrderDetail(order)">{{ order.code }}</button><span v-else class="text-xs font-bold">{{ order.code }}</span><div class="text-[10px] text-slate-500">{{ order.date || '—' }} · Tổng {{ formatMoney(order.total) }} · Đã thu {{ formatMoney(order.paid) }}</div></div><div class="shrink-0 text-right"><div class="text-xs font-bold text-rose-600">{{ formatMoney(order.due) }}</div><button type="button" class="text-[10px] font-semibold text-emerald-700" @click.stop="pay(row, order)">Thanh toán</button></div>
+                        </div>
+                        <p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-xs text-slate-500">Chưa có đơn nợ.</p>
+                    </div>
+                </article>
+                <div v-if="!rows.data.length" class="p-8 text-center text-sm text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</div>
             </div>
             <PaginationBar :data="rows" :filters="filters" />
             </div>

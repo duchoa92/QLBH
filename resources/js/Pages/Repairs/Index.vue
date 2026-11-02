@@ -5,6 +5,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
 import DetailModal from '@/Components/UI/DetailModal.vue';
 import PaginationBar from '@/Components/UI/PaginationBar.vue';
+import DataPanel from '@/Components/UI/DataPanel.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
 import PatternLock from '@/Components/PatternLock.vue';
@@ -13,6 +14,7 @@ import { toast } from 'vue-sonner';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/format';
+import { Search, SlidersHorizontal, RefreshCw, X, FileText, ChevronRight, UserRound, Smartphone, Clock3, CheckCircle2, XCircle, Pencil, Wrench, Printer, RotateCcw } from 'lucide-vue-next';
 
 const props = defineProps({
     repairs: Object,
@@ -42,6 +44,7 @@ const detailCredentials = ref(null);
 const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
+const isFilterExpanded = ref(Boolean(status.value || dateFrom.value || dateTo.value));
 
 const reload = () => {
     router.reload({ only: ['repairs', 'stats'], preserveScroll: true });
@@ -222,6 +225,23 @@ const toggleSort = (field) => {
     }
 };
 
+const clearSearch = () => { search.value = ''; };
+const quickStatuses = [
+    { value: '', label: 'Tất cả' },
+    { value: 'pending', label: 'Tiếp nhận' },
+    { value: 'repairing', label: 'Đang sửa' },
+    { value: 'done', label: 'Hoàn tất sửa' },
+    { value: 'returned', label: 'Đã trả khách' },
+];
+const resetFilters = () => {
+    search.value = '';
+    status.value = '';
+    dateFrom.value = '';
+    dateTo.value = '';
+    sortBy.value = 'created_at';
+    sortOrder.value = 'desc';
+};
+
 const statusClasses = {
     pending: 'bg-amber-50 text-amber-700 border-amber-200',
     repairing: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -265,179 +285,86 @@ const confirmPayment = async (payment) => {
 
 <template>
     <div class="space-y-3 text-slate-800">
-        <!-- HEADER & THỐNG KÊ + NÚT TẠO MỚI -->
-        <div class="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-sm">
-            <div class="flex items-center gap-3">
-                <!-- THỐNG KÊ NHANH (Chữ to & sát lề) -->
-                <div class="hidden md:flex items-center gap-2 pl-3 border-l border-slate-200 text-xs">
-                    <div class="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/60 text-amber-800">
-                        <span>Chưa xong: </span>
-                        <span class="font-bold text-sm">{{ props.stats?.pending_count ?? 0 }}</span>
-                    </div>
-                    <div class="px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200/60 text-purple-800">
-                        <span>Đang sửa: </span>
-                        <span class="font-bold text-sm">{{ props.stats?.repairing_count ?? 0 }}</span>
-                    </div>
-                    <div class="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-800">
-                        <span>Hoàn tất sửa: </span>
-                        <span class="font-bold text-sm">{{ props.stats?.done_count ?? 0 }}</span>
-                    </div>
-                </div>
+        <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <div class="flex items-center justify-between rounded-xl border border-amber-200/80 bg-white p-3 shadow-sm">
+                <div><div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tiếp nhận</div><div class="mt-0.5 text-xl font-black text-slate-900">{{ props.stats?.pending_count ?? 0 }}</div></div>
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Clock3 class="h-5 w-5" /></div>
             </div>
-
-            <button
-                v-if="can('repairs.create')"
-                type="button"
-                @click="openCreate"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm rounded-lg shadow-sm transition shrink-0"
-            >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                <span>Nhận máy mới</span>
-            </button>
-        </div>
-
-        <!-- BỘ LỌC DỮ LIỆU -->
-        <div class="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-sm space-y-2">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                <!-- Tìm kiếm -->
-                <div class="lg:col-span-2">
-                    <FloatingInput
-                        v-model="search"
-                        label="Tìm mã phiếu, tên khách, SĐT, IMEI..."
-                        id="search_repair"
-                    />
-                </div>
-
-                <!-- Lọc trạng thái -->
-                <div>
-                    <FloatingSelect
-                        v-model="status"
-                        label="Trạng thái"
-                        id="status_filter"
-                        :options="statusOptions"
-                    />
-                </div>
-
-                <!-- Từ ngày -->
-                <div>
-                    <FloatingInput
-                        v-model="dateFrom"
-                        type="date"
-                        label="Từ ngày"
-                        id="date_from"
-                    />
-                </div>
-
-                <!-- Đến ngày -->
-                <div>
-                    <FloatingInput
-                        v-model="dateTo"
-                        type="date"
-                        label="Đến ngày"
-                        id="date_to"
-                    />
-                </div>
+            <div class="flex items-center justify-between rounded-xl border border-violet-200/80 bg-white p-3 shadow-sm">
+                <div><div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Đang sửa</div><div class="mt-0.5 text-xl font-black text-slate-900">{{ props.stats?.repairing_count ?? 0 }}</div></div>
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600"><Wrench class="h-5 w-5" /></div>
             </div>
-
-            <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs text-slate-500">
-                <div>
-                    Nhấn vào <span class="font-semibold text-slate-700">tiêu đề cột</span> để sắp xếp.
-                </div>
-                <div>
-                    Hiển thị <span class="font-bold text-slate-800">{{ props.repairs?.data?.length || 0 }}</span> / <span class="font-bold text-slate-800">{{ props.repairs?.total || 0 }}</span> phiếu
-                </div>
+            <div class="flex items-center justify-between rounded-xl border border-emerald-200/80 bg-white p-3 shadow-sm">
+                <div><div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Hoàn tất sửa</div><div class="mt-0.5 text-xl font-black text-slate-900">{{ props.stats?.done_count ?? 0 }}</div></div>
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><CheckCircle2 class="h-5 w-5" /></div>
             </div>
         </div>
 
-        <!-- BẢNG DỮ LIỆU (Chữ to, dòng thoáng hơn) -->
-        <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="app-data-table w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-slate-50 border-b border-slate-200/80 text-xs font-bold text-slate-600 uppercase tracking-wider select-none">
-                            <th @click="toggleSort('code')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
-                                <div class="flex items-center gap-1">
-                                    <span>Mã phiếu</span>
-                                    <span v-if="sortBy === 'code'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                                </div>
-                            </th>
-                            <th class="py-2.5 px-3">Khách hàng</th>
-                            <th @click="toggleSort('device_name')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
-                                <div class="flex items-center gap-1">
-                                    <span>Thiết bị / IMEI</span>
-                                    <span v-if="sortBy === 'device_name'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                                </div>
-                            </th>
-                            <th @click="toggleSort('status')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
-                                <div class="flex items-center gap-1">
-                                    <span>Trạng thái</span>
-                                    <span v-if="sortBy === 'status'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                                </div>
-                            </th>
-                            <th @click="toggleSort('created_at')" class="py-2.5 px-3 cursor-pointer hover:bg-emerald-50 hover:text-emerald-700 transition">
-                                <div class="flex items-center gap-1">
-                                    <span>Ngày nhận</span>
-                                    <span v-if="sortBy === 'created_at'" class="text-emerald-700 font-bold text-sm">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                                </div>
-                            </th>
-                            <th class="py-2.5 px-3 text-right">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 text-sm">
-                        <tr v-for="repair in props.repairs?.data" :key="repair.id" tabindex="0" class="cursor-pointer transition hover:bg-emerald-50/70" title="Bấm vào dòng để xem chi tiết" @click="openRepairDetail(repair)" @keydown.enter.self="openRepairDetail(repair)">
-                            <td class="py-2.5 px-3 font-bold text-emerald-700">
-                                    <span class="font-bold text-emerald-700">{{ repair.code }}</span>
-                            </td>
-                            <td class="py-2.5 px-3">
-                                <div class="font-semibold text-slate-900">{{ repair.customer?.name || 'Khách lẻ' }}</div>
-                                <div class="text-xs text-slate-500">{{ repair.customer?.phone || '---' }}</div>
-                            </td>
-                            <td class="py-2.5 px-3">
-                                <div class="font-semibold text-slate-800">{{ repair.device_name }}</div>
-                                <div class="text-xs text-slate-400 font-mono">{{ repair.imei || 'Không IMEI' }}</div>
-                            </td>
-                            <td class="py-2.5 px-3">
-                                <span :class="['inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold', statusClasses[repair.status]]">
-                                    {{ statusLabels[repair.status] || repair.status }}
-                                </span>
-                                <div v-if="repair.waiting_for_parts" class="mt-1 text-[11px] font-medium text-amber-700">
-                                    <template v-if="repair.waiting_mode === 'wait_repair'">Tạm chờ sửa</template><template v-else>Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span></template>
-                                </div>
-                            </td>
-                            <td class="py-2.5 px-3 text-xs text-slate-600 font-medium">
-                                {{ repair.created_at }}
-                            </td>
-                            <td class="py-2.5 px-3 text-right">
-                                <div class="inline-flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        @click.stop="openRepairWorkflow(repair, 'intake')"
-                                        v-if="can('repairs.edit')"
-                                        class="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition"
-                                    >
-                                        Sửa
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click.stop="openRepairWorkflow(repair)"
-                                        v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)"
-                                        class="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition"
-                                    >
-                                        {{ repair.status === 'done' ? 'Thanh toán / trả khách' : repair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật tiến trình' }}
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr v-if="!props.repairs?.data?.length">
-                            <td colspan="6" class="py-8 text-center text-slate-400 text-sm">
-                                Không tìm thấy phiếu sửa chữa phù hợp
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <DataPanel detached>
+            <template #header>
+                <div class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4">
+                    <div class="flex flex-col items-stretch gap-2.5 lg:flex-row lg:items-center">
+                        <div class="relative min-w-0 flex-1">
+                            <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input id="search_repair" v-model="search" type="text" autocomplete="off" placeholder="Tìm mã phiếu, khách hàng, SĐT, thiết bị hoặc IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
+                            <button v-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
+                        </div>
+                        <div class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                            <button v-for="item in quickStatuses" :key="item.value || 'all'" type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="status === item.value ? (item.value === 'pending' ? 'bg-amber-500 text-white shadow-sm' : item.value === 'repairing' ? 'bg-violet-600 text-white shadow-sm' : item.value === 'done' ? 'bg-emerald-600 text-white shadow-sm' : item.value === 'returned' ? 'bg-slate-700 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm') : 'text-slate-600 hover:text-slate-900'" @click="status = item.value">{{ item.label }}</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-xs font-semibold transition lg:flex-none" :class="isFilterExpanded ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'" @click="isFilterExpanded = !isFilterExpanded"><SlidersHorizontal class="h-3.5 w-3.5" />{{ isFilterExpanded ? 'Ẩn lọc' : 'Lọc nâng cao' }}</button>
+                            <button v-if="can('repairs.create')" type="button" @click="openCreate" class="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-blue-600 px-3.5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 lg:flex-none"><span class="text-base leading-none">+</span> Nhận máy mới</button>
+                        </div>
+                    </div>
+                    <div v-if="isFilterExpanded" class="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto]">
+                        <FloatingSelect v-model="status" label="Trạng thái phiếu" id="repair_status_filter" :options="statusOptions" :show-placeholder="false" option-label="label" option-value="value" />
+                        <FloatingInput v-model="dateFrom" type="date" label="Từ ngày" id="repair_date_from" />
+                        <FloatingInput v-model="dateTo" type="date" label="Đến ngày" id="repair_date_to" />
+                        <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 text-xs text-slate-500 sm:col-span-2 lg:col-span-1"><span>Hiển thị <strong class="text-slate-800">{{ props.repairs?.data?.length || 0 }} / {{ props.repairs?.total || 0 }}</strong></span><button type="button" class="inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-emerald-700" @click="resetFilters"><RefreshCw class="h-3.5 w-3.5" /> Đặt lại</button></div>
+                    </div>
+                </div>
+            </template>
+
+            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div class="hidden overflow-x-auto md:block">
+                    <table class="app-data-table w-full min-w-[900px] border-collapse text-left text-xs">
+                        <thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                            <th v-for="column in [{ key: 'code', label: 'Mã phiếu' }, { key: 'customer', label: 'Khách hàng' }, { key: 'device_name', label: 'Thiết bị / IMEI' }, { key: 'status', label: 'Trạng thái' }, { key: 'created_at', label: 'Ngày nhận' }]" :key="column.key" class="cursor-pointer px-3.5 py-2.5 transition hover:bg-slate-100" @click="column.key !== 'customer' && toggleSort(column.key)"><div class="flex items-center gap-1"><span>{{ column.label }}</span><span v-if="sortBy === column.key" class="text-emerald-700">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></div></th>
+                            <th class="px-3.5 py-2.5 text-right">Thao tác</th>
+                        </tr></thead>
+                        <tbody class="divide-y divide-slate-100 text-xs font-medium">
+                            <tr v-for="repair in props.repairs?.data" :key="repair.id" tabindex="0" class="cursor-pointer transition-colors hover:bg-emerald-50/70" title="Bấm để xem chi tiết phiếu" @click="openRepairDetail(repair)" @keydown.enter.self="openRepairDetail(repair)">
+                                <td class="px-3.5 py-2.5"><button type="button" class="font-bold text-emerald-700 hover:text-emerald-900 hover:underline">#{{ repair.code }}</button></td>
+                                <td class="px-3.5 py-2.5"><div class="font-bold text-slate-900">{{ repair.customer?.name || repair.customer_name || 'Khách lẻ' }}</div><div class="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400"><UserRound class="h-3 w-3" />{{ repair.customer?.phone || repair.contact_phone || '—' }}</div></td>
+                                <td class="px-3.5 py-2.5"><div class="font-bold text-slate-800">{{ repair.device_name }}</div><div class="mt-0.5 flex items-center gap-1 font-mono text-[10px] text-slate-400"><Smartphone class="h-3 w-3" />{{ repair.imei || repair.serial || 'Không IMEI' }}</div></td>
+                                <td class="px-3.5 py-2.5"><span :class="['inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold', statusClasses[repair.status]]">{{ statusLabels[repair.status] || repair.status }}</span><div v-if="repair.waiting_for_parts" class="mt-1 text-[10px] font-semibold text-amber-700">{{ repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : `Chờ ${repair.parts_needed || 'linh kiện'}` }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span></div></td>
+                                <td class="whitespace-nowrap px-3.5 py-2.5 text-[11px] text-slate-500">{{ formatDateTime(repair.created_at) }}</td>
+                                <td class="px-3.5 py-2.5 text-right"><div class="flex items-center justify-end gap-1">
+                                    <button v-if="can('repairs.edit')" type="button" class="rounded-lg p-2 text-amber-600 transition hover:bg-amber-50" title="Sửa thông tin phiếu" @click.stop="openRepairWorkflow(repair, 'intake')"><Pencil class="h-4 w-4" /></button>
+                                    <button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="rounded-lg p-2 text-emerald-700 transition hover:bg-emerald-50" :title="repair.status === 'done' ? 'Thanh toán / trả khách' : 'Cập nhật tiến trình sửa'" @click.stop="openRepairWorkflow(repair)"><Wrench v-if="repair.status !== 'done'" class="h-4 w-4" /><RotateCcw v-else class="h-4 w-4" /></button>
+                                </div></td>
+                            </tr>
+                            <tr v-if="!props.repairs?.data?.length"><td colspan="6" class="px-4 py-12 text-center"><FileText class="mx-auto mb-3 h-10 w-10 text-slate-300" /><p class="text-sm font-bold text-slate-700">Không tìm thấy phiếu sửa nào</p><p class="mt-1 text-xs text-slate-400">Thử thay đổi bộ lọc hoặc từ khóa</p></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+                    <article v-for="repair in props.repairs?.data" :key="`mobile-${repair.id}`" class="space-y-3 rounded-xl border border-slate-200 border-l-4 bg-white p-3.5 shadow-sm transition hover:border-slate-300 hover:shadow-md active:bg-slate-50" :class="repair.status === 'pending' ? 'border-l-amber-400' : repair.status === 'repairing' ? 'border-l-violet-500' : repair.status === 'done' ? 'border-l-emerald-500' : repair.status === 'returned' ? 'border-l-slate-400' : 'border-l-rose-400'" @click="openRepairDetail(repair)">
+                        <div class="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2"><button type="button" class="min-w-0 truncate text-left text-sm font-extrabold text-emerald-700" @click.stop="openRepairDetail(repair)">#{{ repair.code }}</button><span :class="['shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold', statusClasses[repair.status]]">{{ statusLabels[repair.status] || repair.status }}</span></div>
+                        <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="truncate text-sm font-bold text-slate-900">{{ repair.customer?.name || repair.customer_name || 'Khách lẻ' }}</div><div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><UserRound class="h-3 w-3" />{{ repair.customer?.phone || repair.contact_phone || '—' }}</div></div><div class="min-w-0 text-right"><div class="truncate text-xs font-bold text-slate-800">{{ repair.device_name }}</div><div class="mt-0.5 truncate font-mono text-[10px] text-slate-500">IMEI: {{ repair.imei || repair.serial || '—' }}</div></div></div>
+                        <div v-if="repair.waiting_for_parts" class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-800">{{ repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : `Chờ ${repair.parts_needed || 'linh kiện'}` }}<span v-if="repair.expected_days !== null"> · Dự kiến {{ repair.expected_days }} ngày</span></div>
+                        <div class="flex items-center justify-between border-t border-slate-100 pt-2"><span class="text-[10px] text-slate-400">{{ formatDateTime(repair.created_at) }}</span><div class="flex items-center gap-1">
+                            <button v-if="can('repairs.edit')" type="button" class="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-2.5 py-1.5 text-[10px] font-semibold text-amber-700" @click.stop="openRepairWorkflow(repair, 'intake')"><Pencil class="h-3.5 w-3.5" /> Sửa</button>
+                            <button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-800" @click.stop="openRepairWorkflow(repair)"><Wrench class="h-3.5 w-3.5" />{{ repair.status === 'done' ? 'Trả khách' : 'Tiến trình' }}</button>
+                        </div></div>
+                    </article>
+                    <div v-if="!props.repairs?.data?.length" class="p-10 text-center"><FileText class="mx-auto mb-3 h-9 w-9 text-slate-300" /><p class="text-sm font-bold text-slate-700">Không tìm thấy phiếu phù hợp</p><p class="mt-1 text-xs text-slate-400">Thử thay đổi bộ lọc hoặc từ khóa</p></div>
+                </div>
+                <PaginationBar :data="props.repairs" :filters="props.filters" />
             </div>
-            <PaginationBar :data="props.repairs" :filters="props.filters" />
-        </div>
+        </DataPanel>
 
         <DetailModal
             v-if="detailRepair"
