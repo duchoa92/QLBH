@@ -69,15 +69,17 @@ onBeforeUnmount(() => {
         >
             <!-- HEADER -->
             <div class="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3" :class="headerClass">
-                <h2 class="text-base font-bold text-slate-900">{{ title }}</h2>
-                <button
-                    type="button"
-                    @click="$emit('close')"
-                    class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-500"
-                    aria-label="Đóng"
-                >
-                    ✕
-                </button>
+                <slot name="header">
+                    <h2 class="text-base font-bold text-slate-900">{{ title }}</h2>
+                    <button
+                        type="button"
+                        @click="$emit('close')"
+                        class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-500"
+                        aria-label="Đóng"
+                    >
+                        ✕
+                    </button>
+                </slot>
             </div>
 
             <!-- BODY -->

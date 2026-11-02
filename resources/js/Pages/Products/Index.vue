@@ -1,11 +1,11 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
 import ProductImeisModal from './ProductImeisModal.vue'
 import ProductDetailModal from './ProductDetailModal.vue'
-import { ArrowUpDown, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
+import { ArrowUpDown, DollarSign, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal, registerUrlModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
@@ -17,6 +17,7 @@ import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
 import ImportExportModal from './ImportExportModal.vue'
+import BulkPriceUpdateModal from './BulkPriceUpdateModal.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
 import { formatCurrency } from '@/utils/format'
@@ -225,6 +226,24 @@ const toggleAll = () => {
     const ids = props.products?.data?.map(row => row.id) || []
     selectedIds.value = selectedIds.value.length === ids.length ? [] : ids
 }
+
+const selectedProducts = computed(() =>
+    (props.products?.data ?? []).filter(product => selectedIds.value.includes(product.id))
+)
+
+const openPriceUpdate = (products) => {
+    if (!products.length) return
+
+    openModal(BulkPriceUpdateModal, {
+        props: { products },
+        onUpdated: () => {
+            selectedIds.value = []
+            loadData()
+        },
+    })
+}
+
+const openBulkPriceUpdate = () => openPriceUpdate(selectedProducts.value)
 
 const loadingStatus = ref(null)
 
@@ -450,6 +469,14 @@ const openImeiList = (row) => {
         </button>
 
         <button
+            type="button"
+            @click="openBulkPriceUpdate"
+            class="flex items-center gap-1 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded"
+        >
+            <DollarSign :size="16" />Sửa giá đã chọn
+        </button>
+
+        <button
             @click="bulkDelete"
             class="flex items-center gap-1 text-red-600 hover:bg-red-100 px-2 py-1 rounded"
         >
@@ -530,6 +557,16 @@ const openImeiList = (row) => {
                     <Tooltip text="Sửa">
                         <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
                             <SquarePen size="17" class="text-blue-500" />
+                        </button>
+                    </Tooltip>
+
+                    <Tooltip text="Cập nhật giá">
+                        <button
+                            type="button"
+                            class="p-1 hover:bg-gray-200 rounded"
+                            @click="openPriceUpdate([row])"
+                        >
+                            <DollarSign size="17" class="text-emerald-600" />
                         </button>
                     </Tooltip>
 

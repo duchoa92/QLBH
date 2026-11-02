@@ -129,6 +129,7 @@ Route::middleware(['auth'])->group(function () {
         // Trash & Bulk
         Route::get('/trash', [ProductController::class, 'trash'])->middleware('permission:products.view')->name('trash');
         Route::post('/bulk-delete', [ProductController::class, 'bulkDelete'])->middleware('permission:products.delete')->name('bulkDelete');
+        Route::patch('/bulk-price', [ProductController::class, 'bulkUpdatePrice'])->middleware('permission:products.edit')->name('bulk-price');
         Route::post('/bulk-restore', [ProductController::class, 'bulkRestore'])->middleware('permission:products.edit')->name('bulkRestore');
         Route::post('/bulk-force-delete', [ProductController::class, 'bulkForceDelete'])->middleware('permission:products.delete')->name('bulkForceDelete');
 

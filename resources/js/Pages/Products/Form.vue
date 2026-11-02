@@ -8,7 +8,7 @@ import SearchableReferenceSelect from '@/Components/UI/SearchableReferenceSelect
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
 import {toast} from 'vue-sonner'
-import { X } from 'lucide-vue-next'
+import { Layers, Plus } from 'lucide-vue-next'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
 import ReferenceCreateModal from './ReferenceCreateModal.vue'
@@ -340,7 +340,16 @@ watch(() => props.product, (p) => {
             cost_price: p.cost_price || 0,
             sell_price: p.sell_price || 0,
             stock: 0,
-            imeis: ''
+            imeis: '',
+            overrides: Object.fromEntries(p.variants.map(variant => [
+                variantAttributeKey(variant.attributes || []),
+                {
+                    sku: variant.sku || '',
+                    cost_price: variant.cost_price ?? p.cost_price ?? 0,
+                    sell_price: variant.sell_price ?? p.sell_price ?? 0,
+                    stock: variant.stock ?? 0,
+                },
+            ])),
         }]
 
     } else {
@@ -408,7 +417,8 @@ watch(showVariants, (value) => {
                 cost_price: form.cost_price || 0,
                 sell_price: form.sell_price || 0,
                 stock: 0,
-                imeis: ''
+                imeis: '',
+                overrides: {},
             }]
         }
 
@@ -451,6 +461,52 @@ const buildVariantAttributes = () => {
         name: attr.name,
         value: [],
     }))
+}
+
+function variantAttributeKey(attributes) {
+    return (attributes || [])
+        .map((attribute) => `${String(attribute.name || '').trim().toLocaleLowerCase()}=${String(Array.isArray(attribute.value) ? attribute.value[0] : attribute.value || '').trim().toLocaleLowerCase()}`)
+        .sort()
+        .join('|')
+}
+
+const variantPreviewRows = computed(() => {
+    const draft = form.variants[0]
+    const attributes = draft?.attributes || []
+    const completeAttributes = attributes.filter(attribute => attribute.name && attribute.value?.length)
+
+    if (!completeAttributes.length || completeAttributes.length !== attributes.length) return []
+
+    return completeAttributes.reduce((rows, attribute) => rows.flatMap(row =>
+        attribute.value.map(value => {
+            const values = [...row.attributes, { name: attribute.name, value }]
+            return {
+                attributes: values,
+                key: variantAttributeKey(values),
+                label: values.map(item => item.value).join(' - '),
+            }
+        })
+    ), [{ attributes: [] }]).map(row => ({
+        ...row,
+        label: row.label || row.attributes.map(item => item.value).join(' - '),
+    }))
+})
+
+const variantOverrideFor = (row) => {
+    const draft = form.variants[0]
+    if (!draft) return {}
+    draft.overrides ||= {}
+
+    if (!draft.overrides[row.key]) {
+        draft.overrides[row.key] = {
+            sku: '',
+            cost_price: draft.cost_price || form.cost_price || 0,
+            sell_price: draft.sell_price || form.sell_price || 0,
+            stock: 0,
+        }
+    }
+
+    return draft.overrides[row.key]
 }
 
 
@@ -885,6 +941,14 @@ const submit = () => {
                 ...variant,
                 cost_price: Number(variant.cost_price || 0) / factor,
                 sell_price: Number(variant.sell_price || 0) / factor,
+                overrides: Object.fromEntries(Object.entries(variant.overrides || {}).map(([key, override]) => [
+                    key,
+                    {
+                        ...override,
+                        cost_price: Number(override.cost_price || 0) / factor,
+                        sell_price: Number(override.sell_price || 0) / factor,
+                    },
+                ])),
             }))
         }
 
@@ -1149,154 +1213,59 @@ const submit = () => {
                     <!-- ========================= -->
                     <div
                         v-if="form.variants.length"
-                        class="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2"
+                        class="space-y-5 rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2"
                     >
-                        <div>
-                            <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                            <div class="flex items-center gap-2">
+                                <Layers :size="18" class="text-blue-600" />
                                 <div>
-                                    <h3 class="text-sm font-bold text-slate-800">
-                                            Thuộc tính biến thể
-                                    </h3>
-                                    <p class="mt-0.5 text-xs font-medium text-slate-500">
-                                        Nhập giá trị rồi nhấn Enter, hoặc dấu ','
-                                    </p>
+                                    <h3 class="text-sm font-bold text-slate-800">Cấu hình thuộc tính sản phẩm</h3>
+                                    <p class="mt-0.5 text-xs text-slate-500">Thêm giá trị để tạo danh sách biến thể bên dưới.</p>
                                 </div>
-                                
-                                <button
-                                    type="button"
-                                    @click="openAttrDropdown(0)"
-                                    class="h-[38px] rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
-                                >
-                                    + Thêm
-                                </button>
+                            </div>
+                            <button type="button" class="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-800" @click="openAttrDropdown(0)"><Plus :size="16" />Thêm nhóm thuộc tính</button>
+                        </div>
+
+                        <div v-for="(v, i) in form.variants" :key="v.id || i" class="space-y-3">
+                            <div v-for="(attr, i2) in v.attributes" :key="attr.id || attr.name" class="relative rounded-lg border border-slate-200 bg-white p-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-700">{{ attr.name }}</p>
+                                    <button type="button" class="text-xs font-medium text-slate-500 hover:text-red-600" @click="removeAttribute(v, i2)">Xóa nhóm</button>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <TagBadge v-for="(val, idx) in attr.value" :key="idx" :label="val" removable size="lg" color="blue" @remove="attr.value.splice(idx, 1)" />
+                                    <div class="relative" :ref="el => setDropdownRef(el, 'value', i, i2)">
+                                        <input
+                                            :value="pendingValueDrafts[valueDraftKey(i, attr)] || ''"
+                                            class="h-8 w-36 rounded-full border border-slate-300 bg-slate-50 px-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                            placeholder="Thêm giá trị..."
+                                            @focus="openValueDropdown(i, i2)"
+                                            @input="e => { pendingValueDrafts[valueDraftKey(i, attr)] = e.target.value; if (dropdown.type === 'value' && dropdown.variantIndex === i && dropdown.attrIndex === i2) dropdown.keyword = e.target.value }"
+                                            @keydown="e => { if (e.key === ',') { e.preventDefault(); addAttrValue(attr, e.target.value, i, i2); return }; handleKeyDown(e, attr, i, i2) }"
+                                            @blur="closeDropdown('value', i, i2)"
+                                        />
+                                        <div v-if="dropdown.type === 'value' && dropdown.variantIndex === i && dropdown.attrIndex === i2 && suggestions.length" class="absolute z-20 mt-1 max-h-40 w-56 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                                            <div v-for="(item, idx) in suggestions" :key="item + '-' + idx" class="suggestion-item cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" @mousedown.prevent="selectSuggestion(item)">{{ item }}</div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-700" aria-label="Thêm giá trị" @click="addAttrValue(attr, pendingValueDrafts[valueDraftKey(i, attr)] || '', i, i2)"><Plus :size="16" /></button>
+                                </div>
+                            </div>
+
+                            <div v-if="addingAttributeFor[variantDraftKey(i)]" class="relative" :ref="el => setDropdownRef(el, 'attr', i)">
+                                <input :id="'attr-input-' + i" :value="pendingAttributeDrafts[variantDraftKey(i)] || ''" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" placeholder="Nhập hoặc chọn nhóm thuộc tính..." @focus="openAttrDropdown(i)" @input="e => { pendingAttributeDrafts[variantDraftKey(i)] = e.target.value; dropdown.type = 'attr'; dropdown.variantIndex = i; dropdown.keyword = e.target.value }" @keydown="e => handleKeyDown(e, null, i)" @blur="e => handleAttributeInputBlur(i, e)" />
+                                <div v-if="dropdown.type === 'attr' && dropdown.variantIndex === i && suggestions.length" class="absolute z-10 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                                    <div v-for="(item, idx) in suggestions" :key="idx" :class="['cursor-pointer px-3 py-2 text-sm', idx === activeIndex ? 'bg-blue-100' : 'hover:bg-slate-50']" @mousedown.prevent="selectSuggestion(item)">{{ item }}</div>
+                                </div>
                             </div>
                         </div>
 
-                        <div
-                            v-for="(v, i) in form.variants"
-                            :key="v.id || i"
-                            class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-                        >
-
-                            <!-- Thuộc tính mới -->
-                            <div
-                                v-for="(attr, i2) in v.attributes"
-                                :key="attr.id || attr.name"
-                                class="relative"
-                            >
-                                <!-- INPUT -->
-                                <div
-                                    class="relative"
-                                    :ref="el => setDropdownRef(el, 'value', i, i2)"
-                                >
-                                    <!-- INPUT NHẬP GIÁ TRỊ THUỘC TÍNH -->
-                                    <FloatingInput
-                                        :model-value="pendingValueDrafts[valueDraftKey(i, attr)] || ''"
-                                        :label="attr.name"
-                                        @focus="openValueDropdown(i, i2)"
-                                        @update:model-value="val => {
-                                            pendingValueDrafts[valueDraftKey(i, attr)] = val
-                                            if (dropdown.type === 'value' && dropdown.variantIndex === i && dropdown.attrIndex === i2) {
-                                                dropdown.keyword = val
-                                            }
-                                        }"
-                                        @keydown="e => {
-                                            if (e.key === ',') {
-                                                e.preventDefault()
-                                                addAttrValue(attr, e.target.value, i, i2)
-                                                return
-                                            }
-                                            handleKeyDown(e, attr, i, i2)
-                                        }"
-                                        @blur="closeDropdown('value', i, i2)"
-                                    />
-
-                                    <div
-                                        v-if="
-                                            dropdown.type === 'value' &&
-                                            dropdown.variantIndex === i &&
-                                            dropdown.attrIndex === i2 &&
-                                            suggestions.length
-                                        "
-                                        class="absolute z-20 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
-                                    >
-                                        <div
-                                            v-for="(item, idx) in suggestions"
-                                            :key="item + '-' + idx"
-                                            class="suggestion-item cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
-                                            @mousedown.prevent="selectSuggestion(item)"
-                                        >
-                                            {{ item }}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- NÚT XÓA NỔI TRÊN INPUT -->
-                                <button
-                                    type="button"
-                                    @click="removeAttribute(v, i2)"
-                                    class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow hover:bg-red-600"
-                                >
-                                    <X :size="13" />
-                                </button>
-
-                                <!-- TAG -->
-                                <div
-                                    v-if="attr.value.length"
-                                    class="pt-2 flex flex-wrap gap-2"
-                                >
-                                    <TagBadge
-                                        v-for="(val, idx) in attr.value"
-                                        :key="idx"
-                                        :label="val"
-                                        removable
-                                        size="lg"
-                                        color="blue"
-                                        @remove="attr.value.splice(idx, 1)"
-                                    />
-                                </div>
+                        <div class="border-t border-slate-200 pt-4">
+                            <div class="mb-3 flex items-center justify-between gap-3"><h4 class="text-sm font-bold text-slate-800">Danh sách phiên bản biến thể ({{ variantPreviewRows.length }})</h4><span class="text-xs text-slate-500">Tồn kho quản lý từ nhập hàng</span></div>
+                            <div v-if="variantPreviewRows.length" class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                <table class="min-w-[760px] w-full text-sm"><thead class="bg-slate-100 text-left text-xs font-semibold text-slate-600"><tr><th class="px-3 py-2">Phiên bản</th><th class="px-3 py-2">Mã SKU</th><th class="px-3 py-2">Giá nhập (đ)</th><th class="px-3 py-2">Giá bán (đ)</th><th class="px-3 py-2 text-right">Tồn kho</th></tr></thead><tbody><tr v-for="row in variantPreviewRows" :key="row.key" class="border-t border-slate-100"><td class="px-3 py-2 font-semibold text-slate-800"><span class="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500"></span>{{ row.label }}</td><td class="px-3 py-2"><input v-model="variantOverrideFor(row).sku" class="h-8 w-44 rounded border border-slate-300 bg-slate-50 px-2 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:ring-emerald-500" placeholder="Tự tạo khi lưu" /></td><td class="px-3 py-2"><input v-model.number="variantOverrideFor(row).cost_price" type="number" min="0" class="h-8 w-32 rounded border border-slate-300 bg-slate-50 px-2 text-right text-xs font-semibold focus:border-emerald-500 focus:ring-emerald-500" /></td><td class="px-3 py-2"><input v-model.number="variantOverrideFor(row).sell_price" type="number" min="0" class="h-8 w-32 rounded border border-slate-300 bg-slate-50 px-2 text-right text-xs font-semibold text-emerald-700 focus:border-emerald-500 focus:ring-emerald-500" /></td><td class="px-3 py-2 text-right font-semibold text-slate-600">{{ variantOverrideFor(row).stock || 0 }}</td></tr></tbody></table>
                             </div>
-
-                            <!-- NÚT THÊM -->
-                            <div
-                                v-if="addingAttributeFor[variantDraftKey(i)]"
-                                class="relative"
-                                :ref="el => setDropdownRef(el, 'attr', i)"
-                            >
-                                        <input
-                                            :id="'attr-input-' + i"
-                                            :value="pendingAttributeDrafts[variantDraftKey(i)] || ''"
-                                            class="h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                                            placeholder="Nhập hoặc chọn thuộc tính..."
-                                            @focus="openAttrDropdown(i)"
-                                            @input="e => {
-                                                pendingAttributeDrafts[variantDraftKey(i)] = e.target.value
-                                                dropdown.type = 'attr'
-                                                dropdown.variantIndex = i
-                                                dropdown.keyword = e.target.value
-                                            }"
-                                            @keydown="e => handleKeyDown(e, null, i)"
-                                            @blur="e => handleAttributeInputBlur(i, e)"
-                                        />
-
-                                        <div
-                                            v-if="dropdown.type === 'attr' && dropdown.variantIndex === i && suggestions.length"
-                                            class="absolute z-10 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
-                                        >
-                                            <div
-                                                v-for="(item, idx) in suggestions"
-                                                :key="idx"
-                                                :class="[
-                                                    'px-3 py-2 cursor-pointer text-sm',
-                                                    idx === activeIndex ? 'bg-blue-100' : 'hover:bg-gray-100'
-                                                ]"
-                                                @mousedown.prevent="selectSuggestion(item)"
-                                            >
-                                                {{ item }}
-                                            </div>
-                                        </div>
-                            </div>
-
+                            <p v-else class="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">Thêm ít nhất một giá trị cho mỗi nhóm thuộc tính để tạo phiên bản.</p>
                         </div>
 
                     </div>

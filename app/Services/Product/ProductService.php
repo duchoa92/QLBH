@@ -212,12 +212,19 @@ class ProductService extends BaseService
             $seen[$key] = true;
             $desiredKeys->push($key);
 
-            $costPrice = $variants[0]['cost_price'] ?? 0;
-            $sellPrice = $variants[0]['sell_price'] ?? 0;
+            $override = $variants[0]['overrides'][$key] ?? [];
+            $costPrice = $override['cost_price'] ?? $variants[0]['cost_price'] ?? 0;
+            $sellPrice = $override['sell_price'] ?? $variants[0]['sell_price'] ?? 0;
+            $requestedSku = trim((string) ($override['sku'] ?? ''));
 
             if ($existingVariants->has($key)) {
-                $existingVariants->get($key)->update([
+                $existingVariant = $existingVariants->get($key);
+                $existingVariant->update([
                     'attributes' => $formattedAttributes,
+                    'sku' => $this->uniqueVariantSku(
+                        $requestedSku ?: $existingVariant->sku,
+                        $existingVariant->id
+                    ),
                     'cost_price' => $costPrice,
                     'sell_price' => $sellPrice,
                     'is_active' => true,
@@ -228,7 +235,7 @@ class ProductService extends BaseService
 
             // generate SKU
             $sku = $this->uniqueVariantSku(
-                $this->generateSku($product, [
+                $requestedSku ?: $this->generateSku($product, [
                     'attributes' => $formattedAttributes
                 ])
             );
@@ -302,12 +309,15 @@ class ProductService extends BaseService
             ->join('|');
     }
 
-    private function uniqueVariantSku(string $baseSku): string
+    private function uniqueVariantSku(string $baseSku, ?int $ignoreVariantId = null): string
     {
         $sku = $baseSku;
         $i = 1;
 
-        while (ProductVariant::where('sku', $sku)->exists()) {
+        while (ProductVariant::query()
+            ->where('sku', $sku)
+            ->when($ignoreVariantId, fn ($query) => $query->where('id', '!=', $ignoreVariantId))
+            ->exists()) {
             $sku = $baseSku . '-' . str_pad($i, 3, '0', STR_PAD_LEFT);
             $i++;
         }

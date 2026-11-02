@@ -149,6 +149,194 @@ class ProductController extends Controller
         return back()->with('success', 'Cập nhật sản phẩm thành công');
     }
 
+    public function bulkUpdatePrice(Request $request)
+    {
+        if ($request->has('updates')) {
+            return $this->updateListedPrices($request);
+        }
+
+        $data = $request->validate([
+            'product_ids' => ['required', 'array', 'min:1'],
+            'product_ids.*' => ['integer', 'exists:products,id'],
+            'target' => ['required', 'in:product,variant,imei'],
+            'sell_price' => ['required', 'numeric', 'min:0'],
+            'attribute_name' => ['nullable', 'string', 'max:100', 'required_with:attribute_value'],
+            'attribute_value' => ['nullable', 'string', 'max:100', 'required_with:attribute_name'],
+        ]);
+
+        if ($data['target'] === 'product' && !empty($data['attribute_name'])) {
+            return back()->withErrors([
+                'attribute_name' => 'Bộ lọc thuộc tính chỉ áp dụng cho biến thể hoặc IMEI.',
+            ]);
+        }
+
+        $productIds = collect($data['product_ids'])->unique()->values();
+        $price = (float) $data['sell_price'];
+        $attributeName = $data['attribute_name'] ?? null;
+        $attributeValue = $data['attribute_value'] ?? null;
+
+        $updated = \DB::transaction(function () use ($data, $productIds, $price, $attributeName, $attributeValue) {
+            if ($data['target'] === 'product') {
+                return Product::query()
+                    ->whereIn('id', $productIds)
+                    ->update(['sell_price' => $price]);
+            }
+
+            $variants = \App\Models\ProductVariant::query()
+                ->whereIn('product_id', $productIds)
+                ->where('is_active', true)
+                ->get();
+
+            if ($attributeName && $attributeValue) {
+                $variants = $variants->filter(function ($variant) use ($attributeName, $attributeValue) {
+                    return collect($variant->attributes ?? [])->contains(function ($attribute) use ($attributeName, $attributeValue) {
+                        $values = is_array($attribute['value'] ?? null)
+                            ? $attribute['value']
+                            : [$attribute['value'] ?? null];
+
+                        return mb_strtolower(trim((string) ($attribute['name'] ?? ''))) === mb_strtolower(trim($attributeName))
+                            && collect($values)->contains(fn ($value) => mb_strtolower(trim((string) $value)) === mb_strtolower(trim($attributeValue)));
+                    });
+                });
+            }
+
+            if ($data['target'] === 'variant') {
+                return \App\Models\ProductVariant::query()
+                    ->whereIn('id', $variants->pluck('id'))
+                    ->update(['sell_price' => $price]);
+            }
+
+            $imeis = \App\Models\ProductImei::query()
+                ->whereIn('product_id', $productIds)
+                ->where('status', \App\Models\ProductImei::STATUS_IN_STOCK)
+                ->when($attributeName && $attributeValue, fn ($query) => $query->whereIn('variant_id', $variants->pluck('id')))
+                ->get();
+
+            $imeis->each(function ($imei) use ($price) {
+                $previousPrice = (float) ($imei->sell_price ?? 0);
+
+                if ($previousPrice === $price) {
+                    return;
+                }
+
+                $imei->update(['sell_price' => $price]);
+
+                \App\Models\ProductImeiHistory::create([
+                    'product_imei_id' => $imei->id,
+                    'imei' => $imei->imei,
+                    'type' => 'price_update',
+                    'reference_type' => Product::class,
+                    'reference_id' => $imei->product_id,
+                    'cost_price' => $imei->cost_price,
+                    'sell_price' => $price,
+                    'meta' => [
+                        'previous_sell_price' => $previousPrice,
+                        'new_sell_price' => $price,
+                        'user_id' => auth()->id(),
+                        'source' => 'bulk_price_update',
+                    ],
+                    'note' => 'Cập nhật giá bán hàng loạt',
+                    'happened_at' => now(),
+                ]);
+            });
+
+            return $imeis->count();
+        });
+
+        if ($updated === 0) {
+            return back()->withErrors([
+                'sell_price' => 'Không có dữ liệu phù hợp để cập nhật giá.',
+            ]);
+        }
+
+        return back()->with('success', "Đã cập nhật giá bán cho {$updated} mục.");
+    }
+
+    private function updateListedPrices(Request $request)
+    {
+        $data = $request->validate([
+            'updates' => ['required', 'array', 'min:1', 'max:500'],
+            'updates.*.type' => ['required', 'in:product,variant,imei'],
+            'updates.*.id' => ['required', 'integer'],
+            'updates.*.sell_price' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $updates = collect($data['updates'])
+            ->keyBy(fn ($update) => $update['type'] . ':' . $update['id'])
+            ->values();
+
+        $updated = \DB::transaction(function () use ($updates) {
+            return $updates->sum(function (array $update) {
+                $price = (float) $update['sell_price'];
+
+                if ($update['type'] === 'product') {
+                    $product = Product::query()->findOrFail($update['id']);
+
+                    if ((float) $product->sell_price === $price) {
+                        return 0;
+                    }
+
+                    $product->update(['sell_price' => $price]);
+
+                    return 1;
+                }
+
+                if ($update['type'] === 'variant') {
+                    $variant = \App\Models\ProductVariant::query()
+                        ->where('is_active', true)
+                        ->findOrFail($update['id']);
+
+                    if ((float) $variant->sell_price === $price) {
+                        return 0;
+                    }
+
+                    $variant->update(['sell_price' => $price]);
+
+                    return 1;
+                }
+
+                $imei = \App\Models\ProductImei::query()
+                    ->where('status', \App\Models\ProductImei::STATUS_IN_STOCK)
+                    ->findOrFail($update['id']);
+
+                $previousPrice = (float) ($imei->sell_price ?? 0);
+
+                if ($previousPrice === $price) {
+                    return 0;
+                }
+
+                $imei->update(['sell_price' => $price]);
+
+                \App\Models\ProductImeiHistory::create([
+                    'product_imei_id' => $imei->id,
+                    'imei' => $imei->imei,
+                    'type' => 'price_update',
+                    'reference_type' => Product::class,
+                    'reference_id' => $imei->product_id,
+                    'cost_price' => $imei->cost_price,
+                    'sell_price' => $price,
+                    'meta' => [
+                        'previous_sell_price' => $previousPrice,
+                        'new_sell_price' => $price,
+                        'user_id' => auth()->id(),
+                        'source' => 'price_list_update',
+                    ],
+                    'note' => 'Cập nhật giá bán từ danh sách sản phẩm',
+                    'happened_at' => now(),
+                ]);
+
+                return 1;
+            });
+        });
+
+        return back()->with(
+            'success',
+            $updated
+                ? "Đã cập nhật giá bán cho {$updated} mục."
+                : 'Không có giá nào thay đổi.'
+        );
+    }
+
     public function toggleStatus(Product $product)
     {
         $product->update([

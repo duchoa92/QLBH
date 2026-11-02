@@ -285,10 +285,10 @@ const categoryOptions = computed(() => [
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col gap-2 font-sans antialiased sm:gap-3">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm font-sans antialiased">
         
         <!-- THANH LỌC & TÌM KIẾM SẢN PHẨM -->
-        <div class="mb-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm sm:mb-3 sm:p-3">
+        <div class="shrink-0 border-b border-slate-100 bg-white p-2 sm:p-3">
             <div class="flex min-w-0 items-center gap-2">
                 
                 <!-- Ô TÌM KIẾM -->
@@ -331,7 +331,7 @@ const categoryOptions = computed(() => [
         </div>
 
         <!-- DANH SÁCH SẢN PHẨM -->
-        <div class="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-2 pr-1 custom-scrollbar sm:p-3">
+        <div class="min-h-0 flex-1 overflow-auto bg-slate-50 p-1.5 pr-1 custom-scrollbar sm:p-2">
             
             <!-- LOADING -->
             <div
