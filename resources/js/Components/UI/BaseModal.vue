@@ -20,6 +20,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    layerClass: {
+        type: String,
+        default: 'z-[1000]',
+    },
     embedded: {
         type: Boolean,
         default: false,
@@ -49,7 +53,7 @@ onBeforeUnmount(() => {
         <div :class="bodyClass"><slot /></div>
     </template>
     <Teleport v-else to="body">
-    <div class="fixed inset-0 z-[1000] flex items-center justify-center overflow-y-auto p-3 sm:p-5">
+    <div class="fixed inset-0 flex items-center justify-center overflow-y-auto p-3 sm:p-5" :class="layerClass">
         <div
             class="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
             @click="$emit('close')"

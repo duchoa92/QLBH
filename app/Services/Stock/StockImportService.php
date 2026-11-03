@@ -41,6 +41,9 @@ class StockImportService
                 0,
                 $totalAmount - $discount + $extraFee
             );
+            $paidAmount = ! empty($data['supplier_id'])
+                ? min($grandTotal, max(0, (float) ($data['paid_amount'] ?? 0)))
+                : 0;
 
 
             /*
@@ -72,6 +75,8 @@ class StockImportService
 
                 'grand_total' => $grandTotal,
 
+                'paid_amount' => $paidAmount,
+
                 'note' => $data['note'] ?? null,
 
                 'status' => 'completed',
@@ -88,6 +93,20 @@ class StockImportService
                     'user_id' => auth()->id(),
                 ]);
                 Supplier::query()->whereKey($data['supplier_id'])->increment('debt_balance', $grandTotal);
+
+                if ($paidAmount > 0) {
+                    SupplierDebt::query()->create([
+                        'supplier_id' => $data['supplier_id'],
+                        'type' => 'decrease',
+                        'amount' => $paidAmount,
+                        'payment_method' => $data['payment_method'] ?? 'cash',
+                        'source_type' => StockImport::class,
+                        'source_id' => $import->id,
+                        'note' => 'Thanh toán khi tạo phiếu nhập ' . $import->code,
+                        'user_id' => auth()->id(),
+                    ]);
+                    Supplier::query()->whereKey($data['supplier_id'])->decrement('debt_balance', $paidAmount);
+                }
             }
 
 

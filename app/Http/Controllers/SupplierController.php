@@ -103,6 +103,11 @@ class SupplierController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
+            'bank_name' => ['nullable', 'string', 'max:150'],
+            'bank_bin' => ['nullable', 'digits:6'],
+            'bank_account' => ['nullable', 'string', 'max:50'],
+            'bank_account_name' => ['nullable', 'string', 'max:150'],
+            'bank_payment_url' => ['nullable', 'string', 'max:2048'],
         ]);
 
         $supplier = Supplier::create([
@@ -116,6 +121,11 @@ class SupplierController extends Controller
             'phone' => $validated['phone'] ?? null,
             'email' => $validated['email'] ?? null,
             'address' => $validated['address'] ?? null,
+            'bank_name' => $validated['bank_name'] ?? null,
+            'bank_bin' => $validated['bank_bin'] ?? null,
+            'bank_account' => $validated['bank_account'] ?? null,
+            'bank_account_name' => $validated['bank_account_name'] ?? null,
+            'bank_payment_url' => $validated['bank_payment_url'] ?? null,
         ]);
 
         if ($request->expectsJson()) {
@@ -170,6 +180,12 @@ class SupplierController extends Controller
                     'nullable',
                     'string',
                 ],
+
+                'bank_name' => ['nullable', 'string', 'max:150'],
+                'bank_bin' => ['nullable', 'digits:6'],
+                'bank_account' => ['nullable', 'string', 'max:50'],
+                'bank_account_name' => ['nullable', 'string', 'max:150'],
+                'bank_payment_url' => ['nullable', 'string', 'max:2048'],
             ]);
 
         $supplier->update(
@@ -222,6 +238,11 @@ class SupplierController extends Controller
                 'phone',
                 'email',
                 'debt_balance',
+                'bank_name',
+                'bank_bin',
+                'bank_account',
+                'bank_account_name',
+                'bank_payment_url',
             ]);
 
         return response()->json(

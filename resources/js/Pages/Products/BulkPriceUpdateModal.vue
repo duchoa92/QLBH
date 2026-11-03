@@ -11,8 +11,9 @@ import { formatCurrency } from '@/utils/format'
 const props = defineProps({ products: { type: Array, required: true } })
 const emit = defineEmits(['close', 'updated'])
 
-const markupPercent = ref('')
 const batchPrice = ref('')
+const imeiBulkMode = ref('fixed')
+const imeiBulkValue = ref('')
 const variantBulkMode = ref('fixed')
 const variantBulkValue = ref('')
 const variantStockFilter = ref('')
@@ -20,12 +21,10 @@ const imeiSearch = ref('')
 const imeiStateFilter = ref('')
 const filtersOpen = ref(false)
 const variantStockOptions = [
-    { label: 'Tất cả tình trạng', value: 'all' },
     { label: 'Còn hàng', value: 'in_stock' },
     { label: 'Hết hàng', value: 'out_of_stock' },
 ]
 const imeiStateOptions = [
-    { label: 'Tất cả tình trạng', value: 'all' },
     { label: 'Còn hàng · Chưa bán', value: 'unsold' },
     { label: 'Hết hàng · Đã bán', value: 'sold' },
 ]
@@ -139,12 +138,16 @@ const variantAttributeOptions = computed(() => {
     return [...options.entries()].map(([name, values]) => ({
         name,
         values: [...values].sort((a, b) => a.localeCompare(b, 'vi')),
-        options: [
-            { label: `Tất cả ${name}`, value: 'all' },
-            ...[...values].sort((a, b) => a.localeCompare(b, 'vi')).map((value) => ({ label: value, value })),
-        ],
+        options: [...values].sort((a, b) => a.localeCompare(b, 'vi')).map((value) => ({ label: value, value })),
     }))
 })
+const filterGridClass = (count) => {
+    if (count <= 1) return 'grid-cols-1'
+    if (count === 2) return 'grid-cols-2'
+    if (count === 3) return 'grid-cols-2 sm:grid-cols-3'
+    if (count === 4) return 'grid-cols-2 sm:grid-cols-4'
+    return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+}
 const variantFilters = ref({})
 const matchesVariantFilters = (update) => variantAttributeOptions.value.every(({ name }) => {
         const selected = variantFilters.value[name]
@@ -198,22 +201,22 @@ const setSingleMarkup = (markup) => {
     const update = singleUpdates.value[0]
     if (update?.cost_price > 0) update.sell_price = Math.round(update.cost_price * (1 + markup / 100))
 }
-const applyMarkup = () => {
-    if (markupPercent.value === '') {
-        batchError.value = 'Nhập phần trăm lợi nhuận hợp lệ.'
+const applyImeiBulk = () => {
+    if (imeiBulkValue.value === '') {
+        batchError.value = 'Nhập giá trị cập nhật hợp lệ.'
         return
     }
-    const percent = Number(markupPercent.value)
-    if (!Number.isFinite(percent) || percent < -100) {
-        batchError.value = 'Nhập phần trăm lợi nhuận hợp lệ.'
+    const value = Number(imeiBulkValue.value)
+    if (!Number.isFinite(value) || imeiBulkMode.value === 'fixed' && value < 0 || imeiBulkMode.value === 'percent' && value < -100) {
+        batchError.value = 'Nhập giá trị cập nhật hợp lệ.'
         return
     }
-    const targets = filteredImeis.value.filter((update) => update.editable && update.cost_price > 0)
-    if (!targets.length) {
-        batchError.value = 'Các dòng hiện tại chưa có giá vốn để tính giá.'
-        return
-    }
-    targets.forEach((update) => { update.sell_price = Math.round(update.cost_price * (1 + percent / 100)) })
+    filteredImeis.value.filter((update) => update.editable).forEach((update) => {
+        const current = numericPrice(update.sell_price)
+        if (imeiBulkMode.value === 'fixed') update.sell_price = value
+        else if (imeiBulkMode.value === 'percent') update.sell_price = Math.max(0, Math.round(current * (1 + value / 100)))
+        else update.sell_price = Math.max(0, current + value)
+    })
     batchError.value = ''
 }
 
@@ -292,28 +295,29 @@ const submit = () => {
 
         <!-- Sản phẩm IMEI: bố cục thẻ theo từng máy -->
         <template v-if="isSingleProduct && singleMode === 'imei'">
-            <div class="border-b border-emerald-100 bg-emerald-50 px-5 py-3">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex items-center gap-2 text-sm font-semibold text-emerald-950"><Calculator :size="16" />Tính giá nhanh theo % lợi nhuận</div>
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                        <span class="text-slate-600">Lợi nhuận mong muốn:</span>
-                        <div class="relative w-24"><input v-model="markupPercent" type="number" min="-100" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 pr-8 text-center text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:ring-emerald-500" @change="applyMarkup" /><span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-700">%</span></div>
-                        <button type="button" class="h-10 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white hover:bg-emerald-800" @click="applyMarkup">Áp dụng</button>
+            <div class="border-b border-slate-200 bg-slate-50 px-5 py-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800"><Calculator :size="15" class="text-amber-500" />Cập nhật nhanh <span class="font-normal text-slate-500">{{ filteredImeis.length }}/{{ singleUpdates.length }} IMEI</span></div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <select v-model="imeiBulkMode" class="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 focus:border-emerald-500 focus:ring-emerald-500"><option value="fixed">Đặt giá chung (đ)</option><option value="percent">Tăng/giảm theo %</option><option value="amount">Tăng/giảm số tiền (đ)</option></select>
+                        <div class="relative w-32">
+                            <input v-if="imeiBulkMode === 'percent'" v-model="imeiBulkValue" type="number" min="-100" class="h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 pr-7 text-right text-xs font-semibold focus:border-emerald-500 focus:ring-emerald-500" placeholder="VD: 10" />
+                            <FloatingInput v-else v-model.number="imeiBulkValue" type="number" format-thousands :floating-label="false" input-class="!h-9 !w-full !rounded-lg !border-slate-300 !bg-white !px-2.5 !py-1.5 !pr-7 !text-right !text-xs !font-semibold focus:!border-emerald-500" :placeholder-text="imeiBulkMode === 'fixed' ? 'Giá bán' : 'Số tiền +/-'" />
+                            <span class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-500">{{ imeiBulkMode === 'percent' ? '%' : 'đ' }}</span>
+                        </div>
+                        <button type="button" class="h-9 rounded-lg bg-slate-800 px-2.5 text-xs font-semibold text-white hover:bg-slate-900" @click="applyImeiBulk">Áp dụng</button>
                         <div class="relative">
-                            <button type="button" class="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><Filter :size="15" />Bộ lọc<ChevronDown :size="15" class="transition-transform" :class="filtersOpen && 'rotate-180'" /></button>
-                            <button v-if="activeFilterCount" type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-emerald-50 bg-rose-600 text-white shadow-sm hover:bg-rose-700" aria-label="Xóa bộ lọc IMEI" title="Xóa bộ lọc" @click.stop="clearImeiFilters"><X :size="11" /></button>
+                            <button type="button" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><Filter :size="14" />Bộ lọc<ChevronDown :size="14" class="transition-transform" :class="filtersOpen && 'rotate-180'" /></button>
+                            <button v-if="activeFilterCount" type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-slate-50 bg-rose-600 text-white shadow-sm hover:bg-rose-700" aria-label="Xóa bộ lọc IMEI" title="Xóa bộ lọc" @click.stop="clearImeiFilters"><X :size="11" /></button>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="space-y-3 p-5">
-                <div class="flex items-center justify-between gap-3">
-                    <div class="min-w-0 text-xs font-semibold uppercase tracking-wide text-slate-400"><p>Danh sách IMEI</p><p class="mt-1 normal-case tracking-normal">{{ filteredImeis.length }}/{{ singleUpdates.length }} máy · {{ inStockImeis }} còn hàng</p></div>
-                </div>
-                <div v-if="filtersOpen" class="grid grid-cols-1 gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <FloatingInput v-model="imeiSearch" label="Tìm IMEI / Serial" input-class="!h-10 !w-full !px-3 !pt-2.5 !pb-1 !text-xs" />
-                    <FloatingSelect v-for="filter in variantAttributeOptions" :key="filter.name" v-model="variantFilters[filter.name]" :options="filter.options" :label="filter.name" placeholder-text="" float-on-value input-class="!h-10 !w-full !text-xs" />
-                    <FloatingSelect v-model="imeiStateFilter" :options="imeiStateOptions" label="Tình trạng hàng" placeholder-text="" float-on-value input-class="!h-10 !w-full !text-xs" />
+                <div v-if="filtersOpen" class="grid items-end gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 p-2" :class="filterGridClass(variantAttributeOptions.length + 2)">
+                    <FloatingInput v-model="imeiSearch" label="Tìm IMEI / Serial" input-class="!h-9 !w-full !px-3 !pt-2.5 !pb-1 !text-xs" />
+                    <FloatingSelect v-for="filter in variantAttributeOptions" :key="filter.name" v-model="variantFilters[filter.name]" :options="filter.options" :label="filter.name" :placeholder-text="filter.name" compact hide-label input-class="!h-9 !w-full" />
+                    <FloatingSelect v-model="imeiStateFilter" :options="imeiStateOptions" label="Tình trạng hàng" placeholder-text="Tình trạng hàng" compact hide-label input-class="!h-9 !w-full" />
                 </div>
                 <div class="overflow-x-auto rounded-xl border border-slate-200">
                     <table class="w-full min-w-[760px] border-collapse text-left">
@@ -335,26 +339,26 @@ const submit = () => {
 
         <!-- Sản phẩm có biến thể: bố cục thẻ theo từng phiên bản -->
         <template v-else-if="isSingleProduct && singleMode === 'variant'">
-            <div class="border-b border-slate-200 bg-slate-50 px-5 pb-2 pt-4">
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <div class="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><Calculator :size="16" class="text-amber-500" />Cập nhật nhanh <span class="text-xs font-normal text-slate-500">{{ filteredVariants.length }}/{{ singleUpdates.length }} biến thể</span></div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <select v-model="variantBulkMode" class="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 focus:border-emerald-500 focus:ring-emerald-500"><option value="fixed">Đặt giá chung (đ)</option><option value="percent">Tăng/giảm theo %</option><option value="amount">Tăng/giảm số tiền (đ)</option></select>
-                        <div class="relative w-36">
-                            <input v-if="variantBulkMode === 'percent'" v-model="variantBulkValue" type="number" min="-100" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 pr-8 text-right text-sm font-semibold focus:border-emerald-500 focus:ring-emerald-500" placeholder="VD: 10 hoặc -10" />
-                            <FloatingInput v-else v-model.number="variantBulkValue" type="number" format-thousands :floating-label="false" input-class="!h-10 !w-full !rounded-lg !border-slate-300 !bg-white !px-3 !py-2 !pr-8 !text-right !text-sm !font-semibold focus:!border-emerald-500" :placeholder-text="variantBulkMode === 'fixed' ? 'Giá bán' : 'Số tiền +/-'" />
-                            <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{{ variantBulkMode === 'percent' ? '%' : 'đ' }}</span>
+            <div class="border-b border-slate-200 bg-slate-50 px-5 py-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800"><Calculator :size="15" class="text-amber-500" />Cập nhật nhanh <span class="font-normal text-slate-500">{{ filteredVariants.length }}/{{ singleUpdates.length }} biến thể</span></div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <select v-model="variantBulkMode" class="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 focus:border-emerald-500 focus:ring-emerald-500"><option value="fixed">Đặt giá chung (đ)</option><option value="percent">Tăng/giảm theo %</option><option value="amount">Tăng/giảm số tiền (đ)</option></select>
+                        <div class="relative w-32">
+                            <input v-if="variantBulkMode === 'percent'" v-model="variantBulkValue" type="number" min="-100" class="h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 pr-7 text-right text-xs font-semibold focus:border-emerald-500 focus:ring-emerald-500" placeholder="VD: 10" />
+                            <FloatingInput v-else v-model.number="variantBulkValue" type="number" format-thousands :floating-label="false" input-class="!h-9 !w-full !rounded-lg !border-slate-300 !bg-white !px-2.5 !py-1.5 !pr-7 !text-right !text-xs !font-semibold focus:!border-emerald-500" :placeholder-text="variantBulkMode === 'fixed' ? 'Giá bán' : 'Số tiền +/-'" />
+                            <span class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-500">{{ variantBulkMode === 'percent' ? '%' : 'đ' }}</span>
                         </div>
-                        <button type="button" class="h-10 rounded-lg bg-slate-800 px-3 text-sm font-semibold text-white hover:bg-slate-900" @click="applyVariantBulk">Áp dụng</button>
+                        <button type="button" class="h-9 rounded-lg bg-slate-800 px-2.5 text-xs font-semibold text-white hover:bg-slate-900" @click="applyVariantBulk">Áp dụng</button>
                         <div class="relative">
-                            <button type="button" class="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><Filter :size="15" />Bộ lọc<ChevronDown :size="15" class="transition-transform" :class="filtersOpen && 'rotate-180'" /></button>
+                            <button type="button" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><Filter :size="14" />Bộ lọc<ChevronDown :size="14" class="transition-transform" :class="filtersOpen && 'rotate-180'" /></button>
                             <button v-if="activeFilterCount" type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-slate-50 bg-rose-600 text-white shadow-sm hover:bg-rose-700" aria-label="Xóa bộ lọc biến thể" title="Xóa bộ lọc" @click.stop="clearVariantFilters"><X :size="11" /></button>
                         </div>
                     </div>
                 </div>
-                <div v-if="filtersOpen" class="grid grid-cols-1 gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <FloatingSelect v-for="filter in variantAttributeOptions" :key="filter.name" v-model="variantFilters[filter.name]" :options="filter.options" :label="filter.name" placeholder-text="" float-on-value input-class="!h-10 !w-full !text-xs" />
-                    <FloatingSelect v-model="variantStockFilter" :options="variantStockOptions" label="Tình trạng kho" placeholder-text="" float-on-value input-class="!h-10 !w-full !text-xs" />
+                <div v-if="filtersOpen" class="mt-2 grid items-end gap-1.5 rounded-xl border border-slate-200 bg-white p-2" :class="filterGridClass(variantAttributeOptions.length + 1)">
+                    <FloatingSelect v-for="filter in variantAttributeOptions" :key="filter.name" v-model="variantFilters[filter.name]" :options="filter.options" :label="filter.name" :placeholder-text="filter.name" compact hide-label input-class="!h-9 !w-full" />
+                    <FloatingSelect v-model="variantStockFilter" :options="variantStockOptions" label="Tình trạng kho" placeholder-text="Tình trạng kho" compact hide-label input-class="!h-9 !w-full" />
                 </div>
             </div>
             <div class="max-h-[55vh] overflow-auto px-4 pb-4 pt-2 sm:px-5">

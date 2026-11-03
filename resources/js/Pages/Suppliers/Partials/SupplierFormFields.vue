@@ -48,6 +48,12 @@ defineProps({
             :error="form.errors.address"
         />
 
+        <FloatingInput v-model="form.bank_name" label="Ngân hàng" name="bank_name" :error="form.errors.bank_name" />
+        <FloatingInput v-model="form.bank_bin" label="Mã BIN ngân hàng" name="bank_bin" inputmode="numeric" :error="form.errors.bank_bin" />
+        <FloatingInput v-model="form.bank_account" label="Số tài khoản" name="bank_account" :error="form.errors.bank_account" />
+        <FloatingInput v-model="form.bank_account_name" label="Tên chủ tài khoản" name="bank_account_name" :error="form.errors.bank_account_name" />
+        <div class="sm:col-span-2"><FloatingInput v-model="form.bank_payment_url" label="Link mở app ngân hàng (mobile)" name="bank_payment_url" :error="form.errors.bank_payment_url" /></div>
+
     </div>
 
 </template>

@@ -8,6 +8,7 @@ import {
 } from 'vue'
 
 import { useForm, usePage } from '@inertiajs/vue3'
+import { toast } from 'vue-sonner'
 import { openModal } from '@/Stores/modal'
 
 import api from '@/Services/api'
@@ -21,6 +22,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { imageUrl } from '@/utils/imageUrl'
 
 import SupplierSection from './SupplierSection.vue'
+import SupplierPaymentModal from './SupplierPaymentModal.vue'
 import StockImportProductModal from './StockImportProductModal.vue'
 import ProductForm from '@/Pages/Products/Form.vue'
 
@@ -67,6 +69,8 @@ const form = useForm({
 
     discount: 0,
     extra_fee: 0,
+    paid_amount: 0,
+    payment_method: 'cash',
     note: '',
 })
 
@@ -130,12 +134,6 @@ const searchProducts = async () => {
     const value = keyword.value.trim()
     const requestId = ++productSearchRequest
 
-    if (!value) {
-        searchResults.value = []
-        showResults.value = false
-        return
-    }
-
     searching.value = true
     showResults.value = true
 
@@ -160,6 +158,12 @@ const searchProducts = async () => {
     } finally {
         if (requestId === productSearchRequest) searching.value = false
     }
+}
+
+const openProductSearch = () => {
+    showResults.value = true
+    clearTimeout(searchTimeout)
+    searchProducts()
 }
 
 watch(keyword, () => {
@@ -708,12 +712,10 @@ const totalQuantity =
         )
     )
 
-const itemTypeCounts = computed(() => ({
-    simple: selectedItems.value.filter(item => item.type === 'simple').length,
-    variant: selectedItems.value.filter(item => item.type === 'variant').length,
-    imei: selectedItems.value.filter(item => item.type === 'imei').length,
-    imeiVariant: selectedItems.value.filter(item => item.type === 'imei_variant').length,
-}))
+const variantCount = (item) => item.type === 'imei_variant'
+    ? new Set((item.imeis || []).map(row => row?.variant_id).filter(value => value !== null && value !== undefined).map(String)).size
+    : (item.rows || []).length
+const paymentActionError = ref('')
 
 /*
 |--------------------------------------------------------------------------
@@ -784,12 +786,6 @@ const total = computed(() =>
 |--------------------------------------------------------------------------
 */
 
-const canConfirm = computed(
-    () =>
-        (partyType.value === 'supplier' ? selectedSupplier.value : customerDraft.value.full_name?.trim()) &&
-        selectedItems.value.some(item => itemQuantity(item) > 0)
-)
-
 // API và phiếu nhập lưu giá theo đơn vị nhập; nếu người dùng nhập theo
 // đơn vị cơ sở thì đổi sang giá mỗi đơn vị nhập trước khi gửi.
 const importPrice = (item, value) => {
@@ -798,17 +794,37 @@ const importPrice = (item, value) => {
     return price * Math.max(1, Number(item.conversion_factor || 1))
 }
 
-const confirm = () => {
+const handlePaymentAction = () => {
+    paymentActionError.value = ''
+
     if (partyType.value === 'supplier' && !selectedSupplier.value) {
+        paymentActionError.value = 'Vui lòng chọn nhà cung cấp trước khi tiếp tục.'
         return
     }
     if (partyType.value === 'customer' && !customerDraft.value.full_name?.trim()) {
+        paymentActionError.value = 'Vui lòng nhập tên khách hàng trước khi tiếp tục.'
+        return
+    }
+    if (!selectedItems.value.some(item => itemQuantity(item) > 0)) {
+        paymentActionError.value = 'Vui lòng thêm ít nhất một sản phẩm có số lượng hợp lệ.'
         return
     }
 
-    if (!selectedItems.value.some(item => itemQuantity(item) > 0)) {
+    if (partyType.value === 'supplier') {
+        openModal(SupplierPaymentModal, {
+            props: {
+                supplier: selectedSupplier.value,
+                total: Number(total.value || 0),
+            },
+            onUpdated: payment => confirm(payment),
+        })
         return
     }
+
+    confirm({ payment_method: 'cash', paid_amount: 0 })
+}
+
+const confirm = (payment = {}) => {
 
     form.party_type = partyType.value
     form.supplier_id = partyType.value === 'supplier' ? selectedSupplier.value.id : null
@@ -817,6 +833,10 @@ const confirm = () => {
     form.party_phone = partyType.value === 'customer' ? customerDraft.value.phone : (selectedSupplier.value.phone || '')
     form.party_address = partyType.value === 'customer' ? customerDraft.value.address : (selectedSupplier.value.address || '')
     form.party_cccd = partyType.value === 'customer' ? customerDraft.value.cccd : ''
+    form.paid_amount = partyType.value === 'supplier'
+        ? Math.min(Math.max(0, Number(payment.paid_amount || 0)), Number(total.value || 0))
+        : 0
+    form.payment_method = payment.payment_method || 'cash'
 
     form.items = selectedItems.value.flatMap(item => {
         // Sản phẩm thường
@@ -903,11 +923,14 @@ const confirm = () => {
         forceFormData: true,
 
         onSuccess: () => {
+            toast.success('Đã lưu phiếu nhập thành công.')
             emit('created')
         },
 
         onError: (errors) => {
             console.error('Lỗi validation phiếu nhập:', errors)
+            paymentActionError.value = Object.values(errors || {}).flat().filter(Boolean).join(' ')
+                || 'Không lưu được phiếu nhập. Vui lòng kiểm tra lại thông tin.'
         },
     })
 }
@@ -916,7 +939,7 @@ const confirm = () => {
 <template>
     <BaseModal
         title="Nhập hàng"
-        size="2xl"
+        size="xl"
         body-class="p-3 sm:p-4"
         @close="emit('close')"
     >
@@ -949,6 +972,7 @@ const confirm = () => {
                     {{ message }}
                 </div>
             </div>
+            <div v-if="paymentActionError" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ paymentActionError }}</div>
 
             <!-- TÌM SẢN PHẨM -->
             <div :class="['relative transition-[z-index]', showResults ? 'z-50' : 'z-0']">
@@ -959,6 +983,7 @@ const confirm = () => {
                             type="text"
                             label="Tìm tên sản phẩm, SKU hoặc barcode"
                             input-class="pr-20"
+                            @focus="openProductSearch"
                             @keydown.enter.prevent="scanProduct"
                         />
 
@@ -1001,14 +1026,16 @@ const confirm = () => {
                                 </div>
                             </button>
 
-                            <div v-if="!searching && !searchResults.length" class="px-4 py-6 text-center text-sm text-slate-400">
-                                <p>Chưa có sản phẩm phù hợp với “{{ keyword }}”.</p>
+                            <div v-if="!searching && !searchResults.length" class="px-4 pt-5 text-center text-sm text-slate-400">
+                                Chưa có sản phẩm phù hợp với “{{ keyword }}”.
+                            </div>
+                            <div v-if="keyword.trim()" class="flex justify-end border-t border-slate-100 bg-slate-50/70 p-2">
                                 <button
                                     type="button"
-                                    class="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                                    class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
                                     @click="createProductFromSearch"
                                 >
-                                    <Plus class="h-4 w-4" /> Tạo sản phẩm mới
+                                    <Plus class="h-4 w-4" /> Thêm sản phẩm mới
                                 </button>
                             </div>
                         </div>
@@ -1028,11 +1055,6 @@ const confirm = () => {
                             <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{{ selectedItems.length }} mặt hàng</span>
                         </div>
                         <div class="text-sm font-semibold text-blue-700">{{ totalQuantity }} sản phẩm</div>
-                    </div>
-                    <div v-if="selectedItems.length" class="mt-1.5 flex flex-wrap gap-1.5">
-                        <span v-if="itemTypeCounts.simple" class="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">Hàng thường {{ itemTypeCounts.simple }}</span>
-                        <span v-if="itemTypeCounts.variant" class="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">Có biến thể {{ itemTypeCounts.variant }}</span>
-                        <span v-if="itemTypeCounts.imei" class="rounded-md bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-700">Có IMEI {{ itemTypeCounts.imei }}</span>
                     </div>
                 </div>
 
@@ -1059,7 +1081,7 @@ const confirm = () => {
                             <div class="min-w-0 flex-1">
                                 <div class="break-words text-sm font-semibold leading-5 text-slate-900">{{ item.name }}</div>
                                 <div class="mt-1 flex flex-wrap gap-1.5">
-                                    <span v-if="item.type === 'variant' || item.type === 'imei_variant'" class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{{ (item.rows || []).length }} biến thể</span>
+                                    <span v-if="item.type === 'variant' || item.type === 'imei_variant'" class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{{ variantCount(item) }} biến thể</span>
                                     <span v-if="item.type === 'imei' || item.type === 'imei_variant'" class="rounded-md bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">{{ (item.imeis || []).length }} IMEI</span>
                                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ itemUnit(item) }}</span>
                                     <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">
@@ -1189,12 +1211,7 @@ const confirm = () => {
                                                     "
                                                     class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
                                                 >
-                                                    {{
-                                                        (
-                                                            item.rows ||
-                                                            []
-                                                        ).length
-                                                    }}
+                                                    {{ variantCount(item) }}
                                                     biến thể
                                                 </span>
 
@@ -1429,13 +1446,13 @@ const confirm = () => {
 
                     <button
                         type="button"
-                        @click="confirm"
+                        @click="handlePaymentAction"
                         :disabled="
-                            !canConfirm
+                            form.processing
                         "
-                        class="min-h-11 rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                        class="min-h-11 rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                     >
-                        Tạo phiếu nhập
+                        {{ form.processing ? 'Đang lưu...' : 'Thanh toán' }}
                     </button>
                 </div>
             </div>

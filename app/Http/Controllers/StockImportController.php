@@ -174,6 +174,8 @@ class StockImportController extends Controller
             'party_phone' => ['nullable', 'string', 'max:30'],
             'party_address' => ['nullable', 'string', 'max:2000'],
             'party_cccd' => ['nullable', 'string', 'max:30'],
+            'paid_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['nullable', Rule::in(['cash', 'bank', 'card'])],
 
             'import_date' => [
                 'required',

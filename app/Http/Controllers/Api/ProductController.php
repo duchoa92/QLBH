@@ -177,8 +177,10 @@ class ProductController extends Controller
                     'cost_price_min' => $costPrices['min'],
                     'cost_price_max' => $costPrices['max'],
                     'stock' => $product->manage_stock_by_serial || $product->product_type === 'imei'
-                        ? $product->available_imei_count
-                        : $product->stock,
+                        ? (int) $product->available_imei_count
+                        : ($product->variants->isNotEmpty()
+                            ? (float) $product->variants->sum('stock')
+                            : (float) $product->stock),
                     'manage_stock_by_serial' => $product->manage_stock_by_serial,
                     'category_id' => $product->category_id,
                     'unit_id' => $product->unit_id,
