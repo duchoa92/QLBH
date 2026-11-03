@@ -13,11 +13,20 @@ const emit = defineEmits(['close', 'updated'])
 const settlement = ref('bank')
 const paidAmount = ref(Number(props.total || 0))
 const payOldDebt = ref(false)
+const bankAccounts = computed(() => props.supplier.bank_accounts?.length
+    ? props.supplier.bank_accounts
+    : (props.supplier.bank_account ? [{
+        bank_name: props.supplier.bank_name, bank_bin: props.supplier.bank_bin,
+        bank_account: props.supplier.bank_account, bank_account_name: props.supplier.bank_account_name,
+        bank_payment_url: props.supplier.bank_payment_url, is_default: true,
+    }] : []))
+const selectedBankAccount = ref(null)
+if (bankAccounts.value.length) selectedBankAccount.value = bankAccounts.value.find(account => account.is_default) || bankAccounts.value[0]
 const paymentReference = `NCC${props.supplier.id}-${Date.now().toString().slice(-8)}`
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 const oldDebt = computed(() => Math.max(0, Number(props.supplier.debt_balance || 0)))
-const bankQrReady = computed(() => /^\d{6}$/.test(String(props.supplier.bank_bin || ''))
-    && /^[a-zA-Z0-9]{1,50}$/.test(String(props.supplier.bank_account || '')))
+const bankQrReady = computed(() => /^\d{6}$/.test(String(selectedBankAccount.value?.bank_bin || ''))
+    && /^[a-zA-Z0-9]{1,50}$/.test(String(selectedBankAccount.value?.bank_account || '')))
 const transferAmount = computed(() => Math.min(Math.max(0, Number(paidAmount.value || 0)), Number(props.total || 0))
     + (payOldDebt.value ? oldDebt.value : 0))
 
@@ -25,9 +34,10 @@ watch(() => props.total, value => {
     if (settlement.value === 'bank') paidAmount.value = Number(value || 0)
 })
 
-const dueAmount = computed(() => settlement.value === 'debt'
+const dueAmount = computed(() => oldDebt.value + (settlement.value === 'debt'
     ? Number(props.total || 0)
-    : Math.max(0, Number(props.total || 0) - Math.min(Number(paidAmount.value || 0), Number(props.total || 0))))
+    : Math.max(0, Number(props.total || 0) - Math.min(Number(paidAmount.value || 0), Number(props.total || 0)))
+        - (payOldDebt.value ? oldDebt.value : 0)))
 
 const chooseBank = () => {
     settlement.value = 'bank'
@@ -49,7 +59,7 @@ const submit = () => {
     emit('updated', {
         payment_method: settlement.value === 'bank' ? 'bank' : 'cash',
         paid_amount: settlement.value === 'debt' ? 0 : Math.min(Math.max(0, Number(paidAmount.value || 0)), total),
-        pay_old_debt: settlement.value === 'bank' && payOldDebt.value,
+        old_debt_paid: settlement.value === 'bank' && payOldDebt.value ? oldDebt.value : 0,
         payment_reference: paymentReference,
         settlement: settlement.value,
     })
@@ -88,25 +98,28 @@ const submit = () => {
             </label>
             <div class="rounded-lg bg-white p-3 text-sm">
                 <div class="font-semibold text-slate-800">Thông tin tài khoản nhà cung cấp</div>
-                <div v-if="supplier.bank_account" class="mt-2 grid gap-1 text-slate-600">
-                    <div>Ngân hàng: <strong class="text-slate-900">{{ supplier.bank_name || '—' }}</strong></div>
-                    <div>Số tài khoản: <strong class="select-all text-slate-900">{{ supplier.bank_account }}</strong></div>
-                    <div>Chủ tài khoản: <strong class="text-slate-900">{{ supplier.bank_account_name || '—' }}</strong></div>
+                <select v-if="bankAccounts.length > 1" v-model="selectedBankAccount" class="mb-2 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800">
+                    <option v-for="account in bankAccounts" :key="account.bank_account" :value="account">{{ account.bank_name || 'Ngân hàng' }} · {{ account.bank_account }}{{ account.is_default ? ' · Mặc định' : '' }}</option>
+                </select>
+                <div v-if="selectedBankAccount?.bank_account" class="mt-2 grid gap-1 text-slate-600">
+                    <div>Ngân hàng: <strong class="text-slate-900">{{ selectedBankAccount.bank_name || '—' }}</strong></div>
+                    <div>Số tài khoản: <strong class="select-all text-slate-900">{{ selectedBankAccount.bank_account }}</strong></div>
+                    <div>Chủ tài khoản: <strong class="text-slate-900">{{ selectedBankAccount.bank_account_name || '—' }}</strong></div>
                 </div>
                 <p v-else class="mt-1 text-amber-700">Nhà cung cấp chưa khai báo tài khoản ngân hàng.</p>
             </div>
             <div class="rounded-lg bg-white p-3 text-sm">
                 <div class="flex items-center justify-between gap-3"><span class="font-semibold text-slate-800">Nội dung chuyển khoản</span><strong class="select-all text-blue-700">{{ paymentReference }}</strong></div>
                 <div v-if="bankQrReady" class="mt-3">
-                    <QrPayment :bank-bin="String(supplier.bank_bin)" :bank-account="String(supplier.bank_account)" :amount="transferAmount" :description="paymentReference" compact />
+                    <QrPayment :bank-bin="String(selectedBankAccount.bank_bin)" :bank-account="String(selectedBankAccount.bank_account)" :amount="transferAmount" :description="paymentReference" compact />
                 </div>
                 <p v-else class="mt-2 text-amber-700">Cần nhập mã BIN gồm 6 chữ số và số tài khoản để tạo mã QR.</p>
-                <a v-if="isMobile && supplier.bank_payment_url" :href="supplier.bank_payment_url" class="mt-3 inline-flex min-h-10 items-center rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700">Mở ứng dụng ngân hàng</a>
+                <a v-if="isMobile && selectedBankAccount?.bank_payment_url" :href="selectedBankAccount.bank_payment_url" class="mt-3 inline-flex min-h-10 items-center rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700">Mở ứng dụng ngân hàng</a>
             </div>
         </section>
 
         <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-sm">
-            <span class="text-slate-600">{{ settlement === 'debt' ? 'Ghi nợ nhà cung cấp' : 'Còn nợ sau thanh toán' }}</span>
+            <span class="text-slate-600">Công nợ còn lại sau phiếu</span>
             <strong :class="dueAmount > 0 ? 'text-rose-600' : 'text-emerald-600'">{{ formatNumber(dueAmount) }} đ</strong>
         </div>
 

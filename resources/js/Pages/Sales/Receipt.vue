@@ -118,7 +118,8 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
                 <div v-for="item in sale.items" :key="item.id" class="item">
                     <div class="item-name">
                         {{ item.product?.name || 'Sản phẩm' }}
-                        <span v-if="item.has_vat" class="vat-badge">VAT</span>
+                        <span v-if="item.has_vat" class="vat-badge">Có VAT</span>
+                        <span v-if="item.vat_applied" class="vat-badge">VAT tính</span>
                         <span v-if="variantLabel(item.variant)" class="item-variant">
                             ({{ variantLabel(item.variant) }})
                         </span>
@@ -161,7 +162,7 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
                 </div>
                 <div class="row" v-if="Number(sale.invoice_discount || 0) > 0"><span>Chiết khấu đơn:</span><span>-{{ formatMoney(sale.invoice_discount) }}</span></div>
                 <div class="row" v-if="Number(sale.tax || 0) > 0"><span>VAT:</span><span>{{ formatMoney(sale.tax) }}</span></div>
-                <div class="row" v-else-if="sale.items?.some(item => item.has_vat)"><span>VAT theo mặt hàng:</span><span>Đã đánh dấu từng dòng</span></div>
+                <div class="row" v-else-if="sale.items?.some(item => item.has_vat)"><span>Nhãn VAT hàng nhập:</span><span>Chỉ để nhận biết</span></div>
                 <div class="row" v-if="Number(sale.extra_fee || 0) > 0"><span>Phí phụ thu:</span><span>{{ formatMoney(sale.extra_fee) }}</span></div>
                 <div class="row total-grand">
                     <span>TỔNG CỘNG:</span>

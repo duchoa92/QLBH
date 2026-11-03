@@ -175,6 +175,8 @@ class StockImportController extends Controller
             'party_address' => ['nullable', 'string', 'max:2000'],
             'party_cccd' => ['nullable', 'string', 'max:30'],
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
+            'old_debt_paid' => ['nullable', 'numeric', 'min:0'],
+            'payment_reference' => ['nullable', 'string', 'max:80'],
             'payment_method' => ['nullable', Rule::in(['cash', 'bank', 'card'])],
 
             'import_date' => [
@@ -339,17 +341,18 @@ class StockImportController extends Controller
         if (mb_strlen($search) < 2) {
             return response()->json(['customers' => []]);
         }
+        $normalizedSearch = Customer::normalizeSearch($search);
 
         $customers = Customer::query()
-            ->where(function ($query) use ($search): void {
-                $query->where('full_name', 'like', "%{$search}%")
+            ->where(function ($query) use ($search, $normalizedSearch): void {
+                $query->where('search_text', 'like', "%{$normalizedSearch}%")
                     ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhere('cccd', 'like', "%{$search}%")
                     ->orWhere('code', 'like', "%{$search}%");
             })
             ->orderBy('full_name')
             ->limit(10)
-            ->get(['id', 'code', 'full_name', 'phone', 'cccd', 'address']);
+            ->get(['id', 'full_name', 'phone', 'address', 'debt_balance']);
 
         return response()->json(['customers' => $customers]);
     }

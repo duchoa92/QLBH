@@ -76,15 +76,24 @@ const bankAccounts = computed(() => {
             bank_account: bankSettings.value.bank_account,
             bank_account_name: bankSettings.value.bank_account_name,
             is_default: true,
+            vat_preferred: false,
         }]
     }
     return []
 })
 
 const selectedBankAccountId = ref('')
+const recommendedBankAccount = computed(() => {
+    const accounts = bankAccounts.value
+    const hasVatProduct = props.cart.some(item => Boolean(item.has_vat))
+    return (hasVatProduct ? accounts.find(account => account.vat_preferred) : null)
+        || accounts.find(account => account.is_default)
+        || accounts[0]
+        || null
+})
 watch(bankAccounts, accounts => {
     if (!accounts.some(account => String(account.id) === String(selectedBankAccountId.value))) {
-        selectedBankAccountId.value = String(accounts.find(account => account.is_default)?.id ?? accounts[0]?.id ?? '')
+        selectedBankAccountId.value = String(recommendedBankAccount.value?.id ?? '')
     }
 }, { immediate: true })
 
@@ -221,7 +230,8 @@ const disableRemainingQr = () => {
 const resetPaymentFields = () => {
     initializingPaymentFields = true
     const initialAccount = bankAccounts.value.find(account => String(account.bank_account) === String(props.initialPayment.bank_account))
-    if (initialAccount) selectedBankAccountId.value = String(initialAccount.id ?? initialAccount.bank_account)
+    if (props.editMode && initialAccount) selectedBankAccountId.value = String(initialAccount.id ?? initialAccount.bank_account)
+    else selectedBankAccountId.value = String(recommendedBankAccount.value?.id ?? '')
     paymentMethod.value = 'cash'
     mixedPayment.value = false
     if (props.editMode) {
@@ -347,6 +357,7 @@ const startBankPayment = async () => {
             conversion_factor: item.conversion_factor ?? 1,
             variant_id: item.variant_id ?? null,
             imei_id: item.imei_id ?? null,
+            apply_vat: Boolean(item.apply_vat),
             warranty_days: item.customer_warranty_days ?? item.warranty_days ?? null,
             warranty_value: item.customer_warranty_value ?? null,
             warranty_unit: item.customer_warranty_unit ?? null,
@@ -502,7 +513,7 @@ const submit = () => {
                             Tài khoản nhận tiền
                             <select id="checkout-bank-account" v-model="selectedBankAccountId" :disabled="Boolean(bankIntent)" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100">
                                 <option v-for="account in bankAccounts" :key="account.id" :value="String(account.id)">
-                                    {{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}{{ account.bank_account_name ? ` · ${account.bank_account_name}` : '' }}{{ account.is_default ? ' (Mặc định)' : '' }}
+                                    {{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}{{ account.bank_account_name ? ` · ${account.bank_account_name}` : '' }}{{ account.is_default ? ' (Mặc định)' : '' }}{{ account.vat_preferred ? ' (VAT)' : '' }}
                                 </option>
                             </select>
                         </label>

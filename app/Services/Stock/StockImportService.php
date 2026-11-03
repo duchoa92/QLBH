@@ -44,6 +44,18 @@ class StockImportService
             $paidAmount = ! empty($data['supplier_id'])
                 ? min($grandTotal, max(0, (float) ($data['paid_amount'] ?? 0)))
                 : 0;
+            $oldDebtPaid = ! empty($data['supplier_id'])
+                ? max(0, (float) ($data['old_debt_paid'] ?? 0))
+                : 0;
+            $supplier = ! empty($data['supplier_id'])
+                ? Supplier::query()->lockForUpdate()->findOrFail($data['supplier_id'])
+                : null;
+
+            if ($supplier && $oldDebtPaid > (float) $supplier->debt_balance) {
+                throw ValidationException::withMessages([
+                    'old_debt_paid' => 'Số tiền trả nợ cũ vượt quá công nợ hiện tại của nhà cung cấp. Vui lòng tải lại phiếu và thử lại.',
+                ]);
+            }
 
 
             /*
@@ -77,22 +89,30 @@ class StockImportService
 
                 'paid_amount' => $paidAmount,
 
+                'old_debt_paid' => $oldDebtPaid,
+
+                'payment_method' => $data['payment_method'] ?? null,
+
+                'payment_reference' => $data['payment_reference'] ?? null,
+
                 'note' => $data['note'] ?? null,
 
                 'status' => 'completed',
             ]);
 
-            if ($grandTotal > 0 && !empty($data['supplier_id'])) {
-                SupplierDebt::query()->create([
-                    'supplier_id' => $data['supplier_id'],
-                    'type' => 'increase',
-                    'amount' => $grandTotal,
-                    'source_type' => StockImport::class,
-                    'source_id' => $import->id,
-                    'note' => 'Công nợ phát sinh từ phiếu nhập ' . $import->code,
-                    'user_id' => auth()->id(),
-                ]);
-                Supplier::query()->whereKey($data['supplier_id'])->increment('debt_balance', $grandTotal);
+            if (!empty($data['supplier_id'])) {
+                if ($grandTotal > 0) {
+                    SupplierDebt::query()->create([
+                        'supplier_id' => $data['supplier_id'],
+                        'type' => 'increase',
+                        'amount' => $grandTotal,
+                        'source_type' => StockImport::class,
+                        'source_id' => $import->id,
+                        'note' => 'Công nợ phát sinh từ phiếu nhập ' . $import->code,
+                        'user_id' => auth()->id(),
+                    ]);
+                    Supplier::query()->whereKey($data['supplier_id'])->increment('debt_balance', $grandTotal);
+                }
 
                 if ($paidAmount > 0) {
                     SupplierDebt::query()->create([
@@ -106,6 +126,21 @@ class StockImportService
                         'user_id' => auth()->id(),
                     ]);
                     Supplier::query()->whereKey($data['supplier_id'])->decrement('debt_balance', $paidAmount);
+                }
+
+                if ($oldDebtPaid > 0) {
+                    SupplierDebt::query()->create([
+                        'supplier_id' => $data['supplier_id'],
+                        'type' => 'decrease',
+                        'amount' => $oldDebtPaid,
+                        'payment_method' => $data['payment_method'] ?? 'bank',
+                        'source_type' => StockImport::class,
+                        'source_id' => $import->id,
+                        'note' => 'Thanh toán nợ cũ khi tạo phiếu nhập ' . $import->code
+                            . (filled($data['payment_reference'] ?? null) ? ' (' . $data['payment_reference'] . ')' : ''),
+                        'user_id' => auth()->id(),
+                    ]);
+                    Supplier::query()->whereKey($data['supplier_id'])->decrement('debt_balance', $oldDebtPaid);
                 }
             }
 

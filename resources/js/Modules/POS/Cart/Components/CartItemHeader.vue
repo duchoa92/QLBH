@@ -48,7 +48,7 @@ const emit = defineEmits([
         <div class="min-w-0 flex-1">
             <div class="flex min-w-0 items-center gap-1.5">
                 <div class="truncate text-xs font-semibold leading-tight text-slate-900" :title="item.name">{{ item.name }}</div>
-                <span v-if="item.has_vat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Sản phẩm có VAT theo thông tin nhập hàng"><Receipt class="h-3 w-3" />VAT</span>
+                <span v-if="item.has_vat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Mặt hàng được đánh dấu có VAT khi nhập hàng"><Receipt class="h-3 w-3" />Có VAT</span>
             </div>
             <div v-if="showUnit" class="mt-0.5 text-[11px] leading-tight text-slate-500">{{ item.unit_name ?? 'Cái' }}</div>
 
@@ -66,12 +66,12 @@ const emit = defineEmits([
             <button
                 v-if="item.variant_label || item.variant_name"
                 type="button"
-                class="mt-0.5 flex w-fit max-w-full items-center gap-1 text-left text-[10px] font-medium leading-tight"
+                class="mt-0.5 flex w-fit max-w-full items-center gap-1 text-left text-[11px] font-medium leading-tight"
                 :class="clickableVariant ? 'cursor-pointer rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-blue-700 transition hover:border-blue-300 hover:bg-blue-100' : 'cursor-default text-slate-400'"
                 :title="clickableVariant ? 'Nhấn để đổi biến thể' : undefined"
                 @click="clickableVariant && emit('select-variant')"
             >
-                <span class="truncate">Phiên bản: {{ item.variant_label || item.variant_name }}</span><Layers v-if="clickableVariant" class="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span class="truncate">{{ item.variant_label || item.variant_name }}</span><Layers v-if="clickableVariant" class="h-3 w-3 shrink-0" aria-hidden="true" />
             </button>
         </div>
 

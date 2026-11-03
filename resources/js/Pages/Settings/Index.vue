@@ -188,6 +188,10 @@ const form = useForm({
         && props.settings.inventory_alert_enabled !== '0',
     inventory_alert_threshold: Number(props.settings.inventory_alert_threshold ?? 5),
     stock_import_vat_default: Boolean(props.settings.stock_import_vat_default),
+    stock_import_vat_rate: Number(props.settings.stock_import_vat_rate ?? 10),
+    pos_vat_default_enabled: Boolean(props.settings.pos_vat_default_enabled),
+    pos_vat_default_scope: props.settings.pos_vat_default_scope === 'vat_products' ? 'vat_products' : 'all',
+    pos_vat_rate: Number(props.settings.pos_vat_rate ?? 10),
     pos_cost_price_suggestion_enabled: props.settings.pos_cost_price_suggestion_enabled !== false
         && props.settings.pos_cost_price_suggestion_enabled !== 0
         && props.settings.pos_cost_price_suggestion_enabled !== '0',
@@ -241,6 +245,7 @@ const form = useForm({
         bank_account: account.bank_account || '',
         bank_account_name: account.bank_account_name || '',
         transfer_content_mode: account.transfer_content_mode === 'invoice' ? 'invoice' : 'default',
+        vat_preferred: Boolean(account.vat_preferred),
         payment_provider: account.payment_provider || '',
         payment_provider_account_id: account.payment_provider_account_id || '',
         payment_api_key: '',
@@ -274,7 +279,7 @@ const bankAccountSelectOptions = computed(() => [
     { value: '', label: 'Chọn tài khoản ngân hàng...' },
     ...form.bank_accounts.map(account => ({
         value: String(account.id),
-        label: `${bankAccountLabel(account)} · ${account.bank_account || 'Chưa có số tài khoản'}${account.is_default ? ' · Mặc định' : ''}`,
+        label: `${bankAccountLabel(account)} · ${account.bank_account || 'Chưa có số tài khoản'}${account.is_default ? ' · Mặc định' : ''}${account.vat_preferred ? ' · (VAT)' : ''}`,
     })),
     ...(props.can_update_bank_settings && form.bank_accounts.length < 10
         ? [{ value: '__create_new__', label: '+ Tạo tài khoản mới' }]
@@ -330,6 +335,7 @@ const addBankAccount = () => {
         bank_account_name: '',
         transfer_content_mode: 'default',
         is_default: form.bank_accounts.length === 0,
+        vat_preferred: false,
         payment_provider: '',
         payment_provider_account_id: '',
         payment_api_key: '',
@@ -371,6 +377,10 @@ const bankAccountLabel = (account) => {
 
 const setAutoReconcile = (account, enabled) => {
     account.payment_provider = enabled ? (account.payment_provider || 'apipay') : ''
+}
+
+const setVatPreferredAccount = (account, enabled) => {
+    form.bank_accounts.forEach(item => { item.vat_preferred = enabled && item.id === account.id })
 }
 
 const handleBankAccountSelection = (value) => {
@@ -448,6 +458,11 @@ const save = () => {
         ? String(selectedBankAccountId.value)
         : String(accountsToSave.find(account => account.is_default)?.id || accountsToSave[0]?.id || '')
     accountsToSave.forEach(account => { account.is_default = String(account.id) === defaultAccountId })
+    let vatPreferredAssigned = false
+    accountsToSave.forEach(account => {
+        account.vat_preferred = Boolean(account.vat_preferred) && !vatPreferredAssigned
+        if (account.vat_preferred) vatPreferredAssigned = true
+    })
     form.bank_accounts = accountsToSave
 
     form.post(route('settings.update'), {
@@ -739,6 +754,39 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             </span>
                             <input v-model="form.stock_import_vat_default" type="checkbox" class="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                         </label>
+                        <FloatingInput
+                            v-model.number="form.stock_import_vat_rate"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            name="stock_import_vat_rate"
+                            label="Thuế suất VAT (%)"
+                            class="mt-3"
+                        />
+                    </div>
+                </DataPanel>
+
+                <DataPanel class="!bg-blue-50">
+                    <div class="p-3">
+                        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
+                            <span>
+                                <span class="block text-sm font-bold text-slate-800">Mặc định tính và cộng VAT khi bán</span>
+                                <span class="mt-0.5 block text-xs text-slate-500">Nhãn VAT theo hàng nhập chỉ để nhận biết, không tự cộng thuế.</span>
+                            </span>
+                            <input v-model="form.pos_vat_default_enabled" type="checkbox" class="h-5 w-5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        </label>
+                        <FloatingInput v-model.number="form.pos_vat_rate" type="number" min="0" max="100" step="0.1" name="pos_vat_rate" label="Thuế suất VAT bán hàng (%)" class="mt-3" />
+                        <div v-if="form.pos_vat_default_enabled" class="mt-3 space-y-2 border-t border-blue-100 pt-3">
+                            <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                                <input v-model="form.pos_vat_default_scope" type="radio" value="all" class="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500">
+                                Tính VAT cho tất cả sản phẩm
+                            </label>
+                            <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                                <input v-model="form.pos_vat_default_scope" type="radio" value="vat_products" class="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500">
+                                Chỉ tính VAT cho sản phẩm có nhãn VAT khi nhập hàng
+                            </label>
+                        </div>
                     </div>
                 </DataPanel>
 
@@ -747,7 +795,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                         <label class="flex cursor-pointer items-center justify-between gap-3 rounded-lg">
                             <span>
                                 <span class="block text-sm font-bold text-slate-800">Gợi ý giá nhập trên POS</span>
-                                <span class="mt-0.5 block text-xs text-slate-500">Nhấn giữ giá sản phẩm để xem giá nhập.</span>
+                                <span class="mt-0.5 block text-xs text-slate-500">Nhấn giữ ảnh sản phẩm hoặc dòng IMEI/biến thể để xem giá nhập.</span>
                             </span>
                             <input v-model="form.pos_cost_price_suggestion_enabled" type="checkbox" aria-label="Bật gợi ý giá nhập trên POS" class="h-5 w-5 shrink-0 rounded border-slate-300 text-violet-600 focus:ring-violet-500">
                         </label>
@@ -1028,11 +1076,15 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             />
                         </div>
 
-                        <div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-slate-800">
+                                <input type="checkbox" :checked="Boolean(account.vat_preferred)" :disabled="!can_update_bank_settings" class="h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" @change="setVatPreferredAccount(account, $event.target.checked)">
+                                <span>Chọn khi sản phẩm có VAT</span>
+                            </label>
                             <FloatingSelect
                                 v-model="account.transfer_content_mode"
                                 :name="`bank_accounts_${selectedBankAccountIndex}_transfer_content_mode`"
-                                label="Nội dung chuyển khoản"
+                                label="Nội dung CK"
                                 :options="transferContentOptions"
                                 :disabled="!can_update_bank_settings"
                                 :error="form.errors[`bank_accounts.${selectedBankAccountIndex}.transfer_content_mode`]"

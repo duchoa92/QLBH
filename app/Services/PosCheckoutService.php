@@ -14,6 +14,7 @@ use App\Models\CustomerDebt;
 use App\Models\SaleItemGift;
 use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
+use App\Support\PosVatCalculator;
 
 class PosCheckoutService
 {
@@ -30,6 +31,7 @@ class PosCheckoutService
         float $invoiceDiscount = 0,
         string $invoiceDiscountType = 'amount',
         float $extraFee = 0,
+        float $vatRate = 0,
     ): Sale {
 
         return DB::transaction(function () use (
@@ -45,6 +47,7 @@ class PosCheckoutService
             $invoiceDiscount,
             $invoiceDiscountType,
             $extraFee,
+            $vatRate,
         ): Sale {
 
             /*
@@ -97,7 +100,7 @@ class PosCheckoutService
                 ? $invoiceDiscountBase * min(100, max(0, $invoiceDiscount)) / 100
                 : min($invoiceDiscountBase, max(0, $invoiceDiscount));
             $extraFee = max(0, $extraFee);
-            $tax = 0;
+            $tax = PosVatCalculator::calculate($items, $invoiceDiscount, $vatRate);
             $vatProductIds = StockImportItem::query()
                 ->whereIn('product_id', collect($items)->pluck('id')->unique())
                 ->where('has_vat', true)
@@ -334,6 +337,7 @@ class PosCheckoutService
                         $lineDiscount,
 
                     'has_vat' => in_array((int) $product->id, $vatProductIds, true),
+                    'vat_applied' => filter_var($item['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN),
 
                     'subtotal' =>
                         $lineTotal - $lineDiscount,

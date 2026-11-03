@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
-import { Plus, Search, Save, Trash2, MessageSquare, Gift } from 'lucide-vue-next'
+import { Plus, Search, Save, Trash2, MessageSquare, Gift, Receipt } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { formatMoney, formatDate, formatDatePlusDays } from '@/utils/format'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -15,6 +15,8 @@ import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
 const props = defineProps({ sale: { type: Object, required: true }, blockedReason: { type: String, default: '' } })
 const page = usePage()
 const allowNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
+const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled)
+    && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
 const emit = defineEmits(['close', 'saved'])
 const attributeLabel = (value) => {
     if (value === null || value === undefined || value === '') return ''
@@ -69,6 +71,10 @@ const form = useForm({
     bank_account: props.sale.bank_account || '',
     cash_received_amount: previouslyPaidCash,
     bank_received_amount: previouslyPaidBank,
+    invoice_discount: Number(props.sale.invoice_discount || 0),
+    invoice_discount_type: 'amount',
+    extra_fee: Number(props.sale.extra_fee || 0),
+    extra_fee_type: 'amount',
     items: (props.sale.items || []).map(item => ({
         product_id: item.product_id,
         variant_id: item.variant_id ?? '',
@@ -94,6 +100,8 @@ const form = useForm({
         customer_warranty_note: item.warranty_note || '',
         note: item.note || '',
         is_imei: Boolean(item.product_imei_id || item.product?.product_type === 'imei' || item.product?.manage_stock_by_serial),
+        has_vat: Boolean(item.has_vat),
+        apply_vat: Boolean(item.vat_applied),
         imei_options: item.product_imei_id ? [{ id: item.product_imei_id, imei: item.product_imei?.imei || 'IMEI đã gán', serial: item.product_imei?.serial }] : [],
         gifts: (item.gifts || []).map(gift => ({ key: `gift-${gift.id}`, id: gift.product_id, product_id: gift.product_id, variant_id: gift.variant_id ?? null, imei_id: gift.product_imei_id ?? null, name: gift.product?.name || 'Quà tặng', sku: gift.product?.sku || '', variant_name: variantName(gift.variant), imei: gift.product_imei?.imei || '', unit_price: Number(gift.product?.sell_price || gift.product?.price || gift.product?.retail_price || 0), is_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), requires_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), quantity: Number(gift.quantity || 1), conversion_factor: Math.max(1, Number(gift.conversion_factor || 1)), imei_options: gift.product_imei_id ? [{ id: gift.product_imei_id, imei: gift.product_imei?.imei || 'IMEI đã gán', display_code: gift.product_imei?.imei || 'IMEI đã gán' }] : [], variant_options: [] })),
     })),
@@ -142,11 +150,72 @@ const discount = computed(() => form.items.reduce((sum, row) => {
     const value = Number(row.discount_value || 0)
     return sum + (row.discount_type === 'percent' ? amount * value / 100 : row.discount_type === 'amount' ? value : 0)
 }, 0))
-const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value + Number(props.sale.tax || 0)))
+const invoiceDiscountAmount = computed(() => {
+    const base = Math.max(0, subtotal.value - discount.value)
+    const value = Math.max(0, Number(form.invoice_discount || 0))
+    return form.invoice_discount_type === 'percent'
+        ? base * Math.min(100, value) / 100
+        : Math.min(base, value)
+})
+const extraFeeAmount = computed(() => {
+    const value = Math.max(0, Number(form.extra_fee || 0))
+    if (form.extra_fee_type !== 'percent') return value
+    const base = Math.max(0, subtotal.value - discount.value - invoiceDiscountAmount.value)
+    return Math.round(base * value / 100)
+})
+const vatRate = computed(() => Math.max(0, Number(page.props.settings?.pos_vat_rate ?? 10)))
+const vat = computed(() => {
+    const base = Math.max(0, subtotal.value - discount.value)
+    const taxable = form.items.reduce((sum, row) => {
+        if (!row.apply_vat) return sum
+        return sum + lineTotal(row)
+    }, 0)
+    if (!base || !taxable || !vatRate.value) return 0
+    const afterInvoiceDiscount = Math.max(0, taxable - invoiceDiscountAmount.value * taxable / base)
+    return Math.round(afterInvoiceDiscount * vatRate.value / 100)
+})
+const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value - invoiceDiscountAmount.value + vat.value + extraFeeAmount.value))
 const previouslyPaid = computed(() => previouslyPaidAmount)
 const oldOutstandingBalance = computed(() => Math.max(0, oldInvoiceTotal - previouslyPaid.value))
 const settlementDifference = computed(() => newGrandTotal.value - previouslyPaid.value)
 const remainingBalance = computed(() => Math.max(0, settlementDifference.value))
+const discountInputValue = computed(() => form.invoice_discount_type === 'percent'
+    ? (Number(form.invoice_discount || 0) || '')
+    : Number(form.invoice_discount || 0))
+const extraFeeInputValue = computed(() => form.extra_fee_type === 'percent'
+    ? (Number(form.extra_fee || 0) || '')
+    : Number(form.extra_fee || 0))
+const parseAdjustment = (value, percent) => {
+    const raw = String(value || '')
+    const parsed = percent
+        ? Number(raw.replace(',', '.').replace(/[^\d.]/g, ''))
+        : Number(raw.replace(/\D/g, ''))
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+}
+const updateInvoiceDiscount = value => { form.invoice_discount = parseAdjustment(value, form.invoice_discount_type === 'percent') }
+const updateExtraFee = value => { form.extra_fee = parseAdjustment(value, form.extra_fee_type === 'percent') }
+const toggleInvoiceDiscountType = () => {
+    const base = Math.max(0, subtotal.value - discount.value)
+    const value = Math.max(0, Number(form.invoice_discount || 0))
+    if (form.invoice_discount_type === 'percent') {
+        form.invoice_discount = Math.round(base * Math.min(100, value) / 100)
+        form.invoice_discount_type = 'amount'
+    } else {
+        form.invoice_discount = base ? Math.min(100, Number((value / base * 100).toFixed(2))) : 0
+        form.invoice_discount_type = 'percent'
+    }
+}
+const toggleExtraFeeType = () => {
+    const base = Math.max(0, subtotal.value - discount.value - invoiceDiscountAmount.value)
+    const value = Math.max(0, Number(form.extra_fee || 0))
+    if (form.extra_fee_type === 'percent') {
+        form.extra_fee = Math.round(base * value / 100)
+        form.extra_fee_type = 'amount'
+    } else {
+        form.extra_fee = base ? Number((value / base * 100).toFixed(2)) : 0
+        form.extra_fee_type = 'percent'
+    }
+}
 
 watch(() => form.payment_method, (method) => {
     if (method === 'cash') {
@@ -239,12 +308,12 @@ const addProduct = async (product, variant = null, selectedImei = null) => {
         const selected = selectedImei || null
         const selectedVariant = selected?.variant || variant
         const price = effectiveImeiPrice(selected, selectedVariant, product)
-        form.items.push({ product_id: product.id, variant_id: selectedVariant?.id || selected?.variant_id || '', name: product.name, variant_name: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', variant_label: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: price, price, discount_type: 'amount', discount_value: '', is_imei: true, imei_id: selected?.id || '', imei: selected?.imei || selected?.serial || '', warranty_days: Number(product.warranty_days || 0), imei_options: imeis, gifts: [] })
+        form.items.push({ product_id: product.id, variant_id: selectedVariant?.id || selected?.variant_id || '', name: product.name, variant_name: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', variant_label: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: price, price, discount_type: 'amount', discount_value: '', is_imei: true, imei_id: selected?.id || '', imei: selected?.imei || selected?.serial || '', has_vat: Boolean(product.has_vat), apply_vat: defaultVatSelection(product), warranty_days: Number(product.warranty_days || 0), imei_options: imeis, gifts: [] })
     } else {
         const existing = form.items.find(row => !row.is_imei && Number(row.product_id) === Number(product.id) && Number(row.variant_id || 0) === Number(variant?.id || 0))
         if (existing) {
             existing.quantity++
-        } else form.items.push({ product_id: product.id, variant_id: variant?.id || '', name: product.name, variant_name: variantName(variant) || variant?.name || '', variant_label: variantName(variant) || variant?.name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: variant?.sell_price || variant?.price || product.price, price: variant?.sell_price || variant?.price || product.price, discount_type: 'amount', discount_value: '', is_imei: false, imei_id: '', imei: '', warranty_days: Number(product.warranty_days || 0), imei_options: [], gifts: [] })
+        } else form.items.push({ product_id: product.id, variant_id: variant?.id || '', name: product.name, variant_name: variantName(variant) || variant?.name || '', variant_label: variantName(variant) || variant?.name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: variant?.sell_price || variant?.price || product.price, price: variant?.sell_price || variant?.price || product.price, discount_type: 'amount', discount_value: '', is_imei: false, imei_id: '', imei: '', has_vat: Boolean(product.has_vat), apply_vat: defaultVatSelection(product), warranty_days: Number(product.warranty_days || 0), imei_options: [], gifts: [] })
     }
     productQuery.value = ''
     productResults.value = []
@@ -369,6 +438,7 @@ const persistSaleEdit = () => form.transform(data => ({
         return {
             ...saleItem,
             unit_price: price ?? item.unit_price,
+            apply_vat: Boolean(item.apply_vat),
             warranty_days: customer_warranty_days ?? item.warranty_days,
             warranty_note: customer_warranty_note ?? item.warranty_note,
             gifts: (item.gifts || []).map(gift => ({
@@ -601,7 +671,7 @@ const confirmItemOptions = ({ variant, imei }) => {
                                     <div v-if="item.note" class="mt-1 pl-[60px] text-xs italic text-slate-400">Ghi chú: {{ item.note }}</div>
                                 </td>
                                 <td class="p-1.5"><FloatingInput v-if="!item.is_imei" v-model.number="item.quantity" label="Số lượng" :floating-label="false" type="number" min="1" input-class="!h-9 !rounded-md !px-1 !py-1 !text-center !text-xs" /><span v-else class="block text-center text-xs text-slate-600">1</span></td>
-                                <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /></td>
+                                <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /><button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" class="mt-1 inline-flex h-5 items-center gap-0.5 rounded px-1 text-[9px] font-bold leading-none transition" :class="item.apply_vat ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'" :title="item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này'" @click="item.apply_vat = !item.apply_vat"><Receipt class="h-3 w-3" />VAT</button></td>
                                 <td class="p-2 text-right"><div class="font-bold">{{ formatMoney(lineTotal(item)) }}</div><div v-if="Number(item.discount_value || 0)" class="mt-0.5 text-[10px] font-semibold text-amber-700">Giảm {{ item.discount_type === 'percent' ? `${item.discount_value}%` : formatMoney(item.discount_value) }}</div></td>
                                 <td class="p-1"><button type="button" @click="removeItem(index)" class="rounded p-1.5 text-rose-600 hover:bg-rose-50" title="Xóa mặt hàng" aria-label="Xóa mặt hàng"><Trash2 :size="15" /></button></td>
                             </tr>
@@ -628,6 +698,13 @@ const confirmItemOptions = ({ variant, imei }) => {
                     <div class="space-y-1.5 rounded-lg border border-slate-200 bg-white p-3 text-xs">
                         <div class="flex justify-between text-slate-500"><span>Tiền hàng</span><b class="text-slate-800">{{ formatMoney(subtotal) }}</b></div>
                         <div class="flex justify-between text-rose-600"><span>Giảm giá</span><b>{{ formatMoney(discount) }}</b></div>
+                        <div class="grid grid-cols-2 gap-2 border-t border-dashed border-slate-200 pt-2">
+                            <div class="relative min-w-0"><FloatingInput :model-value="extraFeeInputValue" label="Phí phụ thu" :format-thousands="form.extra_fee_type !== 'percent'" :inputmode="form.extra_fee_type === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-10 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateExtraFee" /><button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white" :class="form.extra_fee_type === 'percent' ? 'bg-amber-500' : 'bg-blue-600'" @click="toggleExtraFeeType">{{ form.extra_fee_type === 'percent' ? '%' : $currency() }}</button></div>
+                            <div class="relative min-w-0"><FloatingInput :model-value="discountInputValue" label="Chiết khấu đơn" :format-thousands="form.invoice_discount_type !== 'percent'" :inputmode="form.invoice_discount_type === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-10 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateInvoiceDiscount" /><button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white" :class="form.invoice_discount_type === 'percent' ? 'bg-amber-500' : 'bg-blue-600'" @click="toggleInvoiceDiscountType">{{ form.invoice_discount_type === 'percent' ? '%' : $currency() }}</button></div>
+                        </div>
+                        <div v-if="invoiceDiscountAmount > 0" class="flex justify-between text-rose-600"><span>Chiết khấu đơn</span><b>-{{ formatMoney(invoiceDiscountAmount) }}</b></div>
+                        <div v-if="vat > 0" class="flex justify-between text-emerald-700"><span>Thuế VAT bán hàng</span><b>{{ formatMoney(vat) }}</b></div>
+                        <div v-if="extraFeeAmount > 0" class="flex justify-between text-slate-600"><span>Phí phụ thu</span><b>{{ formatMoney(extraFeeAmount) }}</b></div>
                         <div class="flex justify-between border-t border-dashed border-slate-200 pt-1.5 text-sm font-extrabold text-slate-900"><span>Tổng mới</span><b class="text-blue-700">{{ formatMoney(newGrandTotal) }}</b></div>
                         <div class="flex justify-between border-t border-dashed border-slate-200 pt-1.5 text-slate-600">
                             <span>{{ oldOutstandingBalance > 0 ? 'Đơn cũ đang nợ' : 'Đơn cũ đã thanh toán' }}</span>

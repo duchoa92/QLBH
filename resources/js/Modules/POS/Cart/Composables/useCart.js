@@ -1,6 +1,7 @@
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLocalStorage } from '@/Composables/useLocalStorage'
 import { useCartTotals } from '@/Modules/POS/Cart/Composables/useCartTotals'
+import { usePage } from '@inertiajs/vue3'
 
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') {
@@ -46,6 +47,7 @@ const makeDefaultTab = () => ({
     invoice_discount: 0,
     invoice_discount_type: 'amount',
     extra_fee: 0,
+    extra_fee_type: 'amount',
 })
 
 // Dữ liệu cũ trong localStorage có thể hỏng/thiếu -> chuẩn hoá để POS luôn mở được
@@ -56,22 +58,31 @@ const normalizeTabs = (raw) => {
 
     const tabs = raw
         .filter(tab => tab && typeof tab === 'object' && tab.id !== undefined && tab.id !== null)
-        .map(tab => ({
-            ...tab,
-            default_name: tab.default_name || tab.name || 'Đơn',
-            name: tab.name || tab.default_name || 'Đơn',
-            cart: Array.isArray(tab.cart) ? tab.cart : [],
-            customer: tab.customer ?? null,
-            invoice_discount: Number(tab.invoice_discount || 0),
-            invoice_discount_type: tab.invoice_discount_type === 'percent' ? 'percent' : 'amount',
-            extra_fee: Number(tab.extra_fee || 0),
-        }))
+        .map(tab => {
+            const cart = Array.isArray(tab.cart) ? tab.cart : []
+            const hasItems = cart.length > 0
+
+            return {
+                ...tab,
+                default_name: tab.default_name || tab.name || 'Đơn',
+                name: tab.name || tab.default_name || 'Đơn',
+                cart,
+                customer: tab.customer ?? null,
+                invoice_discount: hasItems ? Number(tab.invoice_discount || 0) : 0,
+                invoice_discount_type: hasItems && tab.invoice_discount_type === 'percent' ? 'percent' : 'amount',
+                extra_fee: hasItems ? Number(tab.extra_fee || 0) : 0,
+                extra_fee_type: hasItems && tab.extra_fee_type === 'percent' ? 'percent' : 'amount',
+            }
+        })
 
     return tabs.length ? tabs : [makeDefaultTab()]
 }
 
 
 export function useCart() {
+    const page = usePage()
+    const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled)
+        && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
 
     /*
     |--------------------------------------------------------------------------
@@ -145,6 +156,29 @@ export function useCart() {
         get: () => Number(currentTab.value.extra_fee || 0),
         set: value => { currentTab.value.extra_fee = Math.max(0, Number(value || 0)) },
     })
+    const extraFeeType = computed({
+        get: () => currentTab.value.extra_fee_type === 'percent' ? 'percent' : 'amount',
+        set: value => { currentTab.value.extra_fee_type = value === 'percent' ? 'percent' : 'amount' },
+    })
+
+    const resetOrderAdjustments = () => {
+        invoiceDiscount.value = 0
+        invoiceDiscountType.value = 'amount'
+        extraFee.value = 0
+        extraFeeType.value = 'amount'
+    }
+
+    // Clear order-level adjustments when the last cart line is removed.
+    // Otherwise an empty order can retain a fee/discount for the next sale.
+    watch(
+        () => cart.value.length,
+        (length, previousLength) => {
+            if (length === 0 && previousLength > 0) {
+                resetOrderAdjustments()
+            }
+        },
+        { flush: 'sync' },
+    )
 
 
     // 
@@ -232,7 +266,8 @@ export function useCart() {
 
         grandTotal,
 
-    } = useCartTotals(cart, invoiceDiscount, extraFee, invoiceDiscountType)
+        extraFeeAmount,
+    } = useCartTotals(cart, invoiceDiscount, extraFee, invoiceDiscountType, computed(() => Number(page.props.settings?.pos_vat_rate ?? 10)), extraFeeType)
 
     /*
     |--------------------------------------------------------------------------
@@ -340,6 +375,10 @@ export function useCart() {
             name: defaultName,
             cart: [],
             customer: null,
+            invoice_discount: 0,
+            invoice_discount_type: 'amount',
+            extra_fee: 0,
+            extra_fee_type: 'amount',
         })
         activeTabId.value = id
     }
@@ -519,6 +558,7 @@ export function useCart() {
                     product.name,
 
                 has_vat: Boolean(product.has_vat),
+                apply_vat: defaultVatSelection(product),
                 tax_percent: Number(product.tax_percent || 0),
 
                 warranty_days:
@@ -606,6 +646,7 @@ export function useCart() {
                     product.name,
 
                 has_vat: Boolean(product.has_vat),
+                apply_vat: defaultVatSelection(product),
                 tax_percent: Number(product.tax_percent || 0),
 
                 warranty_days:
@@ -686,6 +727,7 @@ export function useCart() {
                 product.name,
 
             has_vat: Boolean(product.has_vat),
+            apply_vat: defaultVatSelection(product),
             tax_percent: Number(product.tax_percent || 0),
 
             warranty_days:
@@ -784,6 +826,10 @@ export function useCart() {
         if (index !== -1) {
 
             cart.value.splice(index, 1)
+
+            if (cart.value.length === 0) {
+                resetOrderAdjustments()
+            }
         }
     }
 
@@ -797,9 +843,7 @@ export function useCart() {
 
         currentTab.value.cart = []
         currentTab.value.customer = null
-        invoiceDiscount.value = 0
-        invoiceDiscountType.value = 'amount'
-        extraFee.value = 0
+        resetOrderAdjustments()
     }
 
 
@@ -841,6 +885,8 @@ export function useCart() {
         invoiceDiscountType,
 
         extraFee,
+        extraFeeType,
+        extraFeeAmount,
 
         addToCart,
 

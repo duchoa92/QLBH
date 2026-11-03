@@ -78,18 +78,71 @@ if (!window._inertiaToastRegistered) {
 
     window._inertiaToastRegistered = true
 
+    let nativeValidationToastTimer = null
+    let nativeValidationToastShown = false
+
+    const normalizeFieldName = (name) => String(name || '').replace(/\[([^\]]+)\]/g, '.$1')
+    const markInvalidFields = (errors) => {
+        const controls = Array.from(document.querySelectorAll('input, select, textarea'))
+            .filter((control) => control.name || control.id)
+        const firstFieldName = Object.keys(errors || {})[0]
+        let firstField = null
+
+        Object.entries(errors || {}).forEach(([name, message]) => {
+            const field = controls.find((control) => {
+                const controlNames = [control.name, control.id].map(normalizeFieldName).filter(Boolean)
+                return controlNames.some((controlName) => controlName === name || controlName.startsWith(`${name}.`))
+            })
+
+            if (!field) return
+
+            field.dataset.submitInvalid = 'true'
+            field.setAttribute('aria-invalid', 'true')
+            if (!firstField && (normalizeFieldName(field.name) === firstFieldName || field.name === firstFieldName)) firstField = field
+        })
+
+        return firstField || controls.find((field) => [field.name, field.id].some((value) => normalizeFieldName(value) === firstFieldName)) || null
+    }
+
+    document.addEventListener('invalid', (event) => {
+        const field = event.target
+        if (!(field instanceof HTMLElement)) return
+
+        field.dataset.submitInvalid = 'true'
+        field.setAttribute('aria-invalid', 'true')
+
+        if (nativeValidationToastTimer) return
+        nativeValidationToastShown = false
+        nativeValidationToastTimer = setTimeout(() => {
+            nativeValidationToastTimer = null
+            if (nativeValidationToastShown) return
+            nativeValidationToastShown = true
+            const invalidField = document.querySelector('[data-submit-invalid="true"]:invalid')
+            const label = invalidField?.labels?.[0]?.textContent?.trim()
+            toast.error(label ? `Vui lòng kiểm tra trường: ${label}` : 'Vui lòng điền đầy đủ và đúng các trường bắt buộc.')
+        }, 0)
+    }, true)
+
+    const clearSubmitInvalid = (event) => {
+        const field = event.target
+        if (!(field instanceof HTMLElement) || !field.matches('input, select, textarea')) return
+        delete field.dataset.submitInvalid
+        field.removeAttribute('aria-invalid')
+    }
+
+    document.addEventListener('input', clearSubmitInvalid, true)
+    document.addEventListener('change', clearSubmitInvalid, true)
+
     router.on('error', (event) => {
 
         const errors = event.detail.errors
         if (!errors) return
 
-        Object.values(errors).forEach(msg => {
-            if (msg) toast.error(msg)
-        })
+        const firstMessage = Object.values(errors).flat().find(Boolean)
+        if (firstMessage) toast.error(firstMessage)
 
         setTimeout(() => {
-            const first = Object.keys(errors)[0]
-            const el = document.querySelector(`[name="${first}"]`)
+            const el = markInvalidFields(errors)
 
             if (el) {
                 el.focus()

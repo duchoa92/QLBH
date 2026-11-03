@@ -28,7 +28,7 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <div class="shrink-0 bg-white px-1">
+    <div class="shrink-0 bg-white p-1.5">
         <button
             :disabled="cart.length === 0 || loading"
             @click="emit('checkout')"

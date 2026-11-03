@@ -759,11 +759,13 @@ const highlightedSearchSegments = (value) => {
                                     <button
                                         v-if="canEditSales"
                                         type="button"
-                                        class="rounded-lg p-2 hover:bg-amber-50"
-                                        title="Sửa hóa đơn"
+                                        class="rounded-lg p-2"
+                                        :class="sale.status === 'cancelled' ? 'cursor-not-allowed text-slate-300 opacity-60' : 'text-amber-600 hover:bg-amber-50'"
+                                        :disabled="sale.status === 'cancelled'"
+                                        :title="sale.status === 'cancelled' ? 'Hóa đơn đã hủy, không thể sửa' : 'Sửa hóa đơn'"
                                         @click.stop="editSale = sale"
                                     >
-                                        <Pencil class="h-4 w-4 text-amber-600" />
+                                        <Pencil class="h-4 w-4" />
                                     </button>
                                     <button
                                         type="button"

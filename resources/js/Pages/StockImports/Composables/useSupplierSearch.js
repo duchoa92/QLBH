@@ -1,10 +1,10 @@
-import axios from 'axios'
-
 import {
     ref,
     onBeforeUnmount,
+    watch,
 } from 'vue'
 
+import api from '@/Services/api'
 import { useAutocompleteKeyboard } from '@/Composables/useAutocompleteKeyboard'
 
 export function useSupplierSearch(emit) {
@@ -13,27 +13,32 @@ export function useSupplierSearch(emit) {
     const suppliers = ref([])
 
     let timeout = null
+    let requestId = 0
+    let skipKeywordWatch = false
 
     const search = () => {
 
+        if (skipKeywordWatch) {
+            skipKeywordWatch = false
+            return
+        }
+
         clearTimeout(timeout)
+        const currentRequest = ++requestId
+        const value = keyword.value.trim()
+
+        if (!value) {
+            suppliers.value = []
+            reset()
+            return
+        }
 
         timeout = setTimeout(
             async () => {
-
-                const value =
-                    keyword.value.trim()
-
-                if (!value) {
-                    suppliers.value = []
-                    reset()
-                    return
-                }
-
                 try {
 
                     const response =
-                        await axios.get(
+                        await api.get(
                             '/api/suppliers/search',
                             {
                                 params: {
@@ -42,14 +47,18 @@ export function useSupplierSearch(emit) {
                             }
                         )
 
-                    suppliers.value =
-                        Array.isArray(response.data)
-                            ? response.data
-                            : []
+                    if (currentRequest !== requestId) return
+
+                    const rows = Array.isArray(response.data)
+                        ? response.data
+                        : (response.data?.data || response.data?.suppliers || [])
+                    suppliers.value = Array.isArray(rows) ? rows : []
 
                     reset()
 
                 } catch (error) {
+
+                    if (currentRequest !== requestId) return
 
                     console.error(
                         'Lỗi tìm kiếm nhà cung cấp:',
@@ -64,10 +73,16 @@ export function useSupplierSearch(emit) {
         )
     }
 
+    watch(keyword, search)
+
 
     const selectSupplier = (
         supplier
     ) => {
+
+        clearTimeout(timeout)
+        requestId++
+        skipKeywordWatch = true
 
         keyword.value =
             supplier.name
@@ -85,6 +100,9 @@ export function useSupplierSearch(emit) {
 
     const clearSupplier = () => {
 
+        clearTimeout(timeout)
+        requestId++
+
         keyword.value = ''
 
         suppliers.value = []
@@ -99,6 +117,9 @@ export function useSupplierSearch(emit) {
 
 
     const resetSupplierSearch = () => {
+
+        clearTimeout(timeout)
+        requestId++
 
         keyword.value = ''
 
@@ -128,6 +149,7 @@ export function useSupplierSearch(emit) {
     onBeforeUnmount(() => {
 
         clearTimeout(timeout)
+        requestId++
 
     })
 

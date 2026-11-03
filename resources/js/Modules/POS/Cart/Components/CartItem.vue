@@ -165,7 +165,7 @@ const editorTitle = computed(() => ({
         <CartItemHeader
             :item="item"
             :show-remove="showRemove"
-            :show-unit="!editorOnly"
+            :show-unit="false"
             :clickable-variant="clickableVariant"
             :clickable-imei="clickableImei"
             @edit-note="openEditor('note')"

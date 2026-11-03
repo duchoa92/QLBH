@@ -134,7 +134,7 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
           <slot name="main" />
         </div>
 
-        <div :class="mobilePanel === 'cart' ? 'flex' : 'hidden'" class="min-h-0 w-full flex-1 flex-col px-1 pb-2 lg:flex lg:flex-none lg:w-[35%]">
+        <div :class="mobilePanel === 'cart' ? 'flex' : 'hidden'" class="min-h-0 w-full flex-1 flex-col px-1 pb-0 lg:flex lg:flex-none lg:w-[35%]">
           <slot name="sidebar" />
         </div>
 

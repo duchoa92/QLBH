@@ -264,6 +264,10 @@ class RepairController extends Controller
                     $repair->created_at?->format(
                         'd/m/Y H:i'
                     ),
+                'received_at' =>
+                    ($repair->received_at ?? $repair->created_at)?->format(
+                        'd/m/Y H:i'
+                    ),
             ])
 
             ->withQueryString();

@@ -52,6 +52,10 @@ class SettingController extends Controller
                 'inventory_alert_enabled' => filter_var(setting('inventory_alert_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'inventory_alert_threshold' => (int) setting('inventory_alert_threshold', 5),
                 'stock_import_vat_default' => filter_var(setting('stock_import_vat_default', false), FILTER_VALIDATE_BOOLEAN),
+                'stock_import_vat_rate' => min(100, max(0, (float) setting('stock_import_vat_rate', 10))),
+                'pos_vat_default_enabled' => filter_var(setting('pos_vat_default_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'pos_vat_default_scope' => in_array(setting('pos_vat_default_scope', 'all'), ['all', 'vat_products'], true) ? setting('pos_vat_default_scope', 'all') : 'all',
+                'pos_vat_rate' => min(100, max(0, (float) setting('pos_vat_rate', 10))),
                 'pos_cost_price_suggestion_enabled' => filter_var(setting('pos_cost_price_suggestion_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_opening_count_enabled' => filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
@@ -119,6 +123,10 @@ class SettingController extends Controller
             'inventory_alert_enabled' => ['sometimes', 'boolean'],
             'inventory_alert_threshold' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'stock_import_vat_default' => ['sometimes', 'boolean'],
+            'stock_import_vat_rate' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'pos_vat_default_enabled' => ['sometimes', 'boolean'],
+            'pos_vat_default_scope' => ['sometimes', 'in:all,vat_products'],
+            'pos_vat_rate' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'pos_cost_price_suggestion_enabled' => ['sometimes', 'boolean'],
             'work_shift_opening_count_enabled' => ['sometimes', 'boolean'],
             'work_shift_auto_open_enabled' => ['sometimes', 'boolean'],
@@ -147,6 +155,7 @@ class SettingController extends Controller
             'bank_accounts.*.bank_account_name' => ['nullable', 'string', 'max:150'],
             'bank_accounts.*.transfer_content_mode' => ['nullable', 'in:default,invoice'],
             'bank_accounts.*.is_default' => ['sometimes', 'boolean'],
+            'bank_accounts.*.vat_preferred' => ['sometimes', 'boolean'],
             'bank_accounts.*.payment_provider' => ['nullable', 'in:none,apipay,sepay'],
             'bank_accounts.*.payment_provider_account_id' => ['nullable', 'string', 'max:150'],
             'bank_accounts.*.payment_api_key' => ['nullable', 'string', 'max:2000'],
@@ -166,7 +175,7 @@ class SettingController extends Controller
                 }
             }
         } elseif ($user->can('units.manage')) {
-            $data = array_intersect_key($data, array_flip(['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled', 'pos_cost_price_suggestion_enabled']));
+            $data = array_intersect_key($data, array_flip(['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled', 'pos_cost_price_suggestion_enabled']));
         } else {
             $data = array_intersect_key($data, array_flip($this->bankSettingKeys));
         }
@@ -193,6 +202,7 @@ class SettingController extends Controller
                         'bank_account_name' => trim((string) ($account['bank_account_name'] ?? '')),
                         'transfer_content_mode' => ($account['transfer_content_mode'] ?? 'default') === 'invoice' ? 'invoice' : 'default',
                         'is_default' => (bool) ($account['is_default'] ?? false),
+                        'vat_preferred' => (bool) ($account['vat_preferred'] ?? false),
                         'payment_provider' => in_array($account['payment_provider'] ?? '', ['apipay', 'sepay'], true) ? $account['payment_provider'] : '',
                         'payment_provider_account_id' => trim((string) ($account['payment_provider_account_id'] ?? '')),
                     ];
@@ -211,6 +221,11 @@ class SettingController extends Controller
                 $accounts = $accounts->map(fn ($account, $index) => [
                     ...$account,
                     'is_default' => $index === $defaultIndex,
+                ]);
+                $vatPreferredIndex = $accounts->search(fn ($account) => $account['vat_preferred']);
+                $accounts = $accounts->map(fn ($account, $index) => [
+                    ...$account,
+                    'vat_preferred' => $vatPreferredIndex !== false && $index === $vatPreferredIndex,
                 ]);
                 $defaultAccount = $accounts[$defaultIndex];
             } else {

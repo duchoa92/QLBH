@@ -13,6 +13,7 @@ use App\Models\BankPaymentIntent;
 use App\Models\Customer;
 use App\Notifications\SystemNotification;
 use App\Support\NotificationRecipients;
+use App\Support\PosVatCalculator;
 use Illuminate\Support\Facades\Notification;
 
 class PosController extends Controller
@@ -51,6 +52,7 @@ class PosController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['required', 'integer', 'exists:products,id'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
+            'items.*.apply_vat' => ['sometimes', 'boolean'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1'],
             'items.*.discount_type' => ['nullable', 'in:percent,amount'],
             'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
@@ -118,7 +120,8 @@ class PosController extends Controller
         $invoiceDiscount = $invoiceDiscountType === 'percent'
             ? $invoiceDiscountBase * $invoiceDiscountValue / 100
             : min($invoiceDiscountBase, $invoiceDiscountValue);
-        $tax = 0;
+        $vatRate = (float) setting('pos_vat_rate', 10);
+        $tax = PosVatCalculator::calculate($data['items'], $invoiceDiscount, $vatRate);
         $extraFee = max(0, (float) ($data['extra_fee'] ?? 0));
         $checkoutTotal = (int) round(max(0, $subtotal - $discount - $invoiceDiscount + $tax + $extraFee));
         if ($data['pay_old_debt']) {
@@ -146,6 +149,7 @@ class PosController extends Controller
                 'invoice_discount' => $invoiceDiscount,
                 'invoice_discount_type' => $invoiceDiscountType,
                 'extra_fee' => $extraFee,
+                'vat_rate' => $vatRate,
             ],
             'status' => 'waiting',
             'expires_at' => now()->addMinutes(15),
@@ -307,6 +311,7 @@ class PosController extends Controller
             'items.*.discount_type' => 'nullable|string',
 
             'items.*.discount_value' => 'nullable|numeric',
+            'items.*.apply_vat' => 'sometimes|boolean',
 
             'items.*.variant_id' => 'nullable|integer',
             
@@ -371,6 +376,7 @@ class PosController extends Controller
                 invoiceDiscount: (float) ($request->input('invoice_discount') ?? 0),
                 invoiceDiscountType: ($request->input('invoice_discount_type') ?? 'amount') === 'percent' ? 'percent' : 'amount',
                 extraFee: (float) ($request->input('extra_fee') ?? 0),
+                vatRate: (float) setting('pos_vat_rate', 10),
             );
 
             $sale->update([

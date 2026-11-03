@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
 import { toast } from 'vue-sonner'
@@ -106,19 +106,44 @@ const onCameraScan = async (code) => {
 
 const formatPrice = formatCurrency
 const showingCostPriceFor = ref(null)
+let costPriceHoldTimer = null
+let costPriceHoldTriggered = false
+let suppressImageClick = false
 
 const isShowingCostPrice = (product) => costPriceSuggestionEnabled.value && showingCostPriceFor.value === (product.variant_id ?? product.id)
 const startShowingCostPrice = (product, event) => {
     if (!costPriceSuggestionEnabled.value) return
-    event.preventDefault()
-    event.stopPropagation()
-    showingCostPriceFor.value = product.variant_id ?? product.id
-    event.currentTarget?.setPointerCapture?.(event.pointerId)
+    clearTimeout(costPriceHoldTimer)
+    costPriceHoldTriggered = false
+    suppressImageClick = false
+    const target = event.currentTarget
+    const pointerId = event.pointerId
+    const key = product.variant_id ?? product.id
+    costPriceHoldTimer = setTimeout(() => {
+        showingCostPriceFor.value = key
+        costPriceHoldTriggered = true
+        target?.setPointerCapture?.(pointerId)
+    }, 450)
 }
 const stopShowingCostPrice = (event) => {
-    event?.stopPropagation?.()
-    showingCostPriceFor.value = null
+    clearTimeout(costPriceHoldTimer)
+    if (event?.type === 'pointerup' && costPriceHoldTriggered) {
+        suppressImageClick = true
+        showingCostPriceFor.value = null
+        return
+    }
+    if (event?.type === 'pointercancel') {
+        suppressImageClick = false
+        showingCostPriceFor.value = null
+    }
 }
+const handleCostImageClick = event => {
+    if (!suppressImageClick) return
+    event.preventDefault()
+    event.stopPropagation()
+    suppressImageClick = false
+}
+onBeforeUnmount(() => clearTimeout(costPriceHoldTimer))
 const displayedPriceLabel = (product) => isShowingCostPrice(product)
     ? costPriceLabel(product)
     : priceLabel(product)
@@ -361,13 +386,24 @@ const categoryOptions = computed(() => [
                     @click="selectProduct(product, $event)"
                 >
                     <!-- KHU VỰC ẢNH -->
-                    <div class="relative h-24 w-full shrink-0 overflow-hidden bg-slate-100 sm:h-32">
+                    <div
+                        class="cost-price-hold-area relative h-24 w-full shrink-0 overflow-hidden bg-slate-100 sm:h-32"
+                        :title="costPriceSuggestionEnabled ? 'Nhấn giữ ảnh để xem giá nhập' : undefined"
+                        @pointerdown="startShowingCostPrice(product, $event)"
+                        @pointerup="stopShowingCostPrice($event)"
+                        @pointercancel="stopShowingCostPrice($event)"
+                        @lostpointercapture="stopShowingCostPrice($event)"
+                        @contextmenu.prevent.stop
+                        @click="handleCostImageClick"
+                    >
                         <img
                             v-if="product.image_url"
                             :src="product.image_url"
                             :alt="product.name"
+                            draggable="false"
                             class="h-full w-full object-cover transition-transform duration-300"
                             :class="{ 'group-hover:scale-105': getDisplayStock(product) > 0 }"
+                            @dragstart.prevent
                         />
 
                         <div
@@ -390,15 +426,8 @@ const categoryOptions = computed(() => [
                         <!-- BADGE GIÁ -->
                         <div
                             v-else
-                            class="absolute bottom-2 left-2 touch-none select-none rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm"
+                            class="pointer-events-none absolute bottom-2 left-2 select-none rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm"
                             :class="isShowingCostPrice(product) ? 'bg-amber-600/95' : ''"
-                            :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
-                            @pointerdown="startShowingCostPrice(product, $event)"
-                            @pointerup="stopShowingCostPrice($event)"
-                            @pointercancel="stopShowingCostPrice($event)"
-                            @lostpointercapture="stopShowingCostPrice($event)"
-                            @contextmenu.prevent.stop
-                            @click.stop
                         >
                             {{ displayedPriceLabel(product) }}
                         </div>
@@ -461,6 +490,14 @@ const categoryOptions = computed(() => [
 </template>
 
 <style scoped>
+.cost-price-hold-area,
+.cost-price-hold-area * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
 .pos-category-scroll { scrollbar-width: none; }
 .pos-category-scroll::-webkit-scrollbar { display: none; }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }

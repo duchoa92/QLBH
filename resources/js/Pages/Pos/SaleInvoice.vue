@@ -126,7 +126,7 @@ const saleQuantityText = (item) => {
                         class="hover:bg-slate-50/50 transition-colors"
                     >
                         <td class="py-3 pr-2">
-                            <div class="font-medium text-slate-800">{{ item.product?.name }} <span v-if="item.has_vat" class="ml-1 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-bold text-emerald-700">VAT</span></div>
+                            <div class="font-medium text-slate-800">{{ item.product?.name }} <span v-if="item.has_vat" class="ml-1 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-bold text-emerald-700">Có VAT</span><span v-if="item.vat_applied" class="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-bold text-blue-700">VAT tính</span></div>
                             
                             <div
                                 v-if="item.variant?.attributes"
@@ -186,7 +186,7 @@ const saleQuantityText = (item) => {
                 <div v-if="Number(sale.discount || 0) > 0" class="flex justify-between text-rose-600"><span>Chiết khấu sản phẩm</span><span>-{{ formatCurrency(sale.discount) }}</span></div>
                 <div v-if="Number(sale.invoice_discount || 0) > 0" class="flex justify-between text-rose-600"><span>Chiết khấu đơn</span><span>-{{ formatCurrency(sale.invoice_discount) }}</span></div>
                 <div v-if="Number(sale.tax || 0) > 0" class="flex justify-between text-emerald-700"><span>VAT</span><span>{{ formatCurrency(sale.tax) }}</span></div>
-                <div v-else-if="sale.items?.some(item => item.has_vat)" class="flex justify-between text-emerald-700"><span>VAT theo mặt hàng</span><span>Đã đánh dấu từng dòng</span></div>
+                <div v-else-if="sale.items?.some(item => item.has_vat)" class="flex justify-between text-slate-500"><span>Nhãn VAT hàng nhập</span><span>Chỉ để nhận biết</span></div>
                 <div v-if="Number(sale.extra_fee || 0) > 0" class="flex justify-between text-slate-600"><span>Phí phụ thu</span><span>{{ formatCurrency(sale.extra_fee) }}</span></div>
                 <div class="flex justify-between border-t border-dashed border-slate-200 pt-2 font-bold text-slate-900"><span>Tổng thanh toán</span><span>{{ formatCurrency(sale.grand_total) }}</span></div>
 

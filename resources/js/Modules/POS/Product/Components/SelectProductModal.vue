@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { X, Check, Search, Cpu, Barcode, AlertCircle } from 'lucide-vue-next'
 import { productService } from '@/Modules/POS/Product/Services/productService'
@@ -38,6 +38,9 @@ const imeis = ref([])
 const loadingImeis = ref(false)
 const imeiKeyword = ref('')
 const showingCostPriceFor = ref('')
+let costPriceHoldTimer = null
+let costPriceHoldTriggered = false
+let suppressCostPriceClick = false
 
 const needsImei = computed(() =>
     props.product?.product_type === 'imei'
@@ -115,15 +118,46 @@ const priceKey = (type, item) => `${type}:${item?.id ?? ''}`
 const isShowingCostPrice = (type, item) => costPriceSuggestionEnabled.value && showingCostPriceFor.value === priceKey(type, item)
 const showCostPrice = (type, item, event) => {
     if (!costPriceSuggestionEnabled.value) return
-    if (type === 'imei') selectImei(item)
-    else selectVariant(item)
-    showingCostPriceFor.value = priceKey(type, item)
-    event.currentTarget?.setPointerCapture?.(event.pointerId)
+    clearTimeout(costPriceHoldTimer)
+    costPriceHoldTriggered = false
+    suppressCostPriceClick = false
+    const target = event.currentTarget
+    const pointerId = event.pointerId
+    const key = priceKey(type, item)
+    costPriceHoldTimer = setTimeout(() => {
+        showingCostPriceFor.value = key
+        costPriceHoldTriggered = true
+        target?.setPointerCapture?.(pointerId)
+    }, 450)
 }
 const stopShowingCostPrice = (event) => {
-    event?.stopPropagation?.()
-    showingCostPriceFor.value = ''
+    clearTimeout(costPriceHoldTimer)
+    if (event?.type === 'pointerup' && costPriceHoldTriggered) {
+        suppressCostPriceClick = true
+        showingCostPriceFor.value = ''
+        return
+    }
+    if (event?.type === 'pointercancel') {
+        suppressCostPriceClick = false
+        showingCostPriceFor.value = ''
+    }
 }
+const shouldSuppressCostPriceClick = (event) => {
+    if (!suppressCostPriceClick) return false
+    event.preventDefault()
+    event.stopPropagation()
+    suppressCostPriceClick = false
+    return true
+}
+const handleVariantClick = (variant, event) => {
+    if (shouldSuppressCostPriceClick(event)) return
+    selectVariant(variant)
+}
+const handleImeiClick = (item, event) => {
+    if (shouldSuppressCostPriceClick(event)) return
+    selectImei(item)
+}
+onBeforeUnmount(() => clearTimeout(costPriceHoldTimer))
 
 const displayVariantStock = (variant) => {
     const currentStock = Number(variant?.stock || 0)
@@ -204,12 +238,13 @@ const selectImei = (imei) => {
 watch(
     () => [props.show, props.product?.id],
     () => {
+        clearTimeout(costPriceHoldTimer)
+        showingCostPriceFor.value = ''
         if (!props.show) return
 
         selectedVariant.value = null
         selectedVariant.value = props.currentVariant || null
         selectedImei.value = props.currentImei || null
-        showingCostPriceFor.value = ''
         imeis.value = []
         imeiKeyword.value = ''
 
@@ -286,15 +321,21 @@ const confirm = () => {
                             v-for="variant in product.variants"
                             :key="variant.id"
                             type="button"
-                            class="flex flex-col justify-between rounded-xl border p-3 text-left transition-all relative overflow-hidden"
+                            class="cost-price-hold-area flex flex-col justify-between rounded-xl border p-3 text-left transition-all relative overflow-hidden"
                             :class="[
                                 selectedVariant?.id === variant.id
                                     ? 'border-blue-600 bg-blue-50/40 text-blue-900 ring-2 ring-blue-600/20'
                                     : 'border-slate-200/80 hover:border-slate-300 bg-white',
                                 { 'cursor-not-allowed opacity-50': quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Math.max(1, Number(selectionQuantity || 1)) },
                             ]"
+                            :title="costPriceSuggestionEnabled ? 'Nhấn giữ lựa chọn này để xem giá nhập' : undefined"
                             :disabled="quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Math.max(1, Number(selectionQuantity || 1))"
-                            @click="selectVariant(variant)"
+                            @pointerdown="costPriceSuggestionEnabled && showCostPrice('variant', variant, $event)"
+                            @pointerup="stopShowingCostPrice($event)"
+                            @pointercancel="stopShowingCostPrice($event)"
+                            @lostpointercapture="stopShowingCostPrice($event)"
+                            @contextmenu.prevent.stop
+                            @click="handleVariantClick(variant, $event)"
                         >
                             <div class="flex w-full items-start justify-between">
                                 <span class="font-bold text-xs text-slate-800 line-clamp-2">
@@ -310,15 +351,8 @@ const confirm = () => {
 
                             <div class="mt-2 flex items-center justify-between">
                                 <span
-                                    class="touch-none select-none text-xs font-extrabold"
+                                    class="select-none text-xs font-extrabold"
                                     :class="isShowingCostPrice('variant', variant) ? 'text-amber-700' : 'text-rose-600'"
-                                    :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
-                                    @pointerdown.prevent.stop="costPriceSuggestionEnabled && showCostPrice('variant', variant, $event)"
-                                    @pointerup="stopShowingCostPrice($event)"
-                                    @pointercancel="stopShowingCostPrice($event)"
-                                    @lostpointercapture="stopShowingCostPrice($event)"
-                                    @contextmenu.prevent.stop
-                                    @click.stop
                                 >
                                     {{ formatMoney(isShowingCostPrice('variant', variant) ? variantCostPrice(variant) : variantSellPrice(variant)) }}
                                 </span>
@@ -360,9 +394,15 @@ const confirm = () => {
                             v-for="item in filteredImeis"
                             :key="item.id"
                             type="button"
-                            class="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors"
+                            class="cost-price-hold-area flex w-full items-center justify-between gap-3 p-3 text-left transition-colors"
                             :class="selectedImei?.id === item.id ? 'bg-blue-50/50' : 'hover:bg-slate-50'"
-                            @click="selectImei(item)"
+                            :title="costPriceSuggestionEnabled ? 'Nhấn giữ lựa chọn này để xem giá nhập' : undefined"
+                            @pointerdown="costPriceSuggestionEnabled && showCostPrice('imei', item, $event)"
+                            @pointerup="stopShowingCostPrice($event)"
+                            @pointercancel="stopShowingCostPrice($event)"
+                            @lostpointercapture="stopShowingCostPrice($event)"
+                            @contextmenu.prevent.stop
+                            @click="handleImeiClick(item, $event)"
                         >
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2">
@@ -382,15 +422,8 @@ const confirm = () => {
 
                                 <div class="mt-1.5">
                                     <span
-                                        class="touch-none select-none text-xs font-extrabold"
+                                        class="select-none text-xs font-extrabold"
                                         :class="isShowingCostPrice('imei', item) ? 'text-amber-700' : 'text-rose-600'"
-                                        :title="costPriceSuggestionEnabled ? 'Nhấn giữ để xem giá nhập' : undefined"
-                                        @pointerdown.prevent.stop="costPriceSuggestionEnabled && showCostPrice('imei', item, $event)"
-                                        @pointerup="stopShowingCostPrice($event)"
-                                        @pointercancel="stopShowingCostPrice($event)"
-                                        @lostpointercapture="stopShowingCostPrice($event)"
-                                        @contextmenu.prevent.stop
-                                        @click.stop
                                     >
                                         {{ formatMoney(isShowingCostPrice('imei', item) ? itemCostPrice(item) : imeiSellPrice(item)) }}
                                     </span>
@@ -445,6 +478,14 @@ const confirm = () => {
 </template>
 
 <style scoped>
+.cost-price-hold-area,
+.cost-price-hold-area * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import axios from 'axios'
 import { router, usePage } from '@inertiajs/vue3'
 import { useBarcodeScanner } from '@/Modules/POS/Product/Composables/useBarcodeScanner'
@@ -39,11 +39,28 @@ const {
     invoiceDiscount,
     invoiceDiscountType,
     extraFee,
+    extraFeeType,
+    extraFeeAmount,
     addToCart,
     removeItem,
     clearCart,
 } = useCart()
 
+// Mỗi tab là một hóa đơn riêng. Khi tab hiện tại không còn sản phẩm,
+// mọi điều chỉnh cấp hóa đơn phải được xóa ngay, bất kể sản phẩm được
+// xóa từ nút rác, nút giảm số lượng hay một luồng POS khác.
+watch(
+    () => cart.value.length,
+    length => {
+        if (length !== 0) return
+
+        invoiceDiscount.value = 0
+        invoiceDiscountType.value = 'amount'
+        extraFee.value = 0
+        extraFeeType.value = 'amount'
+    },
+    { immediate: true, flush: 'sync' },
+)
 
 const {
     confirmCheckout,
@@ -52,7 +69,7 @@ const {
     selectedCustomer,
     clearCart,
     invoiceDiscount,
-    extraFee,
+    extraFeeAmount,
     invoiceDiscountType,
 )
 
@@ -440,6 +457,7 @@ const handleCheckout = async (data) => {
                     unit_id: item.unit_id ?? null, unit_name: item.unit_name ?? 'Cái',
                     conversion_factor: item.conversion_factor ?? 1, variant_id: item.variant_id ?? null,
                     imei_id: null, warranty_days: item.customer_warranty_days ?? item.warranty_days ?? null,
+                    apply_vat: Boolean(item.apply_vat),
                     warranty_value: item.customer_warranty_value ?? null, warranty_unit: item.customer_warranty_unit ?? null,
                     note: item.note, discount_type: item.discount_type ?? null,
                     discount_value: Number(item.discount_value ?? 0),
@@ -449,7 +467,7 @@ const handleCheckout = async (data) => {
                 paid_amount: Number(data.paid_amount || 0),
                 invoice_discount: invoiceDiscount.value,
                 invoice_discount_type: invoiceDiscountType.value,
-                extra_fee: extraFee.value,
+                extra_fee: extraFeeAmount.value,
                 cash_received_amount: Number(data.cash_received_amount ?? data.paid_amount ?? 0),
                 bank_received_amount: 0,
                 payment_method: 'cash', bank_account: null,
@@ -657,9 +675,11 @@ useBarcodeScanner(
                 :invoice-discount="invoiceDiscount"
                 :invoice-discount-type="invoiceDiscountType"
                 :extra-fee="extraFee"
+                :extra-fee-type="extraFeeType"
                 @update:invoice-discount="invoiceDiscount = $event"
                 @update:invoice-discount-type="invoiceDiscountType = $event"
                 @update:extra-fee="extraFee = $event"
+                @update:extra-fee-type="extraFeeType = $event"
                 :loading="loading"
                 @select-tab="selectTab"
                 @create-tab="createTab"
@@ -680,7 +700,7 @@ useBarcodeScanner(
         :grand-total="grandTotal"
         :invoice-discount="invoiceDiscount"
         :invoice-discount-type="invoiceDiscountType"
-        :extra-fee="extraFee"
+        :extra-fee="extraFeeAmount"
         :selected-customer="selectedCustomer"
         @close="showCheckoutModal = false"
         @confirm="checkout($event)"

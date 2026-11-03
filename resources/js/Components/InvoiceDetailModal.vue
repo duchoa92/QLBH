@@ -311,7 +311,7 @@ const cancelReason = computed(() =>
                                         <td class="px-3 py-2.5">
                                             <div class="font-bold text-slate-900 text-sm">
                                                 {{ item.product?.name || item.product_name || '-' }}
-                                                <span v-if="item.has_vat" class="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-emerald-700">VAT</span>
+                                                <span v-if="item.has_vat" class="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-emerald-700">Có VAT</span><span v-if="item.vat_applied" class="ml-1 rounded bg-blue-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-blue-700">VAT tính</span>
                                             </div>
 
                                             <div
@@ -470,7 +470,7 @@ const cancelReason = computed(() =>
 
                         <div v-if="Number(invoice.invoice_discount || 0) > 0" class="flex justify-between text-rose-600 font-medium"><span>Chiết khấu đơn:</span><span>-{{ money(invoice.invoice_discount) }}</span></div>
                         <div v-if="Number(invoice.tax || 0) > 0" class="flex justify-between text-emerald-700 font-medium"><span>VAT:</span><span>{{ money(invoice.tax) }}</span></div>
-                        <div v-else-if="invoice.items?.some(item => item.has_vat)" class="flex justify-between text-emerald-700 font-medium"><span>VAT theo mặt hàng:</span><span>Đã đánh dấu từng dòng</span></div>
+                        <div v-else-if="invoice.items?.some(item => item.has_vat)" class="flex justify-between text-slate-500 font-medium"><span>Nhãn VAT hàng nhập:</span><span>Chỉ để nhận biết</span></div>
                         <div v-if="Number(invoice.extra_fee || 0) > 0" class="flex justify-between text-slate-600 font-medium"><span>Phí phụ thu:</span><span>{{ money(invoice.extra_fee) }}</span></div>
 
                         <div class="flex justify-between items-center border-t border-slate-200/80 pt-1.5 text-sm">

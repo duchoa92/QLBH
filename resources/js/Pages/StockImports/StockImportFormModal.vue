@@ -3,6 +3,7 @@ import {
     computed,
     ref,
     watch,
+    nextTick,
     onMounted,
     onBeforeUnmount,
 } from 'vue'
@@ -33,7 +34,6 @@ import {
     Pencil,
     Trash2,
     LoaderCircle,
-    Printer,
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -70,7 +70,9 @@ const form = useForm({
     discount: 0,
     extra_fee: 0,
     paid_amount: 0,
+    old_debt_paid: 0,
     payment_method: 'cash',
+    payment_reference: '',
     note: '',
 })
 
@@ -126,12 +128,21 @@ const searchResults = ref([])
 const searching = ref(false)
 const showResults = ref(false)
 const productSearchRef = ref(null)
+const productSearchDropdownRef = ref(null)
+const productDropdownStyle = ref({})
 let productSearchRequest = 0
 
 let searchTimeout = null
 
 const searchProducts = async () => {
     const value = keyword.value.trim()
+    if (!value) {
+        productSearchRequest++
+        searchResults.value = []
+        searching.value = false
+        showResults.value = false
+        return
+    }
     const requestId = ++productSearchRequest
 
     searching.value = true
@@ -139,7 +150,7 @@ const searchProducts = async () => {
 
     try {
         const res = await api.get(
-            '/api/products',
+            '/products/list-import',
             {
                 params: {
                     keyword: value,
@@ -160,16 +171,50 @@ const searchProducts = async () => {
     }
 }
 
+const updateProductDropdownPosition = () => {
+    const rect = productSearchRef.value?.getBoundingClientRect()
+    if (!rect) return
+    const gap = 6
+    const below = Math.max(0, window.innerHeight - rect.bottom - 12)
+    const above = Math.max(0, rect.top - 12)
+    const openAbove = below < 180 && above > below
+    const maxHeight = Math.max(120, Math.min(320, openAbove ? above : below))
+    const left = Math.max(8, rect.left)
+    productDropdownStyle.value = {
+        position: 'fixed',
+        left: `${left}px`,
+        width: `${Math.min(rect.width, window.innerWidth - left - 8)}px`,
+        maxHeight: `${maxHeight}px`,
+        ...(openAbove
+            ? { bottom: `${Math.max(8, window.innerHeight - rect.top + gap)}px` }
+            : { top: `${rect.bottom + gap}px` }),
+    }
+}
+
+watch([showResults, searchResults], async ([visible, results]) => {
+    if (!visible || (!results.length && !searching.value && !keyword.value.trim())) return
+    await nextTick()
+    updateProductDropdownPosition()
+}, { deep: false })
+
 const openProductSearch = () => {
+    if (!keyword.value.trim()) return
     showResults.value = true
+    if (searchResults.value.length || searching.value) return
     clearTimeout(searchTimeout)
     searchProducts()
 }
 
-watch(keyword, () => {
+watch(keyword, value => {
     clearTimeout(searchTimeout)
     productSearchRequest++
     searching.value = false
+
+    if (!value.trim()) {
+        searchResults.value = []
+        showResults.value = false
+        return
+    }
 
     searchTimeout = setTimeout(
         searchProducts,
@@ -180,6 +225,7 @@ watch(keyword, () => {
 const createProductFromSearch = () => {
     const initialName = keyword.value.trim()
     if (!initialName) return
+    showResults.value = false
 
     openModal(ProductForm, {
         props: {
@@ -221,18 +267,22 @@ const createProductFromSearch = () => {
 }
 
 const closeResultsOnOutsideClick = (event) => {
-    if (showResults.value && !productSearchRef.value?.contains(event.target)) {
+    if (showResults.value && !productSearchRef.value?.contains(event.target) && !productSearchDropdownRef.value?.contains(event.target)) {
         showResults.value = false
     }
 }
 
 onMounted(() => {
     document.addEventListener('pointerdown', closeResultsOnOutsideClick)
+    window.addEventListener('resize', updateProductDropdownPosition)
+    window.addEventListener('scroll', updateProductDropdownPosition, true)
 })
 
 onBeforeUnmount(() => {
     clearTimeout(searchTimeout)
     document.removeEventListener('pointerdown', closeResultsOnOutsideClick)
+    window.removeEventListener('resize', updateProductDropdownPosition)
+    window.removeEventListener('scroll', updateProductDropdownPosition, true)
 })
 
 /*
@@ -324,6 +374,13 @@ const productModal = ref({
 */
 
 const selectProduct = (product, { configure = true } = {}) => {
+    clearTimeout(searchTimeout)
+    productSearchRequest++
+    searchResults.value = []
+    searching.value = false
+    showResults.value = false
+    keyword.value = ''
+
     const item =
         JSON.parse(
             JSON.stringify(product)
@@ -780,6 +837,29 @@ const total = computed(() =>
     )
 )
 
+const vatRate = computed(() => Math.min(100, Math.max(0, Number(page.props.settings?.stock_import_vat_rate ?? 10))))
+
+const itemVatBase = (item) => {
+    if (item.type === 'simple') {
+        return Math.max(0, Number(item.quantity || 0)) * importPrice(item, item.sell_price)
+    }
+
+    const variantTotal = (item.rows || []).reduce(
+        (sum, row) => sum + Math.max(0, Number(row.quantity || 0)) * importPrice(item, row.sell_price),
+        0
+    )
+    const imeiTotal = (item.imeis || []).reduce(
+        (sum, row) => sum + importPrice(item, row.sell_price),
+        0
+    )
+
+    return variantTotal + imeiTotal
+}
+
+const itemVatSuggestion = (item) => item.has_vat
+    ? Math.round(itemVatBase(item) * vatRate.value / 100)
+    : 0
+
 /*
 |--------------------------------------------------------------------------
 | SAVE
@@ -837,6 +917,10 @@ const confirm = (payment = {}) => {
         ? Math.min(Math.max(0, Number(payment.paid_amount || 0)), Number(total.value || 0))
         : 0
     form.payment_method = payment.payment_method || 'cash'
+    form.old_debt_paid = partyType.value === 'supplier'
+        ? Math.max(0, Number(payment.old_debt_paid || 0))
+        : 0
+    form.payment_reference = partyType.value === 'supplier' ? (payment.payment_reference || '') : ''
 
     form.items = selectedItems.value.flatMap(item => {
         // Sản phẩm thường
@@ -951,6 +1035,7 @@ const confirm = (payment = {}) => {
                 :party-type="partyType"
                 :party-type-locked="false"
                 :customer="selectedCustomer"
+                :can-print-contract="selectedItems.some(item => itemQuantity(item) > 0) && Boolean(customerDraft.full_name?.trim())"
                 :date="form.import_date"
                 :error="form.errors.supplier_id"
                 @selected="selectSupplier"
@@ -958,6 +1043,7 @@ const confirm = (payment = {}) => {
                 @customer-draft="updateCustomerDraft"
                 @update:party-type="setPartyType"
                 @update:date="form.import_date = $event"
+                @print-contract="printPurchaseContract"
             />
 
             <div
@@ -995,9 +1081,12 @@ const confirm = (payment = {}) => {
                         <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => { keyword = code; scanProduct() }" />
 
                         <!-- Keep the results attached to the search field and above the import form. -->
+                        <Teleport to="body">
                         <div
                             v-if="showResults"
-                            class="absolute left-0 right-0 top-full z-[100] mt-1 max-h-80 overflow-auto rounded-xl border border-slate-200 bg-white shadow-2xl"
+                            ref="productSearchDropdownRef"
+                            :style="productDropdownStyle"
+                            class="z-[1200] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl custom-scrollbar"
                         >
                             <div v-if="searching" class="px-4 py-4 text-center text-sm text-slate-500">
                                 Đang tìm sản phẩm...
@@ -1039,6 +1128,7 @@ const confirm = (payment = {}) => {
                                 </button>
                             </div>
                         </div>
+                        </Teleport>
                     </div>
                 </div>
 
@@ -1086,7 +1176,7 @@ const confirm = (payment = {}) => {
                                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ itemUnit(item) }}</span>
                                     <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">
                                         <input v-model="item.has_vat" type="checkbox" class="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
-                                        Có VAT
+                                        VAT<span v-if="item.has_vat"> (Thuế dự kiến: {{ formatPrice(itemVatSuggestion(item)) }} {{ $currency() }})</span>
                                     </label>
                                 </div>
                             </div>
@@ -1200,7 +1290,7 @@ const confirm = (payment = {}) => {
                                             >
                                                 <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800" @click.stop>
                                                     <input v-model="item.has_vat" type="checkbox" class="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
-                                                    Có VAT
+                                                    VAT<span v-if="item.has_vat"> (Thuế dự kiến: {{ formatPrice(itemVatSuggestion(item)) }} {{ $currency() }})</span>
                                                 </label>
                                                 <span
                                                     v-if="
@@ -1426,15 +1516,6 @@ const confirm = (payment = {}) => {
                     class="grid grid-cols-2 gap-2 sm:ml-auto sm:flex"
                 >
                     <button
-                        v-if="partyType === 'customer'"
-                        type="button"
-                        @click="printPurchaseContract"
-                        :disabled="!selectedItems.some(item => itemQuantity(item) > 0) || (partyType === 'customer' ? !customerDraft.full_name?.trim() : !selectedSupplier)"
-                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <Printer class="h-4 w-4" /> In hợp đồng
-                    </button>
-                    <button
                         type="button"
                         @click="
                             emit('close')
@@ -1468,6 +1549,7 @@ const confirm = (payment = {}) => {
                 productModal.item
             "
             :customer-import="partyType === 'customer'"
+            :vat-rate="vatRate"
             @close="
                 closeProductModal
             "

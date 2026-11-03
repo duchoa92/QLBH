@@ -23,6 +23,7 @@ class Supplier extends Model
         'bank_account',
         'bank_account_name',
         'bank_payment_url',
+        'bank_accounts',
         'tax_code',
         'contact_person',
         'province',
@@ -35,6 +36,8 @@ class Supplier extends Model
     ];
 
     protected $casts = [
+
+        'bank_accounts' => 'array',
 
         'is_active' => 'boolean',
 

@@ -53,7 +53,7 @@ onBeforeUnmount(() => {
         <div :class="bodyClass"><slot /></div>
     </template>
     <Teleport v-else to="body">
-    <div class="fixed inset-0 flex items-center justify-center overflow-y-auto p-3 sm:p-5" :class="layerClass">
+    <div class="fixed inset-0 flex items-center justify-center overflow-y-auto p-3 sm:p-5 modal-scrollbar" :class="layerClass">
         <div
             class="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
             @click="$emit('close')"
@@ -87,7 +87,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- BODY -->
-            <div class="min-h-0 flex-1 overflow-y-auto bg-white" :class="bodyClass">
+            <div class="min-h-0 flex-1 overflow-y-auto bg-white modal-scrollbar" :class="bodyClass">
                 <slot />
             </div>
 
@@ -100,3 +100,24 @@ onBeforeUnmount(() => {
     </div>
     </Teleport>
 </template>
+
+<style scoped>
+.modal-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.modal-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+.modal-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: #cbd5e1;
+}
+</style>

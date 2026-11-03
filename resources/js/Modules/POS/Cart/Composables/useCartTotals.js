@@ -5,6 +5,8 @@ export const useCartTotals = (
     invoiceDiscount = { value: 0 },
     extraFee = { value: 0 },
     invoiceDiscountType = { value: 'amount' },
+    taxRate = { value: 0 },
+    extraFeeType = { value: 'amount' },
 ) => {
 
     /*
@@ -124,7 +126,20 @@ export const useCartTotals = (
     */
 
     const vat = computed(() => {
-        return 0
+        const lineBase = Math.max(0, subTotal.value - discount.value)
+        if (!lineBase) return 0
+        const taxableBase = cart.value.reduce((total, item) => {
+            if (!item.apply_vat) return total
+            const lineTotal = Number(item.price || 0) * Number(item.quantity || 0)
+            const lineDiscount = item.discount_type === 'percent'
+                ? lineTotal * Math.min(100, Number(item.discount_value || 0)) / 100
+                : item.discount_type === 'amount'
+                    ? Math.min(lineTotal, Number(item.discount_value || 0))
+                    : 0
+            return total + Math.max(0, lineTotal - lineDiscount)
+        }, 0)
+        const afterInvoiceDiscount = Math.max(0, taxableBase - invoiceDiscountAmount.value * taxableBase / lineBase)
+        return Math.round(afterInvoiceDiscount * Math.max(0, Number(taxRate.value || 0)) / 100)
     })
 
     const invoiceDiscountAmount = computed(() => {
@@ -133,6 +148,13 @@ export const useCartTotals = (
         return invoiceDiscountType.value === 'percent'
             ? base * Math.min(100, value) / 100
             : Math.min(base, value)
+    })
+
+    const extraFeeAmount = computed(() => {
+        const value = Math.max(0, Number(extraFee.value || 0))
+        if (extraFeeType.value !== 'percent') return value
+        const base = Math.max(0, subTotal.value - discount.value - invoiceDiscountAmount.value)
+        return Math.round(base * value / 100)
     })
 
     /*
@@ -149,7 +171,7 @@ export const useCartTotals = (
                 - discount.value
                 + vat.value
                 - invoiceDiscountAmount.value
-                + Math.max(0, Number(extraFee.value || 0))
+                + extraFeeAmount.value
             )
         })
 
@@ -168,6 +190,7 @@ export const useCartTotals = (
         invoiceDiscountAmount,
 
         extraFee,
+        extraFeeAmount,
 
         grandTotal,
     }

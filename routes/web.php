@@ -117,7 +117,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/template', [ProductController::class, 'template'])->middleware('permission:products.import')->name('template');
         Route::post('/import', [ProductController::class, 'import'])->middleware('permission:products.import')->name('import');
         Route::post('/validate', [ProductController::class, 'previewImport'])->middleware('permission:products.import')->name('validate');
-        Route::get('/list-import', [ProductController::class, 'listForImport'])->middleware('permission:products.view')->name('listImport');
+        Route::get('/list-import', [ProductController::class, 'listForImport'])->middleware('permission:products.view|stock_imports.view|stock_imports.create')->name('listImport');
         Route::get('/search', [ProductController::class, 'search'])->middleware('permission:products.view')->name('search');
 
         // Export
@@ -337,7 +337,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/expenses/recurring/{recurringExpense}', [ExpenseController::class, 'destroyRecurring'])->middleware('permission:expenses.manage')->name('expenses.recurring.destroy');
     Route::post('/expenses/recurring/{recurringExpense}/paid', [ExpenseController::class, 'markRecurringPaid'])->middleware('permission:expenses.manage')->name('expenses.recurring.paid');
     Route::get('/tax-declaration', [TaxDeclarationController::class, 'index'])->middleware('permission:reports.view')->name('tax-declaration.index');
-    Route::get('/api/suppliers/search', [SupplierController::class, 'search'])->middleware('permission:suppliers.view|stock_imports.view')->name('api.suppliers.search');
+    Route::get('/api/suppliers/search', [SupplierController::class, 'search'])->middleware('permission:suppliers.view|stock_imports.view|stock_imports.create')->name('api.suppliers.search');
     Route::resource('suppliers', SupplierController::class)
         ->middlewareFor(['index', 'show'], 'permission:suppliers.view')
         ->middlewareFor(['create', 'store'], 'permission:suppliers.create')

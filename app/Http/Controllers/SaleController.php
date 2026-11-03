@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\CustomerDebt;
 use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
+use App\Support\PosVatCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -204,6 +205,7 @@ class SaleController extends Controller
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.discount_type' => ['nullable', 'in:percent,amount'],
             'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
+            'items.*.apply_vat' => ['nullable', 'boolean'],
             'items.*.gifts' => ['nullable', 'array'],
             'items.*.gifts.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.gifts.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
@@ -215,7 +217,18 @@ class SaleController extends Controller
             'bank_account' => ['nullable', 'string', 'max:50'],
             'cash_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'bank_received_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'invoice_discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'invoice_discount_type' => ['nullable', 'in:amount,percent'],
+            'extra_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'extra_fee_type' => ['nullable', 'in:amount,percent'],
         ]);
+
+        if (($data['invoice_discount_type'] ?? 'amount') === 'percent' && (float) ($data['invoice_discount'] ?? 0) > 100) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['invoice_discount' => 'Chiết khấu phần trăm không được vượt quá 100%.']);
+        }
+        if (($data['extra_fee_type'] ?? 'amount') === 'percent' && (float) ($data['extra_fee'] ?? 0) > 100) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['extra_fee' => 'Phí phụ thu phần trăm không được vượt quá 100%.']);
+        }
 
         if ($data['payment_method'] === 'mixed') {
             $splitTotal = (float) ($data['cash_received_amount'] ?? 0) + (float) ($data['bank_received_amount'] ?? 0);
@@ -331,7 +344,8 @@ class SaleController extends Controller
                 $unitId = $row['unit_id'] ?? $product->unit_id;
                 $unitName = filled($row['unit_name'] ?? null) ? trim($row['unit_name']) : ($product->unit?->short_name ?: $product->unit?->name);
                 $unitCost = (float) ($imei?->cost_price ?? $variant?->cost_price ?? $product->cost_price ?? 0);
-                $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'unitCost', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note');
+                $vatApplied = filter_var($row['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'unitCost', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note', 'vatApplied');
             }
 
             $oldStockDelta = [];
@@ -409,6 +423,7 @@ class SaleController extends Controller
                     'note' => $item['note'],
                     'discount_amount' => $item['lineDiscount'],
                     'has_vat' => in_array((int) $item['product']->id, $vatProductIds, true),
+                    'vat_applied' => $item['vatApplied'],
                     'subtotal' => $item['lineTotal'] - $item['lineDiscount'],
                 ]);
                 foreach ($item['gifts'] as $gift) {
@@ -425,7 +440,25 @@ class SaleController extends Controller
             }
             $imeiProductIds->unique()->each(fn ($id) => app(ImeiStockSynchronizer::class)->sync((int) $id));
 
-            $newTotal = max(0, round($subtotal - $discount - (float) $sale->invoice_discount + (float) $sale->tax + (float) $sale->extra_fee, 2));
+            $invoiceDiscountBase = max(0, $subtotal - $discount);
+            $invoiceDiscountType = ($data['invoice_discount_type'] ?? 'amount') === 'percent' ? 'percent' : 'amount';
+            $invoiceDiscountValue = max(0, (float) ($data['invoice_discount'] ?? 0));
+            $invoiceDiscount = $invoiceDiscountType === 'percent'
+                ? $invoiceDiscountBase * min(100, $invoiceDiscountValue) / 100
+                : min($invoiceDiscountBase, $invoiceDiscountValue);
+            $extraFeeType = ($data['extra_fee_type'] ?? 'amount') === 'percent' ? 'percent' : 'amount';
+            $extraFeeValue = max(0, (float) ($data['extra_fee'] ?? 0));
+            $extraFee = $extraFeeType === 'percent'
+                ? round(max(0, $invoiceDiscountBase - $invoiceDiscount) * min(100, $extraFeeValue) / 100)
+                : $extraFeeValue;
+            $tax = PosVatCalculator::calculate(array_map(fn (array $item) => [
+                'price' => $item['price'],
+                'quantity' => $item['quantity'],
+                'discount_type' => $item['type'],
+                'discount_value' => $item['value'],
+                'apply_vat' => $item['vatApplied'],
+            ], $newItems), $invoiceDiscount, (float) setting('pos_vat_rate', 10));
+            $newTotal = max(0, round($subtotal - $discount - $invoiceDiscount + $tax + $extraFee, 2));
             $newDebt = max(0, $newTotal - $paidAmount);
             $newCustomerId = $data['customer_id'] ?? null;
             if (!$newCustomerId && $paidAmount < $newTotal) {
@@ -440,6 +473,9 @@ class SaleController extends Controller
                 'note' => filled($data['note'] ?? null) ? trim($data['note']) : null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'invoice_discount' => $invoiceDiscount,
+                'tax' => $tax,
+                'extra_fee' => $extraFee,
                 'grand_total' => $newTotal,
                 'paid_amount' => $paidAmount,
                 'payment_method' => $data['payment_method'],

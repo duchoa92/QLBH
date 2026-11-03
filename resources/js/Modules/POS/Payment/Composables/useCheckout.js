@@ -98,6 +98,8 @@ export function useCheckout(
                         imei_id:
                             item.imei_id ?? null,
 
+                        apply_vat: Boolean(item.apply_vat),
+
                         warranty_days:
                             item.customer_warranty_days ?? item.warranty_days ?? null,
 

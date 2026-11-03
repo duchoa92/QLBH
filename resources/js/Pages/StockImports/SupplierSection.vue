@@ -4,6 +4,7 @@ import { formatCurrency } from '@/utils/format'
 import {
     ref,
     computed,
+    nextTick,
     onMounted,
     onBeforeUnmount,
     watch,
@@ -18,6 +19,7 @@ import {
     Search,
     UserRoundPlus,
     LoaderCircle,
+    Printer,
 } from 'lucide-vue-next'
 
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -42,6 +44,7 @@ const emit = defineEmits([
     'customer-draft',
     'update:party-type',
     'update:date',
+    'print-contract',
 ])
 
 const props = defineProps({
@@ -63,6 +66,7 @@ const props = defineProps({
     partyType: { type: String, default: 'supplier' },
     partyTypeLocked: { type: Boolean, default: false },
     customer: { type: Object, default: null },
+    canPrintContract: { type: Boolean, default: false },
 
 })
 
@@ -104,7 +108,6 @@ watch(
 const {
     keyword,
     suppliers,
-    search,
     selectSupplier,
     clearSupplier,
     activeIndex,
@@ -147,6 +150,8 @@ watch(
 */
 
 const supplierSearchRef = ref(null)
+const supplierDropdownRef = ref(null)
+const supplierDropdownStyle = ref({})
 const customerSearchRef = ref(null)
 const customerKeyword = ref('')
 const customerResults = ref([])
@@ -267,12 +272,37 @@ const handleClickOutside = event => {
         supplierSearchRef.value &&
         !supplierSearchRef.value.contains(
             event.target
-        )
+        ) && !supplierDropdownRef.value?.contains(event.target)
     ) {
         suppliers.value = []
     }
 
 }
+
+const updateSupplierDropdownPosition = () => {
+    const rect = supplierSearchRef.value?.getBoundingClientRect()
+    if (!rect) return
+    const gap = 6
+    const below = Math.max(0, window.innerHeight - rect.bottom - 12)
+    const above = Math.max(0, rect.top - 12)
+    const openAbove = below < 160 && above > below
+    const maxHeight = Math.max(96, Math.min(256, openAbove ? above : below))
+    supplierDropdownStyle.value = {
+        position: 'fixed',
+        left: `${Math.max(8, rect.left)}px`,
+        width: `${Math.min(rect.width, window.innerWidth - Math.max(8, rect.left) - 8)}px`,
+        maxHeight: `${maxHeight}px`,
+        ...(openAbove
+            ? { bottom: `${Math.max(8, window.innerHeight - rect.top + gap)}px` }
+            : { top: `${rect.bottom + gap}px` }),
+    }
+}
+
+watch(suppliers, async results => {
+    if (!results.length) return
+    await nextTick()
+    updateSupplierDropdownPosition()
+}, { deep: false })
 
 
 onMounted(() => {
@@ -283,6 +313,8 @@ onMounted(() => {
     )
 
     document.addEventListener('pointerdown', handleCustomerOutsideClick)
+    window.addEventListener('resize', updateSupplierDropdownPosition)
+    window.addEventListener('scroll', updateSupplierDropdownPosition, true)
 
 })
 
@@ -295,6 +327,8 @@ onBeforeUnmount(() => {
     )
 
     document.removeEventListener('pointerdown', handleCustomerOutsideClick)
+    window.removeEventListener('resize', updateSupplierDropdownPosition)
+    window.removeEventListener('scroll', updateSupplierDropdownPosition, true)
     clearTimeout(customerSearchTimeout)
 
 })
@@ -333,13 +367,24 @@ const handleCustomerOutsideClick = event => {
         <!-- NCC + NGÀY NHẬP HÀNG -->
         <!-- ===================================================== -->
 
-        <div class="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,0.42fr)] lg:items-center">
-            <div v-if="!props.partyTypeLocked" class="col-span-full inline-flex w-fit rounded-xl bg-slate-100 p-1 lg:col-span-1">
-                <button type="button" :class="props.partyType === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'supplier')">
-                    <Truck class="h-4 w-4" /> Nhà cung cấp
-                </button>
-                <button type="button" :class="props.partyType === 'customer' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'customer')">
-                    <UserRound class="h-4 w-4" /> Khách lẻ
+        <div class="grid grid-cols-[minmax(0,1fr)_132px] gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,0.42fr)] lg:items-center">
+            <div v-if="!props.partyTypeLocked" class="col-span-full flex w-fit items-center gap-2 lg:col-span-1">
+                <div class="inline-flex rounded-xl bg-slate-100 p-1">
+                    <button type="button" :class="props.partyType === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'supplier')">
+                        <Truck class="h-4 w-4" /> Nhà cung cấp
+                    </button>
+                    <button type="button" :class="props.partyType === 'customer' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'customer')">
+                        <UserRound class="h-4 w-4" /> Khách lẻ
+                    </button>
+                </div>
+                <button
+                    v-if="props.partyType === 'customer'"
+                    type="button"
+                    :disabled="!props.canPrintContract"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    @click="emit('print-contract')"
+                >
+                    <Printer class="h-3.5 w-3.5" /> Hợp đồng
                 </button>
             </div>
 
@@ -401,16 +446,9 @@ const handleCustomerOutsideClick = event => {
                                                 .debt_balance
                                         ) !== 0
                                     "
+                                    class="ml-1 inline-flex rounded-md bg-rose-100 px-1.5 py-0.5 text-xs font-bold text-rose-700"
                                 >
-                                    (
-                                    nợ:
-                                    {{
-                                        money(
-                                            props.supplier
-                                                .debt_balance
-                                        )
-                                    }}
-                                    )
+                                    Nợ {{ money(props.supplier.debt_balance) }}
                                 </span>
 
                             </div>
@@ -453,7 +491,6 @@ const handleCustomerOutsideClick = event => {
 
                     <FloatingInput
                         v-model="keyword"
-                        @input="search"
                         @keydown="onKeyDown"
                         type="text"
                         label="Nhập tên, SĐT hoặc mã nhà cung cấp"
@@ -483,23 +520,75 @@ const handleCustomerOutsideClick = event => {
 
                     <!-- DROPDOWN -->
 
-                    <div
-                        v-if="suppliers.length"
-                        class="
-                            absolute
-                            z-50
-                            mt-1
-                            max-h-64
-                            w-full
-                            overflow-auto
-                            rounded-md
-                            border
-                            border-slate-200
-                            bg-white
-                            shadow-lg
-                            custom-scrollbar
-                        "
-                    >
+
+                </div>
+
+            </div>
+
+            <div v-else ref="customerSearchRef" class="relative min-w-0">
+                <div v-if="props.customer" class="flex h-10 items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 shadow-sm">
+                    <div class="flex min-w-0 items-center gap-2">
+                        <UserRound class="h-4 w-4 shrink-0 text-blue-700" />
+                        <div class="flex min-w-0 items-center gap-1.5 text-sm">
+                            <span class="truncate font-semibold text-blue-950">{{ props.customer.full_name }}</span>
+                            <span class="shrink-0 text-xs text-blue-700">{{ props.customer.phone || 'Chưa có SĐT' }}</span>
+                            <span v-if="Number(props.customer.debt_balance) !== 0" class="shrink-0 text-xs font-bold text-rose-700">(Nợ {{ money(props.customer.debt_balance) }})</span>
+                        </div>
+                    </div>
+                    <button type="button" title="Bỏ chọn người bán" class="ml-2 rounded-full p-1 text-blue-500 hover:bg-white hover:text-rose-600" @click="clearCustomer"><X :size="15" /></button>
+                </div>
+                <div v-else class="relative">
+                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Tìm khách hàng theo tên, SĐT hoặc CCCD" placeholder-text="Khách lẻ" input-class="pr-20" />
+                    <LoaderCircle v-if="customerSearchLoading" class="absolute right-20 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
+                    <button v-if="customerKeyword.trim()" type="button" title="Thêm khách lẻ mới" aria-label="Thêm khách lẻ mới" class="absolute right-10 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-700 transition hover:bg-blue-50" @click="createCustomer"><UserRoundPlus class="h-5 w-5" /></button>
+                    <CustomerIdCardScanner class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @read="onCustomerIdCardRead" @search="customerKeyword = $event" />
+                    <div v-if="customerResults.length" class="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                        <button v-for="customer in customerResults" :key="customer.id" type="button" class="flex w-full items-center gap-2 overflow-hidden border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-blue-50" @mousedown.prevent="selectCustomer(customer)">
+                            <span class="truncate text-sm font-semibold text-slate-900">{{ customer.full_name }}</span>
+                            <span class="shrink-0 text-xs text-slate-500">{{ customer.phone || 'Chưa có SĐT' }}</span>
+                            <span v-if="Number(customer.debt_balance) !== 0" class="shrink-0 text-xs font-bold text-rose-700">(Nợ {{ money(customer.debt_balance) }})</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================= -->
+            <!-- NGÀY NHẬP HÀNG -->
+            <!-- ================================================= -->
+
+            <div class="relative min-w-0">
+
+                <FloatingInput
+                    v-model="importDate"
+                    type="date"
+                    label="Ngày nhập hàng"
+                />
+
+            </div>
+
+        </div>
+
+
+        <!-- ===================================================== -->
+        <!-- ERROR -->
+        <!-- ===================================================== -->
+
+        <p
+            v-if="error"
+            class="mt-1.5 flex items-center gap-1 text-xs font-semibold text-red-600"
+        >
+            {{ error }}
+        </p>
+
+    </div>
+
+    <Teleport to="body">
+        <div
+            v-if="suppliers.length"
+            ref="supplierDropdownRef"
+            :style="supplierDropdownStyle"
+            class="z-[1200] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl custom-scrollbar"
+        >
 
                         <button
                             v-for="(
@@ -582,80 +671,19 @@ const handleCustomerOutsideClick = event => {
                                 >
                                     {{ supplier.phone }}
                                 </span>
+                                <span
+                                    v-if="Number(supplier.debt_balance) !== 0"
+                                    class="ml-auto rounded-md bg-rose-100 px-1.5 py-0.5 font-bold text-rose-700"
+                                >
+                                    Nợ {{ money(supplier.debt_balance) }}
+                                </span>
 
                             </div>
 
                         </button>
 
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div v-else ref="customerSearchRef" class="relative min-w-0">
-                <div v-if="props.customer" class="flex h-10 items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 shadow-sm">
-                    <div class="flex min-w-0 items-center gap-2">
-                        <UserRound class="h-4 w-4 shrink-0 text-blue-700" />
-                        <div class="min-w-0">
-                            <div class="truncate text-sm font-semibold text-blue-950">{{ props.customer.full_name }}</div>
-                            <div class="truncate text-[11px] text-blue-700">{{ props.customer.phone || 'Khách lẻ' }}<span v-if="props.customer.code"> · {{ props.customer.code }}</span></div>
-                        </div>
-                    </div>
-                    <button type="button" title="Bỏ chọn người bán" class="ml-2 rounded-full p-1 text-blue-500 hover:bg-white hover:text-rose-600" @click="clearCustomer"><X :size="15" /></button>
-                </div>
-                <div v-else class="relative">
-                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Tìm khách hàng theo tên, SĐT hoặc CCCD" placeholder-text="Khách lẻ" input-class="pr-20" />
-                    <LoaderCircle v-if="customerSearchLoading" class="absolute right-11 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
-                    <button v-if="customerKeyword.trim()" type="button" title="Thêm khách lẻ mới" aria-label="Thêm khách lẻ mới" class="absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-700 transition hover:bg-blue-50" @click="createCustomer"><UserRoundPlus class="h-5 w-5" /></button>
-                    <CustomerIdCardScanner class="absolute right-10 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @read="onCustomerIdCardRead" @search="customerKeyword = $event" />
-                    <div v-if="customerResults.length" class="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
-                        <button v-for="customer in customerResults" :key="customer.id" type="button" class="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-blue-50" @mousedown.prevent="selectCustomer(customer)">
-                            <span class="block text-sm font-semibold text-slate-900">{{ customer.full_name }}</span>
-                            <span class="mt-0.5 block text-xs text-slate-500">{{ customer.phone || 'Chưa có SĐT' }} · {{ customer.cccd || customer.code || 'Chưa có CCCD' }}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-
-            <!-- ================================================= -->
-            <!-- NGÀY NHẬP HÀNG -->
-            <!-- ================================================= -->
-
-            <div class="relative min-w-0">
-
-                <FloatingInput
-                    v-model="importDate"
-                    type="date"
-                    label="Ngày nhập hàng"
-                />
-
-            </div>
-
         </div>
-
-
-        <!-- ===================================================== -->
-        <!-- ERROR -->
-        <!-- ===================================================== -->
-
-        <p
-            v-if="error"
-            class="
-                mt-1.5
-                flex
-                items-center
-                gap-1
-                text-xs
-                font-semibold
-                text-red-600
-            "
-        >
-            {{ error }}
-        </p>
-
-    </div>
+    </Teleport>
 
 </template>
 

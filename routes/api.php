@@ -92,7 +92,7 @@ Route::middleware(['web', 'auth'])->group(function ()
     Route::get(
         '/suppliers/search',
         [SupplierController::class, 'search']
-    )->middleware('permission:suppliers.view|stock_imports.view');
+    )->middleware('permission:suppliers.view|stock_imports.view|stock_imports.create');
 
 
 });

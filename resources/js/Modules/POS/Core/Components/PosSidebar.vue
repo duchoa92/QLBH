@@ -28,6 +28,7 @@ const props = defineProps({
     invoiceDiscount: { type: Number, default: 0 },
     invoiceDiscountType: { type: String, default: 'amount' },
     extraFee: { type: Number, default: 0 },
+    extraFeeType: { type: String, default: 'amount' },
     loading: Boolean,
 })
 
@@ -47,6 +48,7 @@ const emit = defineEmits([
     'update:invoice-discount',
     'update:invoice-discount-type',
     'update:extra-fee',
+    'update:extra-fee-type',
 ])
 
 const discountInputValue = computed(() => {
@@ -63,7 +65,31 @@ const updateInvoiceDiscount = inputValue => {
 }
 
 const updateExtraFee = value => {
-    emit('update:extra-fee', Math.max(0, Number(value || 0)))
+    const raw = String(value || '')
+    const parsed = props.extraFeeType === 'percent'
+        ? Number(raw.replace(',', '.').replace(/[^\d.]/g, ''))
+        : Number(raw || 0)
+    emit('update:extra-fee', Number.isFinite(parsed) ? Math.max(0, parsed) : 0)
+}
+
+const extraFeeInputValue = computed(() => props.extraFee ? props.extraFee : '')
+const feeBase = computed(() => {
+    const base = Math.max(0, props.subTotal - props.discount)
+    const value = Math.max(0, Number(props.invoiceDiscount || 0))
+    const invoiceDiscountAmount = props.invoiceDiscountType === 'percent'
+        ? base * Math.min(100, value) / 100
+        : Math.min(base, value)
+    return Math.max(0, base - invoiceDiscountAmount)
+})
+const toggleExtraFeeType = () => {
+    const current = Math.max(0, Number(props.extraFee || 0))
+    if (props.extraFeeType === 'percent') {
+        emit('update:extra-fee', Math.round(feeBase.value * current / 100))
+        emit('update:extra-fee-type', 'amount')
+    } else {
+        emit('update:extra-fee', feeBase.value > 0 ? Number((current / feeBase.value * 100).toFixed(2)) : 0)
+        emit('update:extra-fee-type', 'percent')
+    }
 }
 
 const toggleInvoiceDiscountType = () => {
@@ -80,7 +106,7 @@ const toggleInvoiceDiscountType = () => {
 </script>
 
 <template>
-    <aside class="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-lg font-sans antialiased">
+    <aside class="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-lg font-sans antialiased lg:rounded-b-none">
         <!-- Khối trên: Tab đơn hàng & Tìm/Chọn khách hàng -->
         <div class="shrink-0 space-y-1 border-b border-slate-100 bg-white px-2 py-1.5">
             <div class="flex min-w-0 items-center gap-2">
@@ -132,8 +158,9 @@ const toggleInvoiceDiscountType = () => {
         </div>
         
         <!-- Khối dưới: Thanh toán & Tính tiền -->
-        <div class="shrink-0 bg-white px-2 pb-2 pt-1.5">
-            <div v-if="cart.length" class="mb-2 space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs">
+        <div class="shrink-0 bg-white px-2 pb-0 pt-1.5">
+            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div v-if="cart.length" class="space-y-1 border-b border-slate-100 bg-slate-50 px-2.5 py-2 text-xs">
                 <div class="flex items-center justify-between text-slate-600">
                     <span>Tạm tính ({{ totalQuantity }} món):</span>
                     <strong class="text-slate-800">{{ $money(subTotal) }}</strong>
@@ -143,16 +170,16 @@ const toggleInvoiceDiscountType = () => {
                 </div>
                 <div class="grid grid-cols-2 gap-2 pt-1">
                     <div class="relative min-w-0">
-                        <FloatingInput :model-value="extraFee || ''" label="Phí phụ thu" format-thousands inputmode="numeric" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-7 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateExtraFee" />
-                        <span class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500">₫</span>
+                        <FloatingInput :model-value="extraFeeInputValue" label="Phí phụ thu" :format-thousands="extraFeeType !== 'percent'" :inputmode="extraFeeType === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-11 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateExtraFee" />
+                        <button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white shadow-sm" :class="extraFeeType === 'percent' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'" :aria-label="extraFeeType === 'percent' ? 'Đang tính phí theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang tính phí theo số tiền, nhấn để chuyển sang phần trăm'" @click="toggleExtraFeeType">{{ extraFeeType === 'percent' ? '%' : $currency() }}</button>
                     </div>
                     <div class="relative min-w-0">
                         <FloatingInput :model-value="discountInputValue" label="Chiết khấu đơn" :format-thousands="invoiceDiscountType !== 'percent'" :inputmode="invoiceDiscountType === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-11 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateInvoiceDiscount" />
                         <button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white shadow-sm" :class="invoiceDiscountType === 'percent' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'" :aria-label="invoiceDiscountType === 'percent' ? 'Đang giảm theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang giảm theo số tiền, nhấn để chuyển sang phần trăm'" @click="toggleInvoiceDiscountType">{{ invoiceDiscountType === 'percent' ? '%' : $currency() }}</button>
                     </div>
                 </div>
-                <div v-if="cart.some(item => item.has_vat)" class="flex items-center justify-between border-t border-dashed border-slate-200 pt-1 text-emerald-700">
-                    <span>VAT (theo mặt hàng):</span><strong>Đã đánh dấu từng dòng</strong>
+                <div v-if="vat > 0" class="flex items-center justify-between border-t border-dashed border-slate-200 pt-1 text-emerald-700">
+                    <span>Thuế VAT bán hàng:</span><strong>{{ $money(vat) }}</strong>
                 </div>
             </div>
             <PaymentPanel
@@ -162,6 +189,7 @@ const toggleInvoiceDiscountType = () => {
                 :loading="loading"
                 @checkout="$emit('checkout', $event)"
             />
+            </div>
         </div>
     </aside>
 

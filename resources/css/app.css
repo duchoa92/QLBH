@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Show required/server validation errors consistently across native and Vue form controls. */
+input[data-submit-invalid="true"],
+select[data-submit-invalid="true"],
+textarea[data-submit-invalid="true"] {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgb(254 226 226 / 0.9) !important;
+}
+
+input[data-submit-invalid="true"]:focus,
+select[data-submit-invalid="true"]:focus,
+textarea[data-submit-invalid="true"]:focus {
+    border-color: #dc2626 !important;
+    --tw-ring-color: rgb(254 202 202 / 0.8) !important;
+}
+
+/* iOS zooms the page when a focused form control is smaller than 16px. */
+@media (max-width: 767px) and (pointer: coarse) {
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
 /* Keep data tables visually consistent across pages and embedded panels. */
 @media screen {
     table:not(.no-grid) {
