@@ -510,6 +510,9 @@ class SaleController extends Controller
             $newTotal = max(0, round($subtotal - $discount - $invoiceDiscount + $tax + $extraFee, 2));
             $newDebt = max(0, $newTotal - $paidAmount);
             $newCustomerId = $data['customer_id'] ?? null;
+            if ($newCustomerId && (int) $newCustomerId !== (int) $oldCustomerId) {
+                Customer::query()->findOrFail($newCustomerId)->assertCanTransact();
+            }
             if (!$newCustomerId && $paidAmount < $newTotal) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['customer_id' => 'Khách lẻ cần thanh toán đủ tiền; hãy chọn khách hàng để ghi nhận công nợ.']);
             }

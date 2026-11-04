@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Builder;
 use App\Support\Searchable;
+use Illuminate\Validation\ValidationException;
 
 class Customer extends Model
 {
@@ -95,6 +96,60 @@ class Customer extends Model
     public function logs(): HasMany
     {
         return $this->hasMany(CustomerLog::class);
+    }
+
+    public function sales(): HasMany
+    {
+        return $this->hasMany(Sale::class);
+    }
+
+    public function repairs(): HasMany
+    {
+        return $this->hasMany(Repair::class);
+    }
+
+    /*
+    |--------------------------------------------------
+    | PHÁT SINH & CHẶN GIAO DỊCH
+    |--------------------------------------------------
+    */
+
+    /** Thống kê các phát sinh liên quan khách hàng; total > 0 nghĩa là không được xóa. */
+    public function usageSummary(): array
+    {
+        $sales = $this->sales()->count();
+        $repairs = $this->repairs()->count();
+        $debts = $this->debts()->count();
+        $points = $this->points()->count();
+        $hasBalance = abs((float) $this->debt_balance) > 0 || abs((float) $this->point_balance) > 0;
+
+        return [
+            'sales' => $sales,
+            'repairs' => $repairs,
+            'debts' => $debts,
+            'points' => $points,
+            'total' => $sales + $repairs + $debts + $points + ($hasBalance ? 1 : 0),
+        ];
+    }
+
+    public function isBlocked(): bool
+    {
+        return $this->is_active === false;
+    }
+
+    /** Chặn khách bị khóa phát sinh giao dịch mới (bán hàng, tiếp nhận sửa chữa). */
+    public function assertCanTransact(): void
+    {
+        if ($this->isBlocked()) {
+            throw ValidationException::withMessages([
+                'customer_id' => "Khách hàng {$this->full_name} ({$this->code}) đang bị chặn giao dịch. Hãy bỏ chặn trong danh sách khách hàng để tiếp tục.",
+            ]);
+        }
+    }
+
+    public function scopeNotBlocked(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q->where('is_active', true)->orWhereNull('is_active'));
     }
 
     /*

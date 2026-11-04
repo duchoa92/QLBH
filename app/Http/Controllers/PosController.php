@@ -361,6 +361,10 @@ class PosController extends Controller
             abort_unless(abs($splitTotal - (float) ($request->paid_amount ?? 0)) < 0.01, 422, 'Tổng tiền mặt và chuyển khoản không khớp số tiền đã nhận.');
         }
 
+        if ($request->customer_id) {
+            Customer::query()->findOrFail($request->customer_id)->assertCanTransact();
+        }
+
         try {
 
             $sale = $service->checkout(

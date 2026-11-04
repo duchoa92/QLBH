@@ -928,6 +928,7 @@ class RepairController extends Controller
                 : (!empty($customerInput['customer_phone'])
                     ? Customer::query()->where('phone', $customerInput['customer_phone'])->first()
                     : null);
+            $customer?->assertCanTransact();
 
             $hasCustomerDetails = $customerName !== ''
                 || filled($customerInput['customer_phone'] ?? null)
@@ -1110,7 +1111,7 @@ class RepairController extends Controller
             $this->notifyRepairEvent(
                 $repair,
                 'Tiếp nhận máy sửa chữa mới',
-                ($customer->full_name ?: $customer->phone) . ' vừa gửi tiếp nhận ' . $repair->device_name . ' (' . $repair->code . ').',
+                ($customer?->full_name ?: $customer?->phone ?: $repair->contact_phone ?: 'Khách lẻ') . ' vừa gửi tiếp nhận ' . $repair->device_name . ' (' . $repair->code . ').',
                 'repair'
             );
 
@@ -1124,6 +1125,74 @@ class RepairController extends Controller
 
             throw $e;
         }
+    }
+
+    /**
+     * Xóa phiếu sửa chữa — chỉ tài khoản Super Admin.
+     * Xóa mềm; đồng thời hoàn kho linh kiện và đảo công nợ do phiếu tạo ra.
+     */
+    public function destroy(Request $request, Repair $repair): RedirectResponse
+    {
+        abort_unless(
+            $request->user()?->hasRole('Super Admin'),
+            403,
+            'Chỉ tài khoản Super Admin mới được xóa phiếu sửa chữa.'
+        );
+
+        DB::transaction(function () use ($repair): void {
+            $repair = Repair::query()->lockForUpdate()->findOrFail($repair->id);
+
+            $dependent = Repair::query()
+                ->where('warranty_source_type', 'repair')
+                ->where('warranty_source_id', $repair->id)
+                ->where('id', '!=', $repair->id)
+                ->first(['code']);
+            if ($dependent) {
+                throw ValidationException::withMessages([
+                    'repair' => "Phiếu {$repair->code} là căn cứ bảo hành của phiếu {$dependent->code} nên không thể xóa. Hãy xóa phiếu bảo hành đó trước.",
+                ]);
+            }
+
+            // Hoàn kho linh kiện đã xuất khi hoàn tất sửa.
+            foreach ($repair->parts()->get() as $part) {
+                if ($part->variant_id) {
+                    ProductVariant::query()->lockForUpdate()->find($part->variant_id)?->increment('stock', (int) $part->quantity);
+                }
+                if ($part->product_id) {
+                    Product::withTrashed()->lockForUpdate()->find($part->product_id)?->increment('stock', (int) $part->quantity);
+                }
+            }
+
+            // Đảo công nợ phát sinh từ phiếu (nợ thiếu khi trả máy, trích tiền thừa trả nợ cũ).
+            $debtRows = CustomerDebt::query()
+                ->where('source_type', Repair::class)
+                ->where('source_id', $repair->id)
+                ->get();
+            if ($debtRows->isNotEmpty() && $repair->customer_id) {
+                $net = (float) $debtRows->where('type', 'increase')->sum('amount')
+                    - (float) $debtRows->where('type', 'decrease')->sum('amount');
+                $customer = Customer::withTrashed()->lockForUpdate()->find($repair->customer_id);
+                if ($customer && abs($net) > 0) {
+                    $customer->forceFill(['debt_balance' => max(0, (float) $customer->debt_balance - $net)])->save();
+                }
+            }
+            CustomerDebt::query()
+                ->where('source_type', Repair::class)
+                ->where('source_id', $repair->id)
+                ->delete();
+
+            RepairTimeline::query()->create([
+                'repair_id' => $repair->id,
+                'user_id' => auth()->id(),
+                'status' => $repair->status,
+                'title' => 'Xóa phiếu sửa chữa',
+                'description' => 'Super Admin đã xóa phiếu; linh kiện được hoàn kho và công nợ liên quan được đảo.',
+            ]);
+
+            $repair->delete();
+        });
+
+        return back()->with('success', 'Đã xóa phiếu sửa chữa');
     }
 
     /**
@@ -1793,6 +1862,9 @@ class RepairController extends Controller
                 : (!empty($validated['customer_phone'])
                     ? Customer::query()->where('phone', $validated['customer_phone'])->first()
                     : null);
+            if ($customer && (int) $customer->id !== (int) $repair->customer_id) {
+                $customer->assertCanTransact();
+            }
 
             $hasCustomerDetails = $customerName !== ''
                 || filled($validated['customer_phone'] ?? null)

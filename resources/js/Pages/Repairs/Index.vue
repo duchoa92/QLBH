@@ -3,18 +3,17 @@ import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
-import DetailModal from '@/Components/UI/DetailModal.vue';
 import PaginationBar from '@/Components/UI/PaginationBar.vue';
 import DataPanel from '@/Components/UI/DataPanel.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
-import PatternLock from '@/Components/PatternLock.vue';
+import RepairDetailModal from './RepairDetailModal.vue';
+import { useConfirm } from '@/Composables/useConfirm';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
 import api from '@/Services/api';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
-import { formatCurrency, formatDate, formatDateTime } from '@/utils/format';
 import { Search, SlidersHorizontal, RefreshCw, X, FileText, UserRound, Smartphone, Wrench, RotateCcw, Play } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -29,6 +28,8 @@ const loadingRepairs = ref(false);
 const page = usePage();
 const permissions = computed(() => page.props.auth?.permissions || []);
 const can = (permission) => permissions.value.includes(permission);
+const confirmBox = useConfirm();
+const isSuperAdmin = computed(() => (page.props.auth?.roles || []).includes('Super Admin'));
 const canViewCredentials = computed(() => can('repairs.create') || can('repairs.edit') || can('repairs.complete'));
 const canProgress = (repair) => {
     if (repair.status === 'done') return can('repairs.return');
@@ -245,43 +246,36 @@ const onProgressPayment = async (repair) => {
     paymentRepair.value = repair;
 };
 
-const detailRows = computed(() => {
+const removeRepair = (repair) => {
+    if (!isSuperAdmin.value || !repair?.id) return;
+    const notes = [];
+    if (repair.parts?.length) notes.push('linh kiện đã dùng sẽ được hoàn lại kho');
+    if (['done', 'returned'].includes(repair.status)) notes.push('công nợ phát sinh từ phiếu (nếu có) sẽ được đảo lại');
+    confirmBox.show({
+        title: 'Xóa phiếu sửa chữa',
+        message: `Xóa phiếu ${repair.code} (${repair.device_name})?` + (notes.length ? ` Khi xóa, ${notes.join(' và ')}.` : '') + ' Thao tác này không thể hoàn tác trên giao diện.',
+        confirmText: 'Xóa phiếu',
+        cancelText: 'Hủy',
+        onConfirm: () => new Promise((resolve, reject) => {
+            router.delete(route('repairs.destroy', repair.id), {
+                preserveScroll: true,
+                onSuccess: () => {
+                    toast.success('Đã xóa phiếu sửa chữa');
+                    closeRepairDetail();
+                    reload();
+                    resolve();
+                },
+                onError: (errors) => reject(new Error(Object.values(errors || {}).flat()[0] || 'Không thể xóa phiếu sửa chữa.')),
+            });
+        }),
+    });
+};
+
+const detailProgressLabel = computed(() => {
     const repair = detailRepair.value;
-    if (!repair) return [];
-    return [
-        { label: 'Khách hàng', value: repair.customer?.name || 'Khách lẻ' },
-        { label: 'Số điện thoại', value: repair.customer?.phone || '-' },
-        { label: 'SĐT liên hệ', value: repair.contact_phone || '-' },
-        { label: 'CCCD', value: repair.customer?.identity_card || '-' },
-        { label: 'Thiết bị', value: repair.device_name },
-        { label: 'IMEI / Serial', value: repair.imei || '-' },
-        { label: 'Loại xử lý', value: repair.intake_type === 'warranty' ? 'Bảo hành' : repair.warranty_status === 'declined' ? 'Sửa dịch vụ (đã từ chối BH)' : repair.warranty_status === 'service' ? 'Sửa dịch vụ (có căn cứ BH)' : repair.warranty_source_type && ['pending', 'repairing'].includes(repair.status) ? 'Chưa chốt · có căn cứ BH' : ['pending', 'repairing'].includes(repair.status) ? 'Chưa chốt loại sửa' : 'Sửa dịch vụ' },
-        ...(repair.warranty_expires_at ? [{ label: 'Hạn bảo hành gốc', value: formatDate(repair.warranty_expires_at) }] : []),
-        ...(repair.warranty_decline_reason ? [{ label: 'Lý do từ chối BH', value: repair.warranty_decline_reason, full: true }] : []),
-        ...(Number(repair.warranty_covered_amount || 0) > 0 ? [{ label: 'Chi phí được bảo hành', value: formatCurrency(repair.warranty_covered_amount) }] : []),
-        ...(repair.repair_warranty_expires_at ? [{ label: 'BH sau sửa đến', value: formatDate(repair.repair_warranty_expires_at) }] : []),
-        ...(canViewCredentials.value ? [
-            { label: 'Mật khẩu màn hình', value: detailCredentials.value?.screen_password || '-' },
-            { label: 'Mẫu hình (thứ tự chấm)', value: detailCredentials.value?.screen_pattern || '-' },
-            { label: 'Loại tài khoản', value: detailCredentials.value?.account_type || '-' },
-            { label: 'Email / SĐT tài khoản', value: detailCredentials.value?.account_email || '-' },
-            { label: 'Mật khẩu tài khoản', value: detailCredentials.value?.account_password || '-' },
-        ] : []),
-        { label: 'Trạng thái', value: statusLabels[repair.status] || repair.status },
-        { label: 'Ngày nhận', value: formatDateTime(repair.created_at) },
-        { label: 'Triệu chứng', value: Array.isArray(repair.issue) ? repair.issue.join(', ') : repair.issue || '-' , full: true },
-        { label: 'Yêu cầu sửa chữa', value: repair.repair_request || '-', full: true },
-        { label: 'Phụ kiện kèm theo', value: Array.isArray(repair.accessories) ? repair.accessories.join(', ') : repair.accessories || '-', full: true },
-        { label: 'Chi phí dự kiến', value: repair.estimated_cost ? formatCurrency(repair.estimated_cost) : '-' },
-        { label: 'Chi phí thực tế', value: repair.final_cost ? formatCurrency(repair.final_cost) : '-' },
-        { label: 'Tiền linh kiện', value: formatCurrency(repair.parts_total) },
-        { label: 'Công sửa', value: formatCurrency(repair.labor_cost) },
-        { label: 'Phụ phí', value: formatCurrency(repair.surcharge) },
-        { label: 'Linh kiện', value: repair.parts?.map((part) => `${part.product_name} × ${part.quantity}`).join(', ') || 'Không thay linh kiện', full: true },
-        { label: 'Đã thanh toán', value: formatCurrency(repair.paid_amount) },
-        { label: 'Tiền thừa', value: formatCurrency(repair.change_amount) },
-        { label: 'Ghi chú', value: repair.note || '-', full: true },
-    ];
+    if (!repair || !['pending', 'repairing', 'done'].includes(repair.status) || !canProgress(repair)) return '';
+    if (repair.status === 'done') return 'Thanh toán / trả máy';
+    return repair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa';
 });
 
 const toggleSort = (field) => {
@@ -448,45 +442,23 @@ const confirmPayment = async (payment) => {
             </div>
         </DataPanel>
 
-        <DetailModal
+        <RepairDetailModal
             v-if="detailRepair"
-            :title="`Phiếu sửa ${detailRepair.code}`"
-            :rows="detailRows"
-            size="lg"
+            :repair="detailRepair"
+            :credentials="detailCredentials"
+            :can-view-credentials="canViewCredentials"
+            :can-print="can('repairs.view')"
+            :can-edit="can('repairs.edit')"
+            :can-delete="isSuperAdmin"
+            :progress-label="detailProgressLabel"
+            :status-labels="statusLabels"
+            :status-classes="statusClasses"
             @close="closeRepairDetail"
-        >
-            <div v-if="detailRepair.images?.length" class="mt-4">
-                <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Ảnh tiếp nhận</h3>
-                <div class="flex flex-wrap gap-2">
-                    <a v-for="image in detailRepair.images" :key="image.id" :href="image.url" target="_blank" class="block h-20 w-20 overflow-hidden rounded-lg border border-slate-200">
-                        <img :src="image.url" alt="Ảnh thiết bị" class="h-full w-full object-cover" />
-                    </a>
-                </div>
-            </div>
-            <div v-if="detailRepair.timelines?.length" class="mt-4">
-                <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Lịch sử tiến trình</h3>
-                <div class="space-y-2">
-                    <div v-for="timeline in detailRepair.timelines" :key="timeline.id" class="rounded-lg border border-slate-200 px-3 py-2">
-                        <div class="flex flex-wrap justify-between gap-x-3 text-sm font-semibold text-slate-800"><span>{{ timeline.title }}</span><span class="text-xs font-normal text-slate-400">{{ timeline.created_at }} · {{ timeline.user || 'Hệ thống' }}</span></div>
-                        <p v-if="timeline.description" class="mt-1 text-sm text-slate-600">{{ timeline.description }}</p>
-                        <p v-if="timeline.issue?.length" class="mt-1 text-sm text-rose-700"><strong>Lỗi phát sinh:</strong> {{ timeline.issue.join(', ') }}</p>
-                        <p v-if="timeline.waiting_for_parts" class="mt-1 text-sm text-amber-700"><strong>{{ timeline.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : 'Đang chờ linh kiện' }}:</strong><template v-if="timeline.parts_needed"> {{ timeline.parts_needed }}</template><span v-if="timeline.expected_days !== null"> · Dự kiến {{ timeline.expected_days }} ngày</span></p>
-                        <div v-if="timeline.images?.length" class="mt-2 flex flex-wrap gap-2">
-                            <a v-for="image in timeline.images" :key="image.id" :href="image.url" target="_blank" class="block h-16 w-16 overflow-hidden rounded border border-slate-200"><img :src="image.url" alt="Ảnh tiến trình" class="h-full w-full object-cover" /></a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div v-if="detailCredentials?.screen_pattern" class="mt-4 rounded-lg border border-slate-200 p-3">
-                <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Mẫu hình mở khóa</h3>
-                <PatternLock :model-value="detailCredentials.screen_pattern" readonly />
-            </div>
-            <div class="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3">
-                <button v-if="can('repairs.view')" type="button" @click="printPreviewUrl = route('repairs.print', detailRepair.id)" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">In phiếu</button>
-                <button v-if="can('repairs.edit')" type="button" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100" @click="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null">Sửa phiếu</button>
-                <button v-if="['pending', 'repairing', 'done'].includes(detailRepair.status) && canProgress(detailRepair)" type="button" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100" @click="openRepairWorkflow(detailRepair); detailRepair = null">{{ detailRepair.status === 'done' ? 'Thanh toán / trả máy' : detailRepair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa' }}</button>
-            </div>
-        </DetailModal>
+            @delete="removeRepair(detailRepair)"
+            @print="printPreviewUrl = route('repairs.print', detailRepair.id)"
+            @edit="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null"
+            @progress="openRepairWorkflow(detailRepair); detailRepair = null"
+        />
         <CheckoutModal
             v-if="paymentRepair"
             :key="paymentRepair.id"

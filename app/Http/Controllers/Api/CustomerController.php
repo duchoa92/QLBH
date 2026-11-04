@@ -165,6 +165,8 @@ class CustomerController extends Controller
                     );
             })
 
+            ->notBlocked()
+
             ->limit(10)
 
             ->get();

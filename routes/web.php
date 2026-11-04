@@ -320,7 +320,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/repairs', [RepairController::class, 'index'])->middleware('permission:repairs.view')->name('repairs.index');
     Route::post('/repairs', [RepairController::class, 'store'])->middleware('permission:repairs.create')->name('repairs.store');
     Route::match(['put', 'patch'], '/repairs/{repair}', [RepairController::class, 'update'])->middleware('permission:repairs.edit')->name('repairs.update');
-
+    Route::delete('/repairs/{repair}', [RepairController::class, 'destroy'])->name('repairs.destroy');
     // IMEIs, Customers, Suppliers
     Route::get('/api/imeis/lookup', [ProductImeiController::class, 'lookup'])->middleware('permission:products.view')->name('api.imeis.lookup');
     Route::patch('/product-imeis/imei/{imei}/price', [ProductImeiController::class, 'updatePrice'])->middleware('permission:products.edit')->name('product-imeis.update-price');
@@ -337,6 +337,9 @@ Route::middleware(['auth'])->group(function () {
         ->middlewareFor(['create', 'store'], 'permission:customers.create')
         ->middlewareFor(['edit', 'update'], 'permission:customers.edit')
         ->middlewareFor('destroy', 'permission:customers.delete');
+    Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
+    Route::patch('/customers/{customer}/block', [CustomerController::class, 'toggleBlock'])->name('customers.block');
+
     Route::get('/debts/customers', [DebtPaymentController::class, 'customers'])->middleware('permission:customer_debts.view')->name('debts.customers');
     Route::get('/debts/customers/orders/{sale}', [DebtPaymentController::class, 'customerOrderDetail'])->middleware('permission:customer_debts.view')->name('debts.customers.orders.show');
     Route::post('/debts/customers/{customer}/payments', [DebtPaymentController::class, 'receiveCustomerPayment'])->middleware('permission:customer_debts.pay')->name('debts.customers.payments');

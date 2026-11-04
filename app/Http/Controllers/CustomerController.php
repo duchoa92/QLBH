@@ -7,7 +7,9 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Services\CustomerImageService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
@@ -55,9 +57,20 @@ class CustomerController extends Controller
 
                 });
             })
+            ->withCount(['sales', 'repairs', 'debts', 'points'])
             ->orderBy($sortBy, $sortOrder)
             ->paginate($perPage)
             ->withQueryString();
+
+        $customers->through(function (Customer $customer) {
+            $customer->setAttribute('has_transactions',
+                ($customer->sales_count + $customer->repairs_count + $customer->debts_count + $customer->points_count) > 0
+                || abs((float) $customer->debt_balance) > 0
+                || abs((float) $customer->point_balance) > 0
+            );
+
+            return $customer;
+        });
 
         return Inertia::render('Customers/Index', [
             'customers' => $customers,
@@ -217,7 +230,42 @@ class CustomerController extends Controller
             ->with('success', 'Cập nhật khách hàng thành công');
     }
 
-    // Xóa khách hàng
+    // Xóa khách hàng: chỉ cho xóa khi chưa có bất kỳ phát sinh nào
+    public function destroy(Customer $customer)
+    {
+        $usage = $customer->usageSummary();
+
+        if ($usage['total'] > 0) {
+            $parts = array_filter([
+                $usage['sales'] ? "{$usage['sales']} hóa đơn" : null,
+                $usage['repairs'] ? "{$usage['repairs']} phiếu sửa chữa" : null,
+                $usage['debts'] ? "{$usage['debts']} giao dịch công nợ" : null,
+                $usage['points'] ? "{$usage['points']} giao dịch điểm" : null,
+            ]);
+            $detail = $parts ? ' (' . implode(', ', $parts) . ')' : ' (còn số dư công nợ/điểm)';
+
+            throw ValidationException::withMessages([
+                'customer' => "Khách hàng {$customer->full_name} đã có phát sinh{$detail} nên không thể xóa. Hãy dùng chức năng Chặn để ngừng giao dịch.",
+            ]);
+        }
+
+        DB::transaction(function () use ($customer) {
+            // Giải phóng SĐT/CCCD (có ràng buộc duy nhất) để có thể tạo lại khách sau này.
+            $customer->forceFill(['phone' => null, 'cccd' => null, 'is_active' => false])->save();
+            $customer->delete();
+        });
+
+        return back()->with('success', 'Đã xóa khách hàng');
+    }
+
+    // Chặn / bỏ chặn khách hàng (không cho phát sinh giao dịch mới)
+    public function toggleBlock(Customer $customer)
+    {
+        $block = ! $customer->isBlocked();
+        $customer->update(['is_active' => ! $block]);
+
+        return back()->with('success', $block ? 'Đã chặn khách hàng' : 'Đã bỏ chặn khách hàng');
+    }
 
 
     // Hiển thị chi tiết khách hàng
@@ -289,6 +337,8 @@ class CustomerController extends Controller
                     "%{$keyword}%"
                 );
             })
+
+            ->notBlocked()
 
             ->limit(10)
 
