@@ -31,6 +31,25 @@ const baseQuantityText = (item) => {
 const printInvoice = () => {
     window.print()
 }
+
+const customerPaymentLabel = (method) => ({
+    cash: 'Khách đưa',
+    bank: 'Khách chuyển',
+    mixed: 'Khách đưa / khách chuyển',
+    card: 'Khách thanh toán thẻ',
+}[String(method || '').toLowerCase()] || 'Khách đưa')
+
+const customerPaymentRows = (sale) => {
+    const cash = Math.max(0, Number(sale.cash_received_amount || 0))
+    const bank = Math.max(0, Number(sale.bank_received_amount || 0))
+    if (cash > 0 || bank > 0) return [
+        ...(cash > 0 ? [{ label: 'Khách đưa', amount: cash }] : []),
+        ...(bank > 0 ? [{ label: 'Khách chuyển', amount: bank }] : []),
+    ]
+    return [{ label: customerPaymentLabel(sale.payment_method), amount: Math.max(0, Number(sale.paid_amount || 0)) }]
+}
+
+const customerPaymentAmount = (sale) => customerPaymentRows(sale).reduce((total, row) => total + row.amount, 0)
 </script>
 
 <template>
@@ -186,17 +205,17 @@ const printInvoice = () => {
                     <span>Tổng thanh toán</span>
                     <span>{{ formatMoney(sale.grand_total) }}</span>
                 </div>
-                <div class="mt-2 flex justify-between text-slate-600">
-                    <span>Đã thanh toán hóa đơn</span>
-                    <span class="font-semibold">{{ formatMoney(Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0))) }}</span>
+                <div v-for="payment in customerPaymentRows(sale)" :key="payment.label" class="mt-2 flex justify-between text-slate-600">
+                    <span>{{ payment.label }}</span>
+                    <span class="font-semibold">{{ formatMoney(payment.amount) }}</span>
                 </div>
                 <div v-if="Number(sale.old_debt_paid || 0) > 0" class="mt-1 flex justify-between text-blue-700">
-                    <span>Thanh toán nợ cũ kèm hóa đơn</span>
+                    <span>Trích trả nợ cũ</span>
                     <span class="font-bold">{{ formatMoney(sale.old_debt_paid) }}</span>
                 </div>
-                <div class="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold" :class="Number(sale.grand_total || 0) > Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0)) ? 'text-rose-600' : 'text-emerald-700'">
+                <div class="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold" :class="Number(sale.grand_total || 0) > customerPaymentAmount(sale) ? 'text-rose-600' : 'text-emerald-700'">
                     <span>Còn nợ hóa đơn</span>
-                    <span>{{ formatMoney(Math.max(0, Number(sale.grand_total || 0) - Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0)))) }}</span>
+                    <span>{{ formatMoney(Math.max(0, Number(sale.grand_total || 0) - customerPaymentAmount(sale))) }}</span>
                 </div>
             </div>
 

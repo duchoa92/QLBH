@@ -183,6 +183,11 @@ Route::middleware(['auth'])->group(function () {
         [StockImportController::class, 'replenishmentProducts']
     )->middleware('permission:stock_imports.view')->name('stock.replenishment-products');
 
+    Route::get(
+        '/stock-import/suppliers/{supplier}/outstanding-orders',
+        [StockImportController::class, 'supplierOutstandingOrders']
+    )->middleware('permission:stock_imports.create')->name('stock.import.suppliers.outstanding-orders');
+
     Route::post(
         '/stock-import',
         [StockImportController::class, 'store']
@@ -197,6 +202,16 @@ Route::middleware(['auth'])->group(function () {
         '/stock-import/{stockImport}/contract',
         [StockImportController::class, 'contract']
     )->middleware('permission:stock_imports.view')->name('stock.import.contract');
+
+    Route::post(
+        '/stock-import/{stockImport}/cancel',
+        [StockImportController::class, 'cancel']
+    )->middleware('permission:stock_imports.create')->name('stock.import.cancel');
+
+    Route::put(
+        '/stock-import/{stockImport}',
+        [StockImportController::class, 'update']
+    )->middleware('permission:stock_imports.create')->name('stock.import.update');
 
     Route::get(
         '/stock-import/{stockImport}',

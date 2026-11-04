@@ -17,6 +17,7 @@ import {
     ref,
     watch,
     onBeforeUnmount,
+    computed,
 } from 'vue'
 
 import {
@@ -32,6 +33,10 @@ import {
     Printer,
     SlidersHorizontal,
     RotateCcw,
+    XCircle,
+    Pencil,
+    CheckCircle2,
+    ChevronRight,
 } from 'lucide-vue-next'
 
 
@@ -71,6 +76,7 @@ const props = defineProps({
 
 })
 const page = usePage()
+const canManageImports = computed(() => page.props.auth?.permissions?.includes('stock_imports.create') ?? false)
 
 
 /*
@@ -81,13 +87,20 @@ const page = usePage()
 
 const showCreateModal = ref(false)
 const importPartyType = ref('supplier')
+const editingImport = ref(null)
+const replenishmentDraft = ref(null)
 const showReplenishmentModal = ref(false)
 const detailImport = ref(null)
 const printPreviewUrl = ref('')
 const loadingDetail = ref(false)
+const showCancelModal = ref(false)
+const importToCancel = ref(null)
+const cancelReason = ref('')
 
 
 const openCreateModal = (partyType = 'supplier') => {
+    editingImport.value = null
+    replenishmentDraft.value = null
     importPartyType.value = partyType
     showCreateModal.value = true
 }
@@ -95,17 +108,28 @@ const openCreateModal = (partyType = 'supplier') => {
 
 const closeCreateModal = () => {
     showCreateModal.value = false
+    editingImport.value = null
+    replenishmentDraft.value = null
 }
 
 
 const handleCreated = () => {
 
     showCreateModal.value = false
+    replenishmentDraft.value = null
 
     router.reload({
         only: ['imports'],
     })
 
+}
+
+const applyReplenishmentToImport = (draft) => {
+    replenishmentDraft.value = draft
+    editingImport.value = null
+    importPartyType.value = 'supplier'
+    showReplenishmentModal.value = false
+    showCreateModal.value = true
 }
 
 
@@ -142,6 +166,7 @@ const submitSearch = () => {
         preserveState: true,
         preserveScroll: true,
         replace: true,
+        only: ['imports', 'filters'],
     })
 }
 
@@ -151,7 +176,7 @@ const sortImports = (field) => {
         search: search.value.trim(), party_type: partyTypeFilter.value, status: statusFilter.value,
         date_from: dateFrom.value, date_to: dateTo.value, per_page: props.filters?.per_page,
         sort_by: field, sort_order: sortOrder,
-    }, { preserveState: true, preserveScroll: true, replace: true })
+    }, { preserveState: true, preserveScroll: true, replace: true, only: ['imports', 'filters'] })
 }
 
 watch([search, partyTypeFilter, statusFilter, dateFrom, dateTo], () => {
@@ -179,6 +204,16 @@ const statusLabel = (status) => ({
     pending: 'Chờ xử lý',
     cancelled: 'Đã hủy',
 })[String(status || '').toLowerCase()] || status || 'Hoàn thành'
+
+const statusClass = (status) => String(status || '').toLowerCase() === 'cancelled'
+    ? 'border border-rose-200 bg-rose-50 text-rose-600'
+    : String(status || '').toLowerCase() === 'pending'
+        ? 'border border-amber-200 bg-amber-50 text-amber-700'
+        : 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+
+const filterByStatus = (value) => {
+    statusFilter.value = value
+}
 
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') {
@@ -241,10 +276,49 @@ const showImport = (id) => {
         .then((response) => {
             detailImport.value = response.data
         })
+        .catch(() => {
+            detailImport.value = null
+        })
         .finally(() => {
             loadingDetail.value = false
         })
 
+}
+
+const requestCancelImport = (stockImport) => {
+    importToCancel.value = stockImport
+    cancelReason.value = ''
+    showCancelModal.value = true
+}
+
+const editImport = async (stockImport) => {
+    if (!stockImport || stockImport.status === 'cancelled') return
+
+    // Dữ liệu từ bảng chỉ là bản rút gọn; luôn lấy phiếu đầy đủ để biểu mẫu có đủ dòng hàng/IMEI.
+    loadingDetail.value = true
+    try {
+        const response = stockImport.items ? { data: stockImport } : await api.get(`/stock-import/${stockImport.id}`)
+        editingImport.value = response.data
+        replenishmentDraft.value = null
+        importPartyType.value = response.data.party_type || 'supplier'
+        detailImport.value = null
+        showCreateModal.value = true
+    } finally {
+        loadingDetail.value = false
+    }
+}
+
+const cancelImport = () => {
+    if (!importToCancel.value || !cancelReason.value.trim()) return
+    router.post(`/stock-import/${importToCancel.value.id}/cancel`, { reason: cancelReason.value.trim() }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showCancelModal.value = false
+            detailImport.value = null
+            importToCancel.value = null
+            router.reload({ only: ['imports'] })
+        },
+    })
 }
 
 const openImportFromGlobalSearch = () => {
@@ -388,6 +462,8 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('status')">Trạng thái ↕</button></th>
 
+                            <th class="px-3 py-3 text-center">Thao tác</th>
+
                         </tr>
 
                     </thead>
@@ -488,20 +564,41 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                             <td class="px-3 py-4 text-center">
 
                                 <span
-                                    class="
-                                        inline-flex
-                                        rounded-full
-                                        bg-emerald-50
-                                        px-2.5
-                                        py-1
-                                        text-xs
-                                        font-semibold
-                                        text-emerald-600
-                                    "
+                                    class="inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition hover:brightness-95"
+                                    :class="statusClass(item.status)"
+                                    :title="`Lọc: ${statusLabel(item.status)}`"
+                                    @click.stop="filterByStatus(item.status || 'completed')"
                                 >
+                                    <XCircle v-if="item.status === 'cancelled'" class="h-3.5 w-3.5" />
+                                    <CheckCircle2 v-else class="h-3.5 w-3.5" />
                                     {{ statusLabel(item.status) }}
                                 </span>
 
+                            </td>
+
+                            <td class="px-3 py-4 text-center">
+                                <div class="flex items-center justify-center gap-1">
+                                    <button
+                                        type="button"
+                                        class="rounded-lg p-2 transition"
+                                        :class="canManageImports && item.status !== 'cancelled' ? 'text-amber-600 hover:bg-amber-50' : 'cursor-not-allowed text-slate-300 opacity-60'"
+                                        :disabled="!canManageImports || item.status === 'cancelled'"
+                                        :title="item.status === 'cancelled' ? 'Phiếu nhập đã hủy, không thể sửa' : (canManageImports ? 'Sửa phiếu nhập' : 'Bạn không có quyền sửa phiếu nhập')"
+                                        @click.stop="editImport(item)"
+                                    >
+                                        <Pencil class="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="rounded-lg p-2 transition"
+                                        :class="canManageImports && item.status !== 'cancelled' ? 'text-rose-600 hover:bg-rose-50' : 'cursor-not-allowed text-slate-300 opacity-60'"
+                                        :disabled="!canManageImports || item.status === 'cancelled'"
+                                        :title="item.status === 'cancelled' ? 'Phiếu nhập đã hủy' : (canManageImports ? 'Hủy phiếu nhập và hoàn tác tồn kho' : 'Bạn không có quyền hủy phiếu nhập')"
+                                        @click.stop="requestCancelImport(item)"
+                                    >
+                                        <XCircle class="h-4 w-4" />
+                                    </button>
+                                </div>
                             </td>
 
 
@@ -516,7 +613,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                         >
 
                             <td
-                                colspan="6"
+                                colspan="7"
                                 class="
                                     px-5
                                     py-16
@@ -541,9 +638,9 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
             <div class="divide-y divide-slate-200 md:hidden">
                 <article v-for="item in props.imports.data" :key="`mobile-import-${item.id}`" class="cursor-pointer space-y-2.5 p-3.5 active:bg-slate-50" @click="showImport(item.id)">
-                    <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">{{ item.code }}</div><div class="mt-0.5 truncate text-xs text-slate-500">{{ item.party_name || item.customer?.full_name || item.supplier?.name || '—' }}</div><div class="text-xs text-slate-500">{{ item.party_phone || item.customer?.phone || item.supplier?.phone || '' }}</div></div><span class="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">{{ statusLabel(item.status) }}</span></div>
+                    <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">{{ item.code }}</div><div class="mt-0.5 truncate text-xs text-slate-500">{{ item.party_name || item.customer?.full_name || item.supplier?.name || '—' }}</div><div class="text-xs text-slate-500">{{ item.party_phone || item.customer?.phone || item.supplier?.phone || '' }}</div></div><span class="shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></div>
                     <div class="flex items-center justify-between border-t border-slate-100 pt-2 text-xs"><span class="text-slate-500">{{ formatDate(item.import_date) }} · {{ item.items_count }} dòng</span><span class="font-bold text-slate-900">{{ money(item.grand_total) }}</span></div>
-                    <div class="text-right text-[11px] font-semibold text-emerald-700">Xem chi tiết ›</div>
+                    <div class="flex items-center justify-between pt-0.5"><span class="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700">Xem chi tiết <ChevronRight class="h-3 w-3" /></span><div class="flex items-center gap-1"><button type="button" :disabled="!canManageImports || item.status === 'cancelled'" class="rounded-lg p-2 transition" :class="canManageImports && item.status !== 'cancelled' ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-300 opacity-60'" title="Sửa phiếu nhập" @click.stop="editImport(item)"><Pencil class="h-4 w-4" /></button><button type="button" :disabled="!canManageImports || item.status === 'cancelled'" class="rounded-lg p-2 transition" :class="canManageImports && item.status !== 'cancelled' ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-300 opacity-60'" title="Hủy phiếu nhập" @click.stop="requestCancelImport(item)"><XCircle class="h-4 w-4" /></button></div></div>
                 </article>
                 <div v-if="!props.imports.data?.length" class="p-8 text-center text-sm text-slate-500">{{ search ? `Không tìm thấy phiếu nhập phù hợp với “${search}”` : 'Chưa có đơn nhập hàng' }}</div>
             </div>
@@ -562,6 +659,8 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
     <StockImportFormModal
         v-if="showCreateModal"
         :initial-party-type="importPartyType"
+        :initial-import="editingImport"
+        :initial-replenishment="replenishmentDraft"
         :categories="props.categories"
         :suppliers="props.suppliers"
         @close="closeCreateModal"
@@ -572,6 +671,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
         v-if="showReplenishmentModal"
         :suppliers="props.suppliers"
         @close="showReplenishmentModal = false"
+        @apply="applyReplenishmentToImport"
     />
 
     <BaseModal
@@ -581,9 +681,25 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
         @close="detailImport = null"
     >
         <div class="space-y-4">
-            <div class="flex justify-end">
-                <button type="button" @click="printPreviewUrl = `/stock-import/${detailImport.id}/contract`" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            <div class="flex flex-wrap justify-end gap-2">
+                <button v-if="detailImport.party_type === 'customer'" type="button" @click="printPreviewUrl = `/stock-import/${detailImport.id}/contract`" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                     <Printer class="h-4 w-4" /> In hợp đồng mua bán
+                </button>
+                <button
+                    v-if="canManageImports && detailImport.status !== 'cancelled'"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+                    @click="editImport(detailImport)"
+                >
+                    <Pencil class="h-4 w-4" /> Sửa phiếu
+                </button>
+                <button
+                    v-if="canManageImports && detailImport.status !== 'cancelled'"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+                    @click="requestCancelImport(detailImport)"
+                >
+                    <XCircle class="h-4 w-4" /> Hủy phiếu
                 </button>
             </div>
             <div class="grid gap-3 md:grid-cols-5">
@@ -769,6 +885,19 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
         </div>
     </BaseModal>
     <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hợp đồng mua bán" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
+
+    <BaseModal v-if="showCancelModal" title="Hủy phiếu nhập" size="sm" @close="showCancelModal = false">
+        <div class="space-y-3">
+            <p class="text-sm text-slate-600">Tồn kho và công nợ của phiếu sẽ được hoàn tác. Chỉ hủy được khi hàng chưa bán hoặc xuất kho.</p>
+            <textarea v-model="cancelReason" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-rose-500 focus:ring-rose-500" placeholder="Lý do hủy phiếu nhập" />
+        </div>
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700" @click="showCancelModal = false">Quay lại</button>
+                <button type="button" :disabled="!cancelReason.trim()" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" @click="cancelImport">Xác nhận hủy</button>
+            </div>
+        </template>
+    </BaseModal>
 
     <div
         v-if="loadingDetail"

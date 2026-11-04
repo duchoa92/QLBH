@@ -21,6 +21,7 @@ use App\Jobs\ExportProductsJob;
 use Illuminate\Support\Str;
 use App\Exports\ImportErrorExport;
 use App\Models\ProductVariant;
+use App\Models\StockImportItem;
 
 
 
@@ -679,9 +680,16 @@ class ProductController extends Controller
     public function listForImport(Request $request)
     {
         $keyword = trim($request->input('keyword', ''));
+        $ids = collect($request->input('ids', []))
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
 
         $products = Product::query()
             ->where('is_active', true)
+
+            ->when($ids->isNotEmpty(), fn ($query) => $query->whereIn('id', $ids))
 
             ->when($keyword, function ($query) use ($keyword) {
 
@@ -731,6 +739,37 @@ class ProductController extends Controller
             ->orderBy('name')
             ->limit(30)
             ->get();
+
+        // Lấy BH khách của lần nhập gần nhất, gồm cả BH theo biến thể. Giá trị
+        // này chỉ là mặc định cho biểu mẫu mới, người dùng vẫn có thể thay đổi.
+        $warrantyByProduct = [];
+        $warrantyByVariant = [];
+        StockImportItem::query()
+            ->select('stock_import_items.product_id', 'stock_import_items.variant_id', 'stock_import_items.extra_info')
+            ->whereIn('stock_import_items.product_id', $products->pluck('id'))
+            ->whereHas('stockImport', fn ($query) => $query->where('status', '!=', 'cancelled'))
+            ->orderByDesc('stock_import_items.id')
+            ->get()
+            ->each(function (StockImportItem $item) use (&$warrantyByProduct, &$warrantyByVariant): void {
+                $extra = is_array($item->extra_info) ? $item->extra_info : [];
+                $value = (int) ($extra['customer_warranty_duration_value'] ?? 0);
+                $unit = $extra['customer_warranty_duration_unit'] ?? 'months';
+                if ($value <= 0 || ! in_array($unit, ['days', 'months'], true)) return;
+
+                $warranty = ['value' => $value, 'unit' => $unit];
+                $productKey = (int) $item->product_id;
+                $variantKey = $item->variant_id ? (int) $item->variant_id : null;
+                if (! isset($warrantyByProduct[$productKey])) $warrantyByProduct[$productKey] = $warranty;
+                if ($variantKey && ! isset($warrantyByVariant[$variantKey])) $warrantyByVariant[$variantKey] = $warranty;
+            });
+
+        $products->each(function (Product $product) use ($warrantyByProduct, $warrantyByVariant): void {
+            $productWarranty = $warrantyByProduct[(int) $product->id] ?? null;
+            $product->setAttribute('last_customer_warranty', $productWarranty);
+            $product->variants->each(function (ProductVariant $variant) use ($productWarranty, $warrantyByVariant): void {
+                $variant->setAttribute('last_customer_warranty', $warrantyByVariant[(int) $variant->id] ?? $productWarranty);
+            });
+        });
 
         return response()->json(
             $products

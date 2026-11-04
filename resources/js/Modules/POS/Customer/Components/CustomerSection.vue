@@ -303,8 +303,16 @@ onBeforeUnmount(() => {
                             index === activeIndex ? 'bg-blue-50' : 'hover:bg-slate-50'
                         ]"
                     >
-                        <div class="font-semibold text-slate-900 text-sm">
-                            {{ customer.full_name }}
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="min-w-0 truncate text-sm font-semibold text-slate-900">
+                                {{ customer.full_name }}
+                            </span>
+                            <span
+                                v-if="Number(customer.debt_balance || 0) > 0"
+                                class="shrink-0 whitespace-nowrap rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700"
+                            >
+                                Nợ {{ $money(customer.debt_balance) }}
+                            </span>
                         </div>
                         <div class="text-xs text-slate-500 mt-0.5">
                             {{ customer.phone }}

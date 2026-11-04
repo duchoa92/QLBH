@@ -120,7 +120,7 @@ class StockImportController extends Controller
             ->with('unit:id,name,short_name')
             ->with(['variants' => fn ($query) => $query
                 ->where('is_active', true)
-                ->select('id', 'product_id', 'stock')])
+                ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock')])
             ->withCount(['imeis as in_stock_imeis_count' => fn ($query) =>
                 $query->where('status', \App\Models\ProductImei::STATUS_IN_STOCK)])
             ->orderBy('stock')
@@ -147,6 +147,9 @@ class StockImportController extends Controller
                     'alert_stock' => $alertsEnabled ? $productThreshold : 0,
                     'cost_price' => (float) $product->cost_price,
                     'unit_name' => $product->unit?->short_name ?: ($product->unit?->name ?: 'Cái'),
+                    'product_type' => $product->product_type,
+                    'manage_stock_by_serial' => (bool) $product->manage_stock_by_serial,
+                    'variants' => $product->variants->values(),
                 ];
             });
 
@@ -159,6 +162,28 @@ class StockImportController extends Controller
             'alerts_enabled' => $alertsEnabled,
             'default_alert_threshold' => $defaultThreshold,
         ]);
+    }
+
+    /** Phiếu nhập còn nợ để phân bổ tiền trả nợ cũ ngay khi lập phiếu mới. */
+    public function supplierOutstandingOrders(Supplier $supplier): JsonResponse
+    {
+        $orders = StockImport::query()
+            ->where('supplier_id', $supplier->id)
+            ->where('status', 'completed')
+            ->whereColumn('grand_total', '>', 'paid_amount')
+            ->orderBy('import_date')
+            ->orderBy('id')
+            ->get(['id', 'code', 'import_date', 'grand_total', 'paid_amount'])
+            ->map(fn (StockImport $import) => [
+                'id' => $import->id,
+                'code' => $import->code,
+                'date' => optional($import->import_date)->format('d/m/Y'),
+                'remaining' => max(0, (float) $import->grand_total - (float) $import->paid_amount),
+            ])
+            ->filter(fn (array $import) => $import['remaining'] > 0)
+            ->values();
+
+        return response()->json(['orders' => $orders]);
     }
 
     /**
@@ -176,6 +201,9 @@ class StockImportController extends Controller
             'party_cccd' => ['nullable', 'string', 'max:30'],
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
             'old_debt_paid' => ['nullable', 'numeric', 'min:0'],
+            'old_debt_allocations' => ['nullable', 'array'],
+            'old_debt_allocations.*.stock_import_id' => ['required', 'integer', 'distinct', 'exists:stock_imports,id'],
+            'old_debt_allocations.*.amount' => ['required', 'numeric', 'gt:0'],
             'payment_reference' => ['nullable', 'string', 'max:80'],
             'payment_method' => ['nullable', Rule::in(['cash', 'bank', 'card'])],
 
@@ -327,7 +355,12 @@ class StockImportController extends Controller
             $validated['party_cccd'] = null;
         }
 
-        $this->service->import($validated);
+        $replacement = $request->attributes->get('replacement_stock_import');
+        if ($replacement instanceof StockImport) {
+            $this->service->replace($replacement, $validated);
+        } else {
+            $this->service->import($validated);
+        }
 
         return back()->with(
             'success',
@@ -401,9 +434,10 @@ class StockImportController extends Controller
             'supplier:id,name,phone,email,address',
             'customer:id,code,full_name,phone,cccd,address',
             'user:id,name',
-            'items.product:id,name,sku,image,unit_id,conversion_unit_id',
+            'items.product:id,name,sku,image,unit_id,conversion_unit_id,sell_price,has_unit_conversion,conversion_factor,manage_stock_by_serial',
             'items.product.unit:id,name,short_name',
             'items.product.conversionUnit:id,name,short_name',
+            'items.product.variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock,is_active',
             'items.variant:id,product_id,sku,attributes,stock',
             'items.unit:id,name,short_name',
         ]);
@@ -437,5 +471,26 @@ class StockImportController extends Controller
         }
 
         return redirect()->route('stock.index', ['open_import' => $stockImport->id]);
+    }
+
+    public function cancel(Request $request, StockImport $stockImport): RedirectResponse
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $this->service->cancel($stockImport, $data['reason']);
+
+        return back()->with('success', 'Đã hủy phiếu nhập và hoàn tác tồn kho, công nợ.');
+    }
+
+    public function update(Request $request, StockImport $stockImport): RedirectResponse
+    {
+        if ($stockImport->status === 'cancelled') {
+            return back()->withErrors(['import' => 'Phiếu nhập đã hủy không thể sửa.']);
+        }
+
+        $request->attributes->set('replacement_stock_import', $stockImport);
+        return $this->store($request);
     }
 }

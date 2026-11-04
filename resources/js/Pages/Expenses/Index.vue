@@ -48,7 +48,7 @@ watch(() => page.url, openScheduleReminder, { immediate: true })
 watch(() => props.recurringExpenses, openScheduleReminder)
 watch([month, search, category], () => {
     clearTimeout(timer)
-    timer = setTimeout(() => router.get(route('expenses.index'), { month: month.value, search: search.value || undefined, category: category.value || undefined, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page }, { preserveState: true, preserveScroll: true, replace: true }), 250)
+    timer = setTimeout(() => router.get(route('expenses.index'), { month: month.value, search: search.value || undefined, category: category.value || undefined, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page }, { preserveState: true, preserveScroll: true, replace: true, only: ['expenses', 'summary', 'filters'] }), 250)
 })
 const openCreate = () => { editing.value = null; form.reset(); form.category = 'utilities'; form.expense_date = new Date().toISOString().slice(0, 10); form.payment_method = 'cash'; modal.value = true }
 const openEdit = row => { editing.value = row; form.category = row.category; form.description = row.description; form.amount = row.amount; form.expense_date = row.expense_date; form.payment_method = row.payment_method; form.recipient = row.recipient || ''; form.note = row.note || ''; modal.value = true }
@@ -76,7 +76,7 @@ const columns = [
 const applySort = ({ field, order }) => router.get(route('expenses.index'), {
     month: month.value, category: category.value || undefined, search: search.value || undefined,
     sort_by: field, sort_order: order, per_page: props.filters?.per_page,
-}, { preserveState: true, preserveScroll: true, replace: true })
+}, { preserveState: true, preserveScroll: true, replace: true, only: ['expenses', 'summary', 'filters'] })
 </script>
 
 <template>

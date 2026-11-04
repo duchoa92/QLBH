@@ -1,6 +1,8 @@
 <script setup>
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import { usePage } from '@inertiajs/vue3'
 
 /*
 |--------------------------------------------------------------------------
@@ -16,6 +18,25 @@ const props = defineProps({
 })
 
 const accounts = computed(() => props.form.bank_accounts || [])
+const page = usePage()
+const banks = computed(() => page.props.vietqr_banks || [])
+const bankOptions = computed(() => [{ bin: '', label: 'Chọn ngân hàng...' }, ...banks.value.map(bank => ({
+    ...bank,
+    label: `${bank.shortName || bank.code || bank.name} — ${bank.name || 'Ngân hàng'} (BIN: ${bank.bin})`,
+}))])
+const setAccountBank = (account, bin) => {
+    account.bank_bin = bin || ''
+    account.bank_name = banks.value.find(bank => String(bank.bin) === String(bin))?.shortName || ''
+}
+const deeplinkFor = account => {
+    const bank = banks.value.find(item => String(item.bin) === String(account.bank_bin))
+    const bankCode = bank?.shortName || bank?.code
+    if (!bankCode || !account.bank_account) return ''
+    const params = new URLSearchParams({ app: '0', ba: `${account.bank_account}@${bankCode.toLowerCase()}`, am: '0', tn: '' })
+    if (account.bank_account_name) params.set('bn', account.bank_account_name)
+    return `https://dl.vietqr.io/pay?${params.toString()}`
+}
+watch(accounts, list => list.forEach(account => { account.bank_payment_url = deeplinkFor(account) }), { deep: true })
 const addBankAccount = () => {
     if (accounts.value.length >= 10) return
     accounts.value.push({ bank_name: '', bank_bin: '', bank_account: '', bank_account_name: '', bank_payment_url: '', is_default: accounts.value.length === 0 })
@@ -72,11 +93,11 @@ const setDefault = index => accounts.value.forEach((account, i) => { account.is_
                     <button type="button" class="text-sm font-medium text-rose-600 hover:text-rose-700" @click="removeBankAccount(index)">Xóa</button>
                 </div>
                 <div class="grid gap-3 sm:grid-cols-2">
-                    <FloatingInput v-model="account.bank_name" :label="`Ngân hàng ${index + 1}`" :name="`bank_accounts_${index}_bank_name`" :error="form.errors[`bank_accounts.${index}.bank_name`]" />
-                    <FloatingInput v-model="account.bank_bin" label="Mã BIN (6 chữ số)" :name="`bank_accounts_${index}_bank_bin`" inputmode="numeric" :error="form.errors[`bank_accounts.${index}.bank_bin`]" />
+                    <FloatingSelect v-if="banks.length" v-model="account.bank_bin" label="Ngân hàng" :name="`bank_accounts_${index}_bank_bin`" :options="bankOptions" option-label="label" option-value="bin" :error="form.errors[`bank_accounts.${index}.bank_bin`]" @update:model-value="setAccountBank(account, $event)" />
+                    <template v-else><FloatingInput v-model="account.bank_name" label="Ngân hàng" :name="`bank_accounts_${index}_bank_name`" :error="form.errors[`bank_accounts.${index}.bank_name`]" /><FloatingInput v-model="account.bank_bin" label="Mã BIN (6 chữ số)" :name="`bank_accounts_${index}_bank_bin`" inputmode="numeric" :error="form.errors[`bank_accounts.${index}.bank_bin`]" /></template>
                     <FloatingInput v-model="account.bank_account" label="Số tài khoản" :name="`bank_accounts_${index}_bank_account`" :error="form.errors[`bank_accounts.${index}.bank_account`]" />
                     <FloatingInput v-model="account.bank_account_name" label="Tên chủ tài khoản" :name="`bank_accounts_${index}_bank_account_name`" :error="form.errors[`bank_accounts.${index}.bank_account_name`]" />
-                    <div class="sm:col-span-2"><FloatingInput v-model="account.bank_payment_url" label="Link mở app ngân hàng (mobile)" :name="`bank_accounts_${index}_bank_payment_url`" :error="form.errors[`bank_accounts.${index}.bank_payment_url`]" /></div>
+                    <div class="sm:col-span-2"><div class="text-xs font-medium text-slate-600">Link thanh toán tự tạo</div><a v-if="deeplinkFor(account)" :href="deeplinkFor(account)" target="_blank" rel="noopener noreferrer" class="mt-1 block break-all text-xs text-blue-700 underline">{{ deeplinkFor(account) }}</a><p v-else class="mt-1 text-xs text-slate-400">Chọn ngân hàng và nhập số tài khoản để tạo link.</p></div>
                 </div>
             </div>
             <p v-if="form.errors.bank_accounts" class="mt-2 text-sm text-rose-600">{{ form.errors.bank_accounts }}</p>

@@ -260,7 +260,7 @@ class SettingController extends Controller
         return $user?->can('payment_accounts.manage') ?? false;
     }
 
-    private function vietQrBanks(): array
+    public function vietQrBanks(): array
     {
         $freshCacheKey = 'settings.vietqr_banks';
         $staleCacheKey = 'settings.vietqr_banks.stale';
@@ -302,6 +302,34 @@ class SettingController extends Controller
 
             return Cache::get($staleCacheKey, []);
         }
+    }
+
+    public function vietQrApps(string $platform): array
+    {
+        abort_unless(in_array($platform, ['android', 'ios'], true), 404);
+
+        return Cache::remember("settings.vietqr_apps.{$platform}", now()->addDay(), function () use ($platform): array {
+            try {
+                $response = Http::timeout(5)->get("https://api.vietqr.io/v2/{$platform}-app-deeplinks");
+                $apps = $response->successful() ? $response->json('apps') : null;
+                if (! is_array($apps)) return [];
+
+                return collect($apps)
+                    ->filter(fn ($app) => is_array($app) && filled($app['appId'] ?? null))
+                    ->map(fn ($app) => [
+                        'app_id' => (string) $app['appId'],
+                        'app_name' => (string) ($app['appName'] ?? $app['appId']),
+                        'bank_name' => (string) ($app['bankName'] ?? ''),
+                        'app_logo' => (string) ($app['appLogo'] ?? ''),
+                    ])
+                    ->values()
+                    ->all();
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                return [];
+            }
+        });
     }
 
 }

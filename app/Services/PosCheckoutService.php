@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Models\ProductStockBatch;
 use App\Models\ProductVariant;
 use App\Models\Sale;
 use Illuminate\Support\Facades\DB;
@@ -238,14 +239,19 @@ class PosCheckoutService
                 */
                 if (! $requiresImei) {
                     $allowNegativeStock = filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN);
+                    $isBatchBacked = $this->hasStockBatches($product->id, $variant?->id);
 
-                    if ($variant) {
+                    if (! $allowNegativeStock && $isBatchBacked && $this->availableBatchQuantity($product->id, $variant?->id) < $baseQuantity) {
+                        throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho theo lô");
+                    }
+
+                    if (! $isBatchBacked && $variant) {
 
                         if (! $allowNegativeStock && $variant->stock < $baseQuantity) {
                             throw new \Exception("Phiên bản {$product->name} không đủ tồn kho");
                         }
 
-                    } elseif (! $allowNegativeStock && $product->stock < $baseQuantity) {
+                    } elseif (! $isBatchBacked && ! $allowNegativeStock && $product->stock < $baseQuantity) {
 
                         throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho");
                     }
@@ -470,6 +476,14 @@ class PosCheckoutService
                     ]);
 
                     app(ImeiStockSynchronizer::class)->sync($product);
+
+                } elseif ($this->hasStockBatches($product->id, $variant?->id)) {
+
+                    // StockBatchAllocator đã trừ đúng từng lô ở trên. Đồng bộ
+                    // lại cột tồn tổng để các luồng cũ, báo cáo và lần bán sau
+                    // không còn dùng số tồn cũ (như IC nguồn còn 13 lô nhưng
+                    // product.stock = 0).
+                    $this->syncBatchBackedStock($product, $variant);
 
                 } elseif ($variant) {
 
@@ -720,5 +734,36 @@ class PosCheckoutService
         if ($updated === 0) {
             throw new \Exception('Sản phẩm không đủ tồn kho');
         }
+    }
+
+    private function hasStockBatches(int $productId, ?int $variantId): bool
+    {
+        return ProductStockBatch::query()
+            ->where('product_id', $productId)
+            ->when($variantId, fn ($query) => $query->where('variant_id', $variantId), fn ($query) => $query->whereNull('variant_id'))
+            ->exists();
+    }
+
+    private function availableBatchQuantity(int $productId, ?int $variantId): int
+    {
+        return (int) ProductStockBatch::query()
+            ->where('product_id', $productId)
+            ->when($variantId, fn ($query) => $query->where('variant_id', $variantId), fn ($query) => $query->whereNull('variant_id'))
+            ->sum('remaining_quantity');
+    }
+
+    private function syncBatchBackedStock(Product $product, ?ProductVariant $variant): void
+    {
+        if ($variant) {
+            $variant->update([
+                'stock' => $this->availableBatchQuantity($product->id, $variant->id),
+            ]);
+        }
+
+        $product->update([
+            'stock' => (int) ProductStockBatch::query()
+                ->where('product_id', $product->id)
+                ->sum('remaining_quantity'),
+        ]);
     }
 }

@@ -349,6 +349,12 @@ const selectEntryVariant = () => {
     entryModal.value.sell_price_input = savedPrice?.sell_price != null
         ? Number(savedPrice.sell_price)
         : sell
+
+    // Biến thể có thể có BH mặc định riêng từ lần nhập gần nhất.
+    if (!savedPrice && variant.last_customer_warranty?.value > 0) {
+        entryModal.value.customer_warranty_duration_value_input = variant.last_customer_warranty.value
+        entryModal.value.customer_warranty_duration_unit_input = variant.last_customer_warranty.unit || 'months'
+    }
 }
 
 const selectVariant = (variant) => {
@@ -486,8 +492,8 @@ const resetEntryInputs = (keepPrices = false, keepVariant = false) => {
     modal.password_input = ''
     modal.warranty_duration_value_input = item.supplier_warranty_value ?? null
     modal.warranty_duration_unit_input = item.supplier_warranty_unit || 'months'
-    modal.customer_warranty_duration_value_input = null
-    modal.customer_warranty_duration_unit_input = 'months'
+    modal.customer_warranty_duration_value_input = item.extra_info?.customer_warranty_duration_value ?? null
+    modal.customer_warranty_duration_unit_input = item.extra_info?.customer_warranty_duration_unit || 'months'
     editingEntryIndex.value = null
     imeiLookup.value = null
     variantSearch.value = selectedVariant
@@ -666,7 +672,7 @@ const complete = async () => {
     if (['normal', 'variant'].includes(entryModal.value.mode)) {
         props.item.supplier_warranty_value = props.customerImport ? null : (entryModal.value.warranty_duration_value_input || null)
         props.item.supplier_warranty_unit = props.customerImport ? null : (entryModal.value.warranty_duration_unit_input || 'months')
-        if (props.customerImport) props.item.extra_info = buildExtraInfo(entryModal.value)
+        props.item.extra_info = buildExtraInfo(entryModal.value)
     }
     stopCamera()
     emit('completed', props.item)
@@ -929,7 +935,7 @@ onBeforeUnmount(() => {
                         </select>
                     </div>
 
-                    <div v-if="props.customerImport || entryModal.mode === 'imei'" class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(64px,0.3fr)] items-end gap-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
+                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(64px,0.3fr)] items-end gap-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
                         <input
                             v-model.number="entryModal.customer_warranty_duration_value_input"
                             type="number"

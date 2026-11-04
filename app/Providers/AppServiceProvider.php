@@ -31,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
         date_default_timezone_set($timezone);
 
         Inertia::share([
+            'vietqr_banks' => fn () => app(\App\Http\Controllers\SettingController::class)->vietQrBanks(),
             'settings' => fn () => [
                 'shop_name' => setting('shop_name', config('app.name', 'QLBH POS')),
                 'currency_symbol' => setting('currency_symbol', '₫'),

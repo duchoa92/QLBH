@@ -63,13 +63,30 @@ const variantLabel = (variant) => {
 const balanceLabel = () => {
     const total = Number(saleTotal())
     const paid = Number(props.sale?.paid_amount || 0)
-    const difference = paid - total
-    return difference > 0
-        ? { label: 'Tiền thừa:', amount: difference }
-        : { label: 'Nợ lại:', amount: Math.abs(difference) }
+    const change = Math.max(0, Number(props.sale?.change_amount || 0))
+    if (paid < total) return { label: 'Nợ lại:', amount: total - paid }
+    if (change > 0) return { label: 'Tiền thừa:', amount: change }
+    return { label: 'Đã thanh toán đủ:', amount: 0 }
 }
 
 const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? props.sale?.subtotal ?? 0
+
+const customerPaymentLabel = (method) => ({
+    cash: 'Khách đưa',
+    bank: 'Khách chuyển',
+    mixed: 'Khách đưa / khách chuyển',
+    card: 'Khách thanh toán thẻ',
+}[String(method || '').toLowerCase()] || 'Khách đưa')
+
+const customerPaymentRows = () => {
+    const cash = Math.max(0, Number(props.sale?.cash_received_amount || 0))
+    const bank = Math.max(0, Number(props.sale?.bank_received_amount || 0))
+    if (cash > 0 || bank > 0) return [
+        ...(cash > 0 ? [{ label: 'Khách đưa', amount: cash }] : []),
+        ...(bank > 0 ? [{ label: 'Khách chuyển', amount: bank }] : []),
+    ]
+    return [{ label: customerPaymentLabel(props.sale?.payment_method), amount: Math.max(0, Number(props.sale?.paid_amount || 0)) }]
+}
 
 // Trang được nhúng trong modal xem trước; chỉ in khi người dùng bấm nút In ở modal.
 </script>
@@ -168,21 +185,13 @@ const saleTotal = () => props.sale?.grand_total ?? props.sale?.total_amount ?? p
                     <span>TỔNG CỘNG:</span>
                     <span>{{ formatMoney(sale.grand_total || sale.total_amount || sale.subtotal) }}</span>
                 </div>
-                <div class="row">
-                    <span>Đã thanh toán hóa đơn:</span>
-                    <span>{{ formatMoney(Math.max(0, Number(sale.paid_amount || 0) - Number(sale.old_debt_paid || 0))) }}</span>
+                <div v-for="payment in customerPaymentRows()" :key="payment.label" class="row">
+                    <span>{{ payment.label }}:</span>
+                    <span>{{ formatMoney(payment.amount) }}</span>
                 </div>
                 <div v-if="Number(sale.old_debt_paid || 0) > 0" class="row">
-                    <span>Thanh toán nợ cũ kèm hóa đơn:</span>
+                    <span>Trích trả nợ cũ:</span>
                     <span>{{ formatMoney(sale.old_debt_paid) }}</span>
-                </div>
-                <div v-if="Number(sale.cash_received_amount || 0) > 0 && Number(sale.bank_received_amount || 0) > 0" class="row text-xs">
-                    <span>Tiền mặt:</span>
-                    <span>{{ formatMoney(sale.cash_received_amount) }}</span>
-                </div>
-                <div v-if="Number(sale.cash_received_amount || 0) > 0 && Number(sale.bank_received_amount || 0) > 0" class="row text-xs">
-                    <span>Chuyển khoản{{ sale.bank_account ? ` · ${sale.bank_account}` : '' }}:</span>
-                    <span>{{ formatMoney(sale.bank_received_amount) }}</span>
                 </div>
                 <div class="row">
                     <span>{{ balanceLabel().label }}</span>

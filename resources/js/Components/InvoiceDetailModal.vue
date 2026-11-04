@@ -61,6 +61,29 @@ const paymentMethodLabel = (method) => ({
     card: 'Thẻ',
 }[String(method || '').toLowerCase()] || method || 'Tiền mặt')
 
+const customerPaymentLabel = (method) => ({
+    cash: 'Khách đưa',
+    bank: 'Khách chuyển',
+    mixed: 'Khách đưa / khách chuyển',
+    card: 'Khách thanh toán thẻ',
+}[String(method || '').toLowerCase()] || 'Khách đưa')
+
+const customerPaymentRows = computed(() => {
+    const invoice = props.invoice || {}
+    const cash = Math.max(0, Number(invoice.cash_received_amount || 0))
+    const bank = Math.max(0, Number(invoice.bank_received_amount || 0))
+    if (cash > 0 || bank > 0) {
+        return [
+            ...(cash > 0 ? [{ label: 'Khách đưa', amount: cash }] : []),
+            ...(bank > 0 ? [{ label: 'Khách chuyển', amount: bank }] : []),
+        ]
+    }
+
+    return [{ label: customerPaymentLabel(invoice.payment_method), amount: Math.max(0, Number(invoice.paid_amount || 0)) }]
+})
+
+const customerPaymentAmount = computed(() => customerPaymentRows.value.reduce((total, row) => total + row.amount, 0))
+
 // Format tiền tệ
 const money = formatCurrency
 
@@ -149,21 +172,21 @@ const balanceText = computed(() => {
     if (!props.invoice || isCancelled.value) return null
 
     const total = Number(saleTotal.value || 0)
-    const paid = Math.max(0, Number(props.invoice.paid_amount || 0) - Number(props.invoice.old_debt_paid || 0))
-    const balance = paid - total
+    const paid = customerPaymentAmount.value
+    const change = Math.max(0, Number(props.invoice.change_amount || 0))
 
-    if (balance < 0) {
+    if (paid < total) {
         return {
             label: 'Còn thiếu',
-            value: Math.abs(balance),
+            value: total - paid,
             class: 'text-rose-600',
         }
     }
 
-    if (balance > 0) {
+    if (change > 0) {
         return {
             label: 'Tiền thừa',
-            value: balance,
+            value: change,
             class: 'text-emerald-600',
         }
     }
@@ -478,13 +501,13 @@ const cancelReason = computed(() =>
                             <span class="font-black text-indigo-600 text-base">{{ money(saleTotal) }}</span>
                         </div>
 
-                        <div class="flex justify-between text-slate-600 border-t border-dashed border-slate-100 pt-1">
-                            <span>Đã thanh toán hóa đơn:</span>
-                            <span class="font-bold text-slate-800">{{ money(Math.max(0, Number(invoice.paid_amount || 0) - Number(invoice.old_debt_paid || 0))) }}</span>
+                        <div v-for="payment in customerPaymentRows" :key="payment.label" class="flex justify-between text-slate-600 border-t border-dashed border-slate-100 pt-1">
+                            <span>{{ payment.label }}:</span>
+                            <span class="font-bold text-slate-800">{{ money(payment.amount) }}</span>
                         </div>
 
                         <div v-if="Number(invoice.old_debt_paid || 0) > 0" class="flex justify-between text-blue-700">
-                            <span>Thanh toán nợ cũ kèm hóa đơn:</span>
+                            <span>Trích trả nợ cũ:</span>
                             <span class="font-bold">{{ money(invoice.old_debt_paid) }}</span>
                         </div>
 

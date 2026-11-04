@@ -5,6 +5,7 @@ import {
     ArrowLeft,
     AlertTriangle,
     Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     FileSpreadsheet,
@@ -20,16 +21,19 @@ import { formatCurrency } from '@/utils/format'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import { useReferenceData } from '@/Stores/referenceData'
 import JSZip from 'jszip'
 
 const props = defineProps({
     suppliers: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'apply'])
+const { suppliers: referenceSuppliers, categories: referenceCategories } = useReferenceData({ suppliers: props.suppliers })
+const suppliers = computed(() => referenceSuppliers.value)
 
 const products = ref([])
-const categories = ref([])
+const categories = computed(() => referenceCategories.value)
 const selectedItems = ref([])
 const loading = ref(true)
 const loadError = ref('')
@@ -38,6 +42,7 @@ const categoryId = ref('')
 const stockFilter = ref('all')
 const supplierId = ref('')
 const savedOrders = ref([])
+const expandedVariantProducts = ref(new Set())
 const screen = ref('builder')
 const previewOrder = ref(null)
 const previewBackScreen = ref('builder')
@@ -46,7 +51,7 @@ const pageSize = 10
 const savedOrdersStorageKey = 'stock-import-replenishment-orders-v1'
 
 const selectedSupplier = computed(() =>
-    props.suppliers.find(supplier => String(supplier.id) === String(supplierId.value)) || null
+    suppliers.value.find(supplier => String(supplier.id) === String(supplierId.value)) || null
 )
 
 const stockStatus = product => {
@@ -77,7 +82,29 @@ const lastVisibleProduct = computed(() => Math.min(currentPage.value * pageSize,
 const outOfStockCount = computed(() => products.value.filter(product => Number(product.stock) <= 0).length)
 const lowStockCount = computed(() => products.value.filter(product => stockStatus(product) === 'low').length)
 const availableCount = computed(() => products.value.filter(product => stockStatus(product) === 'available').length)
-const selectedIds = computed(() => new Set(selectedItems.value.map(item => Number(item.id))))
+const itemKey = (productId, variantId = null) => `${productId}:${variantId || 'product'}`
+const selectedKeys = computed(() => new Set(selectedItems.value.map(item => itemKey(item.id, item.variant_id))))
+const productVariants = product => Array.isArray(product.variants) ? product.variants : []
+const variantsExpanded = product => expandedVariantProducts.value.has(Number(product.id))
+const toggleVariants = product => {
+    const next = new Set(expandedVariantProducts.value)
+    const id = Number(product.id)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    expandedVariantProducts.value = next
+}
+const variantLabel = variant => {
+    const attributes = Object.values(variant?.attributes || {})
+        .map(value => typeof value === 'object' ? (value.value || value.label || value.name || '') : value)
+        .filter(Boolean)
+    return attributes.join(' / ') || variant?.sku || `Biến thể #${variant?.id || ''}`
+}
+const isProductSelected = product => {
+    const variants = productVariants(product)
+    return variants.length
+        ? variants.every(variant => selectedKeys.value.has(itemKey(product.id, variant.id)))
+        : selectedKeys.value.has(itemKey(product.id))
+}
 const totalEstimate = computed(() => selectedItems.value.reduce(
     (total, item) => total + Math.max(0, Number(item.quantity) || 0) * Math.max(0, Number(item.cost_price) || 0),
     0,
@@ -89,7 +116,6 @@ const loadProducts = async () => {
     try {
         const { data } = await api.get('/stock-import/replenishment-products')
         products.value = Array.isArray(data.products) ? data.products : []
-        categories.value = Array.isArray(data.categories) ? data.categories : []
     } catch (error) {
         console.error('Không thể tải sản phẩm cần nhập:', error)
         loadError.value = 'Không tải được danh sách tồn kho. Hãy thử tải lại.'
@@ -101,7 +127,13 @@ const loadProducts = async () => {
 const suggestedQuantity = product => Math.max(1, Math.ceil(Number(product.alert_stock || 0) - Number(product.stock || 0)))
 
 const selectProduct = (product, checked) => {
-    const existingIndex = selectedItems.value.findIndex(item => Number(item.id) === Number(product.id))
+    const variants = productVariants(product)
+    if (variants.length) {
+        variants.forEach(variant => selectVariant(product, variant, checked))
+        return
+    }
+
+    const existingIndex = selectedItems.value.findIndex(item => itemKey(item.id, item.variant_id) === itemKey(product.id))
     if (!checked) {
         if (existingIndex !== -1) selectedItems.value.splice(existingIndex, 1)
         return
@@ -109,6 +141,9 @@ const selectProduct = (product, checked) => {
     if (existingIndex !== -1) return
     selectedItems.value.push({
         id: product.id,
+        variant_id: null,
+        variant: null,
+        product,
         name: product.name,
         sku: product.sku,
         unit_name: product.unit_name,
@@ -117,19 +152,39 @@ const selectProduct = (product, checked) => {
     })
 }
 
+const selectVariant = (product, variant, checked) => {
+    const key = itemKey(product.id, variant.id)
+    const existingIndex = selectedItems.value.findIndex(item => itemKey(item.id, item.variant_id) === key)
+    if (!checked) {
+        if (existingIndex !== -1) selectedItems.value.splice(existingIndex, 1)
+        return
+    }
+    if (existingIndex !== -1) return
+    selectedItems.value.push({
+        id: product.id,
+        variant_id: variant.id,
+        variant,
+        product,
+        name: product.name,
+        sku: variant.sku || product.sku,
+        unit_name: product.unit_name,
+        quantity: suggestedQuantity(product),
+        cost_price: Number(variant.cost_price ?? product.cost_price ?? 0),
+    })
+}
+
 const selectAllVisible = () => {
-    const visibleIds = new Set(paginatedProducts.value.map(product => Number(product.id)))
     const allSelected = paginatedProducts.value.length > 0
-        && paginatedProducts.value.every(product => selectedIds.value.has(Number(product.id)))
+        && paginatedProducts.value.every(isProductSelected)
     if (allSelected) {
-        selectedItems.value = selectedItems.value.filter(item => !visibleIds.has(Number(item.id)))
+        paginatedProducts.value.forEach(product => selectProduct(product, false))
         return
     }
     paginatedProducts.value.forEach(product => selectProduct(product, true))
 }
 
-const removeItem = id => {
-    selectedItems.value = selectedItems.value.filter(item => Number(item.id) !== Number(id))
+const removeItem = item => {
+    selectedItems.value = selectedItems.value.filter(candidate => itemKey(candidate.id, candidate.variant_id) !== itemKey(item.id, item.variant_id))
 }
 
 const persistSavedOrders = () => {
@@ -140,9 +195,31 @@ const buildOrder = () => ({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     code: `DH-${new Date().toLocaleDateString('vi-VN').replaceAll('/', '')}-${String(Date.now()).slice(-4)}`,
     savedAt: new Date().toISOString(),
+    supplierId: selectedSupplier.value?.id || null,
     supplierName: selectedSupplier.value?.name || '',
     items: selectedItems.value.map(item => ({ ...item })),
 })
+
+const applyToStockImport = (order = buildOrder()) => {
+    if (!order?.items?.length) {
+        toast.error('Hãy chọn ít nhất một sản phẩm để áp dụng')
+        return
+    }
+
+    emit('apply', {
+        supplierId: order.supplierId || null,
+        supplierName: order.supplierName || '',
+        items: order.items.map(item => ({
+            id: item.id,
+            name: item.name,
+            variant_id: item.variant_id || null,
+            variant: item.variant || null,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            cost_price: Math.max(0, Number(item.cost_price) || 0),
+            product: item.product || products.value.find(product => Number(product.id) === Number(item.id)) || null,
+        })),
+    })
+}
 
 const saveOrder = () => {
     if (!selectedItems.value.length) {
@@ -371,6 +448,7 @@ onMounted(() => {
                 <button type="button" class="col-span-2 inline-flex min-h-9 items-center gap-1 justify-self-start rounded-lg px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 sm:col-span-1 sm:mr-auto sm:text-sm" @click="screen = previewBackScreen; previewOrder = null"><ArrowLeft class="h-4 w-4" /> Quay lại</button>
                 <button type="button" class="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:gap-2 sm:px-3 sm:text-sm" title="Xuất bảng thành ảnh PNG" @click="exportOrderImage"><ImageDown class="h-4 w-4 shrink-0" /> Xuất ảnh</button>
                 <button type="button" class="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 text-xs font-semibold text-white hover:bg-emerald-700 sm:gap-2 sm:px-3 sm:text-sm" title="Xuất bảng thành file Excel" @click="exportOrderExcel"><FileSpreadsheet class="h-4 w-4 shrink-0" /> Xuất Excel</button>
+                <button type="button" class="col-span-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700 sm:col-span-1 sm:gap-2 sm:px-3 sm:text-sm" @click="applyToStockImport(previewOrder)"><Check class="h-4 w-4 shrink-0" /> Áp dụng vào phiếu nhập</button>
             </div>
             <div class="max-h-[calc(100dvh-14rem)] overflow-auto rounded-lg border border-slate-200">
                 <table class="w-full table-fixed border-collapse text-xs sm:text-sm">
@@ -409,6 +487,7 @@ onMounted(() => {
                     </div>
                     <div class="text-sm font-semibold text-slate-800">{{ formatCurrency(order.items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.cost_price || 0), 0)) }}</div>
                     <button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700" @click="showOrder(order, 'saved')">Xem đơn</button>
+                    <button type="button" class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100" @click="applyToStockImport(order)">Áp dụng</button>
                     <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" :aria-label="`Xóa ${order.code}`" @click="deleteSavedOrder(order.id)"><X class="h-4 w-4" /></button>
                 </div>
             </div>
@@ -456,7 +535,7 @@ onMounted(() => {
 
                 <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2 sm:px-4">
                     <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
-                        <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="paginatedProducts.length > 0 && paginatedProducts.every(product => selectedIds.has(Number(product.id)))" @change="selectAllVisible" />
+                        <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="paginatedProducts.length > 0 && paginatedProducts.every(isProductSelected)" @change="selectAllVisible" />
                         Chọn trang này
                     </label>
                     <span class="text-xs text-slate-400">{{ firstVisibleProduct }}–{{ lastVisibleProduct }} / {{ filteredProducts.length }} mặt hàng</span>
@@ -477,11 +556,16 @@ onMounted(() => {
                         <p class="mt-1 text-xs text-slate-500">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc tồn kho.</p>
                     </div>
                     <div v-else class="divide-y divide-slate-100">
-                        <label v-for="product in paginatedProducts" :key="product.id" class="flex cursor-pointer items-start gap-3 px-3 py-2 transition hover:bg-blue-50/50 sm:px-4">
-                            <input type="checkbox" class="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="selectedIds.has(Number(product.id))" @change="selectProduct(product, $event.target.checked)" />
+                        <div v-for="product in paginatedProducts" :key="product.id" class="px-3 py-2 transition hover:bg-blue-50/50 sm:px-4">
+                            <label class="flex cursor-pointer items-start gap-3">
+                            <input type="checkbox" class="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="isProductSelected(product)" @change="selectProduct(product, $event.target.checked)" />
                             <span class="min-w-0 flex-1">
                                 <span class="flex flex-wrap items-center gap-2">
-                                    <span class="truncate text-sm font-semibold text-slate-900">{{ product.name }}</span>
+                                    <button v-if="productVariants(product).length" type="button" class="inline-flex min-w-0 items-center gap-1 truncate text-left text-sm font-semibold text-slate-900 hover:text-blue-700" @click.prevent.stop="toggleVariants(product)">
+                                        <span class="truncate">{{ product.name }}</span>
+                                        <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform" :class="variantsExpanded(product) ? 'rotate-180' : ''" />
+                                    </button>
+                                    <span v-else class="truncate text-sm font-semibold text-slate-900">{{ product.name }}</span>
                                     <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="stockStatus(product) === 'out' ? 'bg-red-50 text-red-700' : stockStatus(product) === 'low' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">{{ stockStatus(product) === 'out' ? 'Hết hàng' : stockStatus(product) === 'low' ? 'Gần hết' : 'Còn hàng' }}</span>
                                 </span>
                                 <span class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
@@ -491,7 +575,16 @@ onMounted(() => {
                                 </span>
                             </span>
                             <span class="hidden shrink-0 text-right text-xs text-slate-500 sm:block">Giá nhập gần nhất<br /><b class="mt-0.5 inline-block text-slate-800">{{ formatCurrency(product.cost_price) }}</b></span>
-                        </label>
+                            </label>
+                            <div v-if="productVariants(product).length && variantsExpanded(product)" class="ml-7 mt-2 space-y-1 border-l border-blue-100 pl-3">
+                                <label v-for="variant in productVariants(product)" :key="variant.id" class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-white">
+                                    <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :checked="selectedKeys.has(itemKey(product.id, variant.id))" @change="selectVariant(product, variant, $event.target.checked)" />
+                                    <span class="min-w-0 flex-1 truncate font-semibold text-slate-700">{{ variantLabel(variant) }}</span>
+                                    <span class="shrink-0 text-slate-400">Tồn: {{ variant.stock ?? 0 }}</span>
+                                    <span class="shrink-0 font-semibold text-slate-600">{{ formatCurrency(variant.cost_price ?? product.cost_price) }}</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div v-if="pageCount > 1" class="flex items-center justify-between border-t border-slate-100 px-4 py-2 sm:px-5">
@@ -529,8 +622,8 @@ onMounted(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <tr v-for="item in selectedItems" :key="item.id" class="hover:bg-slate-50/70">
-                                    <td class="break-words px-2 py-2 font-semibold leading-4 text-slate-900">{{ item.name }}</td>
+                                <tr v-for="item in selectedItems" :key="itemKey(item.id, item.variant_id)" class="hover:bg-slate-50/70">
+                                    <td class="break-words px-2 py-2 font-semibold leading-4 text-slate-900">{{ item.name }}<span v-if="item.variant" class="mt-0.5 block text-[10px] font-medium text-indigo-600">{{ variantLabel(item.variant) }}</span></td>
                                     <td class="px-1 py-2">
                                         <FloatingInput
                                             v-model.number="item.quantity"
@@ -556,7 +649,7 @@ onMounted(() => {
                                     </td>
                                     <td class="px-2 py-2 text-right font-semibold tabular-nums text-slate-700">{{ formatCurrency(Math.max(0, Number(item.quantity) || 0) * Math.max(0, Number(item.cost_price) || 0)) }}</td>
                                     <td class="px-1 py-2 text-center">
-                                        <button type="button" class="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" :aria-label="`Bỏ ${item.name} khỏi danh sách`" @click="removeItem(item.id)"><X class="h-4 w-4" /></button>
+                                        <button type="button" class="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" :aria-label="`Bỏ ${item.name} khỏi danh sách`" @click="removeItem(item)"><X class="h-4 w-4" /></button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -578,6 +671,9 @@ onMounted(() => {
                         </button>
                         <button type="button" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedItems.length || selectedItems.some(item => Number(item.quantity) < 1)" @click="showCurrentOrder">
                             <Check class="h-4 w-4" /> Xem đơn
+                        </button>
+                        <button type="button" class="col-span-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedItems.length || selectedItems.some(item => Number(item.quantity) < 1)" @click="applyToStockImport()">
+                            <Check class="h-4 w-4" /> Áp dụng vào phiếu nhập
                         </button>
                     </div>
                 </div>

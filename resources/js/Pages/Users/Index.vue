@@ -52,6 +52,7 @@ const search = (value) => {
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
+                only: ['users', 'filters'],
             }
         )
     }, 250)
@@ -59,7 +60,7 @@ const search = (value) => {
 
 const sort = ({ field, order }) => router.get(route('users.index'), {
     search: searchValue.value || undefined, sort_by: field, sort_order: order, per_page: props.filters?.per_page,
-}, { preserveState: true, preserveScroll: true, replace: true })
+}, { preserveState: true, preserveScroll: true, replace: true, only: ['users', 'filters'] })
 
 watch(searchValue, search)
 onBeforeUnmount(() => clearTimeout(searchTimeout))

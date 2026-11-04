@@ -36,7 +36,7 @@ class RepairController extends Controller
      */
     public function index(
         Request $request
-        ): Response {
+        ): Response|JsonResponse {
 
         $search = trim(
             (string) $request->input(
@@ -61,7 +61,6 @@ class RepairController extends Controller
         $openRepairId = (int) $request->query('open_repair', 0);
         $statusCounts = Repair::query()
             ->selectRaw('status, COUNT(*) as total')
-            ->whereIn('status', ['pending', 'repairing', 'done'])
             ->groupBy('status')
             ->pluck('total', 'status');
 
@@ -95,6 +94,14 @@ class RepairController extends Controller
 
                                 ->orWhere(
                                     'device_name',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhereRaw('CAST(issue AS CHAR) LIKE ?', ["%{$search}%"])
+
+                                ->orWhere(
+                                    'issue',
                                     'like',
                                     "%{$search}%"
                                 )
@@ -272,6 +279,32 @@ class RepairController extends Controller
 
             ->withQueryString();
 
+        $stats = [
+            'total_count' => (int) $statusCounts->sum(),
+            'pending_count' => (int) ($statusCounts['pending'] ?? 0),
+            'repairing_count' => (int) ($statusCounts['repairing'] ?? 0),
+            'done_count' => (int) ($statusCounts['done'] ?? 0),
+            'returned_count' => (int) ($statusCounts['returned'] ?? 0),
+            'cancelled_count' => (int) ($statusCounts['cancelled'] ?? 0),
+        ];
+        $filters = [
+            'search' => $search,
+            'status' => $status,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'sort_by' => $sortBy,
+            'sort_order' => $sortOrder,
+            'per_page' => $perPage,
+        ];
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'repairs' => $repairs,
+                'stats' => $stats,
+                'filters' => $filters,
+            ]);
+        }
+
         return inertia(
 
             'Repairs/Index',
@@ -280,23 +313,8 @@ class RepairController extends Controller
 
                 'repairs' => $repairs,
                 'createdRepairId' => $createdRepairId,
-                'stats' => [
-                    'pending_count' => (int) ($statusCounts['pending'] ?? 0),
-                    'repairing_count' => (int) ($statusCounts['repairing'] ?? 0),
-                    'done_count' => (int) ($statusCounts['done'] ?? 0),
-                ],
-
-                'filters' => [
-
-                    'search' => $search,
-
-                    'status' => $status,
-                    'date_from' => $dateFrom,
-                    'date_to' => $dateTo,
-                    'sort_by' => $sortBy,
-                    'sort_order' => $sortOrder,
-                    'per_page' => $perPage,
-                ],
+                'stats' => $stats,
+                'filters' => $filters,
             ]
         );
 
@@ -887,6 +905,11 @@ class RepairController extends Controller
             'customer_id', 'customer_conflict_action', 'customer_name', 'customer_phone', 'contact_phone', 'identity_card',
         ]);
         $this->applyCustomerPhoneConflictChoice($customerInput);
+        $customerName = trim((string) ($customerInput['customer_name'] ?? ''));
+        if (mb_strtolower($customerName) === 'khách lẻ') {
+            $customerName = '';
+        }
+        $customerInput['customer_name'] = $customerName;
 
         DB::beginTransaction();
 
@@ -906,22 +929,32 @@ class RepairController extends Controller
                     ? Customer::query()->where('phone', $customerInput['customer_phone'])->first()
                     : null);
 
-            if (!$customer) {
+            $hasCustomerDetails = $customerName !== ''
+                || filled($customerInput['customer_phone'] ?? null)
+                || filled($customerInput['identity_card'] ?? null);
+            if (!$customer && $hasCustomerDetails && $customerName === '') {
+                throw ValidationException::withMessages(['customer_name' => 'Nhập tên khách hàng hoặc để trống toàn bộ thông tin để tiếp nhận khách lẻ.']);
+            }
+
+            if (!$customer && $hasCustomerDetails) {
                 $customer = app(\App\Services\CustomerService::class)->create([
-                    'full_name' => $customerInput['customer_name'],
+                    'full_name' => $customerName,
                     'phone' => $customerInput['customer_phone'] ?? null,
                     'cccd' => $customerInput['identity_card'] ?? null,
                 ]);
-            } else {
+            } elseif ($customer) {
                 // Keep the selected customer's editable intake fields in sync with the customer record.
                 $customer->fill([
-                    'full_name' => $customerInput['customer_name'],
+                    'full_name' => $customerName ?: $customer->full_name,
                     'phone' => $customerInput['customer_phone'] ?? null,
                     'cccd' => $customerInput['identity_card'] ?? null,
                 ])->save();
             }
 
             $hasWarrantySource = $request->filled('warranty_source_type') && $request->filled('warranty_source_id');
+            if ($hasWarrantySource && ! $customer) {
+                throw ValidationException::withMessages(['customer_id' => 'Cần chọn khách hàng để xác nhận bảo hành.']);
+            }
             $warranty = $hasWarrantySource
                 ? $this->resolveWarrantySource(
                     $customer,
@@ -944,8 +977,7 @@ class RepairController extends Controller
                     'code' =>
                         'SC-' . now()->format('YmdHis'),
 
-                    'customer_id' =>
-                        $customer->id,
+                    'customer_id' => $customer?->id,
 
                     'contact_phone' =>
                         $customerInput['contact_phone'] ?? null,
@@ -1001,16 +1033,18 @@ class RepairController extends Controller
                         now(),
                 ]);
 
-            $deviceLookup = ['customer_id' => $customer->id];
-            if ($request->filled('imei')) {
-                $deviceLookup['imei'] = $request->imei;
-            } else {
-                $deviceLookup['model'] = $request->device_name;
+            if ($customer) {
+                $deviceLookup = ['customer_id' => $customer->id];
+                if ($request->filled('imei')) {
+                    $deviceLookup['imei'] = $request->imei;
+                } else {
+                    $deviceLookup['model'] = $request->device_name;
+                }
+                CustomerDevice::query()->updateOrCreate($deviceLookup, [
+                    'model' => $request->device_name,
+                    'serial' => $request->imei,
+                ]);
             }
-            CustomerDevice::query()->updateOrCreate($deviceLookup, [
-                'model' => $request->device_name,
-                'serial' => $request->imei,
-            ]);
 
 
 
@@ -1686,7 +1720,7 @@ class RepairController extends Controller
 
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_conflict_action' => ['nullable', 'in:replace,contact'],
-            'customer_name' => ['required', 'string', 'max:255'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
             'customer_phone' => ['nullable', 'string', 'max:20', Rule::unique('customers', 'phone')->ignore($request->input('customer_id'))],
             'identity_card' => ['nullable', 'string', 'max:20'],
             'contact_phone' => ['nullable', 'string', 'max:20'],
@@ -1742,6 +1776,11 @@ class RepairController extends Controller
         ]);
 
         $this->applyCustomerPhoneConflictChoice($validated);
+        $customerName = trim((string) ($validated['customer_name'] ?? ''));
+        if (mb_strtolower($customerName) === 'khách lẻ') {
+            $customerName = '';
+        }
+        $validated['customer_name'] = $customerName;
 
         DB::beginTransaction();
 
@@ -1755,21 +1794,31 @@ class RepairController extends Controller
                     ? Customer::query()->where('phone', $validated['customer_phone'])->first()
                     : null);
 
-            if (!$customer) {
+            $hasCustomerDetails = $customerName !== ''
+                || filled($validated['customer_phone'] ?? null)
+                || filled($validated['identity_card'] ?? null);
+            if (!$customer && $hasCustomerDetails && $customerName === '') {
+                throw ValidationException::withMessages(['customer_name' => 'Nhập tên khách hàng hoặc để trống toàn bộ thông tin để tiếp nhận khách lẻ.']);
+            }
+
+            if (!$customer && $hasCustomerDetails) {
                 $customer = app(\App\Services\CustomerService::class)->create([
-                    'full_name' => $validated['customer_name'],
+                    'full_name' => $customerName,
                     'phone' => $validated['customer_phone'] ?? null,
                     'cccd' => $validated['identity_card'] ?? null,
                 ]);
-            } else {
+            } elseif ($customer) {
                 $customer->update([
-                    'full_name' => $validated['customer_name'],
+                    'full_name' => $customerName ?: $customer->full_name,
                     'phone' => $validated['customer_phone'] ?? null,
                     'cccd' => $validated['identity_card'] ?? null,
                 ]);
             }
 
             $hasWarrantySource = ! empty($validated['warranty_source_type']) && ! empty($validated['warranty_source_id']);
+            if ($hasWarrantySource && ! $customer) {
+                throw ValidationException::withMessages(['customer_id' => 'Cần chọn khách hàng để xác nhận bảo hành.']);
+            }
             $warranty = $hasWarrantySource
                 ? $this->resolveWarrantySource(
                     $customer,
@@ -1781,7 +1830,7 @@ class RepairController extends Controller
 
             $repair->update([
 
-                'customer_id' => $customer->id,
+                'customer_id' => $customer?->id,
                 'contact_phone' => $validated['contact_phone'] ?? null,
 
                 'device_name' =>

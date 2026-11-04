@@ -33,6 +33,7 @@ class StockImport extends Model
         'grand_total',
         'paid_amount',
         'old_debt_paid',
+        'old_debt_allocations',
         'payment_method',
         'payment_reference',
         'note',
@@ -50,6 +51,7 @@ class StockImport extends Model
         'grand_total'  => 'decimal:2',
         'paid_amount'  => 'decimal:2',
         'old_debt_paid' => 'decimal:2',
+        'old_debt_allocations' => 'array',
     ];
 
     /*

@@ -38,6 +38,8 @@ import {
 
 const props = defineProps({
     initialPartyType: { type: String, default: 'supplier' },
+    initialImport: { type: Object, default: null },
+    initialReplenishment: { type: Object, default: null },
     suppliers: {
         type: Array,
         default: () => [],
@@ -71,6 +73,7 @@ const form = useForm({
     extra_fee: 0,
     paid_amount: 0,
     old_debt_paid: 0,
+    old_debt_allocations: [],
     payment_method: 'cash',
     payment_reference: '',
     note: '',
@@ -276,6 +279,11 @@ onMounted(() => {
     document.addEventListener('pointerdown', closeResultsOnOutsideClick)
     window.addEventListener('resize', updateProductDropdownPosition)
     window.addEventListener('scroll', updateProductDropdownPosition, true)
+
+    if (!props.initialImport && props.initialReplenishment?.items?.length) {
+        hydrateReplenishmentDraft(props.initialReplenishment)
+    }
+
 })
 
 onBeforeUnmount(() => {
@@ -292,6 +300,156 @@ onBeforeUnmount(() => {
 */
 
 const selectedItems = ref([])
+
+const hydrateReplenishmentDraft = async (draft) => {
+    const requestedItems = Array.isArray(draft?.items) ? draft.items : []
+    const ids = [...new Set(requestedItems.map(item => Number(item.id)).filter(Boolean))]
+    if (!ids.length) return
+
+    const supplier = props.suppliers.find(item => String(item.id) === String(draft.supplierId))
+    if (supplier) selectSupplier(supplier)
+
+    try {
+        // Ưu tiên dữ liệu được chuyển trực tiếp từ danh sách lấy hàng: dữ liệu
+        // này chứa đầy đủ biến thể đang được chọn và không bị độ trễ API.
+        const productsById = new Map(
+            requestedItems
+                .filter(item => item.product?.id)
+                .map(item => [Number(item.product.id), item.product])
+        )
+        const missingIds = ids.filter(id => !productsById.has(id))
+        if (missingIds.length) {
+            const { data: products } = await api.get('/products/list-import', { params: { ids: missingIds } })
+            ;(products || []).forEach(product => productsById.set(Number(product.id), product))
+        }
+        let needsConfiguration = false
+
+        requestedItems.forEach(source => {
+            const product = productsById.get(Number(source.id))
+            if (!product) return
+
+            const target = selectProduct(product, { configure: false })
+            const quantity = Math.max(1, Number(source.quantity) || 1)
+            const costPrice = Math.max(0, Number(source.cost_price) || 0)
+
+            target.cost_price = costPrice
+            target.cost_price_input = costPrice
+
+            if (target.type === 'simple') {
+                target.quantity = quantity
+            } else if (target.type === 'variant' && source.variant_id) {
+                const variant = (target.available_variants || target.variants || [])
+                    .find(option => Number(option.id) === Number(source.variant_id))
+                if (!variant) return
+
+                const existingRow = target.rows.find(row => Number(row.variant_id) === Number(variant.id))
+                const row = {
+                    variant_id: variant.id,
+                    variant,
+                    quantity,
+                    cost_price: costPrice,
+                    sell_price: Number(variant.sell_price ?? target.sell_price ?? 0),
+                }
+                if (existingRow) Object.assign(existingRow, row)
+                else target.rows.push(row)
+            } else {
+                // The replenishment list has no variant/IMEI identity. Keep the
+                // product in the receipt and require the user to choose that data.
+                target.replenishment_quantity = quantity
+                needsConfiguration = true
+            }
+        })
+
+        if (!selectedItems.value.length) {
+            toast.error('Không tìm thấy sản phẩm nào trong danh sách lấy hàng.')
+            return
+        }
+
+        toast.success(needsConfiguration
+            ? 'Đã áp dụng danh sách. Hãy chọn biến thể hoặc IMEI cho các sản phẩm cần quản lý riêng.'
+            : 'Đã áp dụng danh sách lấy hàng vào phiếu nhập.')
+    } catch (error) {
+        console.error('Không thể áp dụng danh sách lấy hàng:', error)
+        toast.error('Không thể tải sản phẩm từ danh sách lấy hàng. Vui lòng thử lại.')
+    }
+}
+
+// Modal có thể được tạo trước khi Vue truyền xong prop từ danh sách lấy hàng.
+// Watch ngay lập tức để không bỏ lỡ lần truyền đó.
+let replenishmentDraftKey = ''
+watch(() => props.initialReplenishment, draft => {
+    if (props.initialImport || !draft?.items?.length) return
+    const key = `${draft.supplierId || ''}:${draft.items.map(item => `${item.id}-${item.variant_id || ''}-${item.quantity}-${item.cost_price}`).join('|')}`
+    if (key === replenishmentDraftKey) return
+    replenishmentDraftKey = key
+    hydrateReplenishmentDraft(draft)
+}, { deep: true })
+
+const hydrateInitialImport = (stockImport) => {
+    if (!stockImport) return
+
+    partyType.value = stockImport.party_type || 'supplier'
+    form.party_type = partyType.value
+    form.supplier_id = stockImport.supplier_id || null
+    form.customer_id = stockImport.customer_id || null
+    form.party_name = stockImport.party_name || stockImport.customer?.full_name || stockImport.supplier?.name || ''
+    form.party_phone = stockImport.party_phone || stockImport.customer?.phone || stockImport.supplier?.phone || ''
+    form.party_address = stockImport.party_address || stockImport.customer?.address || stockImport.supplier?.address || ''
+    form.party_cccd = stockImport.party_cccd || stockImport.customer?.cccd || ''
+    form.import_date = stockImport.import_date?.slice(0, 10) || form.import_date
+    form.discount = Number(stockImport.discount || 0)
+    form.extra_fee = Number(stockImport.extra_fee || 0)
+    form.paid_amount = Number(stockImport.paid_amount || 0)
+    form.old_debt_paid = Number(stockImport.old_debt_paid || 0)
+    form.old_debt_allocations = stockImport.old_debt_allocations || []
+    form.payment_method = stockImport.payment_method || 'cash'
+    form.payment_reference = stockImport.payment_reference || ''
+    form.note = stockImport.note || ''
+    selectedSupplier.value = stockImport.supplier || null
+    selectedCustomer.value = stockImport.customer || null
+    customerDraft.value = {
+        full_name: form.party_name || 'Khách lẻ', phone: form.party_phone,
+        address: form.party_address, cccd: form.party_cccd,
+    }
+
+    const grouped = new Map()
+    ;(stockImport.items || []).forEach(source => {
+        const imeis = (source.import_imeis || []).map(history => ({
+            imei: history.product_imei?.imei || history.imei,
+            variant_id: history.product_imei?.variant_id || source.variant_id || null,
+            variant: history.product_imei?.variant || source.variant || null,
+            cost_price: Number(history.cost_price || source.cost_price || 0),
+            sell_price: Number(history.sell_price || source.product?.sell_price || 0),
+            extra_info: history.product_imei?.extra_info || history.meta?.extra_info || null,
+            warranty_duration_value: null,
+            warranty_duration_unit: 'months',
+        }))
+        const type = imeis.length ? (source.variant_id ? 'imei_variant' : 'imei') : (source.variant_id ? 'variant' : 'simple')
+        const key = `${source.product_id}-${type}`
+        let item = grouped.get(key)
+        if (!item) {
+            item = {
+                type, product_id: source.product_id, name: source.product?.name || 'Sản phẩm',
+                unit: source.unit_name || source.unit?.short_name || 'Cái', unit_id: source.unit_id,
+                unit_name: source.unit_name, has_unit_conversion: Number(source.conversion_factor || 1) > 1,
+                price_unit_basis: 'conversion', conversion_factor: Number(source.conversion_factor || 1),
+                base_unit_name: source.product?.unit?.short_name || 'Cái', conversion_unit: source.product?.conversion_unit || null,
+                quantity: 0, cost_price: Number(source.cost_price || 0), sell_price: Number(source.product?.sell_price || 0),
+                has_vat: Boolean(source.has_vat), extra_info: source.extra_info || {},
+                supplier_warranty_value: source.supplier_warranty_value || null,
+                supplier_warranty_unit: source.supplier_warranty_unit || 'months',
+                imeis: [], rows: [], available_variants: source.product?.variants || [], variants: source.product?.variants || [],
+            }
+            grouped.set(key, item)
+        }
+        if (type === 'simple') item.quantity += Number(source.quantity || 0)
+        else if (type === 'variant') item.rows.push({ variant_id: source.variant_id, variant: source.variant, quantity: Number(source.quantity || 0), cost_price: Number(source.cost_price || 0), sell_price: Number(source.product?.sell_price || 0) })
+        else item.imeis.push(...imeis)
+    })
+    selectedItems.value = [...grouped.values()]
+}
+
+if (props.initialImport) hydrateInitialImport(props.initialImport)
 
 const unitLabel = (unit, fallback = 'Cái') => {
     if (typeof unit === 'string') return unit || fallback
@@ -486,7 +644,12 @@ const selectProduct = (product, { configure = true } = {}) => {
 
             is_used: false,
             has_vat: Boolean(page.props.settings?.stock_import_vat_default),
-            extra_info: {},
+            extra_info: item.last_customer_warranty?.value > 0
+                ? {
+                    customer_warranty_duration_value: item.last_customer_warranty.value,
+                    customer_warranty_duration_unit: item.last_customer_warranty.unit || 'months',
+                }
+                : {},
 
             imeis: [],
 
@@ -874,6 +1037,21 @@ const importPrice = (item, value) => {
     return price * Math.max(1, Number(item.conversion_factor || 1))
 }
 
+const itemExtraInfo = (item) => {
+    const source = item?.extra_info && typeof item.extra_info === 'object' ? item.extra_info : {}
+    const warrantyValue = Number(source.customer_warranty_duration_value || 0)
+    const extraInfo = {
+        ...(partyType.value === 'customer' && item.is_used
+            ? { is_used: true, account: source.account || null, password: source.password || null }
+            : {}),
+        customer_warranty_duration_value: warrantyValue > 0 ? warrantyValue : null,
+        customer_warranty_duration_unit: warrantyValue > 0 ? (source.customer_warranty_duration_unit || 'months') : null,
+        note: source.note || null,
+    }
+    const cleaned = Object.fromEntries(Object.entries(extraInfo).filter(([, value]) => value !== null && value !== ''))
+    return Object.keys(cleaned).length ? cleaned : null
+}
+
 const handlePaymentAction = () => {
     paymentActionError.value = ''
 
@@ -920,6 +1098,9 @@ const confirm = (payment = {}) => {
     form.old_debt_paid = partyType.value === 'supplier'
         ? Math.max(0, Number(payment.old_debt_paid || 0))
         : 0
+    form.old_debt_allocations = partyType.value === 'supplier'
+        ? (payment.old_debt_allocations || [])
+        : []
     form.payment_reference = partyType.value === 'supplier' ? (payment.payment_reference || '') : ''
 
     form.items = selectedItems.value.flatMap(item => {
@@ -936,9 +1117,7 @@ const confirm = (payment = {}) => {
                 has_vat: Boolean(item.has_vat),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
-                extra_info: partyType.value === 'customer' && item.is_used
-                    ? { is_used: true, account: item.extra_info?.account || null, password: item.extra_info?.password || null }
-                    : null,
+                extra_info: itemExtraInfo(item),
                 imeis: [],
             }]
         }
@@ -958,9 +1137,7 @@ const confirm = (payment = {}) => {
                     has_vat: Boolean(item.has_vat),
                     supplier_warranty_value: item.supplier_warranty_value || null,
                     supplier_warranty_unit: item.supplier_warranty_unit || 'months',
-                    extra_info: partyType.value === 'customer' && item.is_used
-                        ? { is_used: true, account: item.extra_info?.account || null, password: item.extra_info?.password || null }
-                        : null,
+                    extra_info: itemExtraInfo(item),
                     imeis: [],
                 }))
         }
@@ -999,6 +1176,22 @@ const confirm = (payment = {}) => {
     })
 
     if (!form.items.length) {
+        return
+    }
+
+    if (props.initialImport) {
+        form.put(`/stock-import/${props.initialImport.id}`, {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => {
+                toast.success('Đã cập nhật phiếu nhập thành công.')
+                emit('created')
+            },
+            onError: (errors) => {
+                paymentActionError.value = Object.values(errors || {}).flat().filter(Boolean).join(' ')
+                    || 'Không cập nhật được phiếu nhập. Vui lòng kiểm tra lại thông tin.'
+            },
+        })
         return
     }
 

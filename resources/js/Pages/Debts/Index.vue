@@ -40,6 +40,7 @@ const scanMessage = ref('')
 const error = ref('')
 const form = useForm({ amount: '', payment_method: 'cash', note: '', order_id: '' })
 let searchTimer
+const isEditingSearch = ref(false)
 
 const openDebtReminder = () => {
     const url = new URL(window.location.href)
@@ -63,7 +64,9 @@ const payReminder = () => {
     if (party) pay(party)
 }
 
-watch(() => props.filters.search, value => { search.value = value || '' })
+watch(() => props.filters.search, value => {
+    if (!isEditingSearch.value) search.value = value || ''
+})
 watch(() => page.url, openDebtReminder, { immediate: true })
 watch(() => page.url, openCustomerDebtDetails, { immediate: true })
 watch(() => props.rows, openCustomerDebtDetails)
@@ -73,7 +76,7 @@ watch(search, value => {
     searchTimer = setTimeout(() => router.get(
         isCustomer.value ? route('debts.customers') : route('debts.suppliers'),
         { search: value || undefined, per_page: props.filters?.per_page, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order },
-        { preserveState: true, preserveScroll: true, replace: true },
+        { preserveState: true, preserveScroll: true, replace: true, only: ['rows', 'summary', 'filters'] },
     ), 250)
 })
 
@@ -82,7 +85,7 @@ const sort = field => {
     const order = props.filters?.sort_by === field && props.filters?.sort_order === 'asc' ? 'desc' : 'asc'
     router.get(isCustomer.value ? route('debts.customers') : route('debts.suppliers'), {
         search: search.value || undefined, per_page: props.filters?.per_page, sort_by: field, sort_order: order,
-    }, { preserveState: true, preserveScroll: true, replace: true })
+    }, { preserveState: true, preserveScroll: true, replace: true, only: ['rows', 'summary', 'filters'] })
 }
 const pay = (row, order = null) => {
     selected.value = row
@@ -188,7 +191,7 @@ const submit = () => {
         <div class="space-y-3">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div><h2 class="font-bold text-slate-900">Danh sách còn công nợ</h2></div>
-                <label class="relative block sm:w-80"><Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" :size="16" /><input v-model="search" class="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại' : 'Tìm nhà cung cấp, mã hoặc số điện thoại'" /></label>
+                <label class="relative block sm:w-80"><Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" :size="16" /><input v-model="search" class="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại' : 'Tìm nhà cung cấp, mã hoặc số điện thoại'" @focus="isEditingSearch = true" @blur="isEditingSearch = false" /></label>
             </div>
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="hidden overflow-x-auto md:block">

@@ -136,6 +136,9 @@ export function useCart() {
         return null
     }
 
+    const hasTrackedBatches = (product, variantId = null) => (product.stock_batches || [])
+        .some(batch => Number(batch.variant_id || 0) === Number(variantId || 0))
+
     const applyBatchToItem = (item, product, batch) => {
         item.stock_batches = product.stock_batches || item.stock_batches || []
         item.batch_id = batch?.id ?? null
@@ -672,6 +675,11 @@ export function useCart() {
 
             const batch = nextSellableBatch(product, variant.id)
 
+            if (!batch && hasTrackedBatches(product, variant.id) && !allowsNegativeStock.value) {
+                toast.error(`Sản phẩm ${product.name} đã được chọn hết vào giỏ`)
+                return
+            }
+
             const existing =
                 cart.value.find((item) => {
 
@@ -763,6 +771,10 @@ export function useCart() {
         */
 
         const batch = nextSellableBatch(product)
+        if (!batch && hasTrackedBatches(product) && !allowsNegativeStock.value) {
+            toast.error(`Sản phẩm ${product.name} đã được chọn hết vào giỏ`)
+            return
+        }
         const existing =
             cart.value.find((item) => {
 

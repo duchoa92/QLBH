@@ -12,12 +12,15 @@ use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\AdministrativeUnitController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\BankTransferWebhookController;
+use App\Http\Controllers\SettingController;
 
 Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class, 'receive'])->name('bank-payments.webhook');
 
 
 Route::middleware(['web', 'auth'])->group(function ()
 {
+    Route::get('/vietqr/apps/{platform}', fn (SettingController $controller, string $platform) => response()->json($controller->vietQrApps($platform)))
+        ->middleware('permission:stock_imports.create');
     Route::get('/global-search', GlobalSearchController::class);
     Route::get('/administrative-units/provinces', [AdministrativeUnitController::class, 'provinces'])
         ->middleware('permission:customers.create|customers.edit|pos.access|stock_imports.create');

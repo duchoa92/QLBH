@@ -51,7 +51,7 @@ const lightboxImage = ref(null);
 const form = useForm({
     customer_id: initial?.customer?.id || null,
     customer_conflict_action: '',
-    customer_name: initial?.customer?.name || 'Khách lẻ',
+    customer_name: initial?.customer?.name || '',
     customer_phone: initial?.customer?.phone || '',
     contact_phone: initial?.contact_phone || '',
     identity_card: initial?.customer?.identity_card || '',
@@ -277,10 +277,13 @@ const clearCustomer = () => {
     selectedCustomer.value = null;
     searchQuery.value = '';
     form.customer_id = null;
-    form.customer_name = 'Khách lẻ';
+    form.customer_name = '';
     form.customer_phone = '';
     form.contact_phone = '';
     form.identity_card = '';
+    selectedWarranty.value = null;
+    form.warranty_source_type = '';
+    form.warranty_source_id = null;
     loadCustomerDeviceSuggestions(null);
 };
 
@@ -1377,7 +1380,7 @@ const selectWorkflowStep = (status) => {
                     </div>
                 </header>
                 <div v-if="customerInfoExpanded" class="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
-                    <FloatingInput v-model="form.customer_name" label="Tên khách hàng *" placeholder-text="Khách lẻ" id="repair_customer_name" :error="form.errors.customer_name" required />
+                    <FloatingInput v-model="form.customer_name" label="Tên khách hàng (không bắt buộc)" placeholder-text="Khách lẻ" id="repair_customer_name" :error="form.errors.customer_name" />
                     <FloatingInput v-model="form.customer_phone" label="Số điện thoại" id="repair_customer_phone" :error="form.errors.customer_phone" />
                     <FloatingInput v-model="form.contact_phone" label="SĐT liên hệ khác" id="repair_contact_phone" :error="form.errors.contact_phone" />
                     <div class="relative"><FloatingInput v-model="form.identity_card" label="CCCD / CMND" id="repair_identity_card" :error="form.errors.identity_card" input-class="pr-12" /><CustomerIdCardScanner class="absolute right-1 top-1/2 -translate-y-1/2 " @read="applyScannedCustomerIdentity" @search="searchQuery = $event" /></div>

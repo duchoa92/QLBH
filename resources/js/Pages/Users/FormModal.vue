@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import { ShieldCheck } from 'lucide-vue-next'
 import axios from 'axios'
@@ -10,6 +10,7 @@ import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import RoleManagementDialog from './RoleManagementDialog.vue'
+import { useReferenceData } from '@/Stores/referenceData'
 
 const props = defineProps({
     user: {
@@ -30,8 +31,17 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'updated'])
+const { roles: referenceRoles, refreshReferenceData } = useReferenceData({ roles: props.roles })
 const roles = ref([...props.roles])
 const permissions = ref([...props.permissions])
+
+// Danh sách vai trò được dùng chung trong các form đang mở. Khi vai trò
+// thay đổi ở tab khác hoặc từ cơ sở dữ liệu, ô chọn cập nhật ngay.
+watch(referenceRoles, (freshRoles) => {
+    roles.value = props.canAssignSuperAdmin
+        ? [...freshRoles]
+        : freshRoles.filter(role => !role.system)
+}, { immediate: true })
 
 const form = useForm({
     name: props.user?.name ?? '',
@@ -69,6 +79,7 @@ const refreshRoles = async (change = {}) => {
         permissions.value = data.permissions || []
         const freshRoles = data.roles || []
         roles.value = props.canAssignSuperAdmin ? freshRoles : freshRoles.filter(role => !role.system)
+        await refreshReferenceData()
 
         if (change.deleted && form.role === change.name) form.role = ''
         else if (change.name && roles.value.some(role => role.name === change.name)) form.role = change.name

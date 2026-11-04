@@ -62,7 +62,20 @@ const cartQuantityForVariant = variant => props.cart.reduce((total, item) => (
         ? total + Number(item.quantity || 0)
         : total
 ), 0)
-const remainingVariantStock = variant => Number(variant?.stock || 0) - cartQuantityForVariant(variant)
+const remainingVariantStock = variant => {
+    const allVariantBatches = (props.product?.stock_batches || [])
+        .filter(batch => Number(batch.variant_id || 0) === Number(variant?.id || 0))
+
+    // Với hàng theo lô, tồn trong modal phải khớp đúng với từng lô chưa bị
+    // giữ ở giỏ. Nhờ vậy lô giá thấp dùng hết thì biến thể không còn chọn
+    // nhầm theo tổng tồn cũ.
+    if (allVariantBatches.length) {
+        return availableVariantBatches(variant)
+            .reduce((total, batch) => total + Number(batch.remaining_quantity || 0), 0)
+    }
+
+    return Number(variant?.stock || 0) - cartQuantityForVariant(variant)
+}
 const hasVariantStock = variant => allowNegativeStock.value || remainingVariantStock(variant) >= requiredVariantQuantity.value
 
 const canConfirm = computed(() => {
@@ -168,7 +181,19 @@ const itemCostPrice = (item) => Number(
     ?? 0
 )
 
-const variantCostPrice = (variant) => Number((variant?.cost_price > 0 ? variant.cost_price : null) ?? props.product?.cost_price ?? 0)
+const variantCostPriceLabel = (variant) => {
+    const costs = availableVariantBatches(variant)
+        .map(batch => Number(batch.cost_price || 0))
+        .filter(cost => cost > 0)
+
+    if (costs.length) {
+        const min = Math.min(...costs)
+        const max = Math.max(...costs)
+        return min === max ? formatMoney(min) : `${formatMoney(min)} - ${formatMoney(max)}`
+    }
+
+    return formatMoney((variant?.cost_price > 0 ? variant.cost_price : null) ?? props.product?.cost_price ?? 0)
+}
 const priceKey = (type, item) => `${type}:${item?.id ?? ''}`
 const isShowingCostPrice = (type, item) => costPriceSuggestionEnabled.value && showingCostPriceFor.value === priceKey(type, item)
 const showCostPrice = (type, item, event) => {
@@ -406,7 +431,7 @@ const confirm = () => {
                                     class="select-none text-xs font-extrabold"
                                     :class="isShowingCostPrice('variant', variant) ? 'text-amber-700' : 'text-rose-600'"
                                 >
-                                    {{ isShowingCostPrice('variant', variant) ? formatMoney(variantCostPrice(variant)) : variantPriceLabel(variant) }}
+                                    {{ isShowingCostPrice('variant', variant) ? variantCostPriceLabel(variant) : variantPriceLabel(variant) }}
                                 </span>
 
                                 <span class="text-right text-[10px] font-semibold rounded px-1.5 py-0.5" :class="!hasVariantStock(variant) ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-600'">

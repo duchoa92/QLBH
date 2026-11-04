@@ -61,7 +61,9 @@ watch([search, status], () => {
             per_page: props.filters?.per_page
         }, {
             preserveState: true,
-            replace: true
+            preserveScroll: true,
+            replace: true,
+            only: ['categories', 'filters'],
         })
     }, 300)
 })
@@ -177,7 +179,9 @@ const sort = ({ field, order }) => {
         per_page: props.filters?.per_page
     }, {
         preserveState: true,
-        replace: true
+        preserveScroll: true,
+        replace: true,
+        only: ['categories', 'filters'],
     })
 }
 </script>

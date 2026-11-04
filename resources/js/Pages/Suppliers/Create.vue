@@ -8,6 +8,7 @@ const form = useForm({
     phone: '',
     email: '',
     address: '',
+    bank_accounts: [],
 })
 
 const submit = () => {

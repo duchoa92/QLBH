@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Sale;
+use App\Models\CustomerDebt;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,6 +27,13 @@ class SaleReceiptController extends Controller
 
             'user',
         ]);
+
+        $sale->setAttribute('old_debt_paid', (float) CustomerDebt::query()
+            ->where('source_type', Sale::class)
+            ->where('source_id', $sale->id)
+            ->where('type', 'decrease')
+            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
+            ->sum('amount'));
 
         return Inertia::render(
             'Sales/Receipt',

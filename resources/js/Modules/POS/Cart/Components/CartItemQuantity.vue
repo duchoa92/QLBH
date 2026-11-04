@@ -27,17 +27,12 @@ const stockLimit = computed(() => {
 
     return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null
 })
-const otherLineQuantity = computed(() => props.cart.reduce((total, line) => {
-    if (line === props.item) return total
-
-    return Number(line.id) === Number(props.item.id)
-        && Number(line.variant_id || 0) === Number(props.item.variant_id || 0)
-        ? total + Number(line.quantity || 0)
-        : total
-}, 0))
+// stock_limit là giới hạn của đúng dòng này (và với hàng theo lô là của
+// đúng lô). Không trừ thêm các dòng khác cùng sản phẩm/biến thể: chúng có
+// thể đang thuộc một lô giá khác và đã được giới hạn riêng.
 const maximumQuantity = computed(() => stockLimit.value === null
     ? null
-    : Math.max(0, stockLimit.value - otherLineQuantity.value))
+    : Math.max(0, stockLimit.value))
 const canIncrease = computed(() => !props.item.imei_id
     && (allowsNegativeStock.value || maximumQuantity.value === null || Number(props.item.quantity || 0) < maximumQuantity.value))
 

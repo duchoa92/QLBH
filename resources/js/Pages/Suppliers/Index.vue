@@ -38,7 +38,9 @@ const searchSupplier = () => {
             { search: search.value, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page },
             {
                 preserveState: true,
+                preserveScroll: true,
                 replace: true,
+                only: ['suppliers', 'filters'],
             }
         )
     }, 250)
@@ -46,7 +48,7 @@ const searchSupplier = () => {
 
 const sort = ({ field, order }) => router.get(route('suppliers.index'), {
     search: search.value, sort_by: field, sort_order: order, per_page: props.filters?.per_page,
-}, { preserveState: true, preserveScroll: true, replace: true })
+}, { preserveState: true, preserveScroll: true, replace: true, only: ['suppliers', 'filters'] })
 
 const reload = () => {
     router.reload({

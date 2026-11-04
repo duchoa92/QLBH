@@ -24,7 +24,7 @@ class RepairRequest extends FormRequest
             'warranty_source_id' => ['nullable', 'required_with:warranty_source_type', 'integer', 'min:1'],
 
             'customer_name' => [
-                'required',
+                'nullable',
                 'string',
                 'max:255',
             ],

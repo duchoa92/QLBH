@@ -97,6 +97,7 @@ class ProductController extends Controller
                                 'id' => $batch->id,
                                 'variant_id' => $batch->variant_id,
                                 'remaining_quantity' => (int) $batch->remaining_quantity,
+                                'cost_price' => (float) $batch->cost_price,
                                 'sell_price' => (float) $batch->sell_price,
                             ])->values(),
                     ];
@@ -217,6 +218,7 @@ class ProductController extends Controller
                             'id' => $batch->id,
                             'variant_id' => $batch->variant_id,
                             'remaining_quantity' => (int) $batch->remaining_quantity,
+                            'cost_price' => (float) $batch->cost_price,
                             'sell_price' => (float) $batch->sell_price,
                         ])->values(),
                     'variants' => $product->variants

@@ -12,6 +12,7 @@ const form = useForm({
     phone: props.supplier.phone ?? '',
     email: props.supplier.email ?? '',
     address: props.supplier.address ?? '',
+    bank_accounts: props.supplier.bank_accounts?.length ? props.supplier.bank_accounts : (props.supplier.bank_account ? [{ bank_name: props.supplier.bank_name || '', bank_bin: props.supplier.bank_bin || '', bank_account: props.supplier.bank_account, bank_account_name: props.supplier.bank_account_name || '', bank_payment_url: props.supplier.bank_payment_url || '', is_default: true }] : []),
 })
 
 const submit = () => {

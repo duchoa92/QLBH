@@ -19,6 +19,100 @@ use Illuminate\Validation\ValidationException;
 
 class StockImportService
 {
+    public function replace(StockImport $stockImport, array $data): StockImport
+    {
+        return DB::transaction(function () use ($stockImport, $data): StockImport {
+            $this->cancel($stockImport, 'Được thay thế khi chỉnh sửa phiếu nhập.');
+            return $this->import($data);
+        });
+    }
+
+    public function cancel(StockImport $stockImport, ?string $reason = null): StockImport
+    {
+        return DB::transaction(function () use ($stockImport, $reason): StockImport {
+            $import = StockImport::query()->lockForUpdate()->findOrFail($stockImport->id);
+            if ($import->status === 'cancelled') {
+                return $import;
+            }
+
+            $items = StockImportItem::query()
+                ->where('stock_import_id', $import->id)
+                ->lockForUpdate()
+                ->get();
+            $itemIds = $items->pluck('id');
+
+            $batches = ProductStockBatch::query()
+                ->whereIn('stock_import_item_id', $itemIds)
+                ->lockForUpdate()
+                ->get();
+            if ($batches->contains(fn (ProductStockBatch $batch) => (int) $batch->remaining_quantity !== (int) $batch->initial_quantity)) {
+                throw ValidationException::withMessages([
+                    'import' => 'Không thể hủy phiếu nhập vì một phần hàng trong lô đã được bán.',
+                ]);
+            }
+
+            $histories = ProductImeiHistory::query()
+                ->where('reference_type', StockImport::class)
+                ->where('reference_id', $import->id)
+                ->where('type', 'import')
+                ->with('productImei')
+                ->lockForUpdate()
+                ->get();
+            if ($histories->contains(fn (ProductImeiHistory $history) => $history->productImei?->status !== ProductImei::STATUS_IN_STOCK)) {
+                throw ValidationException::withMessages([
+                    'import' => 'Không thể hủy phiếu nhập vì có IMEI đã bán hoặc không còn trong kho.',
+                ]);
+            }
+
+            foreach ($items as $item) {
+                if ($item->variant_id) {
+                    ProductVariant::query()->whereKey($item->variant_id)->decrement('stock', $item->base_quantity);
+                } else {
+                    Product::query()->whereKey($item->product_id)->decrement('stock', $item->base_quantity);
+                }
+            }
+
+            $histories->each(function (ProductImeiHistory $history): void {
+                $history->productImei?->delete();
+            });
+            ProductImeiHistory::query()->whereKey($histories->pluck('id'))->delete();
+            ProductStockBatch::query()->whereIn('id', $batches->pluck('id'))->delete();
+
+            if ($import->supplier_id) {
+                $supplier = Supplier::query()->lockForUpdate()->find($import->supplier_id);
+                if ($supplier) {
+                    $netDebt = (float) $import->grand_total - (float) $import->paid_amount - (float) $import->old_debt_paid;
+                    $supplier->decrement('debt_balance', $netDebt);
+                }
+                collect($import->old_debt_allocations ?? [])->each(function (array $allocation): void {
+                    $amount = max(0, (float) ($allocation['amount'] ?? 0));
+                    $oldImportId = (int) ($allocation['stock_import_id'] ?? 0);
+                    if ($oldImportId && $amount > 0) {
+                        StockImport::query()->whereKey($oldImportId)->decrement('paid_amount', $amount);
+                    }
+                });
+                SupplierDebt::query()
+                    ->where('source_type', StockImport::class)
+                    ->where('source_id', $import->id)
+                    ->delete();
+            }
+
+            $import->update([
+                'status' => 'cancelled',
+                'note' => trim(($import->note ? $import->note . "\n" : '') . 'Hủy phiếu: ' . ($reason ?: 'Không nêu lý do')),
+            ]);
+
+            $items->pluck('product_id')->unique()->each(function (int $productId): void {
+                $product = Product::query()->find($productId);
+                if ($product?->manage_stock_by_serial) {
+                    app(ImeiStockSynchronizer::class)->sync($productId);
+                }
+            });
+
+            return $import->fresh();
+        });
+    }
+
     public function import(array $data)
     {
         return DB::transaction(function () use ($data) {
@@ -58,6 +152,40 @@ class StockImportService
                 ]);
             }
 
+            $oldDebtAllocations = collect($data['old_debt_allocations'] ?? [])
+                ->map(fn (array $allocation) => [
+                    'stock_import_id' => (int) ($allocation['stock_import_id'] ?? 0),
+                    'amount' => round(max(0, (float) ($allocation['amount'] ?? 0)), 2),
+                ])
+                ->filter(fn (array $allocation) => $allocation['stock_import_id'] > 0 && $allocation['amount'] > 0)
+                ->values();
+
+            if ($oldDebtPaid > 0 && abs((float) $oldDebtAllocations->sum('amount') - $oldDebtPaid) > 0.01) {
+                throw ValidationException::withMessages([
+                    'old_debt_allocations' => 'Vui lòng chọn và phân bổ đầy đủ số tiền trả nợ cũ vào các phiếu nhập.',
+                ]);
+            }
+
+            $oldDebtAllocations = $oldDebtAllocations->map(function (array $allocation) use ($supplier): array {
+                $oldImport = StockImport::query()
+                    ->lockForUpdate()
+                    ->where('supplier_id', $supplier?->id)
+                    ->where('status', 'completed')
+                    ->find($allocation['stock_import_id']);
+
+                if (! $oldImport) {
+                    throw ValidationException::withMessages(['old_debt_allocations' => 'Phiếu nhập cần trả nợ không còn hợp lệ.']);
+                }
+
+                $remaining = max(0, (float) $oldImport->grand_total - (float) $oldImport->paid_amount);
+                if ($allocation['amount'] > $remaining + 0.01) {
+                    throw ValidationException::withMessages(['old_debt_allocations' => "Số tiền trả cho {$oldImport->code} vượt quá công nợ còn lại."]);
+                }
+
+                $oldImport->increment('paid_amount', $allocation['amount']);
+                return [...$allocation, 'code' => $oldImport->code];
+            })->values();
+
 
             /*
              * ==========================================================
@@ -91,6 +219,8 @@ class StockImportService
                 'paid_amount' => $paidAmount,
 
                 'old_debt_paid' => $oldDebtPaid,
+
+                'old_debt_allocations' => $oldDebtAllocations->all() ?: null,
 
                 'payment_method' => $data['payment_method'] ?? null,
 

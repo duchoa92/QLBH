@@ -24,9 +24,11 @@ const replaceItems = (key, items) => {
     state[key].splice(0, state[key].length, ...(items || []))
 }
 
-const hydrate = (initialData = {}) => {
+const hydrate = (initialData = {}, overwrite = false) => {
     ;['categories', 'brands', 'units', 'suppliers', 'roles'].forEach((key) => {
-        if (Array.isArray(initialData[key])) {
+        // Props từ một trang/modal có thể cũ hơn dữ liệu vừa lấy ở nền.
+        // Không để lần mount sau ghi đè lại danh sách mới trong cùng tab.
+        if (Array.isArray(initialData[key]) && (overwrite || !state.loaded || state[key].length === 0)) {
             replaceItems(key, initialData[key])
         }
     })
@@ -37,7 +39,7 @@ export const refreshReferenceData = async () => {
 
     refreshPromise = api.get('/api/reference-data')
         .then(({ data }) => {
-            hydrate(data)
+            hydrate(data, true)
             state.loaded = true
             return data
         })

@@ -75,6 +75,11 @@ const handleFilter = () => {
         sort_by: props.filters?.sort_by,
         sort_order: props.filters?.sort_order,
         per_page: props.filters?.per_page
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: ['brands', 'filters'],
     })
 }
 
@@ -198,7 +203,9 @@ const sort = ({ field, order }) => {
         per_page: props.filters?.per_page
     }, {
         preserveState: true,
+        preserveScroll: true,
         replace: true
+        ,only: ['brands', 'filters']
     })
 }
 

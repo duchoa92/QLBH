@@ -50,6 +50,7 @@ const per_page = ref(props.filters?.per_page || 10)
 
 let timeout = null
 let isSyncingFilters = false
+const isEditingSearch = ref(false)
 
 watch([search, category_id, brand_id], () => {
     if (isSyncingFilters || isChangingPerPage.value) {
@@ -70,7 +71,8 @@ watch([search, category_id, brand_id], () => {
         }, {
             preserveState: true,
             preserveScroll: true,
-            replace: true
+            replace: true,
+            only: ['products', 'filters']
         })
     }, 300)
 })
@@ -78,7 +80,8 @@ watch([search, category_id, brand_id], () => {
 watch(() => props.filters, (filters) => {
     if (!filters) return
     isSyncingFilters = true
-    search.value = filters.search || ''
+    // Không ghi đè phần người dùng đang gõ bằng phản hồi của lần tìm trước.
+    if (!isEditingSearch.value) search.value = filters.search || ''
     category_id.value = filters.category_id || ''
     brand_id.value = filters.brand_id || ''
     if (filters.per_page) per_page.value = Number(filters.per_page)
@@ -442,6 +445,8 @@ const openImeiList = (row) => {
                 v-model="search"
                 label="Tìm tên, SKU hoặc barcode..."
                 input-class="pr-12"
+                @focus="isEditingSearch = true"
+                @blur="isEditingSearch = false"
             />
             <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => search = code" />
         </div>
