@@ -1,5 +1,7 @@
 <script setup>
 import { computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
+import { toast } from 'vue-sonner'
 
 const props = defineProps({
 
@@ -7,20 +9,76 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+
+    cart: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const emit = defineEmits([
     'remove',
 ])
 
+const page = usePage()
+const allowsNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
+const stockLimit = computed(() => {
+    const value = Number(props.item.stock_limit)
+
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null
+})
+const otherLineQuantity = computed(() => props.cart.reduce((total, line) => {
+    if (line === props.item) return total
+
+    return Number(line.id) === Number(props.item.id)
+        && Number(line.variant_id || 0) === Number(props.item.variant_id || 0)
+        ? total + Number(line.quantity || 0)
+        : total
+}, 0))
+const maximumQuantity = computed(() => stockLimit.value === null
+    ? null
+    : Math.max(0, stockLimit.value - otherLineQuantity.value))
+const canIncrease = computed(() => !props.item.imei_id
+    && (allowsNegativeStock.value || maximumQuantity.value === null || Number(props.item.quantity || 0) < maximumQuantity.value))
+
+const setQuantity = (value) => {
+    const normalized = Math.floor(Number(value))
+    const requested = Number.isFinite(normalized) ? Math.max(1, normalized) : 1
+
+    if (!allowsNegativeStock.value && maximumQuantity.value !== null && requested > maximumQuantity.value) {
+        props.item.quantity = Math.max(1, maximumQuantity.value)
+        toast.error(`Sản phẩm ${props.item.name} chỉ còn ${maximumQuantity.value} trong kho`)
+        return
+    }
+
+    props.item.quantity = requested
+}
+
+const increase = () => {
+    if (!canIncrease.value) {
+        toast.error(`Sản phẩm ${props.item.name} không đủ tồn kho`)
+        return
+    }
+
+    setQuantity(Number(props.item.quantity || 0) + 1)
+}
+
+const handleQuantityInput = event => {
+    const requested = Math.floor(Number(event.target.value))
+
+    if (!allowsNegativeStock.value && maximumQuantity.value !== null && requested > maximumQuantity.value) {
+        const cappedQuantity = Math.max(1, maximumQuantity.value)
+        event.target.value = String(cappedQuantity)
+        setQuantity(cappedQuantity)
+        return
+    }
+
+    setQuantity(event.target.value)
+}
+
 const quantity = computed({
     get: () => props.item.quantity,
-    set: (value) => {
-        const normalized = Math.floor(Number(value))
-        props.item.quantity = Number.isFinite(normalized)
-            ? Math.max(1, normalized)
-            : 1
-    },
+    set: setQuantity,
 })
 
 </script>
@@ -59,21 +117,19 @@ const quantity = computed({
                 hover:bg-blue-50
                 hover:text-blue-700
             "
-            @click="
-                item.quantity > 1
-                ? item.quantity--
-                : emit('remove')
-            "
+            @click="item.quantity > 1 ? setQuantity(item.quantity - 1) : emit('remove')"
         >
             -
         </button>
 
         <input
-            v-model="quantity"
+            :value="quantity"
             type="number"
             min="1"
             step="1"
+            :max="!allowsNegativeStock && maximumQuantity !== null ? Math.max(1, maximumQuantity) : undefined"
             :disabled="item.imei_id"
+            @input="handleQuantityInput"
             class="
                 quantity-input
                 w-12
@@ -91,7 +147,7 @@ const quantity = computed({
         >
 
         <button
-            :disabled="item.imei_id"
+            :disabled="item.imei_id || !canIncrease"
             class="
                 w-6
                 h-full
@@ -104,10 +160,11 @@ const quantity = computed({
                 transition-colors
                 hover:bg-blue-50
                 hover:text-blue-700
+                disabled:cursor-not-allowed
+                disabled:bg-slate-100
+                disabled:text-slate-300
             "
-            @click="
-                item.quantity++
-            "
+            @click="increase"
         >
             +
         </button>

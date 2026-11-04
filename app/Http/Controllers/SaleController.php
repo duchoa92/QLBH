@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\CustomerDebt;
 use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
+use App\Services\Stock\StockBatchAllocator;
 use App\Support\PosVatCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -51,7 +52,13 @@ class SaleController extends Controller
                     });
                 });
             })
-            ->with(['unit', 'variants' => fn ($query) => $query->where('is_active', true)])
+            ->with([
+                'unit',
+                'variants' => fn ($query) => $query->where('is_active', true),
+                'stockBatches' => fn ($query) => $query
+                    ->where('remaining_quantity', '>', 0)
+                    ->select('id', 'product_id', 'variant_id', 'remaining_quantity', 'sell_price', 'imported_at'),
+            ])
             ->when($searchImeis, function ($query) use ($term, $saleId): void {
                 $query->with(['imeis' => function ($imeiQuery) use ($term, $saleId): void {
                     $imeiQuery->where(function ($codes) use ($term): void {
@@ -71,12 +78,16 @@ class SaleController extends Controller
         return $products
             ->map(function (Product $product) use ($allowNegativeStock): array {
                 $matchedImei = $product->imeis?->first();
+                $defaultBatch = $product->stockBatches
+                    ->whereNull('variant_id')
+                    ->sortBy([['imported_at', 'asc'], ['id', 'asc']])
+                    ->first();
 
                 return [
                     'id' => $product->id,
                     'name' => $product->name,
                     'sku' => $product->sku,
-                    'price' => (float) $product->sell_price,
+                    'price' => (float) ($defaultBatch?->sell_price ?: $product->sell_price),
                     'stock' => (int) $product->stock,
                     'can_sell' => $allowNegativeStock || (int) $product->stock > 0,
                     'unit_id' => $product->unit_id,
@@ -88,17 +99,24 @@ class SaleController extends Controller
                         'variant_name' => collect($matchedImei->variant?->attributes ?? [])->map(fn ($value) => is_array($value) ? ($value['value'] ?? $value['label'] ?? $value['name'] ?? '') : $value)->filter()->join(' / '),
                         'effective_sell_price' => $this->effectiveImeiSellPrice($matchedImei, $product),
                     ]) : null,
-                    'variants' => $product->variants->map(fn ($variant) => [
-                        'id' => $variant->id,
-                        'name' => $product->name . ' · ' . collect($variant->attributes ?? [])->filter()->join(' / '),
-                        'sku' => $variant->sku,
-                        'barcode' => $variant->barcode,
-                        'attributes' => $variant->attributes ?? [],
-                        'sell_price' => (float) ($variant->sell_price ?: $product->sell_price),
-                        'price' => (float) ($variant->sell_price ?: $product->sell_price),
-                        'stock' => (int) $variant->stock,
-                        'can_sell' => $allowNegativeStock || (int) $variant->stock > 0,
-                    ])->values(),
+                    'variants' => $product->variants->map(function ($variant) use ($product, $allowNegativeStock): array {
+                        $batch = $product->stockBatches
+                            ->where('variant_id', $variant->id)
+                            ->sortBy([['imported_at', 'asc'], ['id', 'asc']])
+                            ->first();
+
+                        return [
+                            'id' => $variant->id,
+                            'name' => $product->name . ' · ' . collect($variant->attributes ?? [])->filter()->join(' / '),
+                            'sku' => $variant->sku,
+                            'barcode' => $variant->barcode,
+                            'attributes' => $variant->attributes ?? [],
+                            'sell_price' => (float) ($batch?->sell_price ?: $variant->sell_price ?: $product->sell_price),
+                            'price' => (float) ($batch?->sell_price ?: $variant->sell_price ?: $product->sell_price),
+                            'stock' => (int) $variant->stock,
+                            'can_sell' => $allowNegativeStock || (int) $variant->stock > 0,
+                        ];
+                    })->values(),
                 ];
             });
     }
@@ -238,7 +256,10 @@ class SaleController extends Controller
         }
 
         DB::transaction(function () use ($sale, $data): void {
-            $sale = Sale::query()->lockForUpdate()->with(['items.product', 'items.variant', 'items.productImei', 'items.gifts'])->findOrFail($sale->id);
+            $sale = Sale::query()->lockForUpdate()->with([
+                'items.product', 'items.variant', 'items.productImei', 'items.stockBatchAllocations',
+                'items.gifts', 'items.gifts.stockBatchAllocations',
+            ])->findOrFail($sale->id);
             $reason = $this->saleEditBlockedReason($sale);
             if ($reason) throw \Illuminate\Validation\ValidationException::withMessages(['sale' => $reason]);
 
@@ -351,12 +372,18 @@ class SaleController extends Controller
             $oldStockDelta = [];
             $oldSoldDelta = [];
             foreach ($sale->items as $item) {
+                if (! $item->product_imei_id) {
+                    app(StockBatchAllocator::class)->restore($item);
+                }
                 $oldSoldDelta[$item->product_id] = ($oldSoldDelta[$item->product_id] ?? 0) + (int) $item->quantity;
                 if (!$item->product_imei_id) {
                     $key = ($item->variant_id ? 'v' . $item->variant_id : 'p' . $item->product_id);
                     $oldStockDelta[$key] = ($oldStockDelta[$key] ?? 0) + (int) ($item->base_quantity ?: $item->quantity);
                 }
                 foreach ($item->gifts as $gift) {
+                    if (! $gift->product_imei_id) {
+                        app(StockBatchAllocator::class)->restore($gift);
+                    }
                     $oldSoldDelta[$gift->product_id] = ($oldSoldDelta[$gift->product_id] ?? 0) + (int) $gift->quantity;
                     if (!$gift->product_imei_id) {
                         $giftKey = $gift->variant_id ? 'v' . $gift->variant_id : 'p' . $gift->product_id;
@@ -426,8 +453,19 @@ class SaleController extends Controller
                     'vat_applied' => $item['vatApplied'],
                     'subtotal' => $item['lineTotal'] - $item['lineDiscount'],
                 ]);
+                if (! $item['imei']) {
+                    $allocation = app(StockBatchAllocator::class)->allocate(
+                        $saleItem,
+                        (int) $item['product']->id,
+                        $item['variant']?->id,
+                        (int) $item['baseQuantity'],
+                    );
+                    if ($allocation['allocated_quantity'] > 0) {
+                        $saleItem->update(['unit_cost' => round($allocation['total_cost'] / $item['quantity'], 2)]);
+                    }
+                }
                 foreach ($item['gifts'] as $gift) {
-                    $saleItem->gifts()->create([
+                    $giftLine = $saleItem->gifts()->create([
                         'product_id' => $gift['product']->id,
                         'variant_id' => $gift['variant']?->id,
                         'product_imei_id' => $gift['imei']?->id,
@@ -436,6 +474,17 @@ class SaleController extends Controller
                         'base_quantity' => $gift['baseQuantity'],
                         'conversion_factor' => $gift['conversionFactor'],
                     ]);
+                    if (! $gift['imei']) {
+                        $allocation = app(StockBatchAllocator::class)->allocate(
+                            $giftLine,
+                            (int) $gift['product']->id,
+                            $gift['variant']?->id,
+                            (int) $gift['baseQuantity'],
+                        );
+                        if ($allocation['allocated_quantity'] > 0) {
+                            $giftLine->update(['unit_cost' => round($allocation['total_cost'] / $gift['quantity'], 2)]);
+                        }
+                    }
                 }
             }
             $imeiProductIds->unique()->each(fn ($id) => app(ImeiStockSynchronizer::class)->sync((int) $id));
@@ -555,7 +604,9 @@ class SaleController extends Controller
                 'items.product.variants' => fn ($variants) => $variants->where('is_active', true),
                 'items.variant',
                 'items.productImei',
+                'items.stockBatchAllocations',
                 'items.gifts.product',
+                'items.gifts.stockBatchAllocations',
                 'items.gifts.productImei',
             ])
             ->when($search !== '', function ($query) use ($search): void {
@@ -746,7 +797,9 @@ class SaleController extends Controller
                 'items.product',
                 'items.variant',
                 'items.productImei',
+                'items.stockBatchAllocations',
                 'items.gifts.product',
+                'items.gifts.stockBatchAllocations',
             ]);
 
             foreach ($sale->items as $item) {
@@ -827,6 +880,7 @@ class SaleController extends Controller
                 $this->syncImeiStock($imei);
             }
         } else {
+            app(StockBatchAllocator::class)->restore($item);
             if ($item->variant) {
                 ProductVariant::query()
                     ->whereKey($item->variant->id)
@@ -865,6 +919,7 @@ class SaleController extends Controller
                     app(ImeiStockSynchronizer::class)->sync($gift->product);
                 }
             } else {
+                app(StockBatchAllocator::class)->restore($gift);
                 Product::query()
                     ->whereKey($gift->product->id)
                     ->increment('stock', $giftBaseQuantity);

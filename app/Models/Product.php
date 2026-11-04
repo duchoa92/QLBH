@@ -96,6 +96,11 @@ class Product extends Model
         return $this->belongsTo(Unit::class, 'conversion_unit_id');
     }
 
+    public function stockBatches(): HasMany
+    {
+        return $this->hasMany(ProductStockBatch::class);
+    }
+
     public function inventoryConversionFactor(): int
     {
         return $this->has_unit_conversion

@@ -30,6 +30,7 @@ export function useProductSearch(emit) {
     const loading = ref(false)
 
     let timeout = null
+    let latestRequest = 0
 
     // Sự kiện
     const {
@@ -48,6 +49,8 @@ export function useProductSearch(emit) {
 
     const loadProducts = async () => {
 
+        const requestId = ++latestRequest
+
         loading.value = true
 
         try {
@@ -57,6 +60,10 @@ export function useProductSearch(emit) {
                     keyword.value,
                     categoryId.value
                 )
+
+            // Chỉ phản hồi mới nhất được phép thay catalog. Nếu phản hồi cũ
+            // về sau khi vừa thanh toán, nó không được ghi đè giá lô kế tiếp.
+            if (requestId !== latestRequest) return
 
             products.value = response
             if (Array.isArray(response) && response.length) {
@@ -96,11 +103,12 @@ export function useProductSearch(emit) {
 
         } catch (error) {
             const cached = await readOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}`).catch(() => null)
+            if (requestId !== latestRequest) return
             products.value = cached?.products || []
 
         } finally {
 
-            loading.value = false
+            if (requestId === latestRequest) loading.value = false
         }
     }
 

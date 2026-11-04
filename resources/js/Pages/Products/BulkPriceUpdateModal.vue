@@ -288,6 +288,7 @@ const submit = () => {
                         <template v-else-if="singleMode === 'variant'">Phân loại: Sản phẩm nhiều phiên bản và thuộc tính</template>
                         <template v-else>Loại: Sản phẩm đơn thể / Phụ kiện</template>
                     </p>
+                    <p class="mt-0.5 text-[11px] text-slate-500">Giá mới áp dụng cho toàn bộ hàng còn trong kho; giá vốn và lịch sử lô không thay đổi.</p>
                 </div>
             </div>
             <button type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-700" aria-label="Đóng" @click="emit('close')"><X :size="19" /></button>

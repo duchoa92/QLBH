@@ -32,6 +32,9 @@ class ProductController extends Controller
                     'variants' => fn ($query) => $query
                         ->where('is_active', true)
                         ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
+                    'stockBatches' => fn ($query) => $query
+                        ->where('remaining_quantity', '>', 0)
+                        ->select('id', 'product_id', 'variant_id', 'remaining_quantity', 'cost_price', 'sell_price', 'imported_at'),
                     'imeis' => fn ($query) => $this->availableImeiScope($query)
                         ->with('variant:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock')
                         ->select([
@@ -53,15 +56,16 @@ class ProductController extends Controller
             $products = $products->map(function ($product) use ($vatProductIds) {
                     $prices = $this->availableSellPrices($product);
                     $costPrices = $this->availableCostPrices($product);
+                    $nextBatch = $product->stockBatches->whereNull('variant_id')->sortBy([['imported_at', 'asc'], ['id', 'asc']])->first();
 
                     return [
                         'id' => $product->id,
                         'name' => $product->name,
                         'sku' => $product->sku,
                         'barcode' => $product->barcode,
-                        'cost_price' => $product->cost_price, // 👈 ĐÃ BỔ SUNG GIÁ NHẬP
-                        'price' => $product->sell_price,      // Giữ giá bán cho frontend cũ
-                        'sell_price' => $product->sell_price, // 👈 BỔ SUNG RÕ RÀNG GIÁ BÁN
+                        'cost_price' => $nextBatch?->cost_price ?? $product->cost_price,
+                        'price' => $nextBatch?->sell_price ?: $product->sell_price,
+                        'sell_price' => $nextBatch?->sell_price ?: $product->sell_price,
                         'warranty_days' => (int) $product->warranty_days,
                         'has_vat' => in_array((int) $product->id, $vatProductIds, true),
                         'tax_percent' => (float) ($product->tax_percent ?? 0),
@@ -87,6 +91,14 @@ class ProductController extends Controller
                         'product_type' => $product->product_type,
                         'sold_count' => $product->sold_count ?? 0,
                         'image_url' => $product->image_url,
+                        'stock_batches' => $product->stockBatches
+                            ->sortBy([['imported_at', 'asc'], ['id', 'asc']])
+                            ->map(fn ($batch) => [
+                                'id' => $batch->id,
+                                'variant_id' => $batch->variant_id,
+                                'remaining_quantity' => (int) $batch->remaining_quantity,
+                                'sell_price' => (float) $batch->sell_price,
+                            ])->values(),
                     ];
                 });
 
@@ -102,6 +114,9 @@ class ProductController extends Controller
                     'variants' => fn ($query) => $query
                         ->where('is_active', true)
                         ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
+                'stockBatches' => fn ($query) => $query
+                    ->where('remaining_quantity', '>', 0)
+                    ->select('id', 'product_id', 'variant_id', 'remaining_quantity', 'cost_price', 'sell_price', 'imported_at'),
                 'imeis' => fn ($query) => $this->availableImeiScope($query)
                     ->with('variant:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock')
                     ->select([
@@ -159,15 +174,16 @@ class ProductController extends Controller
         $products = $products->map(function ($product) use ($vatProductIds) {
                 $prices = $this->availableSellPrices($product);
                 $costPrices = $this->availableCostPrices($product);
+                $nextBatch = $product->stockBatches->whereNull('variant_id')->sortBy([['imported_at', 'asc'], ['id', 'asc']])->first();
 
                 return [
                     'id' => $product->id,
                     'name' => $product->name,
                     'sku' => $product->sku,
                     'barcode' => $product->barcode,
-                    'cost_price' => $product->cost_price, // 👈 ĐÃ BỔ SUNG GIÁ NHẬP
-                    'price' => $product->sell_price,      // Giữ giá bán cho frontend cũ
-                    'sell_price' => $product->sell_price, // 👈 BỔ SUNG RÕ RÀNG GIÁ BÁN
+                    'cost_price' => $nextBatch?->cost_price ?? $product->cost_price,
+                    'price' => $nextBatch?->sell_price ?: $product->sell_price,
+                    'sell_price' => $nextBatch?->sell_price ?: $product->sell_price,
                     'warranty_days' => (int) $product->warranty_days,
                     'has_vat' => in_array((int) $product->id, $vatProductIds, true),
                     'tax_percent' => (float) ($product->tax_percent ?? 0),
@@ -195,16 +211,28 @@ class ProductController extends Controller
                     'product_type' => $product->product_type,
                     'sold_count' => $product->sold_count ?? 0,
                     'image_url' => $product->image_url,
+                    'stock_batches' => $product->stockBatches
+                        ->sortBy([['imported_at', 'asc'], ['id', 'asc']])
+                        ->map(fn ($batch) => [
+                            'id' => $batch->id,
+                            'variant_id' => $batch->variant_id,
+                            'remaining_quantity' => (int) $batch->remaining_quantity,
+                            'sell_price' => (float) $batch->sell_price,
+                        ])->values(),
                     'variants' => $product->variants
-                        ->map(function ($variant) {
+                        ->map(function ($variant) use ($product) {
+                            $batch = $product->stockBatches
+                                ->where('variant_id', $variant->id)
+                                ->sortBy([['imported_at', 'asc'], ['id', 'asc']])
+                                ->first();
                             return [
                                 'id' => $variant->id,
                                 'sku' => $variant->sku,
                                 'barcode' => $variant->barcode,
                                 'attributes' => $variant->attributes,
-                                'cost_price' => $variant->cost_price, // 👈 ĐẢM BẢO CÓ DÒNG NÀY (Giá nhập biến thể)
-                                'sell_price' => $variant->sell_price, // 👈 Giá bán biến thể
-                                'price' => $variant->sell_price,
+                                'cost_price' => $batch?->cost_price ?? $variant->cost_price,
+                                'sell_price' => $batch?->sell_price ?: $variant->sell_price,
+                                'price' => $batch?->sell_price ?: $variant->sell_price,
                                 'stock' => $variant->stock,
                             ];
                         })
@@ -232,6 +260,10 @@ class ProductController extends Controller
 
                     return (float) $product->sell_price;
                 })
+                ->filter(fn (float $price): bool => $price > 0);
+        } elseif ($product->stockBatches->isNotEmpty()) {
+            $prices = $product->stockBatches
+                ->map(fn ($batch): float => (float) $batch->sell_price)
                 ->filter(fn (float $price): bool => $price > 0);
         } elseif ($product->relationLoaded('variants') && $product->variants->isNotEmpty()) {
             $prices = $product->variants
@@ -271,6 +303,9 @@ class ProductController extends Controller
 
                     return (float) $product->cost_price;
                 });
+        } elseif ($product->stockBatches->isNotEmpty()) {
+            $prices = $product->stockBatches
+                ->map(fn ($batch): float => (float) $batch->cost_price);
         } elseif ($product->relationLoaded('variants') && $product->variants->isNotEmpty()) {
             $prices = $product->variants
                 ->filter(fn ($variant): bool => (int) ($variant->stock ?? 0) > 0)

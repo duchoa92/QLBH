@@ -19,6 +19,7 @@ import SelectProductModal from '@/Modules/POS/Product/Components/SelectProductMo
 import { getPosReturnUrl, exitPosFullscreen } from '@/utils/pos'
 import { enqueueOfflineSale, readOfflineSales, removeOfflineSale } from '@/utils/offlinePos'
 import { paymentService } from '@/Modules/POS/Payment/Services/paymentService'
+import { useEventBus } from '@/Composables/useEventBus'
 
 const {
     flushSave,
@@ -45,6 +46,8 @@ const {
     removeItem,
     clearCart,
 } = useCart()
+
+const { emitEvent } = useEventBus()
 
 // Mỗi tab là một hóa đơn riêng. Khi tab hiện tại không còn sản phẩm,
 // mọi điều chỉnh cấp hóa đơn phải được xóa ngay, bất kể sản phẩm được
@@ -521,6 +524,9 @@ const handleBankCheckoutCompleted = async (saleResponse) => {
     invoiceData.value = saleResponse
     showInvoice.value = true
     presentPaymentOutcome(saleResponse, null, true)
+    // Luồng ngân hàng hoàn tất trực tiếp, không đi qua useCheckout nên cần
+    // yêu cầu catalog đọc lại giá/tồn của lô còn lại.
+    emitEvent('products:refresh')
     await refreshShiftSummary()
     switchToNextTab()
     cleanupEmptyTabs()
@@ -531,6 +537,7 @@ const handleBackgroundBankCheckoutCompleted = async (saleResponse, cartSnapshot)
     // Only clear the cart if it is still exactly the one used for this intent.
     if (cartSnapshot && JSON.stringify(cart.value) === cartSnapshot) clearCart()
     presentPaymentOutcome(saleResponse, null, true)
+    emitEvent('products:refresh')
     await refreshShiftSummary()
 }
 

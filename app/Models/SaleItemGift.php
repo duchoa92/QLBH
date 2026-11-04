@@ -61,4 +61,9 @@ class SaleItemGift extends Model
     {
         return $this->belongsTo(ProductVariant::class);
     }
+
+    public function stockBatchAllocations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SaleItemStockBatch::class);
+    }
 }

@@ -110,5 +110,10 @@ class SaleItem extends Model
             SaleItemGift::class
         );
     }
+
+    public function stockBatchAllocations(): HasMany
+    {
+        return $this->hasMany(SaleItemStockBatch::class);
+    }
     
 }

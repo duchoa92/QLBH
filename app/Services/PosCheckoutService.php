@@ -14,6 +14,7 @@ use App\Models\CustomerDebt;
 use App\Models\SaleItemGift;
 use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
+use App\Services\Stock\StockBatchAllocator;
 use App\Support\PosVatCalculator;
 
 class PosCheckoutService
@@ -186,6 +187,10 @@ class PosCheckoutService
                         ->findOrFail($item['variant_id']);
                 }
 
+                if (! $requiresImei && ! $variant && $product->variants()->where('is_active', true)->exists()) {
+                    throw new \Exception("Sản phẩm {$product->name} phải chọn biến thể");
+                }
+
                 /*
                 |--------------------------------------------------------------------------
                 | Kiểm tra IMEI
@@ -346,6 +351,22 @@ class PosCheckoutService
                         $item['note'] ?? null,
                 ]);
 
+                if (! $imei) {
+                    $allocation = app(StockBatchAllocator::class)->allocate(
+                        $saleItem,
+                        (int) $product->id,
+                        $variant?->id,
+                        $baseQuantity,
+                    );
+                    if ($allocation['allocated_quantity'] > 0) {
+                        // unit_cost của sale item luôn cùng đơn vị với quantity
+                        // hiển thị trên hóa đơn, kể cả khi sản phẩm có quy đổi.
+                        $saleItem->update([
+                            'unit_cost' => round($allocation['total_cost'] / $quantity, 2),
+                        ]);
+                    }
+                }
+
 
                 if (!empty($item['gifts'])) {
                     foreach ($item['gifts'] as $gift) {
@@ -391,7 +412,7 @@ class PosCheckoutService
                             $giftQuantity = 1;
                         }
 
-                        SaleItemGift::create([
+                        $giftLine = SaleItemGift::create([
                             'sale_item_id' => $saleItem->id,
                             'product_id' => $gift['id'],
                             'variant_id' => $giftVariant?->id,
@@ -401,6 +422,20 @@ class PosCheckoutService
                             'base_quantity' => $giftQuantity * $giftFactor,
                             'conversion_factor' => $giftFactor,
                         ]);
+
+                        if (! $giftRequiresImei) {
+                            $giftAllocation = app(StockBatchAllocator::class)->allocate(
+                                $giftLine,
+                                (int) $giftProduct->id,
+                                $giftVariant?->id,
+                                $giftQuantity * $giftFactor,
+                            );
+                            if ($giftAllocation['allocated_quantity'] > 0) {
+                                $giftLine->update([
+                                    'unit_cost' => round($giftAllocation['total_cost'] / $giftQuantity, 2),
+                                ]);
+                            }
+                        }
                     }
                 }
                 /*
@@ -555,12 +590,9 @@ class PosCheckoutService
                             );
                         }
                         if ($giftVariant) {
-                            $giftVariant->decrement('stock', $giftBaseQuantity);
+                            $this->decrementStockSafely($giftVariant, $giftBaseQuantity);
                         }
-                        $giftProduct->decrement(
-                            'stock',
-                            $giftBaseQuantity
-                        );
+                        $this->decrementStockSafely($giftProduct, $giftBaseQuantity);
                         $giftProduct->increment(
                             'sold_count',
                             $qty
@@ -680,12 +712,13 @@ class PosCheckoutService
             return;
         }
 
-        $model->newQuery()
+        $updated = $model->newQuery()
             ->whereKey($model->getKey())
-            ->update([
-                'stock' => DB::raw(
-                    'CASE WHEN stock > ' . $quantity . ' THEN stock - ' . $quantity . ' ELSE 0 END'
-                ),
-            ]);
+            ->where('stock', '>=', $quantity)
+            ->decrement('stock', $quantity);
+
+        if ($updated === 0) {
+            throw new \Exception('Sản phẩm không đủ tồn kho');
+        }
     }
 }

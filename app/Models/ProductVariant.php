@@ -27,4 +27,9 @@ class ProductVariant extends Model
     {
         return $this->hasMany(ProductImei::class, 'variant_id');
     }
+
+    public function stockBatches()
+    {
+        return $this->hasMany(ProductStockBatch::class, 'variant_id');
+    }
 }

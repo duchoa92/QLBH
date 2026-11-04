@@ -396,6 +396,23 @@ const productStockDisplay = (row) => {
     return `${quantity} ${productUnitName(row)}`
 }
 
+const productSellPriceLabel = (row) => {
+    const batchPrices = (row.stock_batches || [])
+        .filter(batch => Number(batch.remaining_quantity || 0) > 0 && Number(batch.sell_price || 0) > 0)
+        .map(batch => Number(batch.sell_price))
+    const variantPrices = (row.variants || [])
+        .filter(variant => Number(variant.stock || 0) > 0 && Number(variant.sell_price || 0) > 0)
+        .map(variant => Number(variant.sell_price))
+    const imeiPrices = (row.imeis || [])
+        .filter(imei => imei.status === 'in_stock' && Number(imei.sell_price || 0) > 0)
+        .map(imei => Number(imei.sell_price))
+    const prices = batchPrices.length ? batchPrices : (imeiPrices.length ? imeiPrices : variantPrices)
+    if (!prices.length) return formatMoney(row.sell_price)
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    return min === max ? formatMoney(min) : `${formatMoney(min)} – ${formatMoney(max)}`
+}
+
 const openImeiList = (row) => {
     openModal(ProductImeisModal, {
         props: { productId: row.id, productName: row.name },
@@ -523,7 +540,7 @@ const openImeiList = (row) => {
             </td>
 
             <td class="border-r p-2 text-right">
-                {{ formatMoney(row.sell_price) }}
+                {{ productSellPriceLabel(row) }}
             </td>
 
             <td class="border-r p-2 text-center">

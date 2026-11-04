@@ -9,7 +9,7 @@ import CartItemPromotion from './CartItemPromotion.vue'
 import { useCartGift } from '../Composables/useCartGift'
 import { useCartDiscount } from '../Composables/useCartDiscount'
 
-const props = defineProps({ item: { type: Object, required: true }, editorOnly: { type: Boolean, default: false }, showRemove: { type: Boolean, default: true }, clickableVariant: { type: Boolean, default: false }, clickableImei: { type: Boolean, default: false } })
+const props = defineProps({ item: { type: Object, required: true }, cart: { type: Array, default: () => [] }, editorOnly: { type: Boolean, default: false }, showRemove: { type: Boolean, default: true }, clickableVariant: { type: Boolean, default: false }, clickableImei: { type: Boolean, default: false } })
 const emit = defineEmits(['remove', 'editor-saved', 'select-variant', 'select-imei'])
 const activeEditor = ref(null)
 const draft = ref(null)
@@ -177,7 +177,7 @@ const editorTitle = computed(() => ({
         />
 
         <div v-if="!editorOnly" class="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-1.5">
-            <CartItemQuantity :item="item" @remove="emit('remove', item)" />
+            <CartItemQuantity :item="item" :cart="cart" @remove="emit('remove', item)" />
             <CartItemPrice :item="item" />
         </div>
 

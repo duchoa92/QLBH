@@ -55,10 +55,19 @@ const needsVariant = computed(() =>
     hasVariants.value && !needsImei.value
 )
 
+const requiredVariantQuantity = computed(() => Math.max(1, Number(props.selectionQuantity || 1)))
+const cartQuantityForVariant = variant => props.cart.reduce((total, item) => (
+    Number(item.id) === Number(props.product?.id)
+    && Number(item.variant_id || 0) === Number(variant?.id || 0)
+        ? total + Number(item.quantity || 0)
+        : total
+), 0)
+const remainingVariantStock = variant => Number(variant?.stock || 0) - cartQuantityForVariant(variant)
+const hasVariantStock = variant => allowNegativeStock.value || remainingVariantStock(variant) >= requiredVariantQuantity.value
+
 const canConfirm = computed(() => {
     if (needsVariant.value && !selectedVariant.value) return false
-    if (props.quantityAware && !allowNegativeStock.value && needsVariant.value
-        && Number(selectedVariant.value?.stock || 0) < Math.max(1, Number(props.selectionQuantity || 1))) return false
+    if (needsVariant.value && !hasVariantStock(selectedVariant.value)) return false
     if (needsImei.value && !selectedImei.value) return false
     return true
 })
@@ -98,13 +107,59 @@ const imeiSellPrice = (item) =>
         ?? 0
     )
 
-const variantSellPrice = (variant) => Number(
-    (variant?.sell_price > 0 ? variant.sell_price : null)
-    ?? (variant?.price > 0 ? variant.price : null)
-    ?? props.product?.sell_price
-    ?? props.product?.price
-    ?? 0
-)
+const availableVariantBatches = (variant) => {
+    const productId = Number(props.product?.product_id ?? props.product?.id)
+    const variantId = Number(variant?.id || 0)
+    const batches = (props.product?.stock_batches || [])
+        .filter(batch => Number(batch.variant_id || 0) === variantId)
+        .slice()
+        .sort((left, right) => Number(left.id) - Number(right.id))
+    let legacyClaim = props.cart
+        .filter(item => Number(item.product_id ?? item.id) === productId
+            && Number(item.variant_id || 0) === variantId
+            && !item.batch_id)
+        .reduce((total, item) => total + Number(item.quantity || 0), 0)
+
+    return batches.reduce((available, batch) => {
+        const explicitClaim = props.cart
+            .filter(item => Number(item.product_id ?? item.id) === productId && Number(item.batch_id) === Number(batch.id))
+            .reduce((total, item) => total + Number(item.quantity || 0), 0)
+        const legacyForBatch = Math.min(legacyClaim, Number(batch.remaining_quantity || 0))
+        legacyClaim -= legacyForBatch
+        const remainingQuantity = Number(batch.remaining_quantity || 0) - explicitClaim - legacyForBatch
+
+        if (remainingQuantity > 0) available.push({ ...batch, remaining_quantity: remainingQuantity })
+        return available
+    }, [])
+}
+
+const variantSellPrice = (variant) => {
+    const prices = availableVariantBatches(variant)
+        .map(batch => Number(batch.sell_price || 0))
+        .filter(price => price > 0)
+    if (prices.length) return Math.min(...prices)
+
+    return Number(
+        (variant?.sell_price > 0 ? variant.sell_price : null)
+        ?? (variant?.price > 0 ? variant.price : null)
+        ?? props.product?.sell_price
+        ?? props.product?.price
+        ?? 0
+    )
+}
+
+const variantPriceLabel = (variant) => {
+    const prices = availableVariantBatches(variant)
+        .map(batch => Number(batch.sell_price || 0))
+        .filter(price => price > 0)
+    if (prices.length) {
+        const min = Math.min(...prices)
+        const max = Math.max(...prices)
+        return min === max ? formatMoney(min) : `${formatMoney(min)} - ${formatMoney(max)}`
+    }
+
+    return formatMoney(variantSellPrice(variant))
+}
 
 const itemCostPrice = (item) => Number(
     (item?.cost_price > 0 ? item.cost_price : null)
@@ -160,10 +215,7 @@ const handleImeiClick = (item, event) => {
 onBeforeUnmount(() => clearTimeout(costPriceHoldTimer))
 
 const displayVariantStock = (variant) => {
-    const currentStock = Number(variant?.stock || 0)
-    const remainingStock = props.quantityAware
-        ? currentStock - Math.max(1, Number(props.selectionQuantity || 1))
-        : currentStock
+    const remainingStock = remainingVariantStock(variant)
     const quantity = allowNegativeStock.value ? remainingStock : Math.max(0, remainingStock)
     const unit = props.product?.unit_name || ''
 
@@ -326,10 +378,10 @@ const confirm = () => {
                                 selectedVariant?.id === variant.id
                                     ? 'border-blue-600 bg-blue-50/40 text-blue-900 ring-2 ring-blue-600/20'
                                     : 'border-slate-200/80 hover:border-slate-300 bg-white',
-                                { 'cursor-not-allowed opacity-50': quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Math.max(1, Number(selectionQuantity || 1)) },
+                                { 'cursor-not-allowed opacity-50': !hasVariantStock(variant) },
                             ]"
                             :title="costPriceSuggestionEnabled ? 'Nhấn giữ lựa chọn này để xem giá nhập' : undefined"
-                            :disabled="quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Math.max(1, Number(selectionQuantity || 1))"
+                            :disabled="!hasVariantStock(variant)"
                             @pointerdown="costPriceSuggestionEnabled && showCostPrice('variant', variant, $event)"
                             @pointerup="stopShowingCostPrice($event)"
                             @pointercancel="stopShowingCostPrice($event)"
@@ -354,10 +406,10 @@ const confirm = () => {
                                     class="select-none text-xs font-extrabold"
                                     :class="isShowingCostPrice('variant', variant) ? 'text-amber-700' : 'text-rose-600'"
                                 >
-                                    {{ formatMoney(isShowingCostPrice('variant', variant) ? variantCostPrice(variant) : variantSellPrice(variant)) }}
+                                    {{ isShowingCostPrice('variant', variant) ? formatMoney(variantCostPrice(variant)) : variantPriceLabel(variant) }}
                                 </span>
 
-                                <span class="text-right text-[10px] font-semibold rounded px-1.5 py-0.5" :class="quantityAware && !allowNegativeStock && Number(variant.stock || 0) < Number(selectionQuantity || 1) ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-600'">
+                                <span class="text-right text-[10px] font-semibold rounded px-1.5 py-0.5" :class="!hasVariantStock(variant) ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-600'">
                                     Tồn: {{ displayVariantStock(variant) }}
                                 </span>
                             </div>

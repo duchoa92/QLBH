@@ -10,6 +10,7 @@ use App\Models\ProductVariant;
 use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
+use App\Models\ProductStockBatch;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -229,7 +230,7 @@ class StockImportService
                  * ------------------------------------------------------
                  */
 
-                StockImportItem::create([
+                $importItem = StockImportItem::create([
                     'stock_import_id' => $import->id,
 
                     'product_id' => $productId,
@@ -272,10 +273,6 @@ class StockImportService
 
                 if ($variantId !== null) {
 
-                    if ($sellPrice !== null && ! $product->manage_stock_by_serial) {
-                        ProductVariant::whereKey($variantId)->update(['sell_price' => $sellPrice]);
-                    }
-
                     ProductVariant::whereKey($variantId)
                         ->increment(
                             'stock',
@@ -284,15 +281,35 @@ class StockImportService
 
                 } else {
 
-                    if ($sellPrice !== null && ! $product->manage_stock_by_serial) {
-                        Product::whereKey($productId)->update(['sell_price' => $sellPrice]);
-                    }
-
                     Product::whereKey($productId)
                         ->increment(
                             'stock',
                             $baseQuantity
                         );
+                }
+
+                // Sản phẩm thường/biến thể luôn giữ giá theo từng lô nhập.
+                // Giá bán mặc định của sản phẩm không bị ghi đè khi nhập hàng.
+                if (! $product->manage_stock_by_serial) {
+                    ProductStockBatch::create([
+                        'product_id' => $productId,
+                        'variant_id' => $variantId,
+                        'stock_import_item_id' => $importItem->id,
+                        'initial_quantity' => $baseQuantity,
+                        'remaining_quantity' => $baseQuantity,
+                        'cost_price' => round($costPrice / $conversionFactor, 2),
+                        'sell_price' => $sellPrice ?? 0,
+                        'imported_at' => $import->import_date,
+                    ]);
+
+                    // Chỉ dùng làm gợi ý cho lần nhập kế tiếp; giá vốn thực tế khi
+                    // bán luôn lấy từ lô FIFO, không lấy từ hai cột này.
+                    if ($variantId !== null) {
+                        ProductVariant::whereKey($variantId)->update(['cost_price' => round($costPrice / $conversionFactor, 2)]);
+                    } else {
+                        Product::whereKey($productId)->update(['cost_price' => round($costPrice / $conversionFactor, 2)]);
+                    }
+
                 }
 
 

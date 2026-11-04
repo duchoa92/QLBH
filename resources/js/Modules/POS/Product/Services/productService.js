@@ -19,6 +19,10 @@ export const productService = {
 
                         category_id:
                             categoryId,
+
+                        // Không dùng lại phản hồi API đã được cache bởi trình duyệt/PWA
+                        // sau khi một lô vừa được xuất hết.
+                        _catalog_version: Date.now(),
                     },
                 }
             )

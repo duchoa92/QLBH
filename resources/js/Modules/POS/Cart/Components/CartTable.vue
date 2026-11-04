@@ -27,9 +27,10 @@ const emit = defineEmits([
         :key="
             item.imei_id
                 ? 'imei-' + item.imei_id
-                : 'product-' + item.id
+                : 'product-' + item.id + '-variant-' + (item.variant_id ?? 'default')
         "
         :item="item"
+        :cart="items"
         @remove="
             emit(
                 'remove',

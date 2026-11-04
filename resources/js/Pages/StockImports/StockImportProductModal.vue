@@ -564,7 +564,13 @@ const addEntry = async () => {
             return true
         }
 
-        const exist = item.rows.find(row => Number(row.variant_id) === Number(variant.id))
+        // Không gộp hai lô cùng biến thể nếu giá nhập/giá bán khác nhau.
+        // Mỗi giá là một lô tồn riêng để xuất FIFO và tính lãi chính xác.
+        const exist = item.rows.find(row =>
+            Number(row.variant_id) === Number(variant.id)
+            && Number(row.cost_price) === Number(modal.cost_price_input)
+            && Number(row.sell_price) === Number(modal.sell_price_input)
+        )
 
         if (exist) {
             exist.quantity += qty

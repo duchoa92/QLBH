@@ -177,9 +177,16 @@ class ProductController extends Controller
 
         $updated = \DB::transaction(function () use ($data, $productIds, $price, $attributeName, $attributeValue) {
             if ($data['target'] === 'product') {
-                return Product::query()
+                $productCount = Product::query()
                     ->whereIn('id', $productIds)
                     ->update(['sell_price' => $price]);
+                $batchCount = \App\Models\ProductStockBatch::query()
+                    ->whereIn('product_id', $productIds)
+                    ->whereNull('variant_id')
+                    ->where('remaining_quantity', '>', 0)
+                    ->update(['sell_price' => $price]);
+
+                return max($productCount, $batchCount);
             }
 
             $variants = \App\Models\ProductVariant::query()
@@ -201,9 +208,16 @@ class ProductController extends Controller
             }
 
             if ($data['target'] === 'variant') {
-                return \App\Models\ProductVariant::query()
-                    ->whereIn('id', $variants->pluck('id'))
+                $variantIds = $variants->pluck('id');
+                $variantCount = \App\Models\ProductVariant::query()
+                    ->whereIn('id', $variantIds)
                     ->update(['sell_price' => $price]);
+                $batchCount = \App\Models\ProductStockBatch::query()
+                    ->whereIn('variant_id', $variantIds)
+                    ->where('remaining_quantity', '>', 0)
+                    ->update(['sell_price' => $price]);
+
+                return max($variantCount, $batchCount);
             }
 
             $imeis = \App\Models\ProductImei::query()
@@ -271,14 +285,14 @@ class ProductController extends Controller
 
                 if ($update['type'] === 'product') {
                     $product = Product::query()->findOrFail($update['id']);
-
-                    if ((float) $product->sell_price === $price) {
-                        return 0;
-                    }
-
                     $product->update(['sell_price' => $price]);
+                    $batches = \App\Models\ProductStockBatch::query()
+                        ->where('product_id', $product->id)
+                        ->whereNull('variant_id')
+                        ->where('remaining_quantity', '>', 0)
+                        ->update(['sell_price' => $price]);
 
-                    return 1;
+                    return $batches > 0 || (float) $product->getOriginal('sell_price') !== $price ? 1 : 0;
                 }
 
                 if ($update['type'] === 'variant') {
@@ -286,13 +300,13 @@ class ProductController extends Controller
                         ->where('is_active', true)
                         ->findOrFail($update['id']);
 
-                    if ((float) $variant->sell_price === $price) {
-                        return 0;
-                    }
-
                     $variant->update(['sell_price' => $price]);
+                    $batches = \App\Models\ProductStockBatch::query()
+                        ->where('variant_id', $variant->id)
+                        ->where('remaining_quantity', '>', 0)
+                        ->update(['sell_price' => $price]);
 
-                    return 1;
+                    return $batches > 0 || (float) $variant->getOriginal('sell_price') !== $price ? 1 : 0;
                 }
 
                 $imei = \App\Models\ProductImei::query()

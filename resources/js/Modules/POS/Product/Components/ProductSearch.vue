@@ -24,7 +24,7 @@ const emit = defineEmits([
     'product-scanned',
 ])
 const page = usePage()
-const allowsNegativeStock = computed(() => Boolean(page.props.settings?.allow_negative_stock))
+const allowsNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
 const costPriceSuggestionEnabled = computed(() => page.props.settings?.pos_cost_price_suggestion_enabled !== false
     && page.props.settings?.pos_cost_price_suggestion_enabled !== 0
     && page.props.settings?.pos_cost_price_suggestion_enabled !== '0')
@@ -163,7 +163,50 @@ const canSellWithoutStock = (product) => allowsNegativeStock.value
     && !product.manage_stock_by_serial
     && !product.has_imei
 
+// Giá trên catalog phải phản ánh đúng phần hàng còn có thể thêm. Mỗi lô được
+// trừ riêng theo batch_id của các dòng đang nằm trong giỏ, nên khi dùng hết lô
+// giá thấp, khoảng giá chuyển ngay sang lô tiếp theo.
+const availableBatches = (product) => {
+    const productId = Number(product.product_id ?? product.id)
+    const selectedVariantId = product.variant_id ? Number(product.variant_id) : null
+    const batches = (product.stock_batches || [])
+        .filter(batch => selectedVariantId === null || Number(batch.variant_id || 0) === selectedVariantId)
+        .slice()
+        .sort((left, right) => Number(left.id) - Number(right.id))
+
+    const legacyClaims = new Map()
+    props.cart
+        .filter(item => Number(item.product_id ?? item.id) === productId && !item.batch_id)
+        .forEach(item => {
+            const scope = Number(item.variant_id || 0)
+            legacyClaims.set(scope, (legacyClaims.get(scope) || 0) + Number(item.quantity || 0))
+        })
+
+    return batches.reduce((available, batch) => {
+        const variantId = Number(batch.variant_id || 0)
+        const explicitClaim = props.cart
+            .filter(item => Number(item.product_id ?? item.id) === productId && Number(item.batch_id) === Number(batch.id))
+            .reduce((total, item) => total + Number(item.quantity || 0), 0)
+        const legacyClaim = Math.min(legacyClaims.get(variantId) || 0, Number(batch.remaining_quantity || 0))
+        legacyClaims.set(variantId, Math.max(0, (legacyClaims.get(variantId) || 0) - legacyClaim))
+        const remainingQuantity = Number(batch.remaining_quantity || 0) - explicitClaim - legacyClaim
+
+        if (remainingQuantity > 0) available.push({ ...batch, remaining_quantity: remainingQuantity })
+        return available
+    }, [])
+}
+
 const priceLabel = (product) => {
+    const batchPrices = availableBatches(product)
+        .map(batch => Number(batch.sell_price || 0))
+        .filter(price => price > 0)
+
+    if (batchPrices.length) {
+        const min = Math.min(...batchPrices)
+        const max = Math.max(...batchPrices)
+        return min === max ? formatPrice(min) : `${formatPrice(min)} - ${formatPrice(max)}`
+    }
+
     if (
         Number(product.price_min || 0) > 0
         && Number(product.price_max || 0) > 0

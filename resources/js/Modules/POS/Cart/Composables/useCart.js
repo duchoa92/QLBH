@@ -2,6 +2,7 @@ import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLocalStorage } from '@/Composables/useLocalStorage'
 import { useCartTotals } from '@/Modules/POS/Cart/Composables/useCartTotals'
 import { usePage } from '@inertiajs/vue3'
+import { toast } from 'vue-sonner'
 
 const attributeText = (attribute) => {
     if (attribute === null || attribute === undefined || attribute === '') {
@@ -81,8 +82,69 @@ const normalizeTabs = (raw) => {
 
 export function useCart() {
     const page = usePage()
+    const allowsNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
     const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled)
         && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
+
+    const normalizedStockLimit = value => {
+        const stock = Number(value)
+
+        return Number.isFinite(stock) ? Math.max(0, Math.floor(stock)) : null
+    }
+
+    const canIncreaseItem = item => {
+        if (allowsNegativeStock.value || item.imei_id) return !item.imei_id
+
+        const stockLimit = normalizedStockLimit(item.stock_limit)
+        return stockLimit !== null && Number(item.quantity || 0) < stockLimit
+    }
+
+    const increaseExistingItem = item => {
+        if (canIncreaseItem(item)) {
+            item.quantity++
+            return true
+        }
+
+        toast.error(`Sản phẩm ${item.name} không đủ tồn kho`)
+        return false
+    }
+
+    const sameBatchScope = (item, productId, variantId) =>
+        Number(item.id) === Number(productId)
+        && Number(item.variant_id || 0) === Number(variantId || 0)
+
+    // Chọn lô kế tiếp sau số lượng đã có trong giỏ. Giá bán được gắn với
+    // từng dòng giỏ để một sản phẩm có hai lô giá khác nhau không bị gộp giá.
+    const nextSellableBatch = (product, variantId = null) => {
+        const batches = (product.stock_batches || [])
+            .filter(batch => Number(batch.variant_id || 0) === Number(variantId || 0))
+        let legacyClaim = cart.value
+            .filter(item => sameBatchScope(item, product.id, variantId) && !item.batch_id)
+            .reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+
+        for (const batch of batches) {
+            const explicitClaim = cart.value
+                .filter(item => sameBatchScope(item, product.id, variantId) && Number(item.batch_id) === Number(batch.id))
+                .reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+            const legacyForBatch = Math.min(legacyClaim, Number(batch.remaining_quantity || 0))
+            legacyClaim -= legacyForBatch
+            if (explicitClaim + legacyForBatch < Number(batch.remaining_quantity || 0)) {
+                return batch
+            }
+        }
+
+        return null
+    }
+
+    const applyBatchToItem = (item, product, batch) => {
+        item.stock_batches = product.stock_batches || item.stock_batches || []
+        item.batch_id = batch?.id ?? null
+        item.batch_quantity_limit = batch ? Number(batch.remaining_quantity || 0) : null
+        item.stock_limit = batch
+            ? Number(batch.remaining_quantity || 0)
+            : (normalizedStockLimit(product.stock) ?? item.stock_limit)
+        item.price = Number(batch?.sell_price > 0 ? batch.sell_price : (product.price ?? product.sell_price ?? item.price ?? 0))
+    }
 
     /*
     |--------------------------------------------------------------------------
@@ -608,6 +670,8 @@ export function useCart() {
 
         if (variant) {
 
+            const batch = nextSellableBatch(product, variant.id)
+
             const existing =
                 cart.value.find((item) => {
 
@@ -615,13 +679,15 @@ export function useCart() {
                         item.id === product.id
                         &&
                         item.variant_id === variant.id
+                        && Number(item.batch_id || 0) === Number(batch?.id || 0)
                     )
                 })
 
             if (existing) {
 
                 Object.assign(existing, unitPayload(product))
-                existing.quantity++
+                applyBatchToItem(existing, product, batch)
+                increaseExistingItem(existing)
 
                 return
             }
@@ -632,6 +698,12 @@ export function useCart() {
 
                 variant_id:
                     variant.id,
+
+                stock_limit: batch ? Number(batch.remaining_quantity || 0) : normalizedStockLimit(variant.stock),
+
+                batch_id: batch?.id ?? null,
+                batch_quantity_limit: batch ? Number(batch.remaining_quantity || 0) : null,
+                stock_batches: product.stock_batches || [],
 
                 variant_label:
                     variantLabel,
@@ -664,16 +736,11 @@ export function useCart() {
                 showWarranty:
                     false,
 
-                price:
-                    Number(
-                        (variant.sell_price > 0 ? variant.sell_price : null)
-                        ??
-                        (variant.price > 0 ? variant.price : null)
-                        ??
-                        product.price
-                        ??
-                        0
-                    ),
+                price: Number(batch?.sell_price > 0 ? batch.sell_price : (
+                    (variant.sell_price > 0 ? variant.sell_price : null)
+                    ?? (variant.price > 0 ? variant.price : null)
+                    ?? product.price ?? 0
+                )),
 
                 quantity: 1,
 
@@ -695,6 +762,7 @@ export function useCart() {
         |--------------------------------------------------
         */
 
+        const batch = nextSellableBatch(product)
         const existing =
             cart.value.find((item) => {
 
@@ -703,13 +771,15 @@ export function useCart() {
                     product.id
                     &&
                     !item.variant_id
+                    && Number(item.batch_id || 0) === Number(batch?.id || 0)
                 )
             })
 
         if (existing) {
 
             Object.assign(existing, unitPayload(product))
-            existing.quantity++
+            applyBatchToItem(existing, product, batch)
+            increaseExistingItem(existing)
 
             return
         }
@@ -719,6 +789,12 @@ export function useCart() {
             ...unitPayload(product),
 
             variant_id: null,
+
+            stock_limit: batch ? Number(batch.remaining_quantity || 0) : normalizedStockLimit(product.stock),
+
+            batch_id: batch?.id ?? null,
+            batch_quantity_limit: batch ? Number(batch.remaining_quantity || 0) : null,
+            stock_batches: product.stock_batches || [],
 
             image_url:
                 product.image_url ?? null,
@@ -745,10 +821,7 @@ export function useCart() {
             showWarranty:
                 false,
 
-            price:
-                Number(
-                    product.price
-                ),
+            price: Number(batch?.sell_price > 0 ? batch.sell_price : product.price),
 
             quantity: 1,
 
@@ -775,7 +848,29 @@ export function useCart() {
             return
         }
 
-        item.quantity++
+        if (canIncreaseItem(item)) {
+            increaseExistingItem(item)
+            return
+        }
+
+        // Nếu lô đang ở dòng này đã hết, thêm một dòng mới từ lô kế tiếp.
+        // Không tăng vào dòng cũ vì sẽ làm giá của hai lô bị trộn lẫn.
+        const product = {
+            id: item.id,
+            name: item.name,
+            variant: item.variant_id ? { id: item.variant_id, sell_price: item.price } : null,
+            unit_id: item.unit_id,
+            unit_name: item.unit_name,
+            image_url: item.image_url,
+            stock: item.stock_limit,
+            stock_batches: item.stock_batches || [],
+            warranty_days: item.warranty_days,
+            has_vat: item.has_vat,
+            tax_percent: item.tax_percent,
+            price: item.price,
+            sell_price: item.price,
+        }
+        addToCart(product)
     }
 
 
