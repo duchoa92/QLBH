@@ -52,6 +52,15 @@ class CategoryAttributeValueController extends Controller
     public function destroy($id)
     {
         $value = CategoryAttributeValue::findOrFail($id);
+        $attribute = $value->attribute;
+        $hasVariants = $attribute && \App\Models\ProductVariant::query()
+            ->whereIn('product_id', $attribute->category->products()->select('id'))
+            ->exists();
+        if ($hasVariants) {
+            return response()->json([
+                'message' => "Không thể xóa giá trị “{$value->value}” vì danh mục đã có sản phẩm biến thể. Hãy xử lý biến thể tại Sản phẩm trước; biến thể có lịch sử bán/nhập cần được giữ lại.",
+            ], 422);
+        }
         $value->delete();
 
         return response()->json([

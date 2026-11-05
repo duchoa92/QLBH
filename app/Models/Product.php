@@ -176,12 +176,21 @@ class Product extends Model
         });
     }
 
-    // Check xem có quan hệ DB nào không
-    public function canForceDelete()
+    /** Các vị trí đang giữ lịch sử của sản phẩm, không được xóa vĩnh viễn. */
+    public function deletionUsage(): array
     {
-        return !\DB::table('sale_items')
-            ->where('product_id', $this->id)
-            ->exists();
+        return [
+            'sale_items' => \DB::table('sale_items')->where('product_id', $this->id)->count(),
+            'gift_items' => \DB::table('sale_item_gifts')->where('product_id', $this->id)->count(),
+            'import_items' => \DB::table('stock_import_items')->where('product_id', $this->id)->count(),
+            'imeis' => \DB::table('product_imeis')->where('product_id', $this->id)->count(),
+            'repair_parts' => \DB::table('repair_parts')->where('product_id', $this->id)->count(),
+        ];
+    }
+
+    public function canForceDelete(): bool
+    {
+        return collect($this->deletionUsage())->sum() === 0;
     }
 
     // Biến thể

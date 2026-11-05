@@ -113,8 +113,9 @@ class BrandController extends Controller
         }
 
         // Ngăn chặn xóa cứng nếu dính khóa ngoại tới sản phẩm
-        if ($brand->products()->exists()) {
-            return back()->withErrors(['error' => 'Không thể xóa vì còn sản phẩm thuộc thương hiệu này']);
+        $productCount = $brand->products()->withTrashed()->count();
+        if ($productCount > 0) {
+            return back()->withErrors(['error' => "Không thể xóa vĩnh viễn thương hiệu vì còn {$productCount} sản phẩm thuộc thương hiệu này. Hãy đổi thương hiệu tại từng sản phẩm hoặc xóa vĩnh viễn các sản phẩm chưa có phát sinh trước. Sản phẩm đã có lịch sử bán/nhập phải được giữ lại."]);
         }
 
         $brand->forceDelete();

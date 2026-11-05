@@ -50,7 +50,7 @@ const restore = (id) => {
 const forceDelete = (id) => {
     confirmBox.show({
         title: 'Xóa vĩnh viễn?',
-        message: 'Không thể khôi phục!',
+        message: 'Không thể khôi phục. Nếu mục đã được dùng trong hóa đơn, phiếu nhập hoặc dữ liệu liên quan, hệ thống sẽ chặn và hướng dẫn nơi cần xử lý trước.',
         onConfirm: () => {
             router.delete(`/${props.endpoint}/${id}/force`, {
                 onSuccess: () => {

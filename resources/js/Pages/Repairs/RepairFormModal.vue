@@ -3,6 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import debounce from 'lodash/debounce';
+import { closeModal } from '@/Stores/modal';
 
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue';
 import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue';
@@ -19,10 +20,17 @@ import { imageUrl } from '@/utils/imageUrl';
 import { Barcode, History, KeyRound, Search, ShieldAlert, Smartphone, Trash2, UserRound } from 'lucide-vue-next';
 
 const emit = defineEmits(['close', 'updated']);
-const props = defineProps({ initialRepair: { type: Object, default: null }, startAt: { type: String, default: 'repair' }, onCompleted: Function, onPay: Function });
+const props = defineProps({ initialRepair: { type: Object, default: null }, startAt: { type: String, default: 'repair' }, onCompleted: Function, onPay: Function, modalId: { type: Number, default: null } });
 const step = ref(props.initialRepair ? props.startAt : 'intake');
 const createdRepair = ref(props.initialRepair || null);
 const progressModalRef = ref(null);
+const closeRepairModal = () => {
+    if (props.modalId !== null) {
+        closeModal(props.modalId);
+        return;
+    }
+    emit('close');
+};
 const handleModalClose = () => {
     if (lightboxImage.value) {
         lightboxImage.value = null;
@@ -33,7 +41,7 @@ const handleModalClose = () => {
         return;
     }
     if (progressModalRef.value?.credentialsModalOpen || progressModalRef.value?.historyModalOpen || progressModalRef.value?.imageViewerOpen || progressModalRef.value?.cameraOpen) return;
-    emit('close');
+    closeRepairModal();
 };
 const workflowStage = ref('progress');
 const canOpenComplete = computed(() => createdRepair.value?.status === 'repairing'
@@ -1187,6 +1195,9 @@ const confirmCustomerPhoneConflict = async (action) => {
 const onProgressUpdated = (repair) => {
     if (repair) createdRepair.value = repair;
     emit('updated');
+    // Waiting tickets leave this workflow after saving. Close by modal id so
+    // the outer modal store cannot miss an event from the embedded component.
+    if (repair?.waiting_for_parts) nextTick(closeRepairModal);
 };
 
 const onWorkflowStageChange = (stage) => {
@@ -1266,7 +1277,7 @@ const selectWorkflowStep = (status) => {
             :key="createdRepair.id"
             :repair="createdRepair"
             embedded
-            @close="emit('close')"
+            @close="closeRepairModal"
             @updated="onProgressUpdated"
             @stage-change="onWorkflowStageChange"
             @completed="props.onCompleted?.($event)"
@@ -1726,7 +1737,7 @@ const selectWorkflowStep = (status) => {
         </template>
         <template #footer>
             <div v-if="step === 'intake'" class="flex items-center justify-end gap-2">
-                <ActionButton variant="secondary" @click="emit('close')">
+                <ActionButton variant="secondary" @click="closeRepairModal">
                     Hủy bỏ
                 </ActionButton>
 

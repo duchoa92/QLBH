@@ -24,6 +24,7 @@ const props = defineProps({
 const repairsData = ref(props.repairs);
 const statsData = ref(props.stats || {});
 const perPage = ref(Number(props.filters?.per_page ?? 20));
+const currentPage = ref(Number(props.repairs?.current_page ?? 1));
 const loadingRepairs = ref(false);
 const page = usePage();
 const permissions = computed(() => page.props.auth?.permissions || []);
@@ -84,7 +85,7 @@ const syncFilterUrl = (filters) => {
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 };
 
-const requestRepairs = async () => {
+const requestRepairs = async (pageNumber = 1) => {
     repairsRequestController?.abort();
     const requestId = ++repairsRequestId;
     repairsRequestController = new AbortController();
@@ -97,7 +98,7 @@ const requestRepairs = async () => {
         sort_by: sortBy.value,
         sort_order: sortOrder.value,
         per_page: perPage.value,
-        page: 1,
+        page: pageNumber,
     };
 
     try {
@@ -108,6 +109,11 @@ const requestRepairs = async () => {
         if (requestId !== repairsRequestId) return;
         repairsData.value = data.repairs;
         statsData.value = data.stats || {};
+        currentPage.value = Number(data.repairs?.current_page ?? pageNumber);
+        if (!data.repairs?.data?.length && currentPage.value > 1) {
+            currentPage.value -= 1;
+            return requestRepairs(currentPage.value);
+        }
         syncFilterUrl(data.filters || params);
     } catch (error) {
         if (error.name !== 'CanceledError' && requestId === repairsRequestId) {
@@ -133,7 +139,10 @@ const activeFilters = computed(() => ({
     per_page: perPage.value,
 }));
 
-watch(() => props.repairs, (value) => { repairsData.value = value; });
+watch(() => props.repairs, (value) => {
+    repairsData.value = value;
+    currentPage.value = Number(value?.current_page ?? 1);
+});
 watch(() => props.stats, (value) => { statsData.value = value || {}; });
 watch(() => props.filters, (value) => {
     if (!value) return;
@@ -205,7 +214,7 @@ const closeRepairDetail = () => {
     const url = new URL(window.location.href);
     if (!url.searchParams.has('open_repair')) return;
     url.searchParams.delete('open_repair');
-    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true });
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 };
 
 const openRepairDetail = (repair) => {
@@ -224,7 +233,8 @@ watch(() => page.url, () => { openCreateFromQuery(); openRepairFromQuery(); });
 watch(repairsData, openRepairFromQuery);
 
 const onRepairCompleted = (repair) => {
-    reload();
+    // Prepare the checkout modal before refreshing the list so the completion
+    // flow remains open and the newly completed ticket is immediately payable.
     onProgressPayment(repair);
 };
 
@@ -237,13 +247,14 @@ const onProgressPayment = async (repair) => {
                 note: repair.warranty_covered_amount > 0 ? 'Toàn bộ chi phí được bảo hành' : 'Không phát sinh thanh toán',
             });
             toast.success('Đã xác nhận trả máy, không phát sinh thanh toán');
-            reload();
+            requestRepairs(currentPage.value);
         } catch (error) {
             toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể xác nhận trả máy');
         }
         return;
     }
     paymentRepair.value = repair;
+    requestRepairs(currentPage.value);
 };
 
 const removeRepair = (repair) => {
@@ -262,8 +273,7 @@ const removeRepair = (repair) => {
                 onSuccess: () => {
                     toast.success('Đã xóa phiếu sửa chữa');
                     closeRepairDetail();
-                    reload();
-                    resolve();
+                    requestRepairs(currentPage.value).then(resolve).catch(reject);
                 },
                 onError: (errors) => reject(new Error(Object.values(errors || {}).flat()[0] || 'Không thể xóa phiếu sửa chữa.')),
             });
@@ -350,6 +360,20 @@ const statusLabels = {
     returned: 'Đã trả khách',
     cancelled: 'Hủy',
 };
+const repairStatusLabel = (repair) => {
+    if (repair?.status === 'repairing' && repair.waiting_for_parts) {
+        return repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : 'Chờ linh kiện';
+    }
+    return statusLabels[repair?.status] || repair?.status;
+};
+const repairStatusClass = (repair) => {
+    if (repair?.status === 'repairing' && repair.waiting_for_parts) {
+        return repair.waiting_mode === 'wait_repair'
+            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            : 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+    return statusClasses[repair?.status];
+};
 
 const statusOptions = [
     { value: '', label: 'Tất cả trạng thái' },
@@ -366,7 +390,7 @@ const confirmPayment = async (payment) => {
         await axios.post(route('repairs.return', paymentRepair.value.id), payment);
         toast.success('Đã thanh toán và trả máy cho khách');
         paymentRepair.value = null;
-        reload();
+        requestRepairs(currentPage.value);
     } catch (error) {
         const message = Object.values(error.response?.data?.errors || {}).flat()[0];
         toast.error(message || 'Không thể xác nhận thanh toán');
@@ -418,8 +442,8 @@ const confirmPayment = async (payment) => {
                                 <td class="max-w-[220px] px-3.5 py-2.5"><span v-if="repairIssueText(repair)" class="block truncate text-[11px] text-rose-700" :title="repairIssueText(repair)"><template v-for="(segment, index) in highlightedSearchSegments(repairIssueText(repair))" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></span><span v-else class="text-[11px] text-slate-400">Chưa ghi nhận lỗi</span></td>
                                 <td class="whitespace-nowrap px-3.5 py-2.5 text-[11px] text-slate-600">{{ repair.received_at || repair.created_at || '—' }}</td>
                                 <td class="px-3 py-2"><div class="flex min-w-[190px] items-center justify-center gap-2">
-                                    <span :class="['inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-bold', statusClasses[repair.status]]"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusLabels[repair.status] || repair.status }}</span>
-                                    <span v-if="repair.waiting_for_parts" class="max-w-[120px] truncate text-[9px] font-semibold text-amber-700" :title="repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : `Chờ ${repair.parts_needed || 'linh kiện'}`">{{ repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : `Chờ ${repair.parts_needed || 'linh kiện'}` }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span></span>
+                                    <span :class="['inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-bold', repairStatusClass(repair)]"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ repairStatusLabel(repair) }}</span>
+                                    <span v-if="repair.waiting_for_parts && repair.waiting_mode !== 'wait_repair'" class="max-w-[120px] truncate text-[9px] font-semibold text-amber-700" :title="`Chờ ${repair.parts_needed || 'linh kiện'}`">Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span></span>
                                     <button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm transition hover:bg-blue-700" @click.stop="openRepairWorkflow(repair)"><Play v-if="repair.status === 'pending'" class="h-3 w-3 fill-current" /><Wrench v-else-if="repair.status === 'repairing'" class="h-3 w-3" /><RotateCcw v-else class="h-3 w-3" />Tiếp tục</button>
                                 </div></td>
                             </tr>
@@ -430,10 +454,10 @@ const confirmPayment = async (payment) => {
 
                 <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
                     <article v-for="repair in repairsData?.data" :key="`mobile-${repair.id}`" class="space-y-3 rounded-xl border border-slate-200 border-l-4 bg-white p-3.5 shadow-sm transition hover:border-slate-300 hover:shadow-md active:bg-slate-50" :class="repair.status === 'pending' ? 'border-l-amber-400' : repair.status === 'repairing' ? 'border-l-violet-500' : repair.status === 'done' ? 'border-l-emerald-500' : repair.status === 'returned' ? 'border-l-slate-400' : 'border-l-rose-400'" @click="openRepairDetail(repair)">
-                        <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2"><button type="button" class="min-w-0 truncate text-left text-sm font-extrabold text-emerald-700" @click.stop="openRepairDetail(repair)">#{{ repair.code }}</button><div class="flex shrink-0 items-center gap-2"><span :class="['rounded-full border px-2 py-1 text-[10px] font-bold', statusClasses[repair.status]]">{{ statusLabels[repair.status] || repair.status }}</span><button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-blue-700" @click.stop="openRepairWorkflow(repair)"><Play v-if="repair.status === 'pending'" class="h-3 w-3 fill-current" /><Wrench v-else-if="repair.status === 'repairing'" class="h-3 w-3" /><RotateCcw v-else class="h-3 w-3" />Tiếp tục</button></div></div>
+                        <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2"><button type="button" class="min-w-0 truncate text-left text-sm font-extrabold text-emerald-700" @click.stop="openRepairDetail(repair)">#{{ repair.code }}</button><div class="flex shrink-0 items-center gap-2"><span :class="['rounded-full border px-2 py-1 text-[10px] font-bold', repairStatusClass(repair)]">{{ repairStatusLabel(repair) }}</span><button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-blue-700" @click.stop="openRepairWorkflow(repair)"><Play v-if="repair.status === 'pending'" class="h-3 w-3 fill-current" /><Wrench v-else-if="repair.status === 'repairing'" class="h-3 w-3" /><RotateCcw v-else class="h-3 w-3" />Tiếp tục</button></div></div>
                         <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="truncate text-sm font-bold text-slate-900"><template v-for="(segment, index) in highlightedSearchSegments(repair.customer?.name || repair.customer_name || 'Khách lẻ')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div><div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><UserRound class="h-3 w-3" /><template v-for="(segment, index) in highlightedSearchSegments(repair.customer?.phone || repair.contact_phone || '—')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div></div><div class="min-w-0 text-right"><div class="truncate text-xs font-bold text-slate-800"><template v-for="(segment, index) in highlightedSearchSegments(repair.device_name)" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div><div class="mt-0.5 flex truncate font-mono text-[10px] text-slate-500">IMEI: <template v-for="(segment, index) in highlightedSearchSegments(repair.imei || repair.serial || '—')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div></div></div>
                         <div class="rounded-lg border border-rose-100 bg-rose-50/60 px-2.5 py-2 text-[10px]" :class="repairIssueText(repair) ? 'text-rose-800' : 'text-slate-500'"><span class="font-bold">Lỗi máy: </span><template v-if="repairIssueText(repair)"><template v-for="(segment, index) in highlightedSearchSegments(repairIssueText(repair))" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></template><span v-else>Chưa ghi nhận lỗi</span></div>
-                        <div v-if="repair.waiting_for_parts" class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-800">{{ repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : `Chờ ${repair.parts_needed || 'linh kiện'}` }}<span v-if="repair.expected_days !== null"> · Dự kiến {{ repair.expected_days }} ngày</span></div>
+                        <div v-if="repair.waiting_for_parts && repair.waiting_mode !== 'wait_repair'" class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-800">Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · Dự kiến {{ repair.expected_days }} ngày</span></div>
                         <div class="border-t border-slate-100 pt-2 text-[10px] text-slate-500">Ngày nhận: {{ repair.received_at || repair.created_at || '—' }}</div>
                     </article>
                     <div v-if="!repairsData?.data?.length" class="p-10 text-center"><FileText class="mx-auto mb-3 h-9 w-9 text-slate-300" /><p class="text-sm font-bold text-slate-700">Không tìm thấy phiếu phù hợp</p><p class="mt-1 text-xs text-slate-400">Thử thay đổi bộ lọc hoặc từ khóa</p></div>

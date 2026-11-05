@@ -58,4 +58,23 @@ class Supplier extends Model
             }
         );
     }
+
+    /**
+     * Các phát sinh phải được xử lý trước khi xóa nhà cung cấp.
+     * Không dùng cascade để tránh mất lịch sử nhập hàng/công nợ.
+     */
+    public function usageSummary(): array
+    {
+        $imports = \DB::table('stock_imports')->where('supplier_id', $this->id)->count();
+        $imeis = \DB::table('product_imeis')->where('supplier_id', $this->id)->count();
+        $debts = \DB::table('supplier_debts')->where('supplier_id', $this->id)->count();
+        $hasBalance = abs((float) $this->debt_balance) > 0.0001;
+
+        return compact('imports', 'imeis', 'debts', 'hasBalance');
+    }
+
+    public function hasUsage(): bool
+    {
+        return collect($this->usageSummary())->filter()->isNotEmpty();
+    }
 }

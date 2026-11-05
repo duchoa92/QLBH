@@ -68,6 +68,19 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        if (! $user->canBeDeleted()) {
+            $usage = $user->deletionUsage();
+            $parts = array_filter([
+                $usage['sales'] ? "{$usage['sales']} hóa đơn" : null,
+                $usage['work_shifts'] ? "{$usage['work_shifts']} ca làm việc" : null,
+                $usage['bank_payments'] ? "{$usage['bank_payments']} giao dịch chuyển khoản" : null,
+            ]);
+
+            return back()->withErrors([
+                'password' => 'Không thể xóa tài khoản vì đã có '.implode(', ', $parts).'. Hãy liên hệ quản trị để gỡ quyền hoặc đổi mật khẩu thay vì xóa lịch sử giao dịch.',
+            ]);
+        }
+
         Auth::logout();
 
         $user->delete();

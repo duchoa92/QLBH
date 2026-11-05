@@ -402,7 +402,15 @@ class ProductController extends Controller
         }
 
         if (!$product->canForceDelete()) {
-            return back()->withErrors(['error' => 'Sản phẩm đã phát sinh dữ liệu, không thể xóa vĩnh viễn']);
+            $usage = $product->deletionUsage();
+            $parts = array_filter([
+                $usage['sale_items'] ? "{$usage['sale_items']} dòng hóa đơn" : null,
+                $usage['gift_items'] ? "{$usage['gift_items']} dòng quà tặng" : null,
+                $usage['import_items'] ? "{$usage['import_items']} dòng phiếu nhập" : null,
+                $usage['imeis'] ? "{$usage['imeis']} IMEI/Serial" : null,
+                $usage['repair_parts'] ? "{$usage['repair_parts']} dòng linh kiện sửa chữa" : null,
+            ]);
+            return back()->withErrors(['error' => 'Không thể xóa vĩnh viễn sản phẩm vì đã có '.implode(', ', $parts).'. Đây là dữ liệu lịch sử; hãy giữ sản phẩm trong thùng rác hoặc ngừng hoạt động, không xóa các hóa đơn/phiếu nhập chỉ để xóa sản phẩm.']);
         }
 
         $product->forceDelete();
@@ -445,7 +453,7 @@ class ProductController extends Controller
         }
 
         if ($skippedCount > 0) {
-            return back()->withErrors(['error' => "Có {$skippedCount} sản phẩm đã phát sinh dữ liệu không thể xóa vĩnh viễn. Các sản phẩm còn lại đã được xóa."]);
+            return back()->withErrors(['error' => "Có {$skippedCount} sản phẩm đã phát sinh hóa đơn, phiếu nhập, IMEI/Serial hoặc phiếu sửa nên không thể xóa vĩnh viễn. Các sản phẩm còn lại đã được xóa. Hãy giữ các sản phẩm này trong thùng rác hoặc ngừng hoạt động; không xóa chứng từ lịch sử chỉ để xóa sản phẩm."]);
         }
 
         return back()->with('success', 'Đã xóa vĩnh viễn các sản phẩm được chọn');

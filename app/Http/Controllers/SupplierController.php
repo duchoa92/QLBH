@@ -227,9 +227,23 @@ class SupplierController extends Controller
         Supplier $supplier
     ): RedirectResponse {
 
+        $usage = $supplier->usageSummary();
+        if (collect($usage)->filter()->isNotEmpty()) {
+            $parts = array_filter([
+                $usage['imports'] ? "{$usage['imports']} phiếu nhập" : null,
+                $usage['imeis'] ? "{$usage['imeis']} IMEI/Serial" : null,
+                $usage['debts'] ? "{$usage['debts']} giao dịch công nợ" : null,
+                $usage['hasBalance'] ? 'còn số dư công nợ' : null,
+            ]);
+
+            return back()->withErrors([
+                'supplier' => 'Không thể xóa nhà cung cấp vì đã được sử dụng ('.implode(', ', $parts).'). Hãy xử lý hoặc hủy các phiếu nhập liên quan, xóa/điều chuyển IMEI còn gắn nhà cung cấp và tất toán công nợ trước. Nếu chỉ muốn ngừng dùng, hãy chuyển trạng thái sang ngừng hoạt động.',
+            ]);
+        }
+
         $supplier->delete();
 
-        return back();
+        return back()->with('success', 'Đã xóa nhà cung cấp.');
     }
 
     private function normalizeBankAccounts(array $data): array

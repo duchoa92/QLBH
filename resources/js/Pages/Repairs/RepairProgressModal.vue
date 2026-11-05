@@ -229,7 +229,9 @@ const submit = (targetStatus = 'repairing', { advanceToCompletion = false } = {}
                 activeTab.value = 'log'
                 emit('stage-change', 'complete')
             }
-            if (!embedded || targetStatus === 'cancelled') emit('close')
+            // Waiting tickets are saved for later work, so return to the list immediately.
+            // The repair-now path stays open to move directly to completion.
+            if (!embedded || targetStatus === 'cancelled' || isWaiting.value) emit('close')
             resolve(true)
         },
         onError: (errors) => {
@@ -246,9 +248,11 @@ const cancelRepair = () => {
     }
 }
 
-const onCompleted = (repair) => {
+const onCompleted = async (repair) => {
     if (payImmediately.value) emit('completed', repair)
     else emit('updated', repair)
+    // Let the parent mount the checkout modal before the embedded workflow closes.
+    await nextTick()
     emit('close')
 }
 
@@ -305,7 +309,10 @@ const saveProgress = async () => {
     }
 
     if (isWaiting.value) {
-        await submit()
+        const saved = await submit()
+        // This is the explicit action path for both "Chờ linh kiện" and
+        // "Tạm chờ sửa". Close the parent workflow only after a successful save.
+        if (saved && props.embedded) emit('close')
         return
     }
 

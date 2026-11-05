@@ -32,6 +32,15 @@ class CategoryAttributeController extends Controller
 
     public function destroy(CategoryAttribute $attribute)
     {
+        $hasVariants = \App\Models\ProductVariant::query()
+            ->whereIn('product_id', $attribute->category->products()->select('id'))
+            ->exists();
+        if ($hasVariants) {
+            return back()->withErrors([
+                'attribute' => "Không thể xóa thuộc tính “{$attribute->name}” vì danh mục đã có sản phẩm biến thể. Hãy xử lý biến thể tại Sản phẩm trước; biến thể có lịch sử bán/nhập cần được giữ lại.",
+            ]);
+        }
+
         $attribute->delete();
 
         return back();

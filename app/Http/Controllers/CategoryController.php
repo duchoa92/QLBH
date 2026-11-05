@@ -121,6 +121,34 @@ class CategoryController extends Controller
         $data = $request->validated();
         $data['slug'] = Str::slug($data['name']);
 
+        // Lúc lưu, giao diện thay thế toàn bộ danh sách thuộc tính. Không cho
+        // bỏ nhóm/giá trị đã được dùng để tạo biến thể, tránh làm người dùng
+        // hiểu rằng dữ liệu biến thể lịch sử cũng đã được thay đổi.
+        $currentAttributes = $category->categoryAttributes()->with('values')->get();
+        $nextAttributes = collect($data['attributes'] ?? [])
+            ->mapWithKeys(fn (array $attribute) => [
+                mb_strtolower(trim((string) ($attribute['name'] ?? ''))) => collect($attribute['options'] ?? [])
+                    ->map(fn ($value) => mb_strtolower(trim((string) $value)))
+                    ->filter()
+                    ->values(),
+            ]);
+        $removesExistingOption = $currentAttributes->contains(function (CategoryAttribute $attribute) use ($nextAttributes): bool {
+            $name = mb_strtolower(trim($attribute->name));
+            if (! $nextAttributes->has($name)) return true;
+
+            $nextValues = $nextAttributes->get($name);
+            return $attribute->values->contains(fn (CategoryAttributeValue $value) => ! $nextValues->contains(mb_strtolower(trim($value->value))));
+        });
+        $hasVariants = \App\Models\ProductVariant::query()
+            ->whereIn('product_id', $category->products()->select('id'))
+            ->exists();
+
+        if ($removesExistingOption && $hasVariants) {
+            return back()->withErrors([
+                'attributes' => 'Không thể xóa nhóm thuộc tính hoặc giá trị của danh mục vì đã có sản phẩm biến thể sử dụng. Hãy vào từng Sản phẩm, đổi hoặc xóa các biến thể liên quan trước; với biến thể đã phát sinh bán/nhập, hãy giữ dữ liệu lịch sử và chỉ thêm giá trị mới.',
+            ]);
+        }
+
         DB::transaction(function () use ($category, $data) {
 
             $category->update($data);
@@ -189,8 +217,9 @@ class CategoryController extends Controller
             return back()->withErrors(['error' => 'Danh mục không tồn tại']);
         }
 
-        if ($category->products()->exists()) {
-            return back()->withErrors(['error' => 'Không thể xóa vì còn sản phẩm']);
+        $productCount = $category->products()->withTrashed()->count();
+        if ($productCount > 0) {
+            return back()->withErrors(['error' => "Không thể xóa vĩnh viễn danh mục vì còn {$productCount} sản phẩm (kể cả sản phẩm trong thùng rác). Hãy chuyển các sản phẩm sang danh mục khác hoặc xóa vĩnh viễn từng sản phẩm chưa có phát sinh trước. Sản phẩm đã có hóa đơn/phiếu nhập phải được giữ trong thùng rác."]);
         }
 
         $category->forceDelete();

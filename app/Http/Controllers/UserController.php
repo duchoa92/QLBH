@@ -145,6 +145,18 @@ class UserController extends Controller
 
         abort_if($user->username === 'admin' || $user->hasRole('Super Admin'), 403, 'Không thể xóa tài khoản Super Admin chính.');
 
+        if (! $user->canBeDeleted()) {
+            $usage = $user->deletionUsage();
+            $parts = array_filter([
+                $usage['sales'] ? "{$usage['sales']} hóa đơn" : null,
+                $usage['work_shifts'] ? "{$usage['work_shifts']} ca làm việc" : null,
+                $usage['bank_payments'] ? "{$usage['bank_payments']} giao dịch chuyển khoản" : null,
+            ]);
+            return redirect()->back()->withErrors([
+                'user' => 'Không thể xóa tài khoản vì đã có '.implode(', ', $parts).'. Để ngừng sử dụng, hãy đổi mật khẩu, gỡ vai trò/quyền hoặc chuyển công việc sang tài khoản khác; không xóa dữ liệu lịch sử.',
+            ]);
+        }
+
         $this->service->delete($user);
 
         return redirect()
