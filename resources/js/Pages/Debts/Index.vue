@@ -1,16 +1,13 @@
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { router, useForm, usePage } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
+import { router, useForm } from '@inertiajs/vue3'
 import { Search, HandCoins, Wallet, Users, Truck, X, ChevronDown, ScanLine, History } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import SupplierPaymentModal from '@/Pages/Debts/SupplierPaymentModal.vue'
 import { formatMoney } from '@/utils/format'
-import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
-import PaginationBar from '@/Components/UI/PaginationBar.vue'
-import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
-import api from '@/Services/api'
 
 defineOptions({ layout: AdminLayout })
 
@@ -24,70 +21,37 @@ const props = defineProps({
 })
 
 const isCustomer = computed(() => props.entity === 'customer')
-const page = usePage()
 const title = computed(() => isCustomer.value ? 'Thu công nợ khách hàng' : 'Thanh toán công nợ nhà cung cấp')
 const search = ref(props.filters.search || '')
 const selected = ref(null)
-const reminderParty = ref(null)
+const supplierModal = ref(null) // { supplier, orderId }
 const expandedId = ref(null)
-const detailInvoice = ref(null)
-const detailImport = ref(null)
-const detailLoading = ref(false)
-const detailError = ref('')
-let detailRequestToken = 0
 const scanCode = ref('')
 const scanMessage = ref('')
 const error = ref('')
 const form = useForm({ amount: '', payment_method: 'cash', note: '', order_id: '' })
 let searchTimer
-const isEditingSearch = ref(false)
 
-const openDebtReminder = () => {
-    const url = new URL(window.location.href)
-    const id = Number(url.searchParams.get('open_reminder'))
-    reminderParty.value = id ? props.rows?.data?.find(row => Number(row.id) === id) || null : null
-}
-const openCustomerDebtDetails = () => {
-    const id = Number(new URL(window.location.href).searchParams.get('open_customer'))
-    expandedId.value = id && props.rows?.data?.some(row => Number(row.id) === id) ? id : null
-}
-const closeDebtReminder = () => {
-    reminderParty.value = null
-    const url = new URL(window.location.href)
-    if (!url.searchParams.has('open_reminder')) return
-    url.searchParams.delete('open_reminder')
-    router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true })
-}
-const payReminder = () => {
-    const party = reminderParty.value
-    closeDebtReminder()
-    if (party) pay(party)
-}
-
-watch(() => props.filters.search, value => {
-    if (!isEditingSearch.value) search.value = value || ''
-})
-watch(() => page.url, openDebtReminder, { immediate: true })
-watch(() => page.url, openCustomerDebtDetails, { immediate: true })
-watch(() => props.rows, openCustomerDebtDetails)
-watch(() => props.rows, openDebtReminder)
+watch(() => props.filters.search, value => { search.value = value || '' })
 watch(search, value => {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => router.get(
         isCustomer.value ? route('debts.customers') : route('debts.suppliers'),
-        { search: value || undefined, per_page: props.filters?.per_page, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order },
-        { preserveState: true, preserveScroll: true, replace: true, only: ['rows', 'summary', 'filters'] },
+        { search: value || undefined },
+        { preserveState: true, preserveScroll: true, replace: true },
     ), 250)
 })
 
 const nameOf = row => isCustomer.value ? row.full_name : row.name
-const sort = field => {
-    const order = props.filters?.sort_by === field && props.filters?.sort_order === 'asc' ? 'desc' : 'asc'
-    router.get(isCustomer.value ? route('debts.customers') : route('debts.suppliers'), {
-        search: search.value || undefined, per_page: props.filters?.per_page, sort_by: field, sort_order: order,
-    }, { preserveState: true, preserveScroll: true, replace: true, only: ['rows', 'summary', 'filters'] })
-}
 const pay = (row, order = null) => {
+    // Nhà cung cấp: dùng modal thanh toán riêng (chia tiền cho nhiều phiếu nhập)
+    if (!isCustomer.value) {
+        const target = order || null
+        supplierModal.value = { supplier: row, orderId: target?.id || '' }
+        return
+    }
+
+    order = order || props.orders.find(item => Number(item.party_id) === Number(row.id)) || null
     selected.value = row
     error.value = ''
     form.reset()
@@ -98,54 +62,6 @@ const pay = (row, order = null) => {
     scanMessage.value = ''
     if (order) form.amount = Number(order.due).toFixed(0)
 }
-const showOrderDetail = async (order) => {
-    if (!order?.id || order.unallocated) return
-    const requestToken = ++detailRequestToken
-    const urlState = new URL(window.location.href)
-    if (urlState.searchParams.get('detail_order') !== String(order.id)) {
-        urlState.searchParams.set('detail_order', String(order.id))
-        router.push({ url: `${urlState.pathname}${urlState.search}${urlState.hash}`, preserveState: true, preserveScroll: true })
-    }
-    detailInvoice.value = null
-    detailImport.value = null
-    detailError.value = ''
-    detailLoading.value = true
-    try {
-        const url = isCustomer.value
-            ? `${route('debts.customers')}/orders/${order.id}`
-            : `${route('debts.suppliers')}/orders/${order.id}`
-        const { data } = await api.get(url)
-        if (requestToken !== detailRequestToken) return
-        if (isCustomer.value) detailInvoice.value = data
-        else detailImport.value = data
-    } catch (requestError) {
-        if (requestToken !== detailRequestToken) return
-        detailError.value = requestError.response?.data?.message || 'Không thể tải chi tiết đơn.'
-    } finally {
-        if (requestToken === detailRequestToken) detailLoading.value = false
-    }
-}
-const closeOrderDetail = () => {
-    detailRequestToken++
-    detailLoading.value = false
-    detailError.value = ''
-    detailInvoice.value = null
-    detailImport.value = null
-    const url = new URL(window.location.href)
-    if (url.searchParams.has('detail_order')) {
-        url.searchParams.delete('detail_order')
-        router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true })
-    }
-}
-
-const restoreOrderDetail = () => {
-    const id = Number(new URL(window.location.href).searchParams.get('detail_order'))
-    if (id) showOrderDetail({ id })
-    else if (detailInvoice.value || detailImport.value || detailLoading.value) closeOrderDetail()
-}
-watch(() => page.url, restoreOrderDetail, { immediate: true })
-window.addEventListener('popstate', restoreOrderDetail)
-onBeforeUnmount(() => window.removeEventListener('popstate', restoreOrderDetail))
 const partyOrders = computed(() => selected.value ? props.orders.filter(order => Number(order.party_id) === Number(selected.value.id)) : [])
 const scanOrder = () => {
     const code = scanCode.value.trim().toLowerCase()
@@ -170,9 +86,9 @@ const submit = () => {
 </script>
 
 <template>
-    <div class="space-y-3">
-        <PageHeader :title="title" />
-       
+    <div class="space-y-5 p-4 sm:p-6">
+        <PageHeader :title="title" :description="isCustomer ? 'Theo dõi số dư và ghi nhận các lần khách trả nợ.' : 'Theo dõi số dư phải trả và ghi nhận các lần thanh toán nhà cung cấp.'" />
+
         <div class="grid gap-3 sm:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div class="flex items-center gap-3">
@@ -188,108 +104,47 @@ const submit = () => {
             </div>
         </div>
 
-        <div class="space-y-3">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div><h2 class="font-bold text-slate-900">Danh sách còn công nợ</h2></div>
-                <label class="relative block sm:w-80"><Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" :size="16" /><input v-model="search" class="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại' : 'Tìm nhà cung cấp, mã hoặc số điện thoại'" @focus="isEditingSearch = true" @blur="isEditingSearch = false" /></label>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div><h2 class="font-bold text-slate-900">Danh sách còn công nợ</h2><p class="mt-1 text-xs text-slate-500">Số dư được cập nhật sau mỗi lần thu hoặc chi.</p></div>
+                <label class="relative block sm:w-80"><Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" :size="16" /><input v-model="search" class="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại' : 'Tìm nhà cung cấp, mã hoặc số điện thoại'" /></label>
             </div>
-            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div class="hidden overflow-x-auto md:block">
-                <table class="app-data-table w-full min-w-[720px] text-left text-sm">
-                    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600"><tr><th class="px-4 py-3"><button type="button" class="hover:text-emerald-700" @click="sort(isCustomer ? 'full_name' : 'name')">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }} ↕</button></th><th class="px-4 py-3"><button type="button" class="hover:text-emerald-700" @click="sort('code')">Mã ↕</button></th><th class="px-4 py-3">Điện thoại</th><th class="px-4 py-3 text-right"><button type="button" class="hover:text-emerald-700" @click="sort('debt_balance')">Còn nợ ↕</button></th><th class="px-4 py-3 text-right">Thao tác</th></tr></thead>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[720px] text-left text-sm">
+                    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Mã</th><th class="px-4 py-3">Điện thoại</th><th class="px-4 py-3 text-right">Còn nợ</th><th class="px-4 py-3 text-right">Thao tác</th></tr></thead>
                     <tbody class="divide-y divide-slate-100">
                         <template v-for="row in rows.data" :key="row.id">
-                            <tr
-                                class="cursor-pointer hover:bg-slate-50/70"
-                                tabindex="0"
-                                @click="expandedId = expandedId === row.id ? null : row.id"
-                                @keydown.enter="expandedId = expandedId === row.id ? null : row.id"
-                                @keydown.space.prevent="expandedId = expandedId === row.id ? null : row.id"
-                            ><td class="px-4 py-3 font-semibold text-slate-800"><span class="inline-flex items-center gap-1"><ChevronDown :size="14" class="text-slate-400 transition-transform" :class="expandedId === row.id ? 'rotate-180' : ''" />{{ nameOf(row) }}</span></td><td class="px-4 py-3 text-slate-600">{{ row.code || '—' }}</td><td class="px-4 py-3 text-slate-600">{{ row.phone || '—' }}</td><td class="px-4 py-3 text-right font-bold text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-1"><ActionButton @click.stop="pay(row)"><HandCoins :size="15" />Thanh toán nợ</ActionButton></div></td></tr>
-                            <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id || `other-${row.id}`" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><button v-if="!order.unallocated" type="button" class="font-bold text-blue-700 hover:underline" @click.stop="showOrderDetail(order)">{{ order.code }}</button><span v-else class="font-bold text-slate-800">{{ order.code }}</span><div v-if="!order.unallocated" class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div><div v-else class="mt-1 text-xs text-slate-500">Khoản công nợ chưa được gắn với hóa đơn/phiếu nhập cụ thể.</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có đơn nợ; khoản dư nợ sẽ được thanh toán bằng nút “Thanh toán nợ” phía trên.</p></div></td></tr>
+                            <tr class="hover:bg-slate-50/70"><td class="px-4 py-3 font-semibold text-slate-800">{{ nameOf(row) }}</td><td class="px-4 py-3 text-slate-600">{{ row.code || '—' }}</td><td class="px-4 py-3 text-slate-600">{{ row.phone || '—' }}</td><td class="px-4 py-3 text-right font-bold text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-1"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="expandedId = expandedId === row.id ? null : row.id"><ChevronDown :size="14" :class="expandedId === row.id ? 'rotate-180' : ''" />Đơn nợ</button><ActionButton @click="pay(row)"><HandCoins :size="15" />{{ isCustomer ? 'Ghi nhận thu' : 'Thanh toán' }}</ActionButton></div></td></tr>
+                            <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><a :href="order.href" class="font-bold text-blue-700 hover:underline">{{ order.code }}</a><div class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có hóa đơn/phiếu nhập nợ riêng để đối chiếu. Có thể ghi nhận khoản thanh toán tổng bằng nút phía trên.</p></div></td></tr>
                         </template>
                         <tr v-if="!rows.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div class="divide-y divide-slate-200 md:hidden">
-                <article v-for="row in rows.data" :key="`mobile-debt-${row.id}`" class="space-y-2.5 p-3.5" @click="expandedId = expandedId === row.id ? null : row.id">
-                    <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">{{ nameOf(row) }}</div><div class="mt-0.5 text-xs text-slate-500">{{ row.code || '—' }} · {{ row.phone || '—' }}</div></div><div class="shrink-0 text-right"><div class="text-[10px] font-semibold uppercase text-slate-400">Còn nợ</div><div class="font-bold text-rose-600">{{ formatMoney(row.debt_balance) }}</div></div></div>
-                    <div class="flex items-center justify-between gap-2"><button type="button" class="text-xs font-semibold text-blue-700" @click.stop="expandedId = expandedId === row.id ? null : row.id">{{ expandedId === row.id ? 'Ẩn đơn nợ' : 'Xem đơn nợ' }} <ChevronDown :size="13" class="inline" :class="expandedId === row.id ? 'rotate-180' : ''" /></button><ActionButton @click.stop="pay(row)"><HandCoins :size="15" />Thanh toán nợ</ActionButton></div>
-                    <div v-if="expandedId === row.id" class="space-y-2 border-t border-slate-100 pt-2">
-                        <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div>
-                        <div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id || `mobile-other-${row.id}`" class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-2.5">
-                            <div class="min-w-0"><button v-if="!order.unallocated" type="button" class="truncate text-left text-xs font-bold text-blue-700" @click.stop="showOrderDetail(order)">{{ order.code }}</button><span v-else class="text-xs font-bold">{{ order.code }}</span><div class="text-[10px] text-slate-500">{{ order.date || '—' }} · Tổng {{ formatMoney(order.total) }} · Đã thu {{ formatMoney(order.paid) }}</div></div><div class="shrink-0 text-right"><div class="text-xs font-bold text-rose-600">{{ formatMoney(order.due) }}</div><button type="button" class="text-[10px] font-semibold text-emerald-700" @click.stop="pay(row, order)">Thanh toán</button></div>
-                        </div>
-                        <p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-xs text-slate-500">Chưa có đơn nợ.</p>
-                    </div>
-                </article>
-                <div v-if="!rows.data.length" class="p-8 text-center text-sm text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</div>
-            </div>
-            <PaginationBar :data="rows" :filters="filters" />
+            <div v-if="rows.links?.length > 3" class="flex flex-wrap justify-end gap-1 border-t border-slate-100 p-3">
+                <button v-for="link in rows.links" :key="`${link.label}-${link.url}`" :disabled="!link.url" @click="link.url && router.visit(link.url, { preserveScroll: true })" class="rounded-lg border px-3 py-1.5 text-xs" :class="link.active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-600 disabled:opacity-40'" v-html="link.label" />
             </div>
         </div>
 
-        <div class="space-y-3">
-            <div class="flex items-center gap-2"><History :size="18" class="text-blue-600" /><h2 class="font-bold text-slate-900">Lịch sử thanh toán gần đây</h2></div>
-            <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table class="app-data-table w-full min-w-[760px] text-left text-sm"><thead class="bg-white text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="item in history" :key="item.id"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><button v-if="item.code && item.order_id" type="button" class="font-semibold text-blue-700 hover:underline" @click="showOrderDetail({ id: item.order_id })">{{ item.code }}</button><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', mixed: 'Tiền mặt + Chuyển khoản', card: 'Thẻ' }[item.method] || item.method || '—' }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="flex items-center gap-2 border-b border-slate-100 p-4"><History :size="18" class="text-blue-600" /><div><h2 class="font-bold text-slate-900">Lịch sử thanh toán gần đây</h2><p class="mt-1 text-xs text-slate-500">Hiển thị tối đa 100 lần thu/chi mới nhất.</p></div></div>
+            <div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="item in history" :key="item.id"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><a v-if="item.code && item.href" :href="item.href" class="font-semibold text-blue-700 hover:underline">{{ item.code }}</a><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
         </div>
 
-        <InvoiceDetailModal
-            :show="Boolean(detailInvoice)"
-            :invoice="detailInvoice"
-            @close="closeOrderDetail"
+        <SupplierPaymentModal
+            v-if="supplierModal"
+            :key="`${supplierModal.supplier.id}-${supplierModal.orderId}`"
+            :supplier="supplierModal.supplier"
+            :orders="orders.filter(item => Number(item.party_id) === Number(supplierModal.supplier.id))"
+            :history="history.filter(item => Number(item.party_id) === Number(supplierModal.supplier.id))"
+            :initial-order-id="supplierModal.orderId"
+            @close="supplierModal = null"
         />
-
-        <BaseModal v-if="detailLoading || detailError" :title="detailError ? 'Không tải được chi tiết đơn' : 'Đang tải chi tiết đơn'" size="sm" @close="closeOrderDetail">
-            <p v-if="detailLoading" class="py-5 text-center text-sm text-slate-500">Đang tải dữ liệu đơn hàng…</p>
-            <p v-else class="py-3 text-sm text-rose-700">{{ detailError }}</p>
-        </BaseModal>
-
-        <BaseModal v-if="detailImport" :title="`Chi tiết phiếu nhập · ${detailImport.code}`" size="xl" body-class="space-y-4" @close="closeOrderDetail">
-            <div class="grid gap-3 sm:grid-cols-3">
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Nhà cung cấp</div><div class="mt-1 font-bold text-slate-900">{{ detailImport.supplier?.name || '—' }}</div><div class="text-xs text-slate-500">{{ detailImport.supplier?.phone || '—' }}</div></div>
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Ngày nhập</div><div class="mt-1 font-bold text-slate-900">{{ detailImport.import_date || '—' }}</div></div>
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Người tạo</div><div class="mt-1 font-bold text-slate-900">{{ detailImport.user?.name || '—' }}</div></div>
-            </div>
-            <div class="overflow-x-auto rounded-xl border border-slate-200">
-                <table class="app-data-table w-full min-w-[620px] text-sm">
-                    <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2 text-left">Sản phẩm</th><th class="px-3 py-2 text-center">Số lượng</th><th class="px-3 py-2 text-right">Giá nhập</th><th class="px-3 py-2 text-right">Thành tiền</th></tr></thead>
-                    <tbody class="divide-y divide-slate-100"><tr v-for="item in detailImport.items || []" :key="item.id"><td class="px-3 py-2.5"><div class="font-semibold text-slate-900">{{ item.product?.name || '—' }}</div><div v-if="item.variant?.name" class="text-xs text-slate-500">{{ item.variant.name }}</div></td><td class="px-3 py-2.5 text-center">{{ item.quantity }} {{ item.unit_name || item.unit?.short_name || '' }}</td><td class="px-3 py-2.5 text-right">{{ formatMoney(item.cost_price) }}</td><td class="px-3 py-2.5 text-right font-bold">{{ formatMoney(Number(item.quantity || 0) * Number(item.cost_price || 0)) }}</td></tr><tr v-if="!detailImport.items?.length"><td colspan="4" class="px-3 py-6 text-center text-slate-500">Phiếu nhập không có chi tiết sản phẩm.</td></tr></tbody>
-                </table>
-            </div>
-            <div class="ml-auto grid max-w-sm gap-1 text-sm"><div class="flex justify-between"><span>Tiền hàng</span><span>{{ formatMoney(detailImport.total_amount) }}</span></div><div class="flex justify-between"><span>Giảm giá</span><span>-{{ formatMoney(detailImport.discount) }}</span></div><div class="flex justify-between border-t border-slate-200 pt-2 font-bold"><span>Tổng phiếu nhập</span><span>{{ formatMoney(detailImport.grand_total) }}</span></div><div class="flex justify-between text-emerald-700"><span>Đã thanh toán</span><span>{{ formatMoney(detailImport.paid_amount) }}</span></div><div class="flex justify-between font-bold text-rose-700"><span>Còn nợ</span><span>{{ formatMoney(Math.max(0, Number(detailImport.grand_total || 0) - Number(detailImport.paid_amount || 0))) }}</span></div></div>
-            <template #footer><div class="flex justify-end"><ActionButton variant="secondary" @click="closeOrderDetail">Đóng</ActionButton></div></template>
-        </BaseModal>
-
-        <BaseModal v-if="reminderParty" :title="isCustomer ? 'Nhắc thu công nợ khách hàng' : 'Nhắc thanh toán nhà cung cấp'" size="md" @close="closeDebtReminder">
-            <div class="space-y-3">
-                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <div class="text-base font-bold text-slate-900">{{ nameOf(reminderParty) }}</div>
-                    <div class="mt-1 text-xl font-black text-rose-700">Còn nợ {{ formatMoney(reminderParty.debt_balance) }}</div>
-                </div>
-                <div class="grid gap-2 sm:grid-cols-2">
-                    <div class="rounded-lg bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Mã</div><div class="mt-1 text-sm font-bold text-slate-800">{{ reminderParty.code || '—' }}</div></div>
-                    <div class="rounded-lg bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">Điện thoại</div><div class="mt-1 text-sm font-bold text-slate-800">{{ reminderParty.phone || '—' }}</div></div>
-                </div>
-                <div>
-                    <div class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div>
-                    <div v-for="order in orders.filter(item => Number(item.party_id) === Number(reminderParty.id))" :key="order.id" class="mb-2 flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
-                        <div><div class="font-bold text-slate-800">{{ order.code }}</div><div class="text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã trả {{ formatMoney(order.paid) }}</div></div>
-                        <div class="shrink-0 text-sm font-bold text-rose-700">Còn {{ formatMoney(order.due) }}</div>
-                    </div>
-                    <p v-if="!orders.some(item => Number(item.party_id) === Number(reminderParty.id))" class="text-sm text-slate-500">Khoản công nợ chưa gắn với hóa đơn hoặc phiếu nhập cụ thể.</p>
-                </div>
-            </div>
-            <template #footer>
-                <div class="flex justify-end gap-2"><ActionButton variant="secondary" @click="closeDebtReminder">Đóng</ActionButton><ActionButton @click="payReminder"><HandCoins :size="15" />Ghi nhận thanh toán</ActionButton></div>
-            </template>
-        </BaseModal>
 
         <BaseModal v-if="selected" :title="isCustomer ? 'Ghi nhận khách trả nợ' : 'Thanh toán cho nhà cung cấp'" size="md" @close="selected = null">
             <p class="mb-4 text-sm text-slate-500">{{ nameOf(selected) }} · Còn nợ {{ formatMoney(selected.debt_balance) }}</p>
             <div class="mb-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3"><label class="block text-xs font-bold text-slate-700">Quét mã hóa đơn / phiếu nhập<input v-model="scanCode" autofocus @keyup.enter.prevent="scanOrder" class="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400" placeholder="Quét mã rồi nhấn Enter" /></label><div class="mt-2 flex items-center justify-between gap-2"><span class="text-xs" :class="scanMessage.startsWith('Đã chọn') ? 'text-emerald-700' : 'text-slate-500'">{{ scanMessage || 'Quét mã để gắn khoản thu/chi vào đúng đơn nợ.' }}</span><button type="button" class="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white" @click="scanOrder"><ScanLine :size="14" />Tìm đơn</button></div><select v-if="partyOrders.length" v-model="form.order_id" class="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">Thanh toán công nợ tổng</option><option v-for="order in partyOrders" :key="order.id" :value="order.id">{{ order.code }} — còn {{ formatMoney(order.due) }}</option></select></div>
-            <label class="mb-3 block text-sm font-semibold text-slate-700">Số tiền (đ)<FormattedNumberInput v-model.number="form.amount" min="1" step="1" required class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-400" /></label>
+            <label class="mb-3 block text-sm font-semibold text-slate-700">Số tiền (đ)<input v-model="form.amount" type="number" min="1" step="1" required class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-400" /></label>
             <label class="mb-3 block text-sm font-semibold text-slate-700">Phương thức<select v-model="form.payment_method" class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="cash">Tiền mặt</option><option value="bank">Chuyển khoản</option><option value="card">Thẻ</option></select></label>
             <label class="mb-3 block text-sm font-semibold text-slate-700">Ghi chú<input v-model="form.note" maxlength="1000" class="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-400" placeholder="Không bắt buộc" /></label>
             <p v-if="error" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}</p>

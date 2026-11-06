@@ -29,7 +29,7 @@ class StockImportController extends Controller
     /**
      * Danh sách phiếu nhập hàng
      */
-    public function index(Request $request): Response
+    public function index(Request $request): Response|JsonResponse
     {
         $search = $request
             ->string('search')
@@ -76,26 +76,51 @@ class StockImportController extends Controller
                                 ->orWhere('cccd', 'like', "%{$search}%");
                         })
                         ->orWhere('party_name', 'like', "%{$search}%")
-                        ->orWhere('party_phone', 'like', "%{$search}%");
+                        ->orWhere('party_phone', 'like', "%{$search}%")
+                        ->orWhereHas('user', fn ($user) => $user->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('items.product', fn ($product) => $product
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('sku', 'like', "%{$search}%"))
+                        ->orWhereIn('id', ProductImeiHistory::query()
+                            ->where('reference_type', StockImport::class)
+                            ->where('type', 'import')
+                            ->whereHas('productImei', fn ($imei) => $imei
+                                ->where('imei', 'like', "%{$search}%")
+                                ->orWhere('serial', 'like', "%{$search}%"))
+                            ->select('reference_id'));
                 });
             })
             ->when($sortBy === 'items_count', fn ($query) => $query->orderBy('items_count', $sortOrder), fn ($query) => $query->orderBy($sortBy, $sortOrder))
             ->paginate($perPage)
             ->withQueryString();
 
+        if ($search !== '') {
+            $this->attachSearchMatches($imports, $search);
+        }
+
+        $filters = [
+            'search' => $search,
+            'party_type' => $partyType,
+            'status' => $status,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'per_page' => $perPage,
+            'sort_by' => $sortBy,
+            'sort_order' => $sortOrder,
+        ];
+
+        // Tìm kiếm tức thời: giao diện gọi AJAX và chỉ nhận JSON, không tải lại trang
+        if ($request->expectsJson()) {
+            return response()->json([
+                'imports' => $imports,
+                'filters' => $filters,
+            ]);
+        }
+
         return Inertia::render('StockImports/List', [
             'imports' => $imports,
 
-            'filters' => [
-                'search' => $search,
-                'party_type' => $partyType,
-                'status' => $status,
-                'date_from' => $dateFrom,
-                'date_to' => $dateTo,
-                'per_page' => $perPage,
-                'sort_by' => $sortBy,
-                'sort_order' => $sortOrder,
-            ],
+            'filters' => $filters,
 
             'categories' => Category::query()
                 ->orderBy('name')
@@ -106,6 +131,59 @@ class StockImportController extends Controller
                 ->orderBy('name')
                 ->get(),
         ]);
+    }
+
+    /**
+     * Gắn thêm thông tin "khớp ở đâu" (sản phẩm, SKU, IMEI, Serial) cho từng phiếu
+     * trong trang hiện tại để giao diện tô vàng đúng phần người dùng đang tìm.
+     */
+    private function attachSearchMatches($imports, string $search): void
+    {
+        $ids = $imports->getCollection()->pluck('id');
+        if ($ids->isEmpty()) return;
+
+        $like = '%' . $search . '%';
+
+        $itemMatches = \App\Models\StockImportItem::query()
+            ->with('product:id,name,sku')
+            ->whereIn('stock_import_id', $ids)
+            ->whereHas('product', fn ($product) => $product
+                ->where('name', 'like', $like)
+                ->orWhere('sku', 'like', $like))
+            ->get()
+            ->groupBy('stock_import_id');
+
+        $imeiMatches = ProductImeiHistory::query()
+            ->with('productImei:id,imei,serial')
+            ->where('reference_type', StockImport::class)
+            ->where('type', 'import')
+            ->whereIn('reference_id', $ids)
+            ->whereHas('productImei', fn ($imei) => $imei
+                ->where('imei', 'like', $like)
+                ->orWhere('serial', 'like', $like))
+            ->get()
+            ->groupBy('reference_id');
+
+        $imports->getCollection()->transform(function ($import) use ($itemMatches, $imeiMatches) {
+            $matches = collect();
+
+            foreach ($itemMatches[$import->id] ?? [] as $row) {
+                if ($row->product?->name) $matches->push(['label' => 'Sản phẩm', 'text' => $row->product->name]);
+                if ($row->product?->sku) $matches->push(['label' => 'SKU', 'text' => $row->product->sku]);
+            }
+
+            foreach ($imeiMatches[$import->id] ?? [] as $row) {
+                if ($row->productImei?->imei) $matches->push(['label' => 'IMEI', 'text' => $row->productImei->imei]);
+                if ($row->productImei?->serial) $matches->push(['label' => 'Serial', 'text' => $row->productImei->serial]);
+            }
+
+            $import->setAttribute(
+                'search_matches',
+                $matches->unique(fn ($m) => $m['label'] . ':' . $m['text'])->take(12)->values()->all()
+            );
+
+            return $import;
+        });
     }
 
     /** Active products with stock normalized across standard, variant, and IMEI inventory. */

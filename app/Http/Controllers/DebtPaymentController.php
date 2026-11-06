@@ -10,7 +10,6 @@ use App\Models\Sale;
 use App\Models\StockImport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -28,150 +27,50 @@ class DebtPaymentController extends Controller
         return $this->index($request, 'supplier');
     }
 
-    public function customerOrderDetail(Sale $sale): JsonResponse
-    {
-        abort_unless($sale->status === 'completed', 404);
-
-        $sale->load([
-            'customer:id,full_name,code,phone',
-            'user:id,name',
-            'items.product.conversionUnit',
-            'items.variant',
-            'items.productImei',
-            'items.gifts.product',
-            'items.gifts.productImei',
-        ]);
-        $sale->setAttribute('old_debt_paid', (float) CustomerDebt::query()
-            ->where('source_type', Sale::class)
-            ->where('source_id', $sale->id)
-            ->where('type', 'decrease')
-            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
-            ->sum('amount'));
-
-        return response()->json($sale);
-    }
-
-    public function supplierOrderDetail(StockImport $stockImport): JsonResponse
-    {
-        abort_unless($stockImport->supplier_id, 404);
-
-        $stockImport->load([
-            'supplier:id,name,code,phone',
-            'user:id,name',
-            'items.product.conversionUnit',
-            'items.variant',
-            'items.unit',
-        ]);
-
-        return response()->json($stockImport);
-    }
-
     private function index(Request $request, string $entity): Response
     {
         $search = trim((string) $request->query('search', ''));
         $isCustomer = $entity === 'customer';
         $model = $isCustomer ? Customer::query() : Supplier::query();
         $nameColumn = $isCustomer ? 'full_name' : 'name';
-        $perPage = in_array((int) $request->query('per_page', 15), [10, 20, 50, 100], true)
-            ? (int) $request->query('per_page', 15) : 15;
-        $sortBy = in_array($request->query('sort_by'), ['debt_balance', 'code', $nameColumn], true)
-            ? $request->query('sort_by') : 'debt_balance';
-        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
-        $openReminderId = (int) $request->query('open_reminder', 0);
-        $openCustomerId = $isCustomer ? (int) $request->query('open_customer', 0) : 0;
 
         $rows = $model->where('debt_balance', '>', 0)
-            ->when($openCustomerId > 0, fn ($query) => $query->whereKey($openCustomerId))
-            ->when($openReminderId > 0, fn ($query) => $query->whereKey($openReminderId))
             ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                 ->where($nameColumn, 'like', "%{$search}%")
                 ->orWhere('code', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")))
-            ->orderBy($sortBy, $sortOrder)
-            ->paginate($perPage)->withQueryString();
+            ->orderByDesc('debt_balance')
+            ->paginate(15)->withQueryString();
 
         $partyIds = collect($rows->items())->pluck('id');
         $orders = $isCustomer
-            ? Sale::query()->withSum(['customerDebtEntries as old_debt_paid' => fn ($debtQuery) => $debtQuery
-                    ->where('type', 'decrease')->where('note', 'like', 'Trích tiền thừa hóa đơn%')], 'amount')
-                ->with('customer:id,full_name,code,phone')->whereIn('customer_id', $partyIds)->where('status', 'completed')
+            ? Sale::query()->with('customer:id,full_name,code,phone')->whereIn('customer_id', $partyIds)->where('status', 'completed')
                 ->whereRaw('grand_total > paid_amount')->orderBy('created_at')->get()
                 ->map(fn (Sale $sale) => [
                     'id' => $sale->id, 'code' => $sale->code, 'party_id' => $sale->customer_id,
                     'party_name' => $sale->customer?->full_name, 'date' => $sale->created_at?->format('d/m/Y H:i'),
                     'total' => (float) $sale->grand_total, 'paid' => (float) $sale->paid_amount,
-                    'due' => max(0, (float) $sale->grand_total - (float) $sale->paid_amount),
+                    'due' => max(0, (float) $sale->grand_total - (float) $sale->paid_amount), 'href' => route('sales.show', $sale),
                 ])->values()
-            : StockImport::query()->with(['supplier:id,name,code,phone'])->whereIn('supplier_id', $partyIds)
+            : StockImport::query()->with('supplier:id,name,code,phone')->whereIn('supplier_id', $partyIds)
                 ->whereRaw('grand_total > paid_amount')->orderBy('import_date')->get()
                 ->map(fn (StockImport $import) => [
                     'id' => $import->id, 'code' => $import->code, 'party_id' => $import->supplier_id,
                     'party_name' => $import->supplier?->name, 'date' => $import->import_date?->format('d/m/Y H:i'),
                     'total' => (float) $import->grand_total, 'paid' => (float) $import->paid_amount,
-                    'due' => max(0, (float) $import->grand_total - (float) $import->paid_amount),
+                    'due' => max(0, (float) $import->grand_total - (float) $import->paid_amount), 'href' => route('stock.show', $import),
                 ])->values();
 
-        // Chỉ phân bổ tối đa bằng dư nợ hiện tại của từng khách/NCC. Khoản
-        // còn lại được hiển thị thành một dòng công nợ khác để tổng danh sách
-        // luôn khớp số dư công nợ đang quản lý.
-        $orders = $orders->groupBy('party_id')->flatMap(function ($partyOrders, $partyId) use ($rows) {
-            $party = collect($rows->items())->firstWhere('id', (int) $partyId);
-            $remaining = (float) ($party?->debt_balance ?? 0);
-            $reconciled = $partyOrders->map(function (array $order) use (&$remaining) {
-                $due = min((float) $order['due'], max(0, $remaining));
-                $remaining -= $due;
-                return [...$order, 'due' => $due];
-            })->filter(fn (array $order) => $order['due'] > 0)->values();
-
-            if ($remaining > 0) {
-                $reconciled->push([
-                    'id' => null,
-                    'code' => 'Công nợ khác',
-                    'party_id' => (int) $partyId,
-                    'party_name' => null,
-                    'date' => null,
-                    'total' => $remaining,
-                    'paid' => 0,
-                    'due' => $remaining,
-                    'href' => null,
-                    'unallocated' => true,
-                ]);
-            }
-
-            return $reconciled;
-        })->values();
-
-        foreach ($rows->items() as $party) {
-            if ($orders->contains(fn (array $order) => (int) $order['party_id'] === (int) $party->id)) {
-                continue;
-            }
-
-            $orders->push([
-                'id' => null,
-                'code' => 'Công nợ khác',
-                'party_id' => (int) $party->id,
-                'party_name' => null,
-                'date' => null,
-                'total' => (float) $party->debt_balance,
-                'paid' => 0,
-                'due' => (float) $party->debt_balance,
-                'href' => null,
-                'unallocated' => true,
-            ]);
-        }
-
         $history = $isCustomer
-            ? CustomerDebt::query()->with('customer:id,full_name,code')->where('type', 'decrease')
-                ->where(fn ($query) => $query->whereNotNull('payment_method')->orWhere('note', 'like', 'Trích tiền thừa hóa đơn%'))
-                ->latest()->limit(100)->get()
-                ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'order_id' => $payment->source instanceof Sale ? $payment->source_id : null, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
+            ? CustomerDebt::query()->with('customer:id,full_name,code')->where('type', 'decrease')->whereNotNull('payment_method')->latest()->limit(100)->get()
+                ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof Sale ? route('sales.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
             : SupplierDebt::query()->with('supplier:id,name,code')->where('type', 'decrease')->latest()->limit(100)->get()
-                ->map(fn (SupplierDebt $payment) => ['id' => $payment->id, 'order_id' => $payment->source instanceof StockImport ? $payment->source_id : null, 'party' => $payment->supplier?->name, 'code' => $payment->source?->code, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')]);
+                ->map(fn (SupplierDebt $payment) => ['id' => $payment->id, 'party_id' => $payment->supplier_id, 'party' => $payment->supplier?->name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof StockImport ? route('stock.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')]);
 
         return Inertia::render('Debts/Index', [
             'entity' => $entity,
             'rows' => $rows,
-            'filters' => ['search' => $search, 'per_page' => $perPage, 'sort_by' => $sortBy, 'sort_order' => $sortOrder],
+            'filters' => ['search' => $search],
             'summary' => [
                 'total' => (float) ($isCustomer ? Customer::sum('debt_balance') : Supplier::sum('debt_balance')),
                 'count' => (int) ($isCustomer ? Customer::where('debt_balance', '>', 0)->count() : Supplier::where('debt_balance', '>', 0)->count()),
@@ -214,7 +113,6 @@ class DebtPaymentController extends Controller
                 'note' => $data['note'] ?? null,
             ]);
             $locked->decrement('debt_balance', $amount);
-            if ($sale) app(\App\Services\CustomerPointService::class)->syncSale($sale);
         });
 
         return back()->with('success', 'Đã ghi nhận thu công nợ khách hàng.');
@@ -227,32 +125,82 @@ class DebtPaymentController extends Controller
             'payment_method' => ['required', 'in:cash,bank,card'],
             'note' => ['nullable', 'string', 'max:1000'],
             'order_id' => ['nullable', 'integer'],
+            // Chia tiền cho nhiều phiếu nhập: [{order_id, amount}, ...]
+            'allocations' => ['nullable', 'array', 'max:100'],
+            'allocations.*.order_id' => ['required_with:allocations', 'integer'],
+            'allocations.*.amount' => ['required_with:allocations', 'numeric', 'gt:0'],
         ]);
 
         DB::transaction(function () use ($supplier, $data): void {
             $locked = Supplier::query()->lockForUpdate()->findOrFail($supplier->id);
             $amount = round((float) $data['amount'], 2);
+
             if ($amount > (float) $locked->debt_balance) {
                 throw ValidationException::withMessages(['amount' => 'Số tiền chi không được vượt quá công nợ hiện tại.']);
             }
-            $import = null;
-            if (!empty($data['order_id'])) {
-                $import = StockImport::query()->lockForUpdate()->where('supplier_id', $locked->id)->findOrFail($data['order_id']);
-                if ($amount > max(0, (float) $import->grand_total - (float) $import->paid_amount)) {
-                    throw ValidationException::withMessages(['amount' => 'Số tiền chi vượt quá khoản còn nợ của phiếu nhập.']);
-                }
-                $import->increment('paid_amount', $amount);
+
+            // Tương thích kiểu cũ: chỉ gửi 1 order_id => trả toàn bộ cho phiếu đó
+            $allocations = collect($data['allocations'] ?? []);
+            if ($allocations->isEmpty() && !empty($data['order_id'])) {
+                $allocations = collect([['order_id' => $data['order_id'], 'amount' => $amount]]);
             }
-            SupplierDebt::query()->create([
-                'supplier_id' => $locked->id,
-                'type' => 'decrease',
-                'amount' => $amount,
-                'payment_method' => $data['payment_method'],
-                'source_type' => $import ? StockImport::class : null,
-                'source_id' => $import?->id,
-                'note' => $data['note'] ?? null,
-                'user_id' => auth()->id(),
-            ]);
+
+            // Gộp các dòng trùng phiếu
+            $allocations = $allocations
+                ->groupBy(fn ($row) => (int) $row['order_id'])
+                ->map(fn ($rows) => round((float) $rows->sum('amount'), 2));
+
+            $allocated = 0.0;
+
+            foreach ($allocations as $orderId => $allocAmount) {
+                $import = StockImport::query()->lockForUpdate()
+                    ->where('supplier_id', $locked->id)
+                    ->find($orderId);
+
+                if (! $import) {
+                    throw ValidationException::withMessages(['amount' => 'Phiếu nhập không tồn tại hoặc không thuộc nhà cung cấp này.']);
+                }
+
+                $due = max(0, (float) $import->grand_total - (float) $import->paid_amount);
+                if ($allocAmount > $due + 0.005) {
+                    throw ValidationException::withMessages(['amount' => "Số tiền chi vượt quá khoản còn nợ của phiếu {$import->code}."]);
+                }
+
+                $import->increment('paid_amount', $allocAmount);
+
+                SupplierDebt::query()->create([
+                    'supplier_id' => $locked->id,
+                    'type' => 'decrease',
+                    'amount' => $allocAmount,
+                    'payment_method' => $data['payment_method'],
+                    'source_type' => StockImport::class,
+                    'source_id' => $import->id,
+                    'note' => $data['note'] ?? null,
+                    'user_id' => auth()->id(),
+                ]);
+
+                $allocated += $allocAmount;
+            }
+
+            if ($allocated > $amount + 0.005) {
+                throw ValidationException::withMessages(['amount' => 'Tổng tiền chia cho các phiếu vượt quá số tiền thanh toán.']);
+            }
+
+            // Phần còn lại không gắn phiếu nào => trừ thẳng vào công nợ tổng
+            $rest = round($amount - $allocated, 2);
+            if ($rest > 0) {
+                SupplierDebt::query()->create([
+                    'supplier_id' => $locked->id,
+                    'type' => 'decrease',
+                    'amount' => $rest,
+                    'payment_method' => $data['payment_method'],
+                    'source_type' => null,
+                    'source_id' => null,
+                    'note' => $data['note'] ?? null,
+                    'user_id' => auth()->id(),
+                ]);
+            }
+
             $locked->decrement('debt_balance', $amount);
         });
 
