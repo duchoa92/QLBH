@@ -1,8 +1,6 @@
 <script setup>
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
-import FloatingInput from '@/Components/UI/FloatingInput.vue';
-import FloatingSelect from '@/Components/UI/FloatingSelect.vue';
 import PaginationBar from '@/Components/UI/PaginationBar.vue';
 import DataPanel from '@/Components/UI/DataPanel.vue';
 import { openModal } from '@/Stores/modal';
@@ -14,7 +12,7 @@ import { toast } from 'vue-sonner';
 import api from '@/Services/api';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
-import { Search, SlidersHorizontal, RefreshCw, X, FileText, UserRound, Smartphone, Wrench, RotateCcw, Play } from 'lucide-vue-next';
+import { Search, X, FileText, UserRound, Smartphone, Wrench, RotateCcw, Play, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 const props = defineProps({
     repairs: Object,
@@ -43,6 +41,12 @@ const search = ref(props.filters?.search ?? '');
 const status = ref(props.filters?.status ?? '');
 const dateFrom = ref(props.filters?.date_from ?? '');
 const dateTo = ref(props.filters?.date_to ?? '');
+const datePreset = ref('all');
+const customDatePickerOpen = ref(false);
+const customDatePickerRef = ref(null);
+const pickerStart = ref('');
+const pickerEnd = ref('');
+const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 const sortBy = ref(props.filters?.sort_by ?? 'created_at');
 const sortOrder = ref(props.filters?.sort_order ?? 'desc');
 
@@ -51,7 +55,132 @@ const detailCredentials = ref(null);
 const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
-const isFilterExpanded = ref(Boolean(status.value || dateFrom.value || dateTo.value));
+const datePresetOptions = [
+    { value: 'all', label: 'Toàn thời gian' },
+    { value: 'today', label: 'Hôm nay' },
+    { value: 'yesterday', label: 'Hôm qua' },
+    { value: 'this_month', label: 'Tháng này' },
+    { value: 'last_month', label: 'Tháng trước' },
+    { value: 'custom', label: 'Tùy chọn' },
+];
+const inputDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+const dateFromInput = (value) => value ? new Date(`${value}T12:00:00`) : null;
+const formatPickerDate = (value) => value
+    ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
+    : '';
+const dateRangeFor = (preset) => {
+    const today = new Date();
+    if (preset === 'all') return { from: '', to: '' };
+    if (preset === 'today') {
+        const value = inputDate(today);
+        return { from: value, to: value };
+    }
+    if (preset === 'yesterday') {
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const value = inputDate(yesterday);
+        return { from: value, to: value };
+    }
+    if (preset === 'this_month') {
+        return { from: inputDate(new Date(today.getFullYear(), today.getMonth(), 1)), to: inputDate(today) };
+    }
+    if (preset === 'last_month') {
+        return {
+            from: inputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+            to: inputDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+        };
+    }
+    return null;
+};
+const applyDatePreset = (preset) => {
+    datePreset.value = preset || 'all';
+    const range = dateRangeFor(datePreset.value);
+    if (!range) {
+        pickerStart.value = dateFrom.value;
+        pickerEnd.value = dateTo.value;
+        const anchor = dateFromInput(pickerStart.value) || new Date();
+        calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+        customDatePickerOpen.value = true;
+        return;
+    }
+    customDatePickerOpen.value = false;
+    dateFrom.value = range.from;
+    dateTo.value = range.to;
+};
+const syncDatePresetFromDates = () => {
+    const matchingPreset = ['all', 'today', 'yesterday', 'this_month', 'last_month'].find((preset) => {
+        const range = dateRangeFor(preset);
+        return range.from === dateFrom.value && range.to === dateTo.value;
+    });
+    datePreset.value = matchingPreset || 'custom';
+};
+syncDatePresetFromDates();
+
+const calendarMonthLabel = computed(() => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(calendarMonth.value));
+const rangeCalendarCells = computed(() => {
+    const first = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth(), 1);
+    const start = new Date(first);
+    start.setDate(1 - ((first.getDay() + 6) % 7));
+    return Array.from({ length: 42 }, (_, index) => {
+        const date = new Date(start);
+        date.setDate(start.getDate() + index);
+        return {
+            key: inputDate(date),
+            day: date.getDate(),
+            currentMonth: date.getMonth() === calendarMonth.value.getMonth(),
+        };
+    });
+});
+const pickerRangeLabel = computed(() => {
+    if (!pickerStart.value) return 'Chọn ngày bắt đầu, rồi chọn ngày kết thúc';
+    if (!pickerEnd.value) return `Từ ${formatPickerDate(pickerStart.value)} · chọn ngày kết thúc`;
+    return `${formatPickerDate(pickerStart.value)} – ${formatPickerDate(pickerEnd.value)}`;
+});
+const isPickerSelected = (key) => key === pickerStart.value || key === pickerEnd.value;
+const isPickerInRange = (key) => Boolean(pickerStart.value && pickerEnd.value && key > pickerStart.value && key < pickerEnd.value);
+const moveCalendarMonth = (amount) => {
+    calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + amount, 1);
+};
+const applyCustomDateRange = () => {
+    if (!pickerStart.value) return;
+    dateFrom.value = pickerStart.value;
+    dateTo.value = pickerEnd.value || pickerStart.value;
+    datePreset.value = 'custom';
+    customDatePickerOpen.value = false;
+};
+const selectPickerDate = (key) => {
+    if (!pickerStart.value || pickerEnd.value) {
+        pickerStart.value = key;
+        pickerEnd.value = '';
+        return;
+    }
+    if (key < pickerStart.value) {
+        pickerEnd.value = pickerStart.value;
+        pickerStart.value = key;
+    } else {
+        pickerEnd.value = key;
+    }
+};
+const clearCustomDateRange = () => {
+    applyDatePreset('all');
+};
+const openDatePicker = () => {
+    pickerStart.value = dateFrom.value;
+    pickerEnd.value = dateTo.value;
+    const anchor = dateFromInput(pickerStart.value) || new Date();
+    calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    customDatePickerOpen.value = true;
+};
+const closeCustomDatePickerOnOutside = (event) => {
+    if (customDatePickerOpen.value && customDatePickerRef.value && !customDatePickerRef.value.contains(event.target)) {
+        customDatePickerOpen.value = false;
+    }
+};
 
 const reload = () => {
     router.reload({ only: ['repairs', 'stats'], preserveScroll: true });
@@ -64,6 +193,7 @@ onBeforeUnmount(() => {
     clearTimeout(filterTimeout);
     repairsRequestController?.abort();
     window.removeEventListener('popstate', openRepairFromQuery);
+    window.removeEventListener('pointerdown', closeCustomDatePickerOnOutside);
 });
 
 const syncFilterUrl = (filters) => {
@@ -153,7 +283,9 @@ watch(() => props.filters, (value) => {
     sortBy.value = value.sort_by ?? 'created_at';
     sortOrder.value = value.sort_order ?? 'desc';
     perPage.value = Number(value.per_page ?? 20);
+    syncDatePresetFromDates();
 }, { deep: true });
+watch([dateFrom, dateTo], syncDatePresetFromDates);
 watch([search, status, dateFrom, dateTo, sortBy, sortOrder], applyFilters);
 
 const openCreate = () => {
@@ -228,7 +360,11 @@ const openRepairDetail = (repair) => {
 
 window.addEventListener('popstate', openRepairFromQuery);
 
-onMounted(() => { openCreateFromQuery(); openRepairFromQuery(); });
+onMounted(() => {
+    openCreateFromQuery();
+    openRepairFromQuery();
+    window.addEventListener('pointerdown', closeCustomDatePickerOnOutside);
+});
 watch(() => page.url, () => { openCreateFromQuery(); openRepairFromQuery(); });
 watch(repairsData, openRepairFromQuery);
 
@@ -306,14 +442,6 @@ const quickStatuses = [
     { value: 'returned', label: 'Đã trả khách', countKey: 'returned_count' },
     { value: 'cancelled', label: 'Hủy', countKey: 'cancelled_count' },
 ];
-const resetFilters = () => {
-    search.value = '';
-    status.value = '';
-    dateFrom.value = '';
-    dateTo.value = '';
-    sortBy.value = 'created_at';
-    sortOrder.value = 'desc';
-};
 const repairIssueText = (repair) => Array.isArray(repair.issue)
     ? repair.issue.filter(Boolean).join(', ')
     : String(repair.issue || '').trim();
@@ -375,15 +503,6 @@ const repairStatusClass = (repair) => {
     return statusClasses[repair?.status];
 };
 
-const statusOptions = [
-    { value: '', label: 'Tất cả trạng thái' },
-    { value: 'pending', label: 'Tiếp nhận' },
-    { value: 'repairing', label: 'Đang sửa' },
-    { value: 'done', label: 'Hoàn tất sửa' },
-    { value: 'returned', label: 'Đã trả khách' },
-    { value: 'cancelled', label: 'Hủy' },
-];
-
 const confirmPayment = async (payment) => {
     paymentLoading.value = true;
     try {
@@ -405,25 +524,42 @@ const confirmPayment = async (payment) => {
         <DataPanel detached>
             <template #header>
                 <div class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4">
-                    <div class="flex flex-col items-stretch gap-2.5 lg:flex-row lg:items-center">
+                    <div class="flex items-center gap-2.5">
                         <div class="relative min-w-0 flex-1">
                             <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input id="search_repair" v-model="search" type="text" autocomplete="off" placeholder="Tìm mã phiếu, khách hàng, SĐT, thiết bị hoặc IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
                             <button v-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
                         </div>
+                        <button v-if="can('repairs.create')" type="button" @click="openCreate" class="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 sm:px-3.5"><span class="text-base leading-none">+</span> Nhận máy mới</button>
+                    </div>
+                    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                         <div class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1" :class="loadingRepairs ? 'opacity-70' : ''">
                             <button v-for="item in quickStatuses" :key="item.value || 'all'" type="button" class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:px-3" :class="status === item.value ? (item.value === 'pending' ? 'bg-amber-500 text-white shadow-sm' : item.value === 'repairing' ? 'bg-violet-600 text-white shadow-sm' : item.value === 'done' ? 'bg-emerald-600 text-white shadow-sm' : item.value === 'returned' ? 'bg-slate-700 text-white shadow-sm' : item.value === 'cancelled' ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm') : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'" @click="status = item.value"><span>{{ item.label }}</span><span class="rounded-full px-1.5 py-0.5 text-[10px] leading-none" :class="status === item.value ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'">{{ statsData?.[item.countKey] ?? 0 }}</span></button>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-xs font-semibold transition lg:flex-none" :class="isFilterExpanded ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'" @click="isFilterExpanded = !isFilterExpanded"><SlidersHorizontal class="h-3.5 w-3.5" />{{ isFilterExpanded ? 'Ẩn lọc' : 'Lọc nâng cao' }}</button>
-                            <button v-if="can('repairs.create')" type="button" @click="openCreate" class="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-blue-600 px-3.5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 lg:flex-none"><span class="text-base leading-none">+</span> Nhận máy mới</button>
+                        <div ref="customDatePickerRef" class="relative shrink-0">
+                            <button type="button" class="inline-flex h-[42px] w-[42px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" title="Lọc theo thời gian" aria-label="Lọc theo thời gian" @click="customDatePickerOpen ? customDatePickerOpen = false : openDatePicker()"><CalendarDays class="h-4 w-4" /></button>
+                            <div v-if="customDatePickerOpen" class="absolute right-0 top-full z-50 mt-2 w-[min(304px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                                <div class="grid grid-cols-3 gap-1 border-b border-slate-100 p-1.5">
+                                    <button v-for="preset in datePresetOptions.filter((item) => item.value !== 'custom')" :key="preset.value" type="button" class="rounded-md border px-1.5 py-1 text-[9px] font-semibold transition" :class="datePreset === preset.value ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'" @click="applyDatePreset(preset.value)">{{ preset.label }}</button>
+                                </div>
+                                <header class="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5">
+                                    <button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100" aria-label="Tháng trước" @click="moveCalendarMonth(-1)"><ChevronLeft class="h-3.5 w-3.5" /></button>
+                                    <h3 class="text-xs font-bold capitalize text-slate-800">{{ calendarMonthLabel }}</h3>
+                                    <button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100" aria-label="Tháng sau" @click="moveCalendarMonth(1)"><ChevronRight class="h-3.5 w-3.5" /></button>
+                                </header>
+                                <div class="grid grid-cols-7 bg-slate-50 text-center text-[9px] font-bold text-slate-500"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1.5">{{ day }}</span></div>
+                                <div class="grid grid-cols-7 p-1">
+                                    <button v-for="cell in rangeCalendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectPickerDate(cell.key)">{{ cell.day }}</button>
+                                </div>
+                                <footer class="space-y-1.5 border-t border-slate-100 px-2.5 py-2">
+                                    <p class="truncate text-center text-[10px] font-medium text-slate-600">{{ pickerRangeLabel }}</p>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <button type="button" class="px-1.5 py-1 text-[10px] font-semibold text-slate-500 hover:text-rose-600" @click="clearCustomDateRange">Xóa</button>
+                                        <button type="button" :disabled="!pickerStart" class="rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCustomDateRange">Áp dụng</button>
+                                    </div>
+                                </footer>
+                            </div>
                         </div>
-                    </div>
-                    <div v-if="isFilterExpanded" class="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto]">
-                        <FloatingSelect v-model="status" label="Trạng thái phiếu" id="repair_status_filter" :options="statusOptions" :show-placeholder="false" option-label="label" option-value="value" />
-                        <FloatingInput v-model="dateFrom" type="date" label="Từ ngày" id="repair_date_from" />
-                        <FloatingInput v-model="dateTo" type="date" label="Đến ngày" id="repair_date_to" />
-                        <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 text-xs text-slate-500 sm:col-span-2 lg:col-span-1"><span>Hiển thị <strong class="text-slate-800">{{ repairsData?.data?.length || 0 }} / {{ repairsData?.total || 0 }}</strong></span><button type="button" class="inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-emerald-700" @click="resetFilters"><RefreshCw class="h-3.5 w-3.5" /> Đặt lại</button></div>
                     </div>
                 </div>
             </template>

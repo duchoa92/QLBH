@@ -5,7 +5,7 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
 import ProductImeisModal from './ProductImeisModal.vue'
 import ProductDetailModal from './ProductDetailModal.vue'
-import { ArrowUpDown, DollarSign, Plus, Printer, QrCode, SquarePen, Trash2 } from 'lucide-vue-next'
+import { ArrowUpDown, DollarSign, Plus, Printer, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal, registerUrlModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
@@ -589,16 +589,6 @@ const openImeiList = (row) => {
                             @click="openPriceUpdate([row])"
                         >
                             <DollarSign size="17" class="text-emerald-600" />
-                        </button>
-                    </Tooltip>
-
-                    <Tooltip v-if="row.manage_stock_by_serial" text="Quản lý IMEI">
-                        <button
-                            type="button"
-                            class="p-1 hover:bg-gray-200 rounded"
-                            @click="openImeiList(row)"
-                        >
-                            <QrCode size="17" class="text-indigo-500" />
                         </button>
                     </Tooltip>
 

@@ -142,6 +142,9 @@ class StockImportService
             $oldDebtPaid = ! empty($data['supplier_id'])
                 ? max(0, (float) ($data['old_debt_paid'] ?? 0))
                 : 0;
+            $tenderedAmount = ! empty($data['supplier_id'])
+                ? max(0, (float) ($data['tendered_amount'] ?? ($paidAmount + $oldDebtPaid)))
+                : 0;
             $supplier = ! empty($data['supplier_id'])
                 ? Supplier::query()->lockForUpdate()->findOrFail($data['supplier_id'])
                 : null;
@@ -165,6 +168,10 @@ class StockImportService
                     'old_debt_allocations' => 'Vui lòng chọn và phân bổ đầy đủ số tiền trả nợ cũ vào các phiếu nhập.',
                 ]);
             }
+
+            // Không tin giá trị tiền thừa từ trình duyệt: tính từ số tiền đã đưa
+            // và đúng các khoản thực sự được áp vào phiếu mới/nợ cũ.
+            $changeAmount = max(0, $tenderedAmount - $paidAmount - $oldDebtPaid);
 
             $oldDebtAllocations = $oldDebtAllocations->map(function (array $allocation) use ($supplier): array {
                 $oldImport = StockImport::query()
@@ -217,6 +224,10 @@ class StockImportService
                 'grand_total' => $grandTotal,
 
                 'paid_amount' => $paidAmount,
+
+                'tendered_amount' => $tenderedAmount,
+
+                'change_amount' => $changeAmount,
 
                 'old_debt_paid' => $oldDebtPaid,
 

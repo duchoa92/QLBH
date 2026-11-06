@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 
 const props = defineProps({
     text: String,
@@ -8,11 +8,36 @@ const props = defineProps({
 })
 
 const show = ref(false)
+const tooltipStyle = ref({})
 let timeout = null
 
-const onEnter = () => {
+const onEnter = (event) => {
+    clearTimeout(timeout)
+    const target = event.currentTarget
     timeout = setTimeout(() => {
         show.value = true
+        nextTick(() => {
+            const anchor = target.getBoundingClientRect()
+            const tooltip = target.querySelector('[data-tooltip]')
+            if (!tooltip) return
+
+            const margin = 8
+            const gap = 8
+            const width = tooltip.offsetWidth
+            const height = tooltip.offsetHeight
+            const left = Math.min(
+                Math.max(anchor.left + anchor.width / 2 - width / 2, margin),
+                window.innerWidth - width - margin
+            )
+            const preferredTop = props.position === 'bottom'
+                ? anchor.bottom + gap
+                : anchor.top - height - gap
+            const top = props.position === 'bottom'
+                ? Math.min(preferredTop, window.innerHeight - height - margin)
+                : (preferredTop >= margin ? preferredTop : anchor.bottom + gap)
+
+            tooltipStyle.value = { left: `${left}px`, top: `${top}px` }
+        })
     }, props.delay)
 }
 
@@ -24,7 +49,7 @@ const onLeave = () => {
 
 <template>
 <div
-    class="relative inline-flex"
+    class="inline-flex"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
 >
@@ -35,8 +60,9 @@ const onLeave = () => {
     <transition name="fade">
         <div
             v-if="show"
-            class="absolute z-50 px-3 py-1.5 text-xs text-white bg-gray-900 rounded-md whitespace-nowrap"
-            :class="positionClass"
+            data-tooltip
+            class="pointer-events-none fixed z-[9999] max-w-[calc(100vw-16px)] px-3 py-1.5 text-xs text-white bg-gray-900 rounded-md whitespace-nowrap"
+            :style="tooltipStyle"
         >
             {{ text }}
 

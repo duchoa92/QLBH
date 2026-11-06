@@ -17,7 +17,8 @@ const emit = defineEmits(['close', 'updated', 'completed', 'pay', 'stage-change'
 
 // Quy trình hiện tại và lịch sử sửa chữa.
 const activeTab = ref('log')
-const historyModalOpen = ref(['returned', 'cancelled'].includes(props.repair.status))
+// Lịch sử chỉ mở khi người dùng chủ động bấm nút "Lịch sử".
+const historyModalOpen = ref(false)
 const completionStep = ref(false)
 const hasRepairProgress = ref(['repairing', 'done'].includes(props.repair.status))
 // Phiếu đang chờ khi mở lại sẽ mặc định ở chế độ tiếp tục sửa.

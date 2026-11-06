@@ -72,6 +72,8 @@ const form = useForm({
     discount: 0,
     extra_fee: 0,
     paid_amount: 0,
+    tendered_amount: 0,
+    change_amount: 0,
     old_debt_paid: 0,
     old_debt_allocations: [],
     payment_method: 'cash',
@@ -400,6 +402,8 @@ const hydrateInitialImport = (stockImport) => {
     form.discount = Number(stockImport.discount || 0)
     form.extra_fee = Number(stockImport.extra_fee || 0)
     form.paid_amount = Number(stockImport.paid_amount || 0)
+    form.tendered_amount = Number(stockImport.tendered_amount || 0)
+    form.change_amount = Number(stockImport.change_amount || 0)
     form.old_debt_paid = Number(stockImport.old_debt_paid || 0)
     form.old_debt_allocations = stockImport.old_debt_allocations || []
     form.payment_method = stockImport.payment_method || 'cash'
@@ -1094,6 +1098,12 @@ const confirm = (payment = {}) => {
     form.paid_amount = partyType.value === 'supplier'
         ? Math.min(Math.max(0, Number(payment.paid_amount || 0)), Number(total.value || 0))
         : 0
+    form.tendered_amount = partyType.value === 'supplier'
+        ? Math.max(0, Number(payment.tendered_amount || 0))
+        : 0
+    form.change_amount = partyType.value === 'supplier'
+        ? Math.max(0, Number(payment.change_amount || 0))
+        : 0
     form.payment_method = payment.payment_method || 'cash'
     form.old_debt_paid = partyType.value === 'supplier'
         ? Math.max(0, Number(payment.old_debt_paid || 0))
@@ -1200,7 +1210,9 @@ const confirm = (payment = {}) => {
         forceFormData: true,
 
         onSuccess: () => {
-            toast.success('Đã lưu phiếu nhập thành công.')
+            toast.success(Number(form.paid_amount || 0) + Number(form.old_debt_paid || 0) > 0
+                ? 'Đã lưu phiếu nhập và ghi nhận thanh toán thành công.'
+                : 'Đã lưu phiếu nhập, công nợ đã được ghi nhận.')
             emit('created')
         },
 

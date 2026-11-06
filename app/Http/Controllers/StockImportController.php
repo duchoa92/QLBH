@@ -278,6 +278,8 @@ class StockImportController extends Controller
             'party_address' => ['nullable', 'string', 'max:2000'],
             'party_cccd' => ['nullable', 'string', 'max:30'],
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
+            'tendered_amount' => ['nullable', 'numeric', 'min:0'],
+            'change_amount' => ['nullable', 'numeric', 'min:0'],
             'old_debt_paid' => ['nullable', 'numeric', 'min:0'],
             'old_debt_allocations' => ['nullable', 'array'],
             'old_debt_allocations.*.stock_import_id' => ['required', 'integer', 'distinct', 'exists:stock_imports,id'],

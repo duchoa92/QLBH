@@ -352,6 +352,8 @@ const detailPartyPhone = (d) => d.party_phone || d.customer?.phone || d.supplier
 // Mua từ khách lẻ: thanh toán ngay, không phát sinh công nợ
 const detailPaid = (d) => isCustomerImport(d) ? Number(d.grand_total || 0) : Number(d.paid_amount || 0)
 const detailDebt = (d) => isCustomerImport(d) ? 0 : Math.max(0, Number(d.grand_total || 0) - Number(d.paid_amount || 0))
+const detailTendered = (d) => isCustomerImport(d) ? Number(d.grand_total || 0) : Number(d.tendered_amount || d.paid_amount || 0)
+const detailChange = (d) => Math.max(0, Number(d.change_amount || 0))
 
 const paymentMethodLabel = (method) => ({ cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' })[method] || ''
 
@@ -974,10 +976,12 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                                 <span class="font-bold text-slate-800">Tổng thanh toán:</span>
                                 <span class="text-lg font-bold text-indigo-600">{{ money(detailImport.grand_total) }}</span>
                             </div>
-                            <div class="flex flex-wrap justify-between gap-x-4 gap-y-1 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
-                                <span>{{ isCustomerImport(detailImport) ? 'Đã trả khách' : 'Đã trả NCC' }}: <strong class="text-emerald-600">{{ money(detailPaid(detailImport)) }}</strong></span>
-                                <span v-if="Number(detailImport.old_debt_paid || 0) > 0">Trả nợ cũ kèm theo: <strong class="text-amber-600">{{ money(detailImport.old_debt_paid) }}</strong></span>
-                                <span>Còn nợ: <strong :class="detailDebt(detailImport) > 0 ? 'text-orange-600' : 'text-slate-700'">{{ money(detailDebt(detailImport)) }}</strong></span>
+                            <div class="space-y-1.5 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+                                <div class="flex justify-between gap-4"><span>{{ isCustomerImport(detailImport) ? 'Đã trả khách' : (detailImport.payment_method === 'bank' ? 'Tiền chuyển khoản' : 'Tiền đưa') }}</span><strong class="text-slate-800">{{ money(detailTendered(detailImport)) }}</strong></div>
+                                <div class="flex justify-between gap-4"><span>{{ isCustomerImport(detailImport) ? 'Tiền mua lại' : 'Đã trả NCC cho phiếu này' }}</span><strong class="text-emerald-600">{{ money(detailPaid(detailImport)) }}</strong></div>
+                                <div v-if="Number(detailImport.old_debt_paid || 0) > 0" class="flex justify-between gap-4"><span>Đã trả nợ cũ</span><strong class="text-amber-600">{{ money(detailImport.old_debt_paid) }}</strong></div>
+                                <div v-if="detailChange(detailImport) > 0" class="flex justify-between gap-4"><span>Tiền thừa</span><strong class="text-emerald-600">{{ money(detailChange(detailImport)) }}</strong></div>
+                                <div class="flex justify-between gap-4 border-t border-slate-200 pt-1.5"><span :class="detailDebt(detailImport) > 0 ? 'text-orange-600' : 'text-emerald-600'">{{ detailDebt(detailImport) > 0 ? 'Còn thiếu' : 'Trạng thái phiếu' }}</span><strong :class="detailDebt(detailImport) > 0 ? 'text-orange-600' : 'text-emerald-600'">{{ detailDebt(detailImport) > 0 ? money(detailDebt(detailImport)) : 'Đã thanh toán đủ' }}</strong></div>
                             </div>
                         </div>
                     </div>

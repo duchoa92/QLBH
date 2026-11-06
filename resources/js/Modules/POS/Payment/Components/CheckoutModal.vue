@@ -33,6 +33,7 @@ const mixedPayment = ref(false)
 const paidAmount = ref('')
 const cashReceivedAmount = ref(0)
 const bankReceivedAmount = ref('')
+const autoFillFullPayment = ref(false)
 const note = ref('')
 const payOldDebt = ref(false)
 const bankIntent = ref(null)
@@ -109,6 +110,7 @@ watch(paymentMethod, () => {
     paidAmount.value = ''
     cashReceivedAmount.value = 0
     bankReceivedAmount.value = ''
+    autoFillFullPayment.value = false
     mixedPayment.value = false
 })
 watch(paymentMethod, async method => {
@@ -180,20 +182,24 @@ const parseMoneyInput = (value) =>
 
 const handlePaidAmountInput = (event) => {
     paidAmount.value = parseMoneyInput(event.target.value)
+    autoFillFullPayment.value = false
 }
 
 const handleBankTransferAmountValue = (value) => {
     const payableNow = props.editMode ? remainingToCollect.value : Math.max(0, Math.round(totalNeedToPay.value))
     paidAmount.value = Math.min(Number(value || 0), payableNow)
+    autoFillFullPayment.value = false
 }
 
 const handleCashReceivedAmountInput = (event) => {
     cashReceivedAmount.value = parseMoneyInput(event.target.value)
+    autoFillFullPayment.value = false
     bankError.value = ''
 }
 
 const handleBankReceivedAmountInput = (event) => {
     bankReceivedAmount.value = parseMoneyInput(event.target.value)
+    autoFillFullPayment.value = false
     bankError.value = ''
 }
 
@@ -204,6 +210,27 @@ const handleCashAmountInput = (event) => {
         bankError.value = ''
     }
 }
+
+const fullPaymentAmount = computed(() => props.editMode ? remainingToCollect.value : totalNeedToPay.value)
+const toggleFullPayment = (checked) => {
+    autoFillFullPayment.value = checked
+    if (!checked) return
+
+    const amount = Math.max(0, Math.round(fullPaymentAmount.value))
+    if (paymentMethod.value === 'bank') {
+        paidAmount.value = amount
+        bankReceivedAmount.value = amount
+        return
+    }
+    paidAmount.value = amount
+}
+
+watch(fullPaymentAmount, value => {
+    if (!autoFillFullPayment.value) return
+    const amount = Math.max(0, Math.round(value))
+    paidAmount.value = amount
+    if (paymentMethod.value === 'bank') bankReceivedAmount.value = amount
+})
 
 const enableRemainingQr = () => {
     const cashAmount = mixedPayment.value ? Number(cashReceivedAmount.value || 0) : Number(paidAmount.value || 0)
@@ -240,6 +267,7 @@ const resetPaymentFields = () => {
         paidAmount.value = ''
         cashReceivedAmount.value = 0
         bankReceivedAmount.value = ''
+    autoFillFullPayment.value = false
     } else {
         mixedPayment.value = false
         paidAmount.value = ''
@@ -280,8 +308,8 @@ const balanceStatus = computed(() => {
 
     return {
         label: 'Đã thanh toán đủ',
-        amount: 0,
-        className: 'text-slate-600',
+        amount: null,
+        className: 'text-emerald-600',
     }
 })
 
@@ -468,6 +496,16 @@ const submit = () => {
                 <div>
                     <PaymentMethodSelect v-model="paymentMethod" :disabled="Boolean(bankIntent)" />
                 </div>
+                <label v-if="!mixedPayment" class="-mt-2 inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+                    <input
+                        :checked="autoFillFullPayment"
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        :disabled="Boolean(bankIntent)"
+                        @change="toggleFullPayment($event.target.checked)"
+                    />
+                    Đưa đủ <span class="text-blue-600">{{ formatMoney(fullPaymentAmount) }}</span>
+                </label>
                 <p v-if="editMode" class="-mt-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] leading-relaxed text-blue-800">
                     <template v-if="previouslyPaidAmount > totalNeedToPay">Đơn cũ đã thanh toán {{ formatMoney(previouslyPaidAmount) }}. Cần trả lại khách {{ formatMoney(previouslyPaidAmount - totalNeedToPay) }} tiền thừa.</template>
                     <template v-else-if="remainingToCollect > 0">Đơn cũ đã thanh toán {{ formatMoney(previouslyPaidAmount) }}. Chỉ nhập khoản thu thêm; phần còn thiếu chưa thu sẽ được ghi vào công nợ của khách.</template>
@@ -615,7 +653,7 @@ const submit = () => {
                         </div>
                         <div class="flex justify-between pt-1 text-xs font-bold">
                             <span class="text-slate-500">{{ balanceStatus.label }}</span>
-                            <span :class="balanceStatus.className">{{ formatMoney(balanceStatus.amount) }}</span>
+                            <span :class="balanceStatus.className">{{ balanceStatus.amount === null ? '✓' : formatMoney(balanceStatus.amount) }}</span>
                         </div>
                     </template>
                     <template v-else>
@@ -629,7 +667,7 @@ const submit = () => {
                         </div>
                         <div class="flex justify-between pt-1 text-xs font-bold">
                             <span class="text-slate-500">{{ balanceStatus.label }}</span>
-                            <span :class="balanceStatus.className">{{ formatMoney(balanceStatus.amount) }}</span>
+                            <span :class="balanceStatus.className">{{ balanceStatus.amount === null ? '✓' : formatMoney(balanceStatus.amount) }}</span>
                         </div>
                     </template>
                 </div>

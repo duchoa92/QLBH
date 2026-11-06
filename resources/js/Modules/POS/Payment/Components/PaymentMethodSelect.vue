@@ -7,6 +7,7 @@ const props = defineProps({
         default: 'cash',
     },
     disabled: { type: Boolean, default: false },
+    methods: { type: Array, default: () => ['cash', 'bank', 'card'] },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -16,12 +17,13 @@ const methods = [
     { id: 'bank', label: 'Chuyển khoản', icon: Landmark },
     { id: 'card', label: 'Thẻ / POS', icon: CreditCard },
 ]
+const visibleMethods = methods.filter(method => props.methods.includes(method.id))
 </script>
 
 <template>
-    <div class="grid grid-cols-3 gap-2">
+    <div class="grid gap-2" :class="visibleMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'">
         <button
-            v-for="item in methods"
+            v-for="item in visibleMethods"
             :key="item.id"
             type="button"
             class="flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-xs font-bold transition-all"

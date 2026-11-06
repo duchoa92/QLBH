@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import {
     Search,
@@ -11,7 +11,6 @@ import {
     CheckCircle2,
     XCircle,
     Undo2,
-    RefreshCw,
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
@@ -20,8 +19,9 @@ import {
     Clock,
     Phone,
     ChevronRight,
-    SlidersHorizontal,
     X,
+    CalendarDays,
+    ChevronLeft,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -29,8 +29,6 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
-import FloatingInput from '@/Components/UI/FloatingInput.vue'
-import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
@@ -90,6 +88,11 @@ const paymentStatus = ref(props.filters?.payment_status ?? '')
 const dateFrom = ref(props.filters?.date_from ?? '')
 const dateTo = ref(props.filters?.date_to ?? '')
 const datePreset = ref(dateFrom.value || dateTo.value ? 'custom' : 'all')
+const calendarOpen = ref(false)
+const calendarRef = ref(null)
+const pickerStart = ref('')
+const pickerEnd = ref('')
+const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 const perPage = ref(Number(props.filters?.per_page ?? 10))
 
 const detailSale = ref(null)
@@ -140,10 +143,10 @@ let searchTimeout = null
 let salesRequestController = null
 let salesRequestId = 0
 const loadingSales = ref(false)
-const isFilterExpanded = ref(Boolean(status.value || dateFrom.value || dateTo.value))
 onBeforeUnmount(() => {
     clearTimeout(searchTimeout)
     salesRequestController?.abort()
+    window.removeEventListener('pointerdown', closeCalendarOnOutside)
 })
 
 const syncFilterUrl = (filters) => {
@@ -236,28 +239,18 @@ const applyPaymentStatus = (value) => {
     requestSales()
 }
 
-const handleStatusFilterChange = () => {
-    paymentStatus.value = ''
-    handleFilterChange()
-}
-
 const clearSearch = () => {
     search.value = ''
     clearTimeout(searchTimeout)
     requestSales()
 }
 
-const statusOptions = [
-    { label: 'Tất cả trạng thái', value: '' },
-    { label: 'Hoàn thành', value: 'completed' },
-    { label: 'Đã hủy', value: 'cancelled' },
-]
 const datePresetOptions = [
     { label: 'Toàn thời gian', value: 'all' },
     { label: 'Hôm nay', value: 'today' },
     { label: 'Hôm qua', value: 'yesterday' },
     { label: 'Tháng này', value: 'this_month' },
-    { label: 'Tùy chỉnh', value: 'custom' },
+    { label: 'Tháng trước', value: 'last_month' },
 ]
 
 const dateInputValue = (date) => {
@@ -267,50 +260,83 @@ const dateInputValue = (date) => {
     return `${year}-${month}-${day}`
 }
 
-const applyDatePreset = () => {
+const dateFromInput = value => value ? new Date(`${value}T12:00:00`) : null
+const dateRangeFor = (preset) => {
     const today = new Date()
-    if (datePreset.value === 'all') {
-        dateFrom.value = ''
-        dateTo.value = ''
-    } else if (datePreset.value === 'today') {
-        dateFrom.value = dateInputValue(today)
-        dateTo.value = dateInputValue(today)
-    } else if (datePreset.value === 'yesterday') {
+    if (preset === 'all') return { from: '', to: '' }
+    if (preset === 'today') {
+        const value = dateInputValue(today)
+        return { from: value, to: value }
+    }
+    if (preset === 'yesterday') {
         const yesterday = new Date(today)
         yesterday.setDate(today.getDate() - 1)
-        dateFrom.value = dateInputValue(yesterday)
-        dateTo.value = dateInputValue(yesterday)
-    } else if (datePreset.value === 'this_month') {
-        dateFrom.value = dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1))
-        dateTo.value = dateInputValue(today)
+        const value = dateInputValue(yesterday)
+        return { from: value, to: value }
     }
+    if (preset === 'this_month') return { from: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)), to: dateInputValue(today) }
+    if (preset === 'last_month') return { from: dateInputValue(new Date(today.getFullYear(), today.getMonth() - 1, 1)), to: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 0)) }
+    return null
+}
+const applyDatePreset = (preset) => {
+    datePreset.value = preset
+    const range = dateRangeFor(preset)
+    if (!range) return
+    dateFrom.value = range.from
+    dateTo.value = range.to
+    calendarOpen.value = false
     clearTimeout(searchTimeout)
     requestSales()
 }
-
-const applyCustomDate = () => {
-    datePreset.value = 'custom'
-    handleFilterChange()
+const calendarMonthLabel = computed(() => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(calendarMonth.value))
+const calendarCells = computed(() => {
+    const first = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth(), 1)
+    const start = new Date(first)
+    start.setDate(1 - ((first.getDay() + 6) % 7))
+    return Array.from({ length: 42 }, (_, index) => {
+        const date = new Date(start)
+        date.setDate(start.getDate() + index)
+        return { key: dateInputValue(date), day: date.getDate(), currentMonth: date.getMonth() === calendarMonth.value.getMonth() }
+    })
+})
+const isPickerSelected = key => key === pickerStart.value || key === pickerEnd.value
+const isPickerInRange = key => Boolean(pickerStart.value && pickerEnd.value && key > pickerStart.value && key < pickerEnd.value)
+const pickerRangeLabel = computed(() => {
+    const format = value => new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
+    if (!pickerStart.value) return 'Chọn ngày bắt đầu, rồi chọn ngày kết thúc'
+    return pickerEnd.value ? `${format(pickerStart.value)} – ${format(pickerEnd.value)}` : `Từ ${format(pickerStart.value)} · chọn ngày kết thúc`
+})
+const openDatePicker = () => {
+    pickerStart.value = dateFrom.value
+    pickerEnd.value = dateTo.value
+    const anchor = dateFromInput(pickerStart.value) || new Date()
+    calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    calendarOpen.value = true
 }
+const moveCalendarMonth = amount => { calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + amount, 1) }
+const selectPickerDate = (key) => {
+    if (!pickerStart.value || pickerEnd.value) { pickerStart.value = key; pickerEnd.value = ''; return }
+    if (key < pickerStart.value) { pickerEnd.value = pickerStart.value; pickerStart.value = key } else pickerEnd.value = key
+}
+const applyCustomDateRange = () => {
+    if (!pickerStart.value) return
+    datePreset.value = 'custom'
+    dateFrom.value = pickerStart.value
+    dateTo.value = pickerEnd.value || pickerStart.value
+    calendarOpen.value = false
+    clearTimeout(searchTimeout)
+    requestSales()
+}
+const clearDateRange = () => applyDatePreset('all')
+const closeCalendarOnOutside = event => {
+    if (calendarOpen.value && calendarRef.value && !calendarRef.value.contains(event.target)) calendarOpen.value = false
+}
+onMounted(() => window.addEventListener('pointerdown', closeCalendarOnOutside))
 
 // Hàm kích hoạt lọc (chỉ gửi request khi có thay đổi)
 const handleFilterChange = () => {
     clearTimeout(searchTimeout)
     searchTimeout = setTimeout(requestSales, 180)
-}
-
-// Reset toàn bộ lọc
-const resetFilters = () => {
-    search.value = ''
-    status.value = ''
-    paymentStatus.value = ''
-    dateFrom.value = ''
-    dateTo.value = ''
-    datePreset.value = 'all'
-    sortKey.value = 'created_at'
-    sortOrder.value = 'desc'
-    clearTimeout(searchTimeout)
-    requestSales()
 }
 
 // Tính tổng tiền hóa đơn
@@ -524,31 +550,31 @@ const highlightedSearchSegments = (value) => {
         <DataPanel detached>
             <template #header>
                 <div class="w-full space-y-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4">
-                    <div class="flex flex-col items-stretch gap-2.5 lg:flex-row lg:items-center">
-                        <div class="relative min-w-[260px] flex-1">
+                    <div class="relative min-w-0">
                             <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input id="sales-search" v-model="search" type="text" autocomplete="off" placeholder="Tìm Mã HĐ, Tên KH, SĐT, sản phẩm, Serial/IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" @input="handleFilterChange" />
                             <LoaderCircle v-if="loadingSales" class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" />
                             <button v-else-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
-                        </div>
+                    </div>
 
-                        <div class="flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                        <div class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
                             <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === '' && status === '' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'" @click="applyPaymentStatus('')">Tất cả</button>
                             <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === 'paid' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'" @click="applyPaymentStatus('paid')">Đã thanh toán</button>
                             <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === 'debt' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'" @click="applyPaymentStatus('debt')">Còn nợ</button>
                         </div>
-
-                        <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-xs font-semibold transition" :class="isFilterExpanded ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'" @click="isFilterExpanded = !isFilterExpanded">
-                            <SlidersHorizontal class="h-3.5 w-3.5" /> {{ isFilterExpanded ? 'Ẩn lọc' : 'Lọc nâng cao' }}
-                        </button>
-                    </div>
-
-                    <div v-if="isFilterExpanded" class="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto]">
-                        <FloatingSelect v-model="status" label="Trạng thái đơn" name="status" :options="statusOptions" :show-placeholder="false" option-label="label" option-value="value" @update:modelValue="handleStatusFilterChange" />
-                        <FloatingSelect v-model="datePreset" label="Thời gian" name="date_preset" :options="datePresetOptions" :show-placeholder="false" option-label="label" option-value="value" @update:modelValue="applyDatePreset" />
-                        <FloatingInput v-model="dateFrom" label="Từ ngày" type="date" name="date_from" @change="applyCustomDate" />
-                        <FloatingInput v-model="dateTo" label="Đến ngày" type="date" name="date_to" @change="applyCustomDate" />
-                        <button type="button" class="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100" @click="resetFilters"><RefreshCw class="h-3.5 w-3.5" /> Đặt lại</button>
+                        <div ref="calendarRef" class="relative shrink-0">
+                            <button type="button" class="inline-flex h-[42px] w-[42px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" title="Lọc theo thời gian" aria-label="Lọc theo thời gian" @click="calendarOpen ? calendarOpen = false : openDatePicker()"><CalendarDays class="h-4 w-4" /></button>
+                            <div v-if="calendarOpen" class="absolute right-0 top-full z-50 mt-2 w-[min(304px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                                <div class="grid grid-cols-3 gap-1 border-b border-slate-100 p-1.5">
+                                    <button v-for="preset in datePresetOptions" :key="preset.value" type="button" class="rounded-md border px-1.5 py-1 text-[9px] font-semibold transition" :class="datePreset === preset.value ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'" @click="applyDatePreset(preset.value)">{{ preset.label }}</button>
+                                </div>
+                                <header class="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5"><button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 hover:bg-slate-100" aria-label="Tháng trước" @click="moveCalendarMonth(-1)"><ChevronLeft class="h-3.5 w-3.5" /></button><h3 class="text-xs font-bold capitalize text-slate-800">{{ calendarMonthLabel }}</h3><button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 hover:bg-slate-100" aria-label="Tháng sau" @click="moveCalendarMonth(1)"><ChevronRight class="h-3.5 w-3.5" /></button></header>
+                                <div class="grid grid-cols-7 bg-slate-50 text-center text-[9px] font-bold text-slate-500"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1.5">{{ day }}</span></div>
+                                <div class="grid grid-cols-7 p-1"><button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectPickerDate(cell.key)">{{ cell.day }}</button></div>
+                                <footer class="space-y-1.5 border-t border-slate-100 px-2.5 py-2"><p class="truncate text-center text-[10px] font-medium text-slate-600">{{ pickerRangeLabel }}</p><div class="flex items-center justify-between gap-2"><button type="button" class="px-1.5 py-1 text-[10px] font-semibold text-slate-500 hover:text-rose-600" @click="clearDateRange">Xóa</button><button type="button" :disabled="!pickerStart" class="rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCustomDateRange">Áp dụng</button></div></footer>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </template>
