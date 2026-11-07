@@ -336,10 +336,10 @@ const selectEntryVariant = () => {
     const existingRow = (item.rows || []).find(row => Number(row.variant_id) === Number(variant.id))
     const existingImeiRow = (item.imeis || []).find(row => Number(row?.variant_id) === Number(variant.id))
     const savedPrice = existingRow || existingImeiRow
-    const cost = rawCost === null || rawCost === undefined
+    const cost = !(Number(rawCost) > 0)
         ? Number(item.cost_price || 0)
         : Number(rawCost) * priceFactor
-    const sell = rawSell === null || rawSell === undefined
+    const sell = !(Number(rawSell) > 0)
         ? Number(item.sell_price || 0)
         : Number(rawSell) * priceFactor
 
@@ -402,10 +402,10 @@ const openEntryModal = (item) => {
     const rawVariantCost = defaultVariant?.cost_price ?? defaultVariant?.import_price
     const rawVariantSell = defaultVariant?.sell_price ?? defaultVariant?.retail_price ?? defaultVariant?.price
     const defaultCost = defaultVariant
-        ? (rawVariantCost == null ? Number(item.cost_price || 0) : Number(rawVariantCost) * (priceUnitBasis === 'conversion' ? factor : 1))
+        ? (!(Number(rawVariantCost) > 0) ? Number(item.cost_price || 0) : Number(rawVariantCost) * (priceUnitBasis === 'conversion' ? factor : 1))
         : Number(item.cost_price ?? item.import_price ?? 0)
     const defaultSell = defaultVariant
-        ? (rawVariantSell == null ? Number(item.sell_price || 0) : Number(rawVariantSell) * (priceUnitBasis === 'conversion' ? factor : 1))
+        ? (!(Number(rawVariantSell) > 0) ? Number(item.sell_price || 0) : Number(rawVariantSell) * (priceUnitBasis === 'conversion' ? factor : 1))
         : Number(item.sell_price ?? item.price ?? 0)
 
     entryModal.value = {
@@ -508,7 +508,7 @@ const resetEntryInputs = (keepPrices = false, keepVariant = false) => {
 const selectImeiEntry = (index) => {
     const row = entryModal.value.item?.imeis?.[index]
     if (!row) return
-    editingEntryIndex.value = null
+    editingEntryIndex.value = index
     entryModal.value.imei_input = typeof row === 'string' ? row : (row.imei || '')
     entryModal.value.variant_input = typeof row === 'string' ? null : (row.variant_id || null)
     entryModal.value.info_text_input = row.extra_info?.note || ''
@@ -639,7 +639,11 @@ const addEntry = async () => {
             warranty_duration_value: props.customerImport ? null : (modal.warranty_duration_value_input || null),
             warranty_duration_unit: props.customerImport ? null : (modal.warranty_duration_unit_input || 'months'),
         }
-        item.imeis.push(nextRow)
+        if (editingEntryIndex.value !== null) {
+            item.imeis[editingEntryIndex.value] = nextRow
+        } else {
+            item.imeis.push(nextRow)
+        }
         resetEntryInputs(true, item.type === 'imei_variant')
         nextTick(() => document.getElementById('stock-import-imei-input')?.focus())
         return true

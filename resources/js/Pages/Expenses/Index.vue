@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { router, useForm, usePage } from '@inertiajs/vue3'
-import { Plus, Search, Pencil, Trash2, X, BellRing, CalendarClock } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -9,10 +9,13 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 import { formatMoney } from '@/utils/format'
 import BaseTable from '@/Components/UI/BaseTable.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({ expenses: Object, filters: Object, summary: Object, categories: Array, canManage: Boolean, recurringExpenses: { type: Array, default: () => [] } })
 const page = usePage()
+const categoryOptions = computed(() => [{ value: '', label: 'Tất cả loại chi' }, ...(props.categories || []).map(item => ({ value: item, label: categoryLabels[item] || item }))])
 const categoryLabels = { utilities: 'Điện, nước', internet: 'Internet', rent: 'Thuê nhà', tax: 'Thuế, phí', salary: 'Lương', supplies: 'Văn phòng phẩm', other: 'Khác' }
 const paymentLabels = { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }
 const month = ref(props.filters.month)
@@ -81,28 +84,25 @@ const applySort = ({ field, order }) => router.get(route('expenses.index'), {
 
 <template>
     <div class="space-y-3">
-        <PageHeader title="Chi phí cửa hàng">
-            <template #actions><ActionButton v-if="canManage" @click="openCreate"><Plus :size="16" class="mr-1" /> Thêm chi phí</ActionButton></template>
-        </PageHeader>
+        <PageHeader title="Chi phí cửa hàng" />
         <div class="grid gap-3 sm:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Tổng chi tháng {{ month }}</p><p class="mt-1 text-2xl font-black text-rose-700">{{ formatMoney(summary.total) }}</p></div>
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Số khoản chi trong tháng</p><p class="mt-1 text-2xl font-black text-slate-900">{{ summary.count }}</p></div>
         </div>
         <div class="space-y-3">
-            <div class="flex flex-wrap items-center gap-2">
-                <input v-model="month" type="month" class="rounded-xl border-slate-200 text-sm" />
-                <select v-model="category" class="rounded-xl border-slate-200 text-sm"><option value="">Tất cả loại chi</option><option v-for="item in categories" :key="item" :value="item">{{ categoryLabels[item] || item }}</option></select>
-                <div class="relative min-w-48 flex-1"><Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input v-model="search" placeholder="Tìm nội dung hoặc người nhận" class="w-full rounded-xl border-slate-200 pl-9 text-sm" /></div>
-            </div>
+            <ListToolbar v-model="search" placeholder="Tìm nội dung hoặc người nhận...">
+                <template #filters><input v-model="month" type="month" class="app-filter-control w-full sm:w-[170px]" /><ListFilterSelect v-model="category" label="Loại chi" :show-placeholder="false" :options="categoryOptions" /></template>
+                <template #actions><ActionButton v-if="canManage" @click="openCreate"><Plus :size="16" />Thêm chi phí</ActionButton></template>
+            </ListToolbar>
             <BaseTable :data="expenses" :columns="columns" :filters="filters" :row-clickable="canManage" @sort="applySort" @row-click="openEdit($event)">
                 <template #row="{ row }">
-                    <td class="border-r p-2 text-slate-700">{{ row.expense_date }}</td>
-                    <td class="border-r p-2"><span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ categoryLabels[row.category] || row.category }}</span></td>
-                    <td class="border-r p-2"><div class="font-semibold text-slate-800">{{ row.description }}</div><div v-if="row.note" class="mt-0.5 text-xs text-slate-500">{{ row.note }}</div></td>
-                    <td class="border-r p-2 text-slate-600">{{ row.recipient || '—' }}</td>
-                    <td class="border-r p-2 text-slate-600">{{ paymentLabels[row.payment_method] || row.payment_method }}</td>
-                    <td class="border-r p-2 text-right font-bold text-emerald-700">{{ formatMoney(row.amount) }}</td>
-                    <td class="p-2 text-right" @click.stop><template v-if="canManage"><button class="mr-1 rounded-lg p-2 text-emerald-700 hover:bg-emerald-50" aria-label="Sửa" @click="openEdit(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa" @click="remove(row)"><Trash2 :size="15" /></button></template></td>
+                    <td class="px-3.5 py-2.5 text-slate-700">{{ row.expense_date }}</td>
+                    <td class="px-3.5 py-2.5"><span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ categoryLabels[row.category] || row.category }}</span></td>
+                    <td class="px-3.5 py-2.5"><div class="font-semibold text-slate-800">{{ row.description }}</div><div v-if="row.note" class="mt-0.5 text-xs text-slate-500">{{ row.note }}</div></td>
+                    <td class="px-3.5 py-2.5 text-slate-600">{{ row.recipient || '—' }}</td>
+                    <td class="px-3.5 py-2.5 text-slate-600">{{ paymentLabels[row.payment_method] || row.payment_method }}</td>
+                    <td class="px-3.5 py-2.5 text-right font-bold text-emerald-700">{{ formatMoney(row.amount) }}</td>
+                    <td class="px-3.5 py-2.5 text-center" @click.stop><div v-if="canManage" class="app-row-actions"><button type="button" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa" @click="openEdit(row)"><Pencil class="h-4 w-4" /></button><button type="button" class="app-row-action app-row-action--danger" title="Xóa" aria-label="Xóa" @click="remove(row)"><Trash2 class="h-4 w-4" /></button></div></td>
                 </template>
             </BaseTable>
         </div>

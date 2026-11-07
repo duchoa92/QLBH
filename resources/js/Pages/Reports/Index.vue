@@ -6,6 +6,8 @@ import axios from 'axios'
 import { formatMoney, formatDate } from '@/utils/format'
 import SimpleBarChart from '@/Components/Charts/SimpleBarChart.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import {
     TrendingUp,
     PiggyBank,
@@ -64,6 +66,13 @@ const filters = reactive({
     from: toInputDate(firstDayOfMonth),
     to: toInputDate(today),
 })
+
+// Báo cáo luôn cần một khoảng ngày: nếu bấm "Xóa" thì quay về đầu tháng → hôm nay.
+const resetEmptyRange = ({ from, to }) => {
+    if (from || to) return
+    filters.from = toInputDate(firstDayOfMonth)
+    filters.to = toInputDate(today)
+}
 
 const quickRanges = [
     {
@@ -385,32 +394,15 @@ onMounted(() => {
             <!-- DATE FILTER (revenue / profit / best-sellers) -->
             <section
                 v-if="['revenue', 'profit', 'best-sellers'].includes(activeTab)"
-                class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                class="flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4"
             >
-                <div class="flex items-center gap-2">
-                    <label class="text-xs font-bold uppercase text-slate-500">Từ ngày</label>
-                    <input
-                        v-model="filters.from"
-                        type="date"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    >
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <label class="text-xs font-bold uppercase text-slate-500">Đến ngày</label>
-                    <input
-                        v-model="filters.to"
-                        type="date"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    >
-                </div>
-
-                <div class="flex flex-wrap gap-2">
+                <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" align="left" @change="resetEmptyRange" />
+                <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:ml-auto">
                     <button
                         v-for="range in quickRanges"
                         :key="range.label"
                         type="button"
-                        class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        class="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900"
                         @click="range.apply()"
                     >
                         {{ range.label }}
@@ -543,29 +535,29 @@ onMounted(() => {
                     <SimpleBarChart :series="profitChartSeries" color="#059669" />
                 </section>
 
-                <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                     <h3 class="border-b border-slate-100 p-5 text-sm font-black uppercase text-slate-700">
                         Lợi nhuận theo sản phẩm (top 15)
                     </h3>
 
-                    <table class="app-data-table w-full text-sm">
-                        <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                            <tr>
-                                <th class="px-4 py-3 text-left">Sản phẩm</th>
-                                <th class="px-4 py-3 text-right">SL bán</th>
-                                <th class="px-4 py-3 text-right">Doanh thu</th>
-                                <th class="px-4 py-3 text-right">Giá vốn</th>
-                                <th class="px-4 py-3 text-right">Lợi nhuận</th>
+                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                        <thead>
+                            <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <th class="px-3.5 py-2.5 text-left">Sản phẩm</th>
+                                <th class="px-3.5 py-2.5 text-right">SL bán</th>
+                                <th class="px-3.5 py-2.5 text-right">Doanh thu</th>
+                                <th class="px-3.5 py-2.5 text-right">Giá vốn</th>
+                                <th class="px-3.5 py-2.5 text-right">Lợi nhuận</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-for="row in profit.by_product" :key="row.id">
-                                <td class="px-4 py-3 font-semibold text-slate-800">{{ row.name }}</td>
-                                <td class="px-4 py-3 text-right">{{ row.qty_sold }}</td>
-                                <td class="px-4 py-3 text-right">{{ formatMoney(row.revenue) }}</td>
-                                <td class="px-4 py-3 text-right text-slate-500">{{ formatMoney(row.cost) }}</td>
+                        <tbody class="divide-y divide-slate-100 text-xs font-medium">
+                            <tr class="transition-colors hover:bg-emerald-50/70" v-for="row in profit.by_product" :key="row.id">
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800">{{ row.name }}</td>
+                                <td class="px-3.5 py-2.5 text-right">{{ row.qty_sold }}</td>
+                                <td class="px-3.5 py-2.5 text-right">{{ formatMoney(row.revenue) }}</td>
+                                <td class="px-3.5 py-2.5 text-right text-slate-500">{{ formatMoney(row.cost) }}</td>
                                 <td
-                                    class="px-4 py-3 text-right font-bold"
+                                    class="px-3.5 py-2.5 text-right font-bold"
                                     :class="row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'"
                                 >
                                     {{ formatMoney(row.profit) }}
@@ -578,7 +570,7 @@ onMounted(() => {
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                 </section>
 
             </template>
@@ -592,7 +584,7 @@ onMounted(() => {
                     <div class="flex overflow-hidden rounded-md border border-slate-200">
                         <button
                             type="button"
-                            class="px-4 py-2 text-sm font-bold"
+                            class="px-4 py-2 text-xs font-bold"
                             :class="bestSellerOrder === 'best' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
                             @click="bestSellerOrder = 'best'"
                         >
@@ -600,7 +592,7 @@ onMounted(() => {
                         </button>
                         <button
                             type="button"
-                            class="px-4 py-2 text-sm font-bold"
+                            class="px-4 py-2 text-xs font-bold"
                             :class="bestSellerOrder === 'worst' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
                             @click="bestSellerOrder = 'worst'"
                         >
@@ -618,26 +610,26 @@ onMounted(() => {
                     </select>
                 </section>
 
-                <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <table class="app-data-table w-full text-sm">
-                        <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                            <tr>
-                                <th class="px-4 py-3 text-left">#</th>
-                                <th class="px-4 py-3 text-left">Sản phẩm</th>
-                                <th class="px-4 py-3 text-left">SKU</th>
-                                <th class="px-4 py-3 text-right">SL bán</th>
-                                <th class="px-4 py-3 text-right">Doanh thu</th>
-                                <th class="px-4 py-3 text-right">Tồn kho</th>
+                <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                        <thead>
+                            <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <th class="px-3.5 py-2.5 text-left">#</th>
+                                <th class="px-3.5 py-2.5 text-left">Sản phẩm</th>
+                                <th class="px-3.5 py-2.5 text-left">SKU</th>
+                                <th class="px-3.5 py-2.5 text-right">SL bán</th>
+                                <th class="px-3.5 py-2.5 text-right">Doanh thu</th>
+                                <th class="px-3.5 py-2.5 text-right">Tồn kho</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-for="(row, index) in bestSellers.items" :key="row.id">
-                                <td class="px-4 py-3 text-slate-400">{{ index + 1 }}</td>
-                                <td class="px-4 py-3 font-semibold text-slate-800">{{ row.name }}</td>
-                                <td class="px-4 py-3 text-slate-500">{{ row.sku }}</td>
-                                <td class="px-4 py-3 text-right font-bold text-blue-600">{{ row.qty_sold }}</td>
-                                <td class="px-4 py-3 text-right">{{ formatMoney(row.revenue) }}</td>
-                                <td class="px-4 py-3 text-right text-slate-500">{{ row.stock }}</td>
+                        <tbody class="divide-y divide-slate-100 text-xs font-medium">
+                            <tr class="transition-colors hover:bg-emerald-50/70" v-for="(row, index) in bestSellers.items" :key="row.id">
+                                <td class="px-3.5 py-2.5 text-slate-400">{{ index + 1 }}</td>
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800">{{ row.name }}</td>
+                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.sku }}</td>
+                                <td class="px-3.5 py-2.5 text-right font-bold text-blue-600">{{ row.qty_sold }}</td>
+                                <td class="px-3.5 py-2.5 text-right">{{ formatMoney(row.revenue) }}</td>
+                                <td class="px-3.5 py-2.5 text-right text-slate-500">{{ row.stock }}</td>
                             </tr>
 
                             <tr v-if="!bestSellers.items.length">
@@ -646,7 +638,7 @@ onMounted(() => {
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
                 </section>
 
             </template>
@@ -686,56 +678,47 @@ onMounted(() => {
                     </div>
                 </section>
 
-                <section class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div class="relative flex min-w-[280px] flex-1 items-center">
-                        <input
-                            v-model="inventoryFilters.search"
-                            type="text"
-                            placeholder="Tìm sản phẩm theo tên, SKU hoặc barcode..."
-                            class="w-full rounded-md border border-slate-300 px-3 py-2 pr-12 text-sm"
-                        >
-                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => inventoryFilters.search = code" />
-                    </div>
-
-                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                <ListToolbar v-model="inventoryFilters.search" placeholder="Tìm sản phẩm theo tên, SKU hoặc barcode...">
+                    <template #search-end><BarcodeCameraButton class="absolute right-8 top-1/2 z-10 -translate-y-1/2" @scanned="(code) => inventoryFilters.search = code" /></template>
+                    <template #filters><label class="flex h-[42px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm">
                         <input
                             v-model="inventoryFilters.low_stock"
                             type="checkbox"
                             class="rounded border-slate-300"
                         >
                         Chỉ hiện sắp hết hàng
-                    </label>
-                </section>
+                    </label></template>
+                </ListToolbar>
 
-                <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <table class="app-data-table w-full text-sm">
-                        <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                            <tr>
-                                <th class="px-4 py-3 text-left">Sản phẩm</th>
-                                <th class="px-4 py-3 text-left">Danh mục</th>
-                                <th class="px-4 py-3 text-right">Tồn kho</th>
-                                <th class="px-4 py-3 text-right">Ngưỡng cảnh báo</th>
-                                <th class="px-4 py-3 text-right">Giá vốn</th>
-                                <th class="px-4 py-3 text-right">Giá trị tồn</th>
+                <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                        <thead>
+                            <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <th class="px-3.5 py-2.5 text-left">Sản phẩm</th>
+                                <th class="px-3.5 py-2.5 text-left">Danh mục</th>
+                                <th class="px-3.5 py-2.5 text-right">Tồn kho</th>
+                                <th class="px-3.5 py-2.5 text-right">Ngưỡng cảnh báo</th>
+                                <th class="px-3.5 py-2.5 text-right">Giá vốn</th>
+                                <th class="px-3.5 py-2.5 text-right">Giá trị tồn</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
+                        <tbody class="divide-y divide-slate-100 text-xs font-medium">
                             <tr
                                 v-for="row in inventory.products?.data ?? []"
                                 :key="row.id"
                                 :class="row.stock <= row.alert_stock ? 'bg-amber-50/60' : ''"
                             >
-                                <td class="px-4 py-3 font-semibold text-slate-800">{{ row.name }}</td>
-                                <td class="px-4 py-3 text-slate-500">{{ row.category?.name ?? '—' }}</td>
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800">{{ row.name }}</td>
+                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.category?.name ?? '—' }}</td>
                                 <td
-                                    class="px-4 py-3 text-right font-bold"
+                                    class="px-3.5 py-2.5 text-right font-bold"
                                     :class="row.stock <= row.alert_stock ? 'text-amber-600' : 'text-slate-800'"
                                 >
                                     {{ row.stock }}
                                 </td>
-                                <td class="px-4 py-3 text-right text-slate-500">{{ row.alert_stock }}</td>
-                                <td class="px-4 py-3 text-right">{{ formatMoney(row.cost_price) }}</td>
-                                <td class="px-4 py-3 text-right font-bold text-blue-600">
+                                <td class="px-3.5 py-2.5 text-right text-slate-500">{{ row.alert_stock }}</td>
+                                <td class="px-3.5 py-2.5 text-right">{{ formatMoney(row.cost_price) }}</td>
+                                <td class="px-3.5 py-2.5 text-right font-bold text-blue-600">
                                     {{ formatMoney(row.stock_value) }}
                                 </td>
                             </tr>
@@ -746,20 +729,20 @@ onMounted(() => {
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
 
                     <div
                         v-if="inventory.products?.last_page > 1"
-                        class="flex items-center justify-between border-t border-slate-100 px-4 py-3"
+                        class="flex items-center justify-between border-t border-[#c5d4e3] bg-[#dce7f2] px-4 py-3 text-sm"
                     >
-                        <div class="text-xs text-slate-500">
+                        <div class="text-[#40566d]">
                             Trang {{ inventory.products.current_page }} / {{ inventory.products.last_page }}
                         </div>
 
                         <div class="flex gap-2">
                             <button
                                 type="button"
-                                class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+                                class="min-w-9 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 :disabled="inventory.products.current_page <= 1"
                                 @click="loadInventory(inventory.products.current_page - 1)"
                             >
@@ -767,7 +750,7 @@ onMounted(() => {
                             </button>
                             <button
                                 type="button"
-                                class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+                                class="min-w-9 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 :disabled="inventory.products.current_page >= inventory.products.last_page"
                                 @click="loadInventory(inventory.products.current_page + 1)"
                             >
@@ -802,11 +785,11 @@ onMounted(() => {
                     </div>
                 </section>
 
-                <section class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div class="flex overflow-hidden rounded-md border border-slate-200">
+                <ListToolbar v-model="debtFilters.search" placeholder="Tìm theo tên, mã hoặc điện thoại...">
+                    <template #filters><div class="flex h-[42px] overflow-hidden rounded-xl border border-slate-200">
                         <button
                             type="button"
-                            class="px-4 py-2 text-sm font-bold"
+                            class="px-4 py-2 text-xs font-bold"
                             :class="debtFilters.type === 'customer' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
                             @click="debtFilters.type = 'customer'"
                         >
@@ -814,42 +797,35 @@ onMounted(() => {
                         </button>
                         <button
                             type="button"
-                            class="px-4 py-2 text-sm font-bold"
+                            class="px-4 py-2 text-xs font-bold"
                             :class="debtFilters.type === 'supplier' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
                             @click="debtFilters.type = 'supplier'"
                         >
                             Nhà cung cấp
                         </button>
-                    </div>
+                    </div></template>
+                </ListToolbar>
 
-                    <input
-                        v-model="debtFilters.search"
-                        type="text"
-                        placeholder="Tìm theo tên..."
-                        class="flex-1 min-w-[220px] rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    >
-                </section>
-
-                <section class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <table class="app-data-table w-full text-sm">
-                        <thead class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                            <tr>
-                                <th class="px-4 py-3 text-left">Mã</th>
-                                <th class="px-4 py-3 text-left">
+                <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                        <thead>
+                            <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <th class="px-3.5 py-2.5 text-left">Mã</th>
+                                <th class="px-3.5 py-2.5 text-left">
                                     {{ debtFilters.type === 'customer' ? 'Khách hàng' : 'Nhà cung cấp' }}
                                 </th>
-                                <th class="px-4 py-3 text-left">Điện thoại</th>
-                                <th class="px-4 py-3 text-right">Số nợ</th>
+                                <th class="px-3.5 py-2.5 text-left">Điện thoại</th>
+                                <th class="px-3.5 py-2.5 text-right">Số nợ</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-for="row in debts.items?.data ?? []" :key="row.id">
-                                <td class="px-4 py-3 text-slate-500">{{ row.code }}</td>
-                                <td class="px-4 py-3 font-semibold text-slate-800">
+                        <tbody class="divide-y divide-slate-100 text-xs font-medium">
+                            <tr class="transition-colors hover:bg-emerald-50/70" v-for="row in debts.items?.data ?? []" :key="row.id">
+                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.code }}</td>
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800">
                                     {{ row.full_name ?? row.name }}
                                 </td>
-                                <td class="px-4 py-3 text-slate-500">{{ row.phone ?? '—' }}</td>
-                                <td class="px-4 py-3 text-right font-bold text-rose-600">
+                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.phone ?? '—' }}</td>
+                                <td class="px-3.5 py-2.5 text-right font-bold text-rose-600">
                                     {{ formatMoney(row.debt_balance) }}
                                 </td>
                             </tr>
@@ -860,20 +836,20 @@ onMounted(() => {
                                 </td>
                             </tr>
                         </tbody>
-                    </table>
+                    </table></div>
 
                     <div
                         v-if="debts.items?.last_page > 1"
-                        class="flex items-center justify-between border-t border-slate-100 px-4 py-3"
+                        class="flex items-center justify-between border-t border-[#c5d4e3] bg-[#dce7f2] px-4 py-3 text-sm"
                     >
-                        <div class="text-xs text-slate-500">
+                        <div class="text-[#40566d]">
                             Trang {{ debts.items.current_page }} / {{ debts.items.last_page }}
                         </div>
 
                         <div class="flex gap-2">
                             <button
                                 type="button"
-                                class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+                                class="min-w-9 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 :disabled="debts.items.current_page <= 1"
                                 @click="loadDebts(debts.items.current_page - 1)"
                             >
@@ -881,7 +857,7 @@ onMounted(() => {
                             </button>
                             <button
                                 type="button"
-                                class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+                                class="min-w-9 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 :disabled="debts.items.current_page >= debts.items.last_page"
                                 @click="loadDebts(debts.items.current_page + 1)"
                             >

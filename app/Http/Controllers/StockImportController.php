@@ -370,6 +370,26 @@ class StockImportController extends Controller
                 'max:100',
             ],
 
+            // Giá và biến thể của từng IMEI. Thiếu các rule này thì validate()
+            // loại bỏ chúng khỏi dữ liệu, khiến giá IMEI lưu thành 0 / không đổi
+            // khi nhập mới hoặc sửa phiếu.
+            'items.*.imeis.*.cost_price' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
+            'items.*.imeis.*.sell_price' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
+            'items.*.imeis.*.variant_id' => [
+                'nullable',
+                'integer',
+            ],
+
             'items.*.imeis.*.extra_info' => [
                 'nullable',
                 'array',
@@ -518,8 +538,9 @@ class StockImportController extends Controller
             'items.product.unit:id,name,short_name',
             'items.product.conversionUnit:id,name,short_name',
             'items.product.variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock,is_active',
-            'items.variant:id,product_id,sku,attributes,stock',
+            'items.variant:id,product_id,sku,attributes,cost_price,sell_price,stock',
             'items.unit:id,name,short_name',
+            'items.stockBatch:id,stock_import_item_id,variant_id,cost_price,sell_price',
         ]);
 
         $imeiHistories = ProductImeiHistory::query()
@@ -534,16 +555,40 @@ class StockImportController extends Controller
             ->latest('id')
             ->get();
 
-        $stockImport->items->each(function ($item) use ($imeiHistories): void {
-            $item->setRelation(
-                'import_imeis',
-                $imeiHistories
-                    ->filter(function (ProductImeiHistory $history) use ($item): bool {
-                        return (int) ($history->meta['product_id'] ?? 0) === (int) $item->product_id
-                            && (int) ($history->meta['variant_id'] ?? 0) === (int) ($item->variant_id ?? 0);
-                    })
-                    ->values()
-            );
+        // Phiếu cũ chưa lưu stock_import_item_id trong meta. Không được gắn cả
+        // nhóm IMEI đó vào từng dòng giống nhau, nếu không form sửa sẽ nhân đôi
+        // IMEI (2 IMEI thành 4). Phân bổ theo số lượng từng dòng của phiếu cũ.
+        $legacyAssignments = [];
+        $stockImport->items
+            ->groupBy(fn ($item) => $item->product_id . ':' . ($item->variant_id ?? 'none'))
+            ->each(function ($items, string $key) use ($imeiHistories, &$legacyAssignments): void {
+                [$productId, $variantId] = explode(':', $key, 2);
+                $legacyHistories = $imeiHistories
+                    ->filter(fn (ProductImeiHistory $history): bool =>
+                        empty($history->meta['stock_import_item_id'])
+                        && (int) ($history->meta['product_id'] ?? 0) === (int) $productId
+                        && (int) ($history->meta['variant_id'] ?? 0) === ($variantId === 'none' ? 0 : (int) $variantId)
+                    )
+                    ->values();
+
+                $offset = 0;
+                foreach ($items as $item) {
+                    $quantity = max(0, (int) $item->quantity);
+                    $legacyAssignments[$item->id] = $legacyHistories->slice($offset, $quantity)->values();
+                    $offset += $quantity;
+                }
+            });
+
+        $stockImport->items->each(function ($item) use ($imeiHistories, $legacyAssignments): void {
+            $linkedHistories = $imeiHistories
+                ->filter(fn (ProductImeiHistory $history): bool =>
+                    (int) ($history->meta['stock_import_item_id'] ?? 0) === (int) $item->id
+                )
+                ->values();
+
+            $item->setRelation('import_imeis', $linkedHistories->isNotEmpty()
+                ? $linkedHistories
+                : ($legacyAssignments[$item->id] ?? collect()));
         });
 
         if ($request->wantsJson()) {

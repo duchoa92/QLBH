@@ -447,7 +447,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
         <template #footer>
             <div class="flex items-center justify-between gap-3">
                 <div class="hidden items-center gap-3 text-xs text-slate-400 sm:flex">
-                    <span>Mã tra cứu: <span class="font-mono text-slate-600">{{ repair.code }}</span></span>
                     <button
                         v-if="canDelete"
                         type="button"

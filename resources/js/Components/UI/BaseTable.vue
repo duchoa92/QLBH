@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import SortHeader from './SortHeader.vue'
+import { ArrowUp, ArrowDown, ArrowUpDown, FileText } from 'lucide-vue-next'
 import PaginationBar from './PaginationBar.vue'
 
 const props = defineProps({
@@ -10,7 +10,8 @@ const props = defineProps({
     selectable: { type: Boolean, default: false },
     rowClickable: { type: Boolean, default: false },
     hidePaginationWhenSinglePage: { type: Boolean, default: false },
-    selectedIds: { type: Array, default: () => [] }
+    selectedIds: { type: Array, default: () => [] },
+    hideActions: { type: Boolean, default: false }
 })
 
 const emit = defineEmits([
@@ -21,6 +22,12 @@ const emit = defineEmits([
 ])
 
 const rows = computed(() => props.data?.data || [])
+const handleSort = (col) => {
+    if (!col.sortable) return
+    const order = props.filters?.sort_by === col.key && props.filters?.sort_order === 'asc' ? 'desc' : 'asc'
+    emit('sort', { field: col.key, order })
+}
+const headAlign = (col) => /text-right/.test(col.class || '') ? 'justify-end' : /text-center/.test(col.class || '') ? 'justify-center' : ''
 const isAllSelected = computed(() => rows.value.length > 0 && rows.value.every(row => props.selectedIds?.includes(row.id)))
 const displayValue = (value, key = '') => {
     if (value === null || value === undefined || value === '') return '—'
@@ -38,14 +45,13 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
 <template>
 <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div class="hidden overflow-x-auto md:block">
-        <table class="app-data-table min-w-[500px] w-full text-sm">
+        <table class="app-data-table w-full min-w-[500px] border-collapse text-left text-xs">
 
             <!-- HEADER -->
             <thead>
-                <tr class="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
 
-                    <!-- checkbox -->
-                    <th v-if="selectable" class="w-10 border-r border-slate-200 p-2 text-center">
+                    <th v-if="selectable" class="w-10 px-3.5 py-2.5 text-center">
                         <input
                             type="checkbox"
                             :checked="isAllSelected"
@@ -54,48 +60,43 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                         />
                     </th>
 
-                    <!-- dynamic columns -->
-                    <th 
-                        v-for="col in columns" 
+                    <th
+                        v-for="col in columns"
                         :key="col.key"
-                        class="whitespace-nowrap border-r border-slate-200 px-3 py-2.5"
-                        :class="col.class"
+                        class="px-3.5 py-2.5 transition"
+                        :class="[col.class, col.sortable ? 'cursor-pointer hover:bg-slate-100' : '']"
                         :style="{ width: col.width }"
+                        @click="handleSort(col)"
                     >
-    
-                        <SortHeader
-                            v-if="col.sortable"
-                            :label="col.label"
-                            :field="col.key"
-                            :currentSort="filters?.sort_by"
-                            :currentOrder="filters?.sort_order"
-                            @sort="$emit('sort', $event)"
-                        />
-
-                        <span v-else>
-                            {{ col.label }}
-                        </span>
-
+                        <div v-if="col.sortable" class="flex items-center gap-1" :class="headAlign(col)">
+                            <span>{{ col.label }}</span>
+                            <template v-if="filters?.sort_by === col.key">
+                                <ArrowUp v-if="filters?.sort_order === 'asc'" :size="13" class="text-emerald-700" />
+                                <ArrowDown v-else :size="13" class="text-emerald-700" />
+                            </template>
+                            <ArrowUpDown v-else :size="13" class="text-slate-300" />
+                        </div>
+                        <span v-else>{{ col.label }}</span>
                     </th>
 
-                    <th class="w-16 px-3 py-2.5 text-center">Tác vụ</th>
+                    <th v-if="!hideActions" class="w-24 px-2 py-2.5 text-center">Thao Tác</th>
                 </tr>
             </thead>
 
             <!-- BODY -->
-            <tbody>
-                <tr v-for="row in data.data"
+            <tbody class="divide-y divide-slate-100 text-xs font-medium">
+                <tr v-for="row in rows"
                     :key="row.id"
-                    class="border-t border-slate-100 transition-colors even:bg-slate-50/40 hover:bg-emerald-50/70"
+                    class="transition-colors hover:bg-emerald-50/70"
                     :class="rowClickable ? 'cursor-pointer' : ''"
                     :tabindex="rowClickable ? 0 : null"
                     :aria-label="rowClickable ? 'Xem chi tiết' : null"
+                    :title="rowClickable ? 'Bấm vào dòng để xem chi tiết' : null"
                     @click="rowClickable && $emit('rowClick', row)"
                     @keydown.enter.self="rowClickable && $emit('rowClick', row)"
                     @keydown.space.self.prevent="rowClickable && $emit('rowClick', row)"
                 >
-                    <!-- checkbox -->
-                    <td v-if="selectable" class="border-r border-slate-100 p-2 text-center">
+                    <td v-if="selectable" class="px-3.5 py-2.5 text-center">
                         <input
                             type="checkbox"
                             :checked="selectedIds.includes(row.id)"
@@ -104,29 +105,31 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                         />
                     </td>
 
-                    <!-- SLOT render row -->
                     <slot name="row" :row="row" />
                 </tr>
 
                 <tr v-if="rows.length === 0">
-                    <td :colspan="columns.length + (selectable ? 2 : 1)"
-                        class="bg-slate-50 p-10 text-center text-slate-500">
-                        Không có dữ liệu
+                    <td :colspan="columns.length + (selectable ? 1 : 0) + (hideActions ? 0 : 1)" class="px-4 py-12 text-center">
+                        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                            <FileText :size="24" />
+                        </div>
+                        <p class="text-sm font-bold text-slate-700">Không tìm thấy dữ liệu nào</p>
+                        <p class="mt-1 text-xs text-slate-400">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
                     </td>
                 </tr>
             </tbody>
         </table>
     </div>
 
-    <div class="divide-y divide-slate-200 md:hidden">
-        <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 p-3.5 transition active:bg-slate-50" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
+    <div class="divide-y divide-slate-100 md:hidden">
+        <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 p-4 transition active:bg-slate-100" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
             <div class="flex items-start gap-2">
                 <input v-if="selectable" type="checkbox" class="mt-1 shrink-0" :checked="selectedIds.includes(row.id)" @click.stop @change="$emit('toggleOne', row.id)" />
                 <div class="min-w-0 flex-1">
                     <slot name="mobile-title" :row="row">
                     <div class="break-words text-sm font-bold text-slate-900">{{ displayValue(primaryValue(row)) }}</div>
                     </slot>
-                    <div v-if="rowClickable" class="mt-0.5 text-[11px] font-semibold text-emerald-700">Xem chi tiết ›</div>
+                    <div v-if="rowClickable" class="mt-0.5 text-[11px] font-semibold text-emerald-600">Xem chi tiết ›</div>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-x-3 gap-y-2 pl-6 text-xs">
@@ -139,7 +142,11 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
             </div>
             <slot name="mobile-actions" :row="row" />
         </article>
-        <div v-if="rows.length === 0" class="p-8 text-center text-sm text-slate-500">Không có dữ liệu</div>
+        <div v-if="rows.length === 0" class="p-10 text-center">
+            <FileText class="mx-auto mb-3 h-9 w-9 text-slate-300" />
+            <p class="text-sm font-bold text-slate-700">Không tìm thấy dữ liệu phù hợp</p>
+            <p class="mt-1 text-xs text-slate-400">Thử thay đổi từ khóa hoặc điều kiện lọc</p>
+        </div>
     </div>
 
     <!-- PAGINATION -->

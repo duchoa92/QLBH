@@ -7,10 +7,15 @@ import QrPayment from '@/Modules/POS/Payment/Components/QrPayment.vue'
 import { formatCurrency, formatNumber } from '@/utils/format'
 import api from '@/Services/api'
 
-const props = defineProps({ supplier: { type: Object, required: true }, total: { type: Number, required: true } })
+const props = defineProps({
+    supplier: { type: Object, required: true },
+    total: { type: Number, required: true },
+    editMode: { type: Boolean, default: false },
+    initialPayment: { type: Object, default: () => ({}) },
+})
 const emit = defineEmits(['close', 'updated'])
-const paymentMethod = ref('cash')
-const tenderedAmount = ref('')
+const paymentMethod = ref(props.initialPayment.payment_method || 'cash')
+const tenderedAmount = ref(Number(props.initialPayment.tendered_amount ?? props.initialPayment.paid_amount ?? 0) || '')
 const autoFillTendered = ref(false)
 const payOldDebt = ref(false)
 const oldDebtMode = ref('aggregate')
@@ -127,7 +132,7 @@ const submit = () => {
 <template>
     <BaseModal title="Xác nhận thanh toán" size="md" layer-class="z-[1200]" body-class="space-y-4 p-4 sm:p-5" @close="emit('close')">
         <template #header>
-            <div class="flex items-center gap-3"><div class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><Receipt class="h-5 w-5" /></div><div><div class="text-base font-bold text-slate-900">Xác nhận thanh toán</div><div class="text-xs font-medium text-slate-500">Hoàn tất phiếu nhập hàng</div></div></div>
+            <div class="flex items-center gap-3"><div class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><Receipt class="h-5 w-5" /></div><div><div class="text-base font-bold text-slate-900">{{ editMode ? 'Cập nhật thanh toán' : 'Xác nhận thanh toán' }}</div><div class="text-xs font-medium text-slate-500">{{ editMode ? 'Điều chỉnh thanh toán phiếu nhập' : 'Hoàn tất phiếu nhập hàng' }}</div></div></div>
             <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-slate-600" aria-label="Đóng" @click="emit('close')"><X class="h-5 w-5" /></button>
         </template>
 

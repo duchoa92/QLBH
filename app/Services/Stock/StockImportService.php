@@ -22,8 +22,101 @@ class StockImportService
     public function replace(StockImport $stockImport, array $data): StockImport
     {
         return DB::transaction(function () use ($stockImport, $data): StockImport {
-            $this->cancel($stockImport, 'Được thay thế khi chỉnh sửa phiếu nhập.');
-            return $this->import($data);
+            $target = StockImport::query()->lockForUpdate()->findOrFail($stockImport->id);
+            $originalCode = $target->code;
+            $originalUserId = $target->user_id;
+
+            // Hoàn tác tồn/công nợ trong transaction để áp dữ liệu mới, nhưng
+            // tuyệt đối không gọi cancel(): sửa phiếu không được đổi trạng thái
+            // sang cancelled hay để lại ghi chú hủy.
+            $this->reverseForUpdate($target);
+            $replacement = $this->import($data);
+
+            StockImportItem::query()
+                ->where('stock_import_id', $replacement->id)
+                ->update(['stock_import_id' => $target->id]);
+            ProductImeiHistory::query()
+                ->where('reference_type', StockImport::class)
+                ->where('reference_id', $replacement->id)
+                ->update(['reference_id' => $target->id]);
+            SupplierDebt::query()
+                ->where('source_type', StockImport::class)
+                ->where('source_id', $replacement->id)
+                ->update(['source_id' => $target->id]);
+
+            $attributes = collect($replacement->getAttributes())
+                ->except(['id', 'code', 'user_id', 'created_at', 'updated_at'])
+                ->all();
+            $target->forceFill([
+                ...$attributes,
+                'code' => $originalCode,
+                'user_id' => $originalUserId,
+                'status' => 'completed',
+            ])->save();
+
+            $replacement->delete();
+
+            return $target->fresh();
+        });
+    }
+
+    /** Hoàn tác dữ liệu vận hành của phiếu để ghi đè tại chỗ khi sửa. */
+    private function reverseForUpdate(StockImport $stockImport): void
+    {
+        $items = StockImportItem::query()
+            ->where('stock_import_id', $stockImport->id)
+            ->lockForUpdate()
+            ->get();
+        $itemIds = $items->pluck('id');
+
+        $batches = ProductStockBatch::query()
+            ->whereIn('stock_import_item_id', $itemIds)
+            ->lockForUpdate()
+            ->get();
+        if ($batches->contains(fn (ProductStockBatch $batch) => (int) $batch->remaining_quantity !== (int) $batch->initial_quantity)) {
+            throw ValidationException::withMessages(['import' => 'Không thể sửa phiếu vì một phần hàng trong lô đã được bán.']);
+        }
+
+        $histories = ProductImeiHistory::query()
+            ->where('reference_type', StockImport::class)
+            ->where('reference_id', $stockImport->id)
+            ->where('type', 'import')
+            ->with('productImei')
+            ->lockForUpdate()
+            ->get();
+        if ($histories->contains(fn (ProductImeiHistory $history) => $history->productImei?->status !== ProductImei::STATUS_IN_STOCK)) {
+            throw ValidationException::withMessages(['import' => 'Không thể sửa phiếu vì có IMEI đã bán hoặc không còn trong kho.']);
+        }
+
+        foreach ($items as $item) {
+            if ($item->variant_id) ProductVariant::query()->whereKey($item->variant_id)->decrement('stock', $item->base_quantity);
+            else Product::query()->whereKey($item->product_id)->decrement('stock', $item->base_quantity);
+        }
+
+        $histories->each(fn (ProductImeiHistory $history) => $history->productImei?->delete());
+        ProductImeiHistory::query()->whereKey($histories->pluck('id'))->delete();
+        ProductStockBatch::query()->whereIn('id', $batches->pluck('id'))->delete();
+
+        if ($stockImport->supplier_id) {
+            $supplier = Supplier::query()->lockForUpdate()->find($stockImport->supplier_id);
+            if ($supplier) {
+                $netDebt = (float) $stockImport->grand_total - (float) $stockImport->paid_amount - (float) $stockImport->old_debt_paid;
+                $supplier->decrement('debt_balance', $netDebt);
+            }
+            collect($stockImport->old_debt_allocations ?? [])->each(function (array $allocation): void {
+                $amount = max(0, (float) ($allocation['amount'] ?? 0));
+                $oldImportId = (int) ($allocation['stock_import_id'] ?? 0);
+                if ($oldImportId && $amount > 0) StockImport::query()->whereKey($oldImportId)->decrement('paid_amount', $amount);
+            });
+            SupplierDebt::query()
+                ->where('source_type', StockImport::class)
+                ->where('source_id', $stockImport->id)
+                ->delete();
+        }
+
+        StockImportItem::query()->whereIn('id', $itemIds)->delete();
+        $items->pluck('product_id')->unique()->each(function (int $productId): void {
+            if (Product::query()->find($productId)?->manage_stock_by_serial) app(ImeiStockSynchronizer::class)->sync($productId);
         });
     }
 
@@ -462,6 +555,7 @@ class StockImportService
 
                 foreach ($imeis as $imeiData) {
                     $imei = ProductImei::query()
+                        ->withTrashed()
                         ->where('imei', $imeiData['imei'])
                         ->first();
 
@@ -470,7 +564,7 @@ class StockImportService
                         'variant_id' => $imeiData['variant_id'] ?? $variantId,
                         'imei' => $imeiData['imei'],
                         'cost_price' => $imeiData['cost_price'] ?? $costPrice,
-                        'sell_price' => $imeiData['sell_price'] ?? 0,
+                        'sell_price' => $imeiData['sell_price'] ?? $sellPrice ?? 0,
                         'extra_info' => $imeiData['extra_info'] ?? null,
                         'warranty_expired_at' => $imeiData['warranty_expired_at'] ?? null,
                         'status' => ProductImei::STATUS_IN_STOCK,
@@ -479,6 +573,12 @@ class StockImportService
                     ];
 
                     if ($imei) {
+                        // Khi sửa phiếu, bản cũ được hủy trước và IMEI được
+                        // soft-delete. Khôi phục chính bản ghi này để không
+                        // đụng unique index imei khi nhập lại cùng mã.
+                        if ($imei->trashed()) {
+                            $imei->restore();
+                        }
                         $imei->update($imeiPayload);
                     } else {
                         $imei = ProductImei::create($imeiPayload);
@@ -493,8 +593,10 @@ class StockImportService
                         'cost_price' => $imeiPayload['cost_price'],
                         'sell_price' => $imeiPayload['sell_price'],
                         'meta' => [
+                            'stock_import_item_id' => $importItem->id,
                             'product_id' => $productId,
                             'variant_id' => $imeiPayload['variant_id'],
+                            'has_vat' => (bool) ($item['has_vat'] ?? false),
                             'supplier_id' => $data['supplier_id'] ?? null,
                             'import_code' => $import->code,
                             'extra_info' => $imeiPayload['extra_info'],
@@ -532,11 +634,12 @@ class StockImportService
                     'variant_id' => is_array($imeiData) && !empty($imeiData['variant_id'])
                         ? (int) $imeiData['variant_id']
                         : null,
-                    'cost_price' => is_array($imeiData)
-                        ? (float) ($imeiData['cost_price'] ?? 0)
+                    // null = không gửi giá riêng → dùng giá của dòng nhập.
+                    'cost_price' => is_array($imeiData) && isset($imeiData['cost_price']) && $imeiData['cost_price'] !== ''
+                        ? (float) $imeiData['cost_price']
                         : null,
-                    'sell_price' => is_array($imeiData)
-                        ? (float) ($imeiData['sell_price'] ?? 0)
+                    'sell_price' => is_array($imeiData) && isset($imeiData['sell_price']) && $imeiData['sell_price'] !== ''
+                        ? (float) $imeiData['sell_price']
                         : null,
                     'extra_info' => is_array($imeiData)
                         ? $this->normalizeImeiExtraInfo($imeiData)

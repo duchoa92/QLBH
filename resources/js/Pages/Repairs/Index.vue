@@ -3,6 +3,10 @@ import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import PaginationBar from '@/Components/UI/PaginationBar.vue';
 import DataPanel from '@/Components/UI/DataPanel.vue';
+import ListToolbar from '@/Components/UI/ListToolbar.vue';
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue';
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue';
+import ActionButton from '@/Components/UI/ActionButton.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
 import RepairDetailModal from './RepairDetailModal.vue';
@@ -12,7 +16,7 @@ import { toast } from 'vue-sonner';
 import api from '@/Services/api';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
-import { Search, X, FileText, UserRound, Smartphone, Wrench, RotateCcw, Play, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { FileText, Plus, UserRound, Smartphone, Wrench, RotateCcw, Play, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 const props = defineProps({
     repairs: Object,
@@ -442,6 +446,7 @@ const quickStatuses = [
     { value: 'returned', label: 'Đã trả khách', countKey: 'returned_count' },
     { value: 'cancelled', label: 'Hủy', countKey: 'cancelled_count' },
 ];
+const statusOptions = computed(() => quickStatuses.map(item => ({ value: item.value, label: `${item.label} (${statsData.value?.[item.countKey] ?? 0})` })));
 const repairIssueText = (repair) => Array.isArray(repair.issue)
     ? repair.issue.filter(Boolean).join(', ')
     : String(repair.issue || '').trim();
@@ -523,45 +528,13 @@ const confirmPayment = async (payment) => {
     <div class="space-y-3 text-slate-800">
         <DataPanel detached>
             <template #header>
-                <div class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4">
-                    <div class="flex items-center gap-2.5">
-                        <div class="relative min-w-0 flex-1">
-                            <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input id="search_repair" v-model="search" type="text" autocomplete="off" placeholder="Tìm mã phiếu, khách hàng, SĐT, thiết bị hoặc IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
-                            <button v-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
-                        </div>
-                        <button v-if="can('repairs.create')" type="button" @click="openCreate" class="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 sm:px-3.5"><span class="text-base leading-none">+</span> Nhận máy mới</button>
-                    </div>
-                    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                        <div class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1" :class="loadingRepairs ? 'opacity-70' : ''">
-                            <button v-for="item in quickStatuses" :key="item.value || 'all'" type="button" class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:px-3" :class="status === item.value ? (item.value === 'pending' ? 'bg-amber-500 text-white shadow-sm' : item.value === 'repairing' ? 'bg-violet-600 text-white shadow-sm' : item.value === 'done' ? 'bg-emerald-600 text-white shadow-sm' : item.value === 'returned' ? 'bg-slate-700 text-white shadow-sm' : item.value === 'cancelled' ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm') : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'" @click="status = item.value"><span>{{ item.label }}</span><span class="rounded-full px-1.5 py-0.5 text-[10px] leading-none" :class="status === item.value ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'">{{ statsData?.[item.countKey] ?? 0 }}</span></button>
-                        </div>
-                        <div ref="customDatePickerRef" class="relative shrink-0">
-                            <button type="button" class="inline-flex h-[42px] w-[42px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" title="Lọc theo thời gian" aria-label="Lọc theo thời gian" @click="customDatePickerOpen ? customDatePickerOpen = false : openDatePicker()"><CalendarDays class="h-4 w-4" /></button>
-                            <div v-if="customDatePickerOpen" class="absolute right-0 top-full z-50 mt-2 w-[min(304px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                                <div class="grid grid-cols-3 gap-1 border-b border-slate-100 p-1.5">
-                                    <button v-for="preset in datePresetOptions.filter((item) => item.value !== 'custom')" :key="preset.value" type="button" class="rounded-md border px-1.5 py-1 text-[9px] font-semibold transition" :class="datePreset === preset.value ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'" @click="applyDatePreset(preset.value)">{{ preset.label }}</button>
-                                </div>
-                                <header class="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5">
-                                    <button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100" aria-label="Tháng trước" @click="moveCalendarMonth(-1)"><ChevronLeft class="h-3.5 w-3.5" /></button>
-                                    <h3 class="text-xs font-bold capitalize text-slate-800">{{ calendarMonthLabel }}</h3>
-                                    <button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100" aria-label="Tháng sau" @click="moveCalendarMonth(1)"><ChevronRight class="h-3.5 w-3.5" /></button>
-                                </header>
-                                <div class="grid grid-cols-7 bg-slate-50 text-center text-[9px] font-bold text-slate-500"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1.5">{{ day }}</span></div>
-                                <div class="grid grid-cols-7 p-1">
-                                    <button v-for="cell in rangeCalendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectPickerDate(cell.key)">{{ cell.day }}</button>
-                                </div>
-                                <footer class="space-y-1.5 border-t border-slate-100 px-2.5 py-2">
-                                    <p class="truncate text-center text-[10px] font-medium text-slate-600">{{ pickerRangeLabel }}</p>
-                                    <div class="flex items-center justify-between gap-2">
-                                        <button type="button" class="px-1.5 py-1 text-[10px] font-semibold text-slate-500 hover:text-rose-600" @click="clearCustomDateRange">Xóa</button>
-                                        <button type="button" :disabled="!pickerStart" class="rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCustomDateRange">Áp dụng</button>
-                                    </div>
-                                </footer>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    <ListToolbar v-model="search" search-id="search_repair" :loading="loadingRepairs" placeholder="Tìm mã phiếu, khách hàng, SĐT, thiết bị hoặc IMEI..." @clear="clearSearch">
+                        <template #filters>
+                            <ListFilterSelect v-model="status" label="Trạng thái" :show-placeholder="false" :options="statusOptions" />
+                            <DateRangeFilter v-model:from="dateFrom" v-model:to="dateTo" />
+                        </template>
+                        <template #actions><ActionButton v-if="can('repairs.create')" @click="openCreate"><Plus :size="16" />Nhận máy mới</ActionButton></template>
+                    </ListToolbar>
             </template>
 
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

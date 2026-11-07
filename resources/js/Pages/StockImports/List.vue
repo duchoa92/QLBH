@@ -9,6 +9,9 @@ import api from '@/Services/api'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
@@ -44,6 +47,9 @@ import {
     Wallet,
     X,
     LoaderCircle,
+    ArrowUp,
+    ArrowDown,
+    ArrowUpDown,
 } from 'lucide-vue-next'
 
 
@@ -98,6 +104,7 @@ const editingImport = ref(null)
 const replenishmentDraft = ref(null)
 const showReplenishmentModal = ref(false)
 const detailImport = ref(null)
+const importItemDetail = ref(null)
 const printPreviewUrl = ref('')
 const loadingDetail = ref(false)
 const showCancelModal = ref(false)
@@ -284,6 +291,26 @@ const statusLabel = (status) => ({
     cancelled: 'Đã hủy',
 })[String(status || '').toLowerCase()] || status || 'Hoàn thành'
 
+const partyTypeOptions = [
+    { value: '', label: 'Tất cả loại phiếu' },
+    { value: 'supplier', label: 'Nhà cung cấp' },
+    { value: 'customer', label: 'Mua từ khách lẻ' },
+]
+const statusFilterOptions = [
+    { value: '', label: 'Tất cả trạng thái' },
+    { value: 'completed', label: 'Hoàn thành' },
+    { value: 'draft', label: 'Nháp' },
+    { value: 'cancelled', label: 'Đã hủy' },
+]
+const importColumns = [
+    { key: 'code', label: 'Mã Đơn' },
+    { key: 'party', label: 'Nhà Cung Cấp / Khách Lẻ', sortable: false },
+    { key: 'import_date', label: 'Ngày Nhập', class: 'text-center', align: 'justify-center' },
+    { key: 'items_count', label: 'Số Dòng', class: 'text-center', align: 'justify-center' },
+    { key: 'grand_total', label: 'Tổng Tiền', class: 'text-right', align: 'justify-end' },
+    { key: 'status', label: 'Trạng Thái', class: 'text-center', align: 'justify-center' },
+]
+
 const statusClass = (status) => String(status || '').toLowerCase() === 'cancelled'
     ? 'border border-rose-200 bg-rose-50 text-rose-600'
     : String(status || '').toLowerCase() === 'pending'
@@ -371,22 +398,182 @@ const itemKindLabel = (item) => {
     return 'Sản phẩm thường'
 }
 
+const hasItemDetail = (item) => Boolean(item?._variantRows?.length || item?.variant || itemImportImeis(item).length)
+const firstAvailablePrice = (...values) => values.find(value => Number(value || 0) > 0) ?? 0
+
+// Giá bán tại thời điểm nhập nằm ở lô tồn kho (lưu theo đơn vị cơ sở). Chỉ khi
+// phiếu cũ không có lô mới dùng giá bán hiện tại; cả hai đều quy về đơn vị nhập.
+const itemSellPrice = (item) => {
+    const factor = Math.max(1, Number(item?.conversion_factor || 1))
+    const batchPrice = Number(item?.stock_batch?.sell_price || 0) * factor
+    if (batchPrice > 0) return Math.round(batchPrice)
+    return Math.round(Number(firstAvailablePrice(item?.variant?.sell_price, item?.product?.sell_price)) * factor)
+}
+const variantRowOf = (item) => ({
+    id: item.id,
+    quantity: Number(item.quantity || 0),
+    costPrice: Number(firstAvailablePrice(item.cost_price, item.variant?.cost_price)),
+    sellPrice: itemSellPrice(item),
+    variant: item.variant || null,
+    hasVat: Boolean(item.has_vat),
+})
+
+const importItemDetailRows = computed(() => {
+    const item = importItemDetail.value
+    if (!item) return []
+
+    const imeis = itemImportImeis(item)
+    if (imeis.length) {
+        return imeis.map(history => ({
+            key: `imei-${history.id}`,
+            type: 'imei',
+            imei: history.product_imei?.imei || history.imei || '-',
+            serial: history.product_imei?.serial || '',
+            variant: history.product_imei?.variant || item.variant,
+            // Giá của lịch sử IMEI ưu tiên trước; các phiếu cũ từng lưu 0 thì
+            // quay về giá của IMEI/dòng nhập thay vì hiển thị 0 không chính xác.
+            costPrice: firstAvailablePrice(history.product_imei?.cost_price, history.cost_price, item.cost_price),
+            sellPrice: firstAvailablePrice(history.product_imei?.sell_price, history.sell_price, item.variant?.sell_price, item.product?.sell_price),
+            warranty: history.product_imei?.warranty_expired_at || history.meta?.warranty_expired_at,
+            hasVat: Boolean(history.meta?.has_vat ?? item.has_vat),
+        }))
+    }
+
+    const variantRows = item._variantRows?.length ? item._variantRows : (item.variant ? [variantRowOf(item)] : [])
+    return variantRows.map(row => ({
+        key: `variant-${row.id}`,
+        type: 'variant',
+        imei: '',
+        serial: '',
+        variant: row.variant,
+        quantity: row.quantity,
+        costPrice: row.costPrice,
+        sellPrice: row.sellPrice,
+        warranty: null,
+        hasVat: row.hasVat,
+    }))
+})
+
+const openImportItemDetail = (item) => { importItemDetail.value = item }
+
 const handleDetailEsc = (event) => {
     if (event.key !== 'Escape') return
     // Không đóng khi đang có modal khác mở phía trên
-    if (showCancelModal.value || showCreateModal.value || printPreviewUrl.value) return
+    if (showCancelModal.value || showCreateModal.value || printPreviewUrl.value || importItemDetail.value) return
     detailImport.value = null
 }
 
 watch(detailImport, (value, oldValue) => {
     if (value && !oldValue) window.addEventListener('keydown', handleDetailEsc)
-    if (!value && oldValue) window.removeEventListener('keydown', handleDetailEsc)
+    if (!value && oldValue) {
+        importItemDetail.value = null
+        window.removeEventListener('keydown', handleDetailEsc)
+    }
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailEsc))
 
 const itemImportImeis = (item) =>
     item.import_imeis || []
+
+const priceRange = (values) => {
+    const unique = [...new Set(values.map(value => Number(value || 0)))].sort((a, b) => a - b)
+    if (unique.length <= 1) return money(unique[0] || 0)
+    return `${money(unique[0])} – ${money(unique.at(-1))}`
+}
+
+const itemUniqueImeis = (item) => {
+    const imeis = itemImportImeis(item)
+    return imeis.filter((history, index) =>
+        index === imeis.findIndex(candidate => String(candidate.id || candidate.imei) === String(history.id || history.imei))
+    )
+}
+
+// Với sản phẩm serial, IMEI là nguồn số lượng/giá đáng tin cậy nhất. Những
+// phiếu cũ từng có dòng bị nhân bản không được phép làm SL hoặc thành tiền
+// tăng theo các dòng đó nữa.
+const serialPrices = (item) => itemUniqueImeis(item).map(history =>
+    firstAvailablePrice(history.cost_price, history.product_imei?.cost_price, item.cost_price)
+)
+const displayItemQuantity = (item) => {
+    const imeis = itemUniqueImeis(item)
+    return imeis.length ? imeis.length : Number(item.quantity || 0)
+}
+const displayCostPrice = (item) => {
+    const serial = serialPrices(item)
+    return priceRange(serial.length ? serial : (item._costPrices || [item.cost_price]))
+}
+const displayItemTotal = (item) => {
+    const serial = serialPrices(item)
+    if (serial.length) return serial.reduce((sum, price) => sum + Number(price || 0), 0)
+    return (item._priceRows || [{ quantity: item.quantity, costPrice: item.cost_price }])
+        .reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.costPrice || 0), 0)
+}
+
+// Các phiếu cũ có thể đã lưu mỗi IMEI thành một dòng. Khi xem chi tiết, gộp
+// các dòng serial cùng sản phẩm/biến thể/đơn giá để người dùng thấy đúng một
+// mặt hàng và số lượng thực tế; IMEI được giữ trong modal con.
+const displayImportItems = computed(() => {
+    const items = detailImport.value?.items || []
+    const grouped = new Map()
+
+    items.forEach(item => {
+        const isSerial = Boolean(item.product?.manage_stock_by_serial || itemImportImeis(item).length)
+
+        if (!isSerial) {
+            // Sản phẩm thường / có biến thể: các dòng cùng sản phẩm, đơn vị, VAT và
+            // bảo hành NCC gộp thành một mặt hàng; mỗi biến thể là một dòng con
+            // (giá nhập, giá bán riêng) xem trong modal. Hàng đã qua sử dụng giữ riêng.
+            const key = item.extra_info?.is_used
+                ? `line-${item.id}`
+                : [item.product_id, 'std', item.unit_id || 'none', item.has_vat ? 1 : 0, item.supplier_warranty_value || 0, item.supplier_warranty_unit || ''].join('-')
+            const existing = grouped.get(key)
+            if (!existing) {
+                grouped.set(key, {
+                    ...item,
+                    _key: key,
+                    _variantRows: item.variant ? [variantRowOf(item)] : [],
+                    _costPrices: [Number(item.cost_price || 0)],
+                    _priceRows: [{ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) }],
+                })
+                return
+            }
+
+            existing.quantity = Number(existing.quantity || 0) + Number(item.quantity || 0)
+            existing.base_quantity = Number(existing.base_quantity || 0) + Number(item.base_quantity || 0)
+            existing._costPrices.push(Number(item.cost_price || 0))
+            existing._priceRows.push({ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) })
+            if (item.variant) existing._variantRows.push(variantRowOf(item))
+            return
+        }
+
+        // IMEI là đơn vị tồn độc lập: cùng một sản phẩm dù khác biến thể vẫn
+        // hiển thị một dòng và để biến thể nằm trong modal danh sách IMEI.
+        const key = [item.product_id, 'serial', item.unit_id || 'none'].join('-')
+        const existing = grouped.get(key)
+        if (!existing) {
+            grouped.set(key, {
+                ...item,
+                _key: key,
+                import_imeis: [...itemImportImeis(item)],
+                _costPrices: [Number(item.cost_price || 0)],
+                _priceRows: [{ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) }],
+            })
+            return
+        }
+
+        existing.quantity = Number(existing.quantity || 0) + Number(item.quantity || 0)
+        existing.base_quantity = Number(existing.base_quantity || 0) + Number(item.base_quantity || 0)
+        existing._costPrices.push(Number(item.cost_price || 0))
+        existing._priceRows.push({ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) })
+        const histories = [...itemImportImeis(existing), ...itemImportImeis(item)]
+        existing.import_imeis = histories.filter((history, index, collection) =>
+            index === collection.findIndex(candidate => String(candidate.id || candidate.imei) === String(history.id || history.imei))
+        )
+    })
+
+    return [...grouped.values()]
+})
 
 
 /*
@@ -476,85 +663,17 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
             <!-- SEARCH -->
 
-            <div
-                class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
-            >
-
-                <div class="min-w-0 flex-1 sm:max-w-lg">
-                    <div class="relative">
-                        <Search :size="18" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            v-model="search"
-                            type="text"
-                            autocomplete="off"
-                            placeholder="Tìm mã phiếu, nhà cung cấp / khách, SĐT, sản phẩm, IMEI/Serial..."
-                            @keyup.enter="submitSearch"
-                            class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                        />
-                        <LoaderCircle v-if="loadingImports" class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" />
-                        <button v-else-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" aria-label="Xóa tìm kiếm" @click="search = ''"><X class="h-3 w-3" /></button>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
-                    <button
-                        type="button"
-                        :class="showFilters ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
-                        class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition"
-                        @click="showFilters = !showFilters"
-                    >
-                        <SlidersHorizontal :size="16" />
-                        Bộ lọc
-                        <span v-if="[partyTypeFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length" class="rounded-full bg-blue-100 px-1.5 text-[11px] text-blue-700">{{ [partyTypeFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length }}</span>
-                    </button>
-                    <button
-                        type="button"
-                        class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
-                        @click="showReplenishmentModal = true"
-                    >
-                        <ClipboardList :size="17" />
-                        Lập DS lấy hàng
-                    </button>
-                    <ActionButton @click="openCreateModal('supplier')">
-                        <Plus :size="18" />
-                        Tạo đơn nhập
-                    </ActionButton>
-                </div>
-
-            </div>
-
-            <div v-if="showFilters" class="grid gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:grid-cols-2 sm:px-5 lg:grid-cols-5">
-                <label class="space-y-1 text-xs font-semibold text-slate-600">
-                    <span>Loại phiếu</span>
-                    <select v-model="partyTypeFilter" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                        <option value="">Tất cả</option>
-                        <option value="supplier">Nhà cung cấp</option>
-                        <option value="customer">Mua từ khách lẻ</option>
-                    </select>
-                </label>
-                <label class="space-y-1 text-xs font-semibold text-slate-600">
-                    <span>Trạng thái</span>
-                    <select v-model="statusFilter" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                        <option value="">Tất cả</option>
-                        <option value="completed">Hoàn thành</option>
-                        <option value="draft">Nháp</option>
-                        <option value="cancelled">Đã hủy</option>
-                    </select>
-                </label>
-                <label class="space-y-1 text-xs font-semibold text-slate-600">
-                    <span>Từ ngày</span>
-                    <input v-model="dateFrom" type="date" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-                </label>
-                <label class="space-y-1 text-xs font-semibold text-slate-600">
-                    <span>Đến ngày</span>
-                    <input v-model="dateTo" type="date" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-                </label>
-                <div class="flex items-end">
-                    <button type="button" class="inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-800" @click="partyTypeFilter = ''; statusFilter = ''; dateFrom = ''; dateTo = ''; search = ''">
-                        <RotateCcw :size="15" /> Xóa bộ lọc
-                    </button>
-                </div>
-            </div>
+            <ListToolbar v-model="search" :loading="loadingImports" placeholder="Tìm mã phiếu, nhà cung cấp / khách, SĐT, sản phẩm, IMEI/Serial..." @submit="submitSearch">
+                <template #filters>
+                    <ListFilterSelect v-model="partyTypeFilter" label="Loại phiếu" :show-placeholder="false" :options="partyTypeOptions" />
+                    <ListFilterSelect v-model="statusFilter" label="Trạng thái" :show-placeholder="false" :options="statusFilterOptions" />
+                    <DateRangeFilter v-model:from="dateFrom" v-model:to="dateTo" />
+                </template>
+                <template #actions>
+                    <ActionButton variant="warning" @click="showReplenishmentModal = true"><ClipboardList :size="16" />Lập DS lấy hàng</ActionButton>
+                    <ActionButton @click="openCreateModal('supplier')"><Plus :size="16" />Tạo đơn nhập</ActionButton>
+                </template>
+            </ListToolbar>
 
 
             <!-- TABLE -->
@@ -562,48 +681,32 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="hidden overflow-x-auto md:block">
 
-                <table class="app-data-table w-full text-sm">
-
-                    <thead
-                        class="
-                            bg-slate-50
-                            text-xs
-                            font-semibold
-                            uppercase
-                            text-slate-500
-                        "
-                    >
-
-                        <tr>
-
-                            <th class="px-5 py-3 text-left"><button type="button" class="hover:text-emerald-700" @click="sortImports('code')">Mã đơn ↕</button></th>
-
-                            <th class="px-3 py-3 text-left">
-                                Nhà cung cấp / khách lẻ
+                <table class="app-data-table w-full min-w-[850px] border-collapse text-left text-xs">
+                    <thead>
+                        <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                            <th v-for="col in importColumns" :key="col.key" class="px-3.5 py-2.5 transition" :class="[col.class, col.sortable === false ? '' : 'cursor-pointer hover:bg-slate-100']" @click="col.sortable === false || sortImports(col.key)">
+                                <div class="flex items-center gap-1" :class="col.align">
+                                    <span>{{ col.label }}</span>
+                                    <template v-if="col.sortable !== false">
+                                        <template v-if="filtersData?.sort_by === col.key">
+                                            <ArrowUp v-if="filtersData?.sort_order === 'asc'" :size="13" class="text-emerald-700" />
+                                            <ArrowDown v-else :size="13" class="text-emerald-700" />
+                                        </template>
+                                        <ArrowUpDown v-else :size="13" class="text-slate-300" />
+                                    </template>
+                                </div>
                             </th>
-
-                            <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('import_date')">Ngày nhập ↕</button></th>
-
-                            <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('items_count')">Số dòng ↕</button></th>
-
-                            <th class="px-3 py-3 text-right"><button type="button" class="hover:text-emerald-700" @click="sortImports('grand_total')">Tổng tiền ↕</button></th>
-
-                            <th class="px-3 py-3 text-center"><button type="button" class="hover:text-emerald-700" @click="sortImports('status')">Trạng thái ↕</button></th>
-
-                            <th class="px-3 py-3 text-center">Thao tác</th>
-
+                            <th class="w-24 px-2 py-2.5 text-center">Thao Tác</th>
                         </tr>
-
                     </thead>
 
-
-                    <tbody>
+                    <tbody class="divide-y divide-slate-100 text-xs font-medium">
 
                         <tr
                             v-for="item in importsData.data"
                             :key="item.id"
                             tabindex="0"
-                            class="cursor-pointer border-t border-slate-100 transition-colors hover:bg-emerald-50/70"
+                            class="cursor-pointer transition-colors hover:bg-emerald-50/70"
                             title="Bấm vào dòng để xem chi tiết"
                             @click="showImport(item.id)"
                             @keydown.enter.self="showImport(item.id)"
@@ -611,13 +714,10 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <!-- CODE -->
 
-                            <td class="px-5 py-4">
+                            <td class="px-3.5 py-2.5">
 
                                 <div
-                                    class="
-                                        font-semibold
-                                        text-slate-800
-                                    "
+                                    class="font-bold text-emerald-700"
                                 >
                                     <HighlightText :text="item.code" :keyword="search" />
                                 </div>
@@ -633,7 +733,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <!-- SUPPLIER -->
 
-                            <td class="px-3 py-4">
+                            <td class="px-3.5 py-2.5">
 
                                 <div
                                     class="
@@ -655,8 +755,8 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <td
                                 class="
-                                    px-3
-                                    py-4
+                                    px-3.5
+                                    py-2.5
                                     text-center
                                     text-slate-600
                                 "
@@ -669,8 +769,8 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <td
                                 class="
-                                    px-3
-                                    py-4
+                                    px-3.5
+                                    py-2.5
                                     text-center
                                 "
                             >
@@ -682,8 +782,8 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <td
                                 class="
-                                    px-3
-                                    py-4
+                                    px-3.5
+                                    py-2.5
                                     text-right
                                     font-semibold
                                     text-slate-900
@@ -695,22 +795,22 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <!-- STATUS -->
 
-                            <td class="px-3 py-4 text-center">
+                            <td class="px-3.5 py-2.5 text-center">
 
                                 <span
-                                    class="inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition hover:brightness-95"
+                                    class="inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold transition hover:brightness-95"
                                     :class="statusClass(item.status)"
                                     :title="`Lọc: ${statusLabel(item.status)}`"
                                     @click.stop="filterByStatus(item.status || 'completed')"
                                 >
-                                    <XCircle v-if="item.status === 'cancelled'" class="h-3.5 w-3.5" />
-                                    <CheckCircle2 v-else class="h-3.5 w-3.5" />
+                                    <XCircle v-if="item.status === 'cancelled'" class="h-3 w-3" />
+                                    <CheckCircle2 v-else class="h-3 w-3" />
                                     {{ statusLabel(item.status) }}
                                 </span>
 
                             </td>
 
-                            <td class="px-3 py-4 text-center">
+                            <td class="px-3.5 py-2.5 text-center">
                                 <div class="flex items-center justify-center gap-1">
                                     <button
                                         type="button"
@@ -748,12 +848,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
                             <td
                                 colspan="7"
-                                class="
-                                    px-5
-                                    py-16
-                                    text-center
-                                    text-slate-400
-                                "
+                                class="px-4 py-12 text-center text-slate-400"
                             >
                                 <div class="mx-auto flex max-w-sm flex-col items-center gap-2">
                                     <Search v-if="search" :size="22" class="text-slate-300" />
@@ -770,7 +865,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
             </div>
 
-            <div class="divide-y divide-slate-200 md:hidden">
+            <div class="divide-y divide-slate-100 md:hidden">
                 <article v-for="item in importsData.data" :key="`mobile-import-${item.id}`" class="cursor-pointer space-y-2.5 p-3.5 active:bg-slate-50" @click="showImport(item.id)">
                     <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900"><HighlightText :text="item.code" :keyword="search" /></div><div class="mt-0.5 truncate text-xs text-slate-500"><HighlightText :text="importPartyName(item)" :keyword="search" /></div><div class="text-xs text-slate-500"><HighlightText :text="importPartyPhone(item)" :keyword="search" /></div><div v-if="hasActiveSearch && importSearchMatches(item).length" class="mt-1 space-y-0.5 text-[10px] font-medium text-slate-500"><div v-for="match in importSearchMatches(item)" :key="`${match.label}-${match.text}`" class="truncate"><span>{{ match.label }}: </span><HighlightText :text="match.text" :keyword="search" /></div></div></div><span class="shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></div>
                     <div class="flex items-center justify-between border-t border-slate-100 pt-2 text-xs"><span class="text-slate-500">{{ formatDate(item.import_date) }} · {{ item.items_count }} dòng</span><span class="font-bold text-slate-900">{{ money(item.grand_total) }}</span></div>
@@ -812,54 +907,52 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
         <div v-if="detailImport" class="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/50 p-3 sm:p-4">
             <div class="absolute inset-0" @click="detailImport = null"></div>
 
-            <section role="dialog" aria-modal="true" class="relative flex max-h-[95dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <section role="dialog" aria-modal="true" class="relative flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-black/5">
 
                 <!-- HEADER -->
-                <div class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
-                    <div class="flex items-center gap-3">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                            <FileText class="h-5 w-5" />
+                <div class="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                            <FileText class="h-[18px] w-[18px]" />
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
-                            <h2 class="text-xl font-bold text-slate-800">Chi tiết đơn nhập</h2>
-                            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="statusClass(detailImport.status)">
+                            <h2 class="text-base font-extrabold text-slate-900">Chi tiết đơn nhập</h2>
+                            <span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold" :class="statusClass(detailImport.status)">
                                 <span class="h-1.5 w-1.5 rounded-full bg-current"></span>{{ statusLabel(detailImport.status) }}
                             </span>
                         </div>
                     </div>
-                    <button type="button" title="Đóng" class="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" @click="detailImport = null">
+                    <button type="button" title="Đóng" class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700" @click="detailImport = null">
                         <X class="h-5 w-5" />
                     </button>
                 </div>
 
                 <!-- BODY -->
-                <div class="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-50/60 p-4 sm:p-6">
+                <div class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white p-3.5">
 
                     <!-- 4 thẻ thông tin -->
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
-                        <div class="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
-                            <div class="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-slate-400"><Hash class="h-3 w-3" /> Mã đơn nhập</div>
-                            <div class="break-all font-bold text-slate-800">{{ detailImport.code }}</div>
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                            <div class="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400"><Hash class="h-3 w-3" /> Mã đơn nhập</div>
+                            <div class="mt-0.5 break-all text-sm font-bold text-slate-900">{{ detailImport.code }}</div>
                             <div class="mt-0.5 text-xs text-slate-500">{{ formatDate(detailImport.import_date) }}</div>
                         </div>
 
-                        <div class="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
-                            <div class="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-slate-400"><Truck class="h-3 w-3" /> {{ isCustomerImport(detailImport) ? 'Khách lẻ' : 'Nhà cung cấp' }}</div>
-                            <div class="font-bold text-slate-800">{{ detailPartyName(detailImport) }}</div>
-                            <div class="mt-0.5 text-xs text-slate-500">{{ detailPartyPhone(detailImport) || '-' }}</div>
-                            <div v-if="detailImport.party_cccd || detailImport.customer?.cccd" class="mt-0.5 text-xs text-slate-500">CCCD: {{ detailImport.party_cccd || detailImport.customer?.cccd }}</div>
-                            <div v-if="detailImport.party_address || detailImport.customer?.address" class="mt-0.5 text-xs text-slate-500">{{ detailImport.party_address || detailImport.customer?.address }}</div>
+                        <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                            <div class="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400"><Truck class="h-3 w-3" /> {{ isCustomerImport(detailImport) ? 'Khách lẻ' : 'Nhà cung cấp' }}</div>
+                            <div class="mt-0.5 truncate text-sm font-bold text-slate-900">{{ detailPartyName(detailImport) }}</div>
+                            <div class="truncate text-xs font-medium text-slate-400">{{ detailPartyPhone(detailImport) || '-' }}</div>
                         </div>
 
-                        <div class="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
-                            <div class="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-slate-400"><UserRound class="h-3 w-3" /> Người tạo</div>
-                            <div class="font-bold text-slate-800">{{ detailImport.user?.name || '-' }}</div>
+                        <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-2.5">
+                            <div class="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400"><UserRound class="h-3 w-3" /> Người tạo</div>
+                            <div class="mt-0.5 truncate text-sm font-bold text-slate-900">{{ detailImport.user?.name || '-' }}</div>
                             <div v-if="paymentMethodLabel(detailImport.payment_method) && !isCustomerImport(detailImport)" class="mt-0.5 text-xs text-slate-500">Thanh toán: {{ paymentMethodLabel(detailImport.payment_method) }}</div>
                         </div>
 
-                        <div class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 shadow-sm">
-                            <div class="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-indigo-500"><Wallet class="h-3 w-3" /> Tổng thanh toán</div>
-                            <div class="text-lg font-bold text-indigo-600">{{ money(detailImport.grand_total) }}</div>
+                        <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5">
+                            <div class="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-500"><Wallet class="h-3 w-3" /> Tổng thanh toán</div>
+                            <div class="mt-0.5 text-base font-black text-indigo-700">{{ money(detailImport.grand_total) }}</div>
                             <div class="mt-0.5 text-xs font-medium" :class="detailDebt(detailImport) > 0 ? 'text-orange-600' : 'text-emerald-600'">
                                 {{ detailDebt(detailImport) > 0 ? `Còn nợ ${money(detailDebt(detailImport))}` : 'Đã thanh toán đủ' }}
                             </div>
@@ -867,27 +960,30 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                     </div>
 
                     <!-- Bảng hàng hóa -->
-                    <div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-sm">
-                        <table class="w-full min-w-[820px] border-collapse text-left">
+                    <div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+                        <div class="overflow-x-auto">
+                        <table class="w-full min-w-[700px] border-collapse text-left text-xs">
                             <thead>
-                                <tr class="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase text-slate-500">
-                                    <th class="w-12 px-4 py-3 text-center">STT</th>
-                                    <th class="px-4 py-3">Sản phẩm</th>
-                                    <th class="px-4 py-3">Loại</th>
-                                    <th class="px-4 py-3 text-center">SL</th>
-                                    <th class="px-4 py-3 text-right">Đơn giá</th>
-                                    <th class="px-4 py-3 text-right">Thành tiền</th>
+                                <tr class="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                    <th class="w-10 px-3 py-2 text-center">STT</th>
+                                    <th class="px-3 py-2">Sản phẩm</th>
+                                    <th class="w-28 px-3 py-2 text-center">Loại</th>
+                                    <th class="w-24 px-3 py-2 text-center">SL</th>
+                                    <th class="w-28 px-3 py-2 text-right">Đơn giá</th>
+                                    <th class="w-32 px-3 py-2 text-right">Thành tiền</th>
                                 </tr>
                             </thead>
 
-                            <tbody class="divide-y divide-slate-100 text-sm text-slate-700">
-                                <template v-for="(item, index) in detailImport.items" :key="item.id">
-                                    <tr class="transition hover:bg-slate-50/50">
-                                        <td class="px-4 py-3.5 text-center font-medium text-slate-400">{{ index + 1 }}</td>
-                                        <td class="px-4 py-3.5">
-                                            <div class="font-semibold text-slate-800">{{ item.product?.name || '-' }}</div>
-                                            <div class="text-xs text-slate-500">SKU: {{ item.product?.sku || '-' }}</div>
-                                            <div v-if="item.variant" class="text-xs font-semibold text-indigo-700">{{ variantLabel(item.variant) }}</div>
+                            <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                                <template v-for="(item, index) in displayImportItems" :key="item._key || item.id">
+                                    <tr class="transition hover:bg-slate-50/60">
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400">{{ index + 1 }}</td>
+                                        <td class="px-3 py-2.5">
+                                            <div class="text-sm font-bold text-slate-900">{{ item.product?.name || '-' }}</div>
+                                            <div class="text-xs text-slate-400">SKU: {{ item.product?.sku || '-' }}</div>
+                                            <button v-if="hasItemDetail(item)" type="button" class="mt-1 inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" @click="openImportItemDetail(item)">
+                                                {{ itemImportImeis(item).length ? `${itemImportImeis(item).length} IMEI / biến thể` : (item._variantRows?.length > 1 ? `${item._variantRows.length} biến thể` : 'Xem biến thể') }} <ChevronRight class="h-3 w-3" />
+                                            </button>
                                             <div v-if="item.has_vat || warrantyLabel(item)" class="mt-1 flex flex-wrap items-center gap-2">
                                                 <span v-if="item.has_vat" class="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">Có VAT</span>
                                                 <span v-if="warrantyLabel(item)" class="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">BH NCC: {{ warrantyLabel(item) }}</span>
@@ -897,61 +993,22 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                                                 <div v-if="item.extra_info.password">Mật khẩu: {{ item.extra_info.password }}</div>
                                             </div>
                                         </td>
-                                        <td class="px-4 py-3.5">
-                                            <span class="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium" :class="item.extra_info?.is_used ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'">{{ itemKindLabel(item) }}</span>
+                                        <td class="px-3 py-2.5 text-center">
+                                            <span class="inline-flex rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-600">{{ itemKindLabel(item) }}</span>
                                         </td>
-                                        <td class="px-4 py-3.5 text-center font-semibold">
-                                            <div>{{ item.quantity }} {{ item.unit_name || item.unit?.short_name || '' }}</div>
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-800">
+                                            <div>{{ displayItemQuantity(item) }} {{ item.unit_name || item.unit?.short_name || '' }}</div>
                                             <div v-if="Number(item.conversion_factor || 1) > 1" class="mt-0.5 text-[11px] font-medium text-indigo-600">
                                                 = {{ item.base_quantity }} {{ item.product?.unit?.short_name || item.product?.unit?.name || 'đơn vị bán' }}
                                             </div>
                                         </td>
-                                        <td class="px-4 py-3.5 text-right">{{ money(item.cost_price) }}</td>
-                                        <td class="px-4 py-3.5 text-right font-bold text-slate-900">{{ money(Number(item.quantity || 0) * Number(item.cost_price || 0)) }}</td>
-                                    </tr>
-
-                                    <tr v-if="itemImportImeis(item).length">
-                                        <td colspan="6" class="bg-slate-50/70 px-4 py-3">
-                                            <div class="mb-2 text-xs font-bold uppercase text-slate-500">IMEI / Serial đã nhập</div>
-
-                                            <div class="grid gap-2 md:grid-cols-2">
-                                                <div v-for="history in itemImportImeis(item)" :key="history.id" class="rounded-xl border border-slate-200 bg-white p-3 text-xs">
-                                                    <div class="flex flex-wrap items-start justify-between gap-2">
-                                                        <div>
-                                                            <div class="font-mono text-sm font-bold text-slate-900">{{ history.product_imei?.imei || history.imei }}</div>
-                                                            <div v-if="history.product_imei?.serial" class="mt-0.5 font-mono text-slate-500">Serial: {{ history.product_imei.serial }}</div>
-                                                        </div>
-                                                        <span class="rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">{{ history.product_imei?.status || 'in_stock' }}</span>
-                                                    </div>
-
-                                                    <div class="mt-2 grid gap-2 sm:grid-cols-3">
-                                                        <div>
-                                                            <div class="font-bold uppercase text-slate-400">Giá nhập</div>
-                                                            <div class="font-semibold text-slate-800">{{ money(history.cost_price) }}</div>
-                                                        </div>
-                                                        <div>
-                                                            <div class="font-bold uppercase text-slate-400">Giá bán</div>
-                                                            <div class="font-semibold text-slate-800">{{ money(history.sell_price) }}</div>
-                                                        </div>
-                                                        <div>
-                                                            <div class="font-bold uppercase text-slate-400">BH NCC</div>
-                                                            <div class="font-semibold text-slate-800">{{ formatDate(history.product_imei?.warranty_expired_at || history.meta?.warranty_expired_at) }}</div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div v-if="hasExtraInfo(history.product_imei)" class="mt-2 space-y-0.5 rounded-lg bg-slate-50 p-2 text-slate-600">
-                                                        <div v-if="history.product_imei.extra_info?.note">{{ history.product_imei.extra_info.note }}</div>
-                                                        <div v-if="history.product_imei.extra_info?.account">Tài khoản: {{ history.product_imei.extra_info.account }}</div>
-                                                        <div v-if="history.product_imei.extra_info?.password">Mật khẩu: {{ history.product_imei.extra_info.password }}</div>
-                                                        <a v-if="extraInfoImageUrl(history.product_imei)" :href="extraInfoImageUrl(history.product_imei)" target="_blank" class="inline-flex font-semibold text-blue-600 hover:text-blue-700">Xem ảnh thiết bị</a>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
+                                        <td class="px-3 py-2.5 text-right whitespace-nowrap text-slate-700">{{ displayCostPrice(item) }}</td>
+                                        <td class="px-3 py-2.5 text-right whitespace-nowrap text-sm font-extrabold text-slate-900">{{ money(displayItemTotal(item)) }}</td>
                                     </tr>
                                 </template>
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     <!-- Ghi chú & tổng kết -->
@@ -1023,6 +1080,58 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
             </section>
         </div>
     </Teleport>
+
+    <BaseModal
+        v-if="importItemDetail"
+        :title="`IMEI & biến thể · ${importItemDetail.product?.name || 'Sản phẩm'}`"
+        size="xl"
+        layer-class="z-[1300]"
+        body-class="space-y-3 p-3.5"
+        @close="importItemDetail = null"
+    >
+        <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+            <div class="min-w-0"><span class="font-bold text-slate-800">{{ importItemDetail.product?.name || '-' }}</span><span class="ml-2 text-slate-500">SKU: {{ importItemDetail.product?.sku || '-' }}</span></div>
+            <span class="rounded-full bg-indigo-50 px-2.5 py-1 font-bold text-indigo-700">{{ importItemDetailRows.length }} {{ itemImportImeis(importItemDetail).length ? 'IMEI / Serial' : 'biến thể' }}</span>
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-slate-200">
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[680px] text-left text-xs">
+                    <thead class="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                        <tr>
+                            <th class="px-3 py-2">IMEI / Serial</th>
+                            <th class="px-3 py-2">Biến thể</th>
+                            <th v-if="!itemImportImeis(importItemDetail).length" class="px-3 py-2 text-center">SL</th>
+                            <th class="px-3 py-2 text-right">Giá nhập</th>
+                            <th class="px-3 py-2 text-right">Giá bán</th>
+                            <th class="px-3 py-2">BH NCC</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+                        <tr v-for="row in importItemDetailRows" :key="row.key" class="hover:bg-slate-50/60">
+                            <td class="px-3 py-2.5">
+                                <template v-if="row.type === 'imei'">
+                                    <div class="font-mono text-sm font-bold text-slate-900">{{ row.imei }}</div>
+                                    <div v-if="row.serial" class="mt-0.5 font-mono text-[11px] text-slate-400">Serial: {{ row.serial }}</div>
+                                </template>
+                                <span v-else class="text-slate-400">—</span>
+                            </td>
+                            <td class="px-3 py-2.5"><div class="flex flex-wrap items-center gap-1"><span class="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">{{ variantLabel(row.variant) }}</span><span v-if="row.hasVat" class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">VAT</span></div></td>
+                            <td v-if="!itemImportImeis(importItemDetail).length" class="px-3 py-2.5 text-center font-bold text-slate-800">{{ row.quantity }}</td>
+                            <td class="px-3 py-2.5 text-right font-semibold text-slate-800">{{ money(row.costPrice) }}</td>
+                            <td class="px-3 py-2.5 text-right font-semibold text-emerald-700">{{ money(row.sellPrice) }}</td>
+                            <td class="px-3 py-2.5 text-slate-600">{{ row.warranty ? formatDate(row.warranty) : '—' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <template #footer>
+            <div class="flex justify-end"><button type="button" class="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-200" @click="importItemDetail = null">Đóng</button></div>
+        </template>
+    </BaseModal>
+
     <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hợp đồng mua bán" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
 
     <BaseModal v-if="showCancelModal" title="Hủy phiếu nhập" size="sm" @close="showCancelModal = false">

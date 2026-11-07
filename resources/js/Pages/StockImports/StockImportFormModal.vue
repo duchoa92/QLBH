@@ -56,6 +56,7 @@ const emit = defineEmits([
     'created',
 ])
 const page = usePage()
+const isEditingImport = computed(() => Boolean(props.initialImport))
 
 const form = useForm({
     party_type: props.initialPartyType,
@@ -416,14 +417,35 @@ const hydrateInitialImport = (stockImport) => {
         address: form.party_address, cccd: form.party_cccd,
     }
 
+    // Decimal từ Laravel có thể là chuỗi "0.00" (truthy trong JS), nên không
+    // dùng toán tử || để chọn giá dự phòng từ lịch sử IMEI/dòng nhập.
+    const storedPrice = (...values) => {
+        const positive = values.find(value => Number(value || 0) > 0)
+        if (positive !== undefined) return Number(positive)
+        const present = values.find(value => value !== null && value !== undefined && value !== '')
+        return Number(present || 0)
+    }
+
+    // Giá bán đã lưu nằm ở lô tồn kho của dòng nhập (theo đơn vị cơ sở). Nạp lại
+    // đúng giá đó (quy về đơn vị nhập) để sửa phiếu không vô tình ghi đè bằng giá
+    // bán hiện tại của sản phẩm/biến thể; chỉ phiếu cũ không có lô mới dùng giá hiện tại.
+    const importFactor = source => Math.max(1, Number(source.conversion_factor || 1))
+    const savedSellPrice = source => {
+        const batchPrice = Math.round(Number(source.stock_batch?.sell_price || 0) * importFactor(source))
+        const currentPrice = Math.round(storedPrice(source.variant?.sell_price, source.product?.sell_price) * importFactor(source))
+        return storedPrice(batchPrice, currentPrice)
+    }
+
     const grouped = new Map()
     ;(stockImport.items || []).forEach(source => {
         const imeis = (source.import_imeis || []).map(history => ({
             imei: history.product_imei?.imei || history.imei,
             variant_id: history.product_imei?.variant_id || source.variant_id || null,
             variant: history.product_imei?.variant || source.variant || null,
-            cost_price: Number(history.cost_price || source.cost_price || 0),
-            sell_price: Number(history.sell_price || source.product?.sell_price || 0),
+            // Giá hiện tại của IMEI đi trước lịch sử nhập: nếu giá bán đã chỉnh ở trang
+            // sản phẩm thì sửa phiếu không được đặt lại về giá cũ lúc nhập.
+            cost_price: storedPrice(history.product_imei?.cost_price, history.cost_price, source.cost_price),
+            sell_price: storedPrice(history.product_imei?.sell_price, history.sell_price, source.variant?.sell_price, source.product?.sell_price),
             extra_info: history.product_imei?.extra_info || history.meta?.extra_info || null,
             warranty_duration_value: null,
             warranty_duration_unit: 'months',
@@ -438,7 +460,9 @@ const hydrateInitialImport = (stockImport) => {
                 unit_name: source.unit_name, has_unit_conversion: Number(source.conversion_factor || 1) > 1,
                 price_unit_basis: 'conversion', conversion_factor: Number(source.conversion_factor || 1),
                 base_unit_name: source.product?.unit?.short_name || 'Cái', conversion_unit: source.product?.conversion_unit || null,
-                quantity: 0, cost_price: Number(source.cost_price || 0), sell_price: Number(source.product?.sell_price || 0),
+                quantity: 0,
+                cost_price: storedPrice(source.cost_price),
+                sell_price: savedSellPrice(source),
                 has_vat: Boolean(source.has_vat), extra_info: source.extra_info || {},
                 supplier_warranty_value: source.supplier_warranty_value || null,
                 supplier_warranty_unit: source.supplier_warranty_unit || 'months',
@@ -447,7 +471,13 @@ const hydrateInitialImport = (stockImport) => {
             grouped.set(key, item)
         }
         if (type === 'simple') item.quantity += Number(source.quantity || 0)
-        else if (type === 'variant') item.rows.push({ variant_id: source.variant_id, variant: source.variant, quantity: Number(source.quantity || 0), cost_price: Number(source.cost_price || 0), sell_price: Number(source.product?.sell_price || 0) })
+        else if (type === 'variant') item.rows.push({
+            variant_id: source.variant_id,
+            variant: source.variant,
+            quantity: Number(source.quantity || 0),
+            cost_price: storedPrice(source.cost_price, source.variant?.cost_price),
+            sell_price: savedSellPrice(source),
+        })
         else item.imeis.push(...imeis)
     })
     selectedItems.value = [...grouped.values()]
@@ -1077,6 +1107,14 @@ const handlePaymentAction = () => {
             props: {
                 supplier: selectedSupplier.value,
                 total: Number(total.value || 0),
+                editMode: isEditingImport.value,
+                initialPayment: isEditingImport.value ? {
+                    payment_method: form.payment_method,
+                    tendered_amount: form.tendered_amount,
+                    paid_amount: form.paid_amount,
+                    old_debt_paid: form.old_debt_paid,
+                    payment_reference: form.payment_reference,
+                } : {},
             },
             onUpdated: payment => confirm(payment),
         })
@@ -1154,31 +1192,54 @@ const confirm = (payment = {}) => {
 
         // Sản phẩm IMEI
         if (item.type === 'imei') {
-            return (item.imeis || []).map(imei => ({
+            const groups = new Map()
+            ;(item.imeis || []).forEach(imei => {
+                const costPrice = importPrice(item, imei.cost_price ?? item.cost_price)
+                const sellPrice = importPrice(item, imei.sell_price ?? item.sell_price)
+                const key = `${costPrice}-${sellPrice}`
+                if (!groups.has(key)) groups.set(key, { costPrice, sellPrice, imeis: [] })
+                groups.get(key).imeis.push(imei)
+            })
+            return [...groups.values()].map(group => ({
                 product_id: item.product_id,
                 variant_id: null,
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
-                quantity: 1,
-                cost_price: importPrice(item, imei.cost_price ?? item.cost_price),
-                sell_price: importPrice(item, imei.sell_price ?? item.sell_price),
+                quantity: group.imeis.length,
+                cost_price: group.costPrice,
+                sell_price: group.sellPrice,
                 has_vat: Boolean(item.has_vat),
-                imeis: [imei],
+                supplier_warranty_value: item.supplier_warranty_value || null,
+                supplier_warranty_unit: item.supplier_warranty_unit || 'months',
+                extra_info: itemExtraInfo(item),
+                imeis: group.imeis,
             }))
         }
 
         // Sản phẩm biến thể + IMEI
         if (item.type === 'imei_variant') {
-            return (item.imeis || []).map(imei => ({
+            const groups = new Map()
+            ;(item.imeis || []).forEach(imei => {
+                const variantId = imei.variant_id ?? null
+                const costPrice = importPrice(item, imei.cost_price ?? item.cost_price)
+                const sellPrice = importPrice(item, imei.sell_price ?? item.sell_price)
+                const key = `${variantId ?? 'none'}-${costPrice}-${sellPrice}`
+                if (!groups.has(key)) groups.set(key, { variantId, costPrice, sellPrice, imeis: [] })
+                groups.get(key).imeis.push(imei)
+            })
+            return [...groups.values()].map(group => ({
                 product_id: item.product_id,
-                variant_id: imei.variant_id ?? null,
+                variant_id: group.variantId,
                 unit_id: item.unit_id ?? null,
                 unit_name: item.unit_name ?? itemUnit(item),
-                quantity: 1,
-                cost_price: importPrice(item, imei.cost_price ?? item.cost_price),
-                sell_price: importPrice(item, imei.sell_price ?? item.sell_price),
+                quantity: group.imeis.length,
+                cost_price: group.costPrice,
+                sell_price: group.sellPrice,
                 has_vat: Boolean(item.has_vat),
-                imeis: [imei],
+                supplier_warranty_value: item.supplier_warranty_value || null,
+                supplier_warranty_unit: item.supplier_warranty_unit || 'months',
+                extra_info: itemExtraInfo(item),
+                imeis: group.imeis,
             }))
         }
 
@@ -1190,7 +1251,10 @@ const confirm = (payment = {}) => {
     }
 
     if (props.initialImport) {
-        form.put(`/stock-import/${props.initialImport.id}`, {
+        // PHP không parse multipart body của PUT/PATCH. Phiếu nhập có thể mang
+        // ảnh trong thông tin IMEI, nên gửi POST + method spoofing để toàn bộ
+        // party_type, ngày nhập và items luôn đến được backend.
+        form.transform(data => ({ ...data, _method: 'put' })).post(`/stock-import/${props.initialImport.id}`, {
             preserveScroll: true,
             forceFormData: true,
             onSuccess: () => {
@@ -1227,18 +1291,23 @@ const confirm = (payment = {}) => {
 
 <template>
     <BaseModal
-        title="Nhập hàng"
+        :title="isEditingImport ? 'Sửa phiếu nhập' : 'Nhập hàng'"
         size="xl"
         body-class="p-3 sm:p-4"
         @close="emit('close')"
     >
         <div class="flex min-h-0 flex-col gap-2.5">
 
+            <div v-if="isEditingImport" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <div><span class="font-bold">Đang sửa phiếu {{ initialImport.code }}</span><span class="ml-2 text-amber-700">· Thông tin thanh toán hiện có được giữ nguyên.</span></div>
+                <span class="rounded-full border border-amber-300 bg-white px-2 py-0.5 font-bold text-amber-700">Chế độ chỉnh sửa</span>
+            </div>
+
             <!-- NHÀ CUNG CẤP -->
             <SupplierSection
                 :supplier="selectedSupplier"
                 :party-type="partyType"
-                :party-type-locked="false"
+                :party-type-locked="isEditingImport"
                 :customer="selectedCustomer"
                 :can-print-contract="selectedItems.some(item => itemQuantity(item) > 0) && Boolean(customerDraft.full_name?.trim())"
                 :date="form.import_date"
@@ -1727,7 +1796,7 @@ const confirm = (payment = {}) => {
                         "
                         class="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
-                        Hủy
+                        {{ isEditingImport ? 'Hủy chỉnh sửa' : 'Hủy' }}
                     </button>
 
                     <button
@@ -1736,9 +1805,10 @@ const confirm = (payment = {}) => {
                         :disabled="
                             form.processing
                         "
-                        class="min-h-11 rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                        class="min-h-11 rounded-lg px-5 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-wait disabled:opacity-60"
+                        :class="isEditingImport ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'"
                     >
-                        {{ form.processing ? 'Đang lưu...' : 'Thanh toán' }}
+                        {{ form.processing ? 'Đang cập nhật...' : (isEditingImport ? 'Lưu cập nhật phiếu' : 'Thanh toán') }}
                     </button>
                 </div>
             </div>

@@ -20,10 +20,11 @@ import TrashModal from '@/Components/TrashModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
-import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import ImportExportModal from './ImportExportModal.vue'
 import BulkPriceUpdateModal from './BulkPriceUpdateModal.vue'
 import { useReferenceData } from '@/Stores/referenceData'
@@ -443,50 +444,31 @@ const openImeiList = (row) => {
 <template>
 <div class="space-y-3">
  
-    <PageHeader title="Sản phẩm">
-        <template #actions>
-            <ActionButton @click="openCreate"><Plus :size="16" />Thêm sản phẩm</ActionButton>
-            <ActionButton variant="secondary" @click="openImportExport"><ArrowUpDown :size="16" />Nhập / xuất</ActionButton>
-            <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
-        </template>
-    </PageHeader>
- 
-   <!-- FILTER -->
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.2fr)_minmax(200px,1fr)_minmax(200px,1fr)]">
- 
-        <!-- SEARCH -->
-        <div class="relative min-w-0">
-            <FloatingInput
-                v-model="search"
-                label="Tìm tên, SKU hoặc barcode..."
-                input-class="pr-12"
-                @focus="isEditingSearch = true"
-                @blur="isEditingSearch = false"
-            />
-            <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => search = code" />
-        </div>
- 
-        <!-- CATEGORY -->
-        <FloatingSelect
+    <PageHeader title="Sản phẩm" />
+
+   <ListToolbar v-model="search" search-id="product-search" placeholder="Tìm tên, SKU hoặc barcode..." @focus="isEditingSearch = true" @blur="isEditingSearch = false">
+        <template #filters><ListFilterSelect
             v-model="category_id"
             label="Danh mục"
             :options="categories"
             option-label="name"
             option-value="id"
             placeholder-text="Tất cả danh mục"
-        />
- 
-        <!-- BRAND -->
-        <FloatingSelect
+        /><ListFilterSelect
             v-model="brand_id"
             label="Thương hiệu"
             :options="brands"
             option-label="name"
             option-value="id"
             placeholder-text="Tất cả thương hiệu"
-        />
- 
-    </div>
+        /></template>
+        <template #search-end><BarcodeCameraButton class="absolute right-8 top-1/2 z-10 -translate-y-1/2" @scanned="(code) => search = code" /></template>
+        <template #actions>
+            <ActionButton @click="openCreate"><Plus :size="16" />Thêm sản phẩm</ActionButton>
+            <ActionButton variant="secondary" @click="openImportExport"><ArrowUpDown :size="16" />Nhập / xuất</ActionButton>
+            <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
+        </template>
+    </ListToolbar>
  
     <!-- BULK ACTION -->
     <div 
@@ -536,9 +518,9 @@ const openImeiList = (row) => {
     >
         <template #row="{ row }">
  
-            <td class="border-r p-2 text-center">{{ row.id }}</td>
+            <td class="px-3.5 py-2.5 text-center">{{ row.id }}</td>
  
-            <td class="border-r p-2 flex items-center gap-2">
+            <td class="px-3.5 py-2.5"><div class="flex items-center gap-2 font-bold text-slate-900">
                 <img
                     v-if="imageUrl(row.image_url ?? row.image)"
                     :src="imageUrl(row.image_url ?? row.image)"
@@ -551,24 +533,24 @@ const openImeiList = (row) => {
                     SP
                 </div>
                 {{ row.name }}
-            </td>
+            </div></td>
  
-            <td class="border-r px-1 py-2 text-center whitespace-nowrap">
+            <td class="px-3.5 py-2.5 text-center whitespace-nowrap">
                 <div class="font-medium text-slate-700 text-xs">
                     {{ productUnitName(row) }}
                 </div>
             </td>
  
-            <td class="border-r p-2 text-right">
+            <td class="px-3.5 py-2.5 text-right">
                 {{ productSellPriceLabel(row) }}
             </td>
  
-            <td class="border-r p-2 text-center">
+            <td class="px-3.5 py-2.5 text-center">
                 {{ productStockDisplay(row) }}
             </td>
  
             <!-- STATUS -->
-            <td class="border-r p-2 text-center">
+            <td class="px-3.5 py-2.5 text-center">
                 <button
                     @click.stop="toggleStatus(row.id)"
                     :disabled="loadingStatus === row.id"
@@ -583,33 +565,33 @@ const openImeiList = (row) => {
             </td>
  
             <!-- ACTION -->
-            <td class="text-center p-1" @click.stop>
-                <div class="flex">
+            <td class="px-3.5 py-2.5 text-center" @click.stop>
+                <div class="app-row-actions">
                     <Tooltip text="In tem" position="top">
-                        <button @click="printOne(row.id)"  class="p-1 hover:bg-gray-200 rounded">
-                            <Printer size="17" class="text-gray-500 " />
+                        <button type="button" @click="printOne(row.id)"  class="app-row-action app-row-action--view">
+                            <Printer class="h-4 w-4" />
                         </button>
                     </Tooltip>
  
                     <Tooltip text="Sửa">
-                        <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
-                            <SquarePen size="17" class="text-blue-500" />
+                        <button type="button" @click="openEdit(row)" title="Sửa" class="app-row-action app-row-action--edit">
+                            <SquarePen class="h-4 w-4" />
                         </button>
                     </Tooltip>
  
                     <Tooltip text="Cập nhật giá">
                         <button
                             type="button"
-                            class="p-1 hover:bg-gray-200 rounded"
+                           
                             @click="openPriceUpdate([row])"
-                        >
-                            <DollarSign size="17" class="text-emerald-600" />
+                         class="app-row-action app-row-action--view">
+                            <DollarSign class="h-4 w-4" />
                         </button>
                     </Tooltip>
  
                     <Tooltip text="Chuyển vào thùng rác" position="top">
-                        <button @click="destroy(row.id)"  class="p-1 hover:bg-gray-200 rounded">
-                            <Trash2 size="17" class="text-red-500" />
+                        <button type="button" @click="destroy(row.id)"  class="app-row-action app-row-action--danger">
+                            <Trash2 class="h-4 w-4" />
                         </button>
                     </Tooltip>
                 </div>

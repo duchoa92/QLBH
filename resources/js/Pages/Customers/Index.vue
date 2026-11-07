@@ -1,16 +1,16 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
-import { Ban, Plus, RotateCcw, Search, SquarePen, Trash2 } from 'lucide-vue-next'
+import { Ban, Plus, RotateCcw, SquarePen, Trash2 } from 'lucide-vue-next'
 import { openModal, registerUrlModal } from '@/Stores/modal'
 import { formatMoney } from '@/utils/format'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import CustomerFormModal from './CustomerFormModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
-import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { toast } from 'vue-sonner'
 
@@ -145,54 +145,47 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
 
 <template>
     <div class="space-y-3">
-        <PageHeader
-            title="Khách hàng"
-        >
-        </PageHeader>
+        <PageHeader title="Khách hàng" />
 
         <DataPanel detached>
             <template #header>
-                <div class="flex w-full items-center gap-2">
-                    <div class="relative min-w-0 flex-1 sm:max-w-xl">
-                        <Search class="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <FloatingInput v-model="search" label="Tìm khách hàng" placeholder-text="Tên, SĐT, mã KH hoặc CCCD" placeholder-class="left-9 right-2 truncate" label-class="left-9" input-class="h-10 !pl-9 !pt-2 !pb-2" />
-                    </div>
-                    <ActionButton class="shrink-0 whitespace-nowrap" @click="openCreate">
+                <ListToolbar v-model="search" placeholder="Tìm tên, SĐT, mã khách hàng hoặc CCCD...">
+                    <template #actions><ActionButton class="shrink-0 whitespace-nowrap" @click="openCreate">
                         <Plus class="h-4 w-4" />
                         Thêm khách
-                    </ActionButton>
-                </div>
+                    </ActionButton></template>
+                </ListToolbar>
             </template>
 
             <BaseTable :data="customers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
                 <template #row="{ row }">
-                    <td class="border-r p-2 font-medium text-slate-700">{{ row.code }}</td>
-                    <td class="border-r p-2 font-semibold text-slate-900">
+                    <td class="px-3.5 py-2.5 font-medium text-slate-700">{{ row.code }}</td>
+                    <td class="px-3.5 py-2.5 font-semibold text-slate-900">
                         <span :class="row.is_active === false ? 'text-slate-400 line-through decoration-slate-300' : ''">{{ row.full_name }}</span>
                         <span v-if="row.is_active === false" class="ml-2 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 align-middle text-[10px] font-bold text-rose-700"><Ban class="h-3 w-3" />Đã chặn</span>
                     </td>
-                    <td class="border-r p-2 text-slate-600">{{ row.phone || '—' }}</td>
-                    <td class="border-r p-2 text-center font-semibold text-emerald-700">{{ row.point_balance }}</td>
-                    <td class="border-r p-2 text-right font-semibold" :class="[
+                    <td class="px-3.5 py-2.5 text-slate-600">{{ row.phone || '—' }}</td>
+                    <td class="px-3.5 py-2.5 text-center font-semibold text-emerald-700">{{ row.point_balance }}</td>
+                    <td class="px-3.5 py-2.5 text-right font-semibold" :class="[
                         row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500',
                         canViewCustomerDebts && row.debt_balance > 0 ? 'cursor-pointer underline decoration-dotted underline-offset-2 hover:text-rose-800' : '',
                     ]" @click.stop="openDebtDetails(row)" :title="canViewCustomerDebts && row.debt_balance > 0 ? 'Xem chi tiết công nợ' : undefined">{{ formatMoney(row.debt_balance) }}</td>
-                    <td class="border-r p-2 text-center text-slate-600">{{ row.customer_type === 'retail' ? 'Khách lẻ' : row.customer_type }}</td>
-                    <td class="w-32 p-2 text-center" @click.stop>
-                        <div class="flex items-center justify-center gap-0.5">
-                            <ActionButton variant="ghost" title="Sửa" @click="openEdit(row)"><SquarePen class="h-4 w-4 text-emerald-700" /></ActionButton>
+                    <td class="px-3.5 py-2.5 text-center text-slate-600">{{ row.customer_type === 'retail' ? 'Khách lẻ' : row.customer_type }}</td>
+                    <td class="px-3.5 py-2.5 text-center" @click.stop>
+                        <div class="app-row-actions">
+                            <button type="button" title="Sửa" @click="openEdit(row)" class="app-row-action app-row-action--edit"><SquarePen class="h-4 w-4" /></button>
                             <template v-if="canManageCustomers">
-                                <ActionButton variant="ghost" :title="row.is_active === false ? 'Bỏ chặn' : 'Chặn giao dịch'" @click="toggleBlock(row)">
-                                    <RotateCcw v-if="row.is_active === false" class="h-4 w-4 text-emerald-700" />
-                                    <Ban v-else class="h-4 w-4 text-amber-600" />
-                                </ActionButton>
-                                <ActionButton
-                                    variant="ghost"
+                                <button type="button" class="app-row-action" :class="row.is_active === false ? 'app-row-action--view' : 'app-row-action--edit'" :title="row.is_active === false ? 'Bỏ chặn' : 'Chặn giao dịch'" @click="toggleBlock(row)">
+                                    <RotateCcw v-if="row.is_active === false" class="h-4 w-4" />
+                                    <Ban v-else class="h-4 w-4" />
+                                </button>
+                                <button type="button"
+                                   
                                     :disabled="row.has_transactions"
                                     :title="row.has_transactions ? 'Đã có phát sinh, không thể xóa — hãy dùng Chặn' : 'Xóa khách hàng'"
                                     :class="row.has_transactions ? 'cursor-not-allowed opacity-40' : ''"
                                     @click="removeCustomer(row)"
-                                ><Trash2 class="h-4 w-4 text-rose-600" /></ActionButton>
+                                 class="app-row-action app-row-action--danger"><Trash2 class="h-4 w-4" /></button>
                             </template>
                         </div>
                     </td>

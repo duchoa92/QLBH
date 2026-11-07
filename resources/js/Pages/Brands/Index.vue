@@ -2,7 +2,6 @@
 import { router, usePage } from '@inertiajs/vue3'
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import BrandForm from './Form.vue'
 import { FilePlus, SquarePen, Trash2 } from 'lucide-vue-next'
@@ -13,6 +12,8 @@ import BaseTable from '@/Components/UI/BaseTable.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import CatalogTabs from '@/Components/CatalogTabs.vue'
@@ -217,30 +218,12 @@ const sort = ({ field, order }) => {
         title="Danh mục & Thương hiệu"
     />
 
-    <CatalogTabs>
-            <ActionButton @click="openCreate">
-                <FilePlus :size="16" />
-                Thêm
-            </ActionButton>
-
-            <ActionButton
-                variant="danger"
-                @click="openTrash"
-            >
-                <Trash2 :size="16" />
-                Thùng rác ({{ trashCount }})
-            </ActionButton>
-    </CatalogTabs>
+    <CatalogTabs />
 
     <DataPanel detached>
         <template #header>
-            <div class="grid gap-3 md:grid-cols-[260px_260px]">
-                <FloatingInput
-                    v-model="search"
-                    name="search"
-                    label="Tìm kiếm..."
-                />
-                <FloatingSelect
+            <ListToolbar v-model="search" placeholder="Tìm thương hiệu...">
+                <template #filters><ListFilterSelect
                     v-model="category_id"
                     name="category_id"
                     label="Danh mục"
@@ -249,8 +232,9 @@ const sort = ({ field, order }) => {
                         { value: '', label: 'Tất cả' },
                         ...categories.map(c => ({ value: c.id, label: c.name }))
                     ]"
-                />
-            </div>
+                /></template>
+                <template #actions><ActionButton @click="openCreate"><FilePlus :size="16" />Thêm</ActionButton><ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton></template>
+            </ListToolbar>
         </template>
 
         <BaseTable
@@ -263,17 +247,17 @@ const sort = ({ field, order }) => {
         >
             <template #row="{ row }">
 
-                <td class="border-r p-2 text-center">{{ row.id }}</td>
+                <td class="px-3.5 py-2.5 text-center">{{ row.id }}</td>
 
-                <td class="border-r p-2 font-medium">
+                <td class="px-3.5 py-2.5 font-medium">
                     {{ row.name }}
                 </td>
 
-                <td class="border-r p-2">
+                <td class="px-3.5 py-2.5">
                     {{ row.category?.name || '---' }}
                 </td>
 
-                <td class="border-r p-2 text-center">
+                <td class="px-3.5 py-2.5 text-center">
                     <button
                         @click.stop="toggleStatus(row.id)"
                         :disabled="loadingStatus === row.id"
@@ -287,17 +271,17 @@ const sort = ({ field, order }) => {
                     </button>
                 </td>
 
-                <td class="text-center p-2" @click.stop>
-                    <div class="flex justify-center gap-1">
+                <td class="px-3.5 py-2.5 text-center" @click.stop>
+                    <div class="app-row-actions">
                         <Tooltip text="Sửa">
-                            <button @click="openEdit(row)" title="Sửa" class="rounded p-1 text-blue-600 hover:bg-blue-50">
-                                <SquarePen size="17" class="text-blue-500" />
+                            <button type="button" @click="openEdit(row)" title="Sửa" class="app-row-action app-row-action--edit">
+                                <SquarePen class="h-4 w-4" />
                             </button>
                         </Tooltip>
 
                         <Tooltip text="Chuyển vào thùng rác" position="top">
-                            <button @click="destroy(row.id)"  class="rounded p-1 text-red-600 hover:bg-red-50">
-                                <Trash2 size="17" class="text-red-500" />
+                            <button type="button" @click="destroy(row.id)"  class="app-row-action app-row-action--danger">
+                                <Trash2 class="h-4 w-4" />
                             </button>
                         </Tooltip>
                     </div>

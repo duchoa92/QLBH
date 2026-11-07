@@ -367,7 +367,12 @@ const handleCustomerOutsideClick = event => {
         <!-- NCC + NGÀY NHẬP HÀNG -->
         <!-- ===================================================== -->
 
-        <div class="grid grid-cols-[minmax(0,1fr)_132px] gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,0.42fr)] lg:items-center">
+        <div
+            class="grid grid-cols-[minmax(0,1fr)_132px] gap-2 lg:items-center"
+            :class="props.partyTypeLocked
+                ? 'lg:grid-cols-[minmax(0,1fr)_190px]'
+                : 'lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,0.42fr)]'"
+        >
             <div v-if="!props.partyTypeLocked" class="col-span-full flex w-fit items-center gap-2 lg:col-span-1">
                 <div class="inline-flex rounded-xl bg-slate-100 p-1">
                     <button type="button" :class="props.partyType === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition" @click="emit('update:party-type', 'supplier')">

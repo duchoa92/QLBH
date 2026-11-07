@@ -1,13 +1,15 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
-import { Search, HandCoins, Wallet, Users, Truck, X, ChevronDown, ScanLine, History } from 'lucide-vue-next'
+import { HandCoins, Wallet, Users, Truck, X, ChevronDown, ScanLine, History } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import SupplierPaymentModal from '@/Pages/Debts/SupplierPaymentModal.vue'
 import { formatMoney } from '@/utils/format'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import PaginationBar from '@/Components/UI/PaginationBar.vue'
 
 defineOptions({ layout: AdminLayout })
 
@@ -37,7 +39,7 @@ watch(search, value => {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => router.get(
         isCustomer.value ? route('debts.customers') : route('debts.suppliers'),
-        { search: value || undefined },
+        { search: value || undefined, per_page: props.filters.per_page || undefined },
         { preserveState: true, preserveScroll: true, replace: true },
     ), 250)
 })
@@ -104,31 +106,26 @@ const submit = () => {
             </div>
         </div>
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div><h2 class="font-bold text-slate-900">Danh sách còn công nợ</h2><p class="mt-1 text-xs text-slate-500">Số dư được cập nhật sau mỗi lần thu hoặc chi.</p></div>
-                <label class="relative block sm:w-80"><Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" :size="16" /><input v-model="search" class="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại' : 'Tìm nhà cung cấp, mã hoặc số điện thoại'" /></label>
-            </div>
+        <ListToolbar v-model="search" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại...' : 'Tìm nhà cung cấp, mã hoặc số điện thoại...'" />
+        <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[720px] text-left text-sm">
-                    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Mã</th><th class="px-4 py-3">Điện thoại</th><th class="px-4 py-3 text-right">Còn nợ</th><th class="px-4 py-3 text-right">Thao tác</th></tr></thead>
-                    <tbody class="divide-y divide-slate-100">
+                <table class="app-data-table w-full min-w-[720px] border-collapse text-left text-xs">
+                    <thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500"><th class="px-3.5 py-2.5">{{ isCustomer ? 'Khách Hàng' : 'Nhà Cung Cấp' }}</th><th class="px-3.5 py-2.5">Mã</th><th class="px-3.5 py-2.5">Điện Thoại</th><th class="px-3.5 py-2.5 text-right">Còn Nợ</th><th class="px-2 py-2.5 text-center">Thao Tác</th></tr></thead>
+                    <tbody class="divide-y divide-slate-100 text-xs font-medium">
                         <template v-for="row in rows.data" :key="row.id">
-                            <tr class="hover:bg-slate-50/70"><td class="px-4 py-3 font-semibold text-slate-800">{{ nameOf(row) }}</td><td class="px-4 py-3 text-slate-600">{{ row.code || '—' }}</td><td class="px-4 py-3 text-slate-600">{{ row.phone || '—' }}</td><td class="px-4 py-3 text-right font-bold text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-4 py-3 text-right"><div class="inline-flex gap-1"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="expandedId = expandedId === row.id ? null : row.id"><ChevronDown :size="14" :class="expandedId === row.id ? 'rotate-180' : ''" />Đơn nợ</button><ActionButton @click="pay(row)"><HandCoins :size="15" />{{ isCustomer ? 'Ghi nhận thu' : 'Thanh toán' }}</ActionButton></div></td></tr>
+                            <tr class="transition-colors hover:bg-emerald-50/70"><td class="px-3.5 py-2.5 font-bold text-slate-900">{{ nameOf(row) }}</td><td class="px-4 py-3 text-slate-600">{{ row.code || '—' }}</td><td class="px-4 py-3 text-slate-600">{{ row.phone || '—' }}</td><td class="px-3.5 py-2.5 text-right text-sm font-black text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-3.5 py-2.5 text-center"><div class="inline-flex items-center justify-center gap-1"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="expandedId = expandedId === row.id ? null : row.id"><ChevronDown :size="14" :class="expandedId === row.id ? 'rotate-180' : ''" />Đơn nợ</button><ActionButton @click="pay(row)"><HandCoins :size="15" />{{ isCustomer ? 'Ghi nhận thu' : 'Thanh toán' }}</ActionButton></div></td></tr>
                             <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><a :href="order.href" class="font-bold text-blue-700 hover:underline">{{ order.code }}</a><div class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có hóa đơn/phiếu nhập nợ riêng để đối chiếu. Có thể ghi nhận khoản thanh toán tổng bằng nút phía trên.</p></div></td></tr>
                         </template>
                         <tr v-if="!rows.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div v-if="rows.links?.length > 3" class="flex flex-wrap justify-end gap-1 border-t border-slate-100 p-3">
-                <button v-for="link in rows.links" :key="`${link.label}-${link.url}`" :disabled="!link.url" @click="link.url && router.visit(link.url, { preserveScroll: true })" class="rounded-lg border px-3 py-1.5 text-xs" :class="link.active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-600 disabled:opacity-40'" v-html="link.label" />
-            </div>
+            <PaginationBar :data="rows" :filters="filters" />
         </div>
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="flex items-center gap-2 border-b border-slate-100 p-4"><History :size="18" class="text-blue-600" /><div><h2 class="font-bold text-slate-900">Lịch sử thanh toán gần đây</h2><p class="mt-1 text-xs text-slate-500">Hiển thị tối đa 100 lần thu/chi mới nhất.</p></div></div>
-            <div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100"><tr v-for="item in history" :key="item.id"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><a v-if="item.code && item.href" :href="item.href" class="font-semibold text-blue-700 hover:underline">{{ item.code }}</a><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
+            <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[760px] border-collapse text-left text-xs"><thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500"><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100 text-xs font-medium"><tr v-for="item in history" :key="item.id" class="transition-colors hover:bg-emerald-50/70"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><a v-if="item.code && item.href" :href="item.href" class="font-semibold text-blue-700 hover:underline">{{ item.code }}</a><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
         </div>
 
         <SupplierPaymentModal

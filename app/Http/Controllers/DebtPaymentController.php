@@ -30,6 +30,7 @@ class DebtPaymentController extends Controller
     private function index(Request $request, string $entity): Response
     {
         $search = trim((string) $request->query('search', ''));
+        $perPage = in_array((int) $request->query('per_page'), [10, 20, 50, 100], true) ? (int) $request->query('per_page') : 10;
         $isCustomer = $entity === 'customer';
         $model = $isCustomer ? Customer::query() : Supplier::query();
         $nameColumn = $isCustomer ? 'full_name' : 'name';
@@ -40,7 +41,7 @@ class DebtPaymentController extends Controller
                 ->orWhere('code', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")))
             ->orderByDesc('debt_balance')
-            ->paginate(15)->withQueryString();
+            ->paginate($perPage)->withQueryString();
 
         $partyIds = collect($rows->items())->pluck('id');
         $orders = $isCustomer
@@ -70,7 +71,7 @@ class DebtPaymentController extends Controller
         return Inertia::render('Debts/Index', [
             'entity' => $entity,
             'rows' => $rows,
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'per_page' => $perPage],
             'summary' => [
                 'total' => (float) ($isCustomer ? Customer::sum('debt_balance') : Supplier::sum('debt_balance')),
                 'count' => (int) ($isCustomer ? Customer::where('debt_balance', '>', 0)->count() : Supplier::where('debt_balance', '>', 0)->count()),

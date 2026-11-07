@@ -1,13 +1,14 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router, usePage } from '@inertiajs/vue3'
-import { Plus, Search, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
+import { Plus, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal, registerUrlModal } from '@/Stores/modal'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import UserFormModal from './FormModal.vue'
 import RoleManagementDialog from './RoleManagementDialog.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
@@ -149,17 +150,8 @@ const destroy = (user) => {
 
             <DataPanel detached>
                 <template #header>
-                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="relative w-full sm:max-w-md">
-                            <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                                v-model="searchValue"
-                                type="search"
-                                placeholder="Tìm tên, tên đăng nhập hoặc điện thoại..."
-                                class="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                            >
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <ListToolbar v-model="searchValue" placeholder="Tìm tên, tên đăng nhập hoặc điện thoại...">
+                        <template #actions><div class="flex flex-wrap items-center gap-2 sm:justify-end">
                             <ActionButton v-if="can_manage_roles" variant="secondary" @click="showRoleManager = true">
                                 <ShieldCheck class="h-4 w-4" />
                                 Vai trò & quyền
@@ -168,23 +160,23 @@ const destroy = (user) => {
                                 <Plus class="h-4 w-4" />
                                 Thêm người dùng
                             </ActionButton>
-                        </div>
-                    </div>
+                        </div></template>
+                    </ListToolbar>
                 </template>
 
                 <BaseTable :data="users" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
                     <template #row="{ row }">
-                        <td class="border-r p-2 font-medium text-slate-700">{{ row.id }}</td>
-                        <td class="border-r p-2 font-semibold text-slate-900">{{ row.name }}</td>
-                        <td class="border-r p-2 text-slate-600">{{ row.username }}</td>
-                        <td class="border-r p-2 text-slate-600">{{ row.phone || '—' }}</td>
-                        <td class="border-r p-2">
+                        <td class="px-3.5 py-2.5 font-medium text-slate-700">{{ row.id }}</td>
+                        <td class="px-3.5 py-2.5 font-semibold text-slate-900">{{ row.name }}</td>
+                        <td class="px-3.5 py-2.5 text-slate-600">{{ row.username }}</td>
+                        <td class="px-3.5 py-2.5 text-slate-600">{{ row.phone || '—' }}</td>
+                        <td class="px-3.5 py-2.5">
                             <span v-for="role in row.roles" :key="role.id || role" class="mr-1 inline-flex rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ role.name || role }}</span>
                         </td>
-                        <td class="p-2 text-center" @click.stop>
-                            <div class="flex justify-center gap-1">
-                                <ActionButton v-if="can_edit_users && row.username !== 'admin'" variant="ghost" title="Sửa" @click="openEdit(row)"><SquarePen class="h-4 w-4 text-emerald-700" /></ActionButton>
-                                <ActionButton v-if="can_delete_users && row.username !== 'admin'" variant="ghost" title="Xóa" @click="destroy(row)"><Trash2 class="h-4 w-4 text-rose-600" /></ActionButton>
+                        <td class="px-3.5 py-2.5 text-center" @click.stop>
+                            <div class="app-row-actions">
+                                <button type="button" v-if="can_edit_users && row.username !== 'admin'" title="Sửa" @click="openEdit(row)" class="app-row-action app-row-action--edit"><SquarePen class="h-4 w-4" /></button>
+                                <button type="button" v-if="can_delete_users && row.username !== 'admin'" title="Xóa" @click="destroy(row)" class="app-row-action app-row-action--danger"><Trash2 class="h-4 w-4" /></button>
                             </div>
                         </td>
                     </template>

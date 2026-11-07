@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class StockImportItem extends Model
 {
@@ -62,6 +63,18 @@ class StockImportItem extends Model
         return $this->belongsTo(
             Unit::class,
             'unit_id'
+        );
+    }
+
+    /**
+     * Lô tồn kho tạo từ dòng nhập này. Giá bán nhập tay được lưu ở lô (theo đơn
+     * vị cơ sở), không ghi đè giá bán hiện tại của sản phẩm/biến thể.
+     */
+    public function stockBatch(): HasOne
+    {
+        return $this->hasOne(
+            ProductStockBatch::class,
+            'stock_import_item_id'
         );
     }
 }

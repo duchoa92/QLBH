@@ -31,6 +31,7 @@ import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
+import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import api from '@/Services/api'
 
@@ -239,6 +240,12 @@ const applyPaymentStatus = (value) => {
     requestSales()
 }
 
+const paymentStatusOptions = [
+    { label: 'Tất cả trạng thái', value: '' },
+    { label: 'Đã thanh toán', value: 'paid' },
+    { label: 'Còn nợ', value: 'debt' },
+]
+
 const clearSearch = () => {
     search.value = ''
     clearTimeout(searchTimeout)
@@ -249,6 +256,8 @@ const datePresetOptions = [
     { label: 'Toàn thời gian', value: 'all' },
     { label: 'Hôm nay', value: 'today' },
     { label: 'Hôm qua', value: 'yesterday' },
+    { label: '7 ngày qua', value: 'last_7_days' },
+    { label: '30 ngày qua', value: 'last_30_days' },
     { label: 'Tháng này', value: 'this_month' },
     { label: 'Tháng trước', value: 'last_month' },
 ]
@@ -274,6 +283,16 @@ const dateRangeFor = (preset) => {
         const value = dateInputValue(yesterday)
         return { from: value, to: value }
     }
+    if (preset === 'last_7_days') {
+        const from = new Date(today)
+        from.setDate(today.getDate() - 6)
+        return { from: dateInputValue(from), to: dateInputValue(today) }
+    }
+    if (preset === 'last_30_days') {
+        const from = new Date(today)
+        from.setDate(today.getDate() - 29)
+        return { from: dateInputValue(from), to: dateInputValue(today) }
+    }
     if (preset === 'this_month') return { from: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)), to: dateInputValue(today) }
     if (preset === 'last_month') return { from: dateInputValue(new Date(today.getFullYear(), today.getMonth() - 1, 1)), to: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 0)) }
     return null
@@ -288,23 +307,41 @@ const applyDatePreset = (preset) => {
     clearTimeout(searchTimeout)
     requestSales()
 }
-const calendarMonthLabel = computed(() => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(calendarMonth.value))
-const calendarCells = computed(() => {
-    const first = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth(), 1)
+const stageDatePreset = (preset) => {
+    datePreset.value = preset
+    const range = dateRangeFor(preset)
+    if (!range) return
+    pickerStart.value = range.from
+    pickerEnd.value = range.to
+    if (range.from) {
+        const anchor = dateFromInput(range.from)
+        calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    }
+}
+const monthLabel = month => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(month)
+const calendarCellsFor = (month) => {
+    const first = new Date(month.getFullYear(), month.getMonth(), 1)
     const start = new Date(first)
     start.setDate(1 - ((first.getDay() + 6) % 7))
     return Array.from({ length: 42 }, (_, index) => {
         const date = new Date(start)
         date.setDate(start.getDate() + index)
-        return { key: dateInputValue(date), day: date.getDate(), currentMonth: date.getMonth() === calendarMonth.value.getMonth() }
+        return { key: dateInputValue(date), day: date.getDate(), currentMonth: date.getMonth() === month.getMonth() }
     })
-})
+}
+const calendarCells = computed(() => calendarCellsFor(calendarMonth.value))
 const isPickerSelected = key => key === pickerStart.value || key === pickerEnd.value
 const isPickerInRange = key => Boolean(pickerStart.value && pickerEnd.value && key > pickerStart.value && key < pickerEnd.value)
 const pickerRangeLabel = computed(() => {
     const format = value => new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
     if (!pickerStart.value) return 'Chọn ngày bắt đầu, rồi chọn ngày kết thúc'
     return pickerEnd.value ? `${format(pickerStart.value)} – ${format(pickerEnd.value)}` : `Từ ${format(pickerStart.value)} · chọn ngày kết thúc`
+})
+const selectedDateRangeLabel = computed(() => {
+    const format = value => new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
+    if (!dateFrom.value && !dateTo.value) return 'Toàn thời gian'
+    if (!dateTo.value || dateTo.value === dateFrom.value) return format(dateFrom.value || dateTo.value)
+    return `${format(dateFrom.value)} – ${format(dateTo.value)}`
 })
 const openDatePicker = () => {
     pickerStart.value = dateFrom.value
@@ -319,6 +356,10 @@ const selectPickerDate = (key) => {
     if (key < pickerStart.value) { pickerEnd.value = pickerStart.value; pickerStart.value = key } else pickerEnd.value = key
 }
 const applyCustomDateRange = () => {
+    if (datePreset.value === 'all') {
+        applyDatePreset('all')
+        return
+    }
     if (!pickerStart.value) return
     datePreset.value = 'custom'
     dateFrom.value = pickerStart.value
@@ -519,62 +560,41 @@ const highlightedSearchSegments = (value) => {
     <!-- THU NHỎ MARGIN / PADDING NGOÀI (p-2.5 sm:p-3 space-y-3) -->
     <div class="space-y-3 font-sans text-slate-800">
         <PageHeader title="Hóa đơn bán hàng" />
-        
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
-                <div>
-                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Doanh thu theo bộ lọc</div>
-                    <div class="mt-0.5 text-xl font-black text-slate-900">{{ formatMoney(Number(statsData?.totalRevenue ?? 0)) }}</div>
-                </div>
-                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><DollarSign :size="20" /></div>
-            </div>
-
-            <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
-                <div>
-                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng số đơn hàng</div>
-                    <div class="mt-0.5 text-xl font-black text-slate-900">{{ Number(statsData?.totalOrders ?? 0) }} <span class="text-xs font-semibold text-slate-500">hóa đơn</span></div>
-                </div>
-                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><FileText :size="20" /></div>
-            </div>
-
-            <div class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
-                <div>
-                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng công nợ gối đầu</div>
-                    <div class="mt-0.5 text-xl font-black text-rose-600">{{ formatMoney(Number(statsData?.totalDebt ?? 0)) }}</div>
-                </div>
-                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600"><CreditCard :size="20" /></div>
-            </div>
-        </div>
-
-        <div class="pt-2">
         <DataPanel detached>
             <template #header>
-                <div class="w-full space-y-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4">
-                    <div class="relative min-w-0">
+                <div class="flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
+                    <div class="relative min-w-0 w-full sm:min-w-[220px] sm:flex-1">
                             <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input id="sales-search" v-model="search" type="text" autocomplete="off" placeholder="Tìm Mã HĐ, Tên KH, SĐT, sản phẩm, Serial/IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" @input="handleFilterChange" />
                             <LoaderCircle v-if="loadingSales" class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" />
                             <button v-else-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
                     </div>
 
-                    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                        <div class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-                            <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === '' && status === '' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'" @click="applyPaymentStatus('')">Tất cả</button>
-                            <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === 'paid' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'" @click="applyPaymentStatus('paid')">Đã thanh toán</button>
-                            <button type="button" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition" :class="paymentStatus === 'debt' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'" @click="applyPaymentStatus('debt')">Còn nợ</button>
-                        </div>
-                        <div ref="calendarRef" class="relative shrink-0">
-                            <button type="button" class="inline-flex h-[42px] w-[42px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" title="Lọc theo thời gian" aria-label="Lọc theo thời gian" @click="calendarOpen ? calendarOpen = false : openDatePicker()"><CalendarDays class="h-4 w-4" /></button>
-                            <div v-if="calendarOpen" class="absolute right-0 top-full z-50 mt-2 w-[min(304px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                                <div class="grid grid-cols-3 gap-1 border-b border-slate-100 p-1.5">
-                                    <button v-for="preset in datePresetOptions" :key="preset.value" type="button" class="rounded-md border px-1.5 py-1 text-[9px] font-semibold transition" :class="datePreset === preset.value ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'" @click="applyDatePreset(preset.value)">{{ preset.label }}</button>
+                    <FloatingSelect
+                        :model-value="paymentStatus"
+                        label="Trạng thái thanh toán"
+                        :options="paymentStatusOptions"
+                        input-class="!h-[42px] !rounded-xl !border-slate-200 !px-3 !pb-1 !pt-3 !text-xs !font-semibold focus:!border-blue-400"
+                        wrapper-class="w-full sm:w-[180px]"
+                        @update:model-value="applyPaymentStatus"
+                    />
+                    <div ref="calendarRef" class="relative w-full min-w-0 shrink-0 sm:w-auto">
+                            <button type="button" class="inline-flex h-[42px] w-full min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-left text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 sm:min-w-[220px] sm:w-auto" title="Lọc theo khoảng ngày" @click="calendarOpen ? calendarOpen = false : openDatePicker()"><CalendarDays class="h-4 w-4 shrink-0 text-blue-600" /><span class="min-w-0 flex-1 truncate">{{ selectedDateRangeLabel }}</span><ChevronRight class="h-4 w-4 shrink-0 rotate-90 text-slate-400" /></button>
+                            <div v-if="calendarOpen" class="absolute right-0 top-full z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:w-[470px]">
+                                <div class="flex flex-col sm:flex-row">
+                                    <aside class="border-b border-slate-200 bg-slate-50/70 p-2 sm:w-40 sm:shrink-0 sm:border-b-0 sm:border-r">
+                                        <p class="mb-1 px-2 pt-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Khoảng có sẵn</p>
+                                        <div class="flex flex-wrap gap-1 sm:block sm:space-y-0.5">
+                                            <button v-for="preset in datePresetOptions" :key="preset.value" type="button" class="w-auto rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition sm:w-full sm:px-2.5 sm:py-2" :class="datePreset === preset.value ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-white hover:text-slate-900'" @click="stageDatePreset(preset.value)">{{ preset.label }}</button>
+                                        </div>
+                                    </aside>
+                                    <section class="min-w-0 flex-1 p-2.5 sm:p-3">
+                                        <header class="mb-2 flex items-center justify-between gap-2"><button type="button" class="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100" aria-label="Tháng trước" @click="moveCalendarMonth(-1)"><ChevronLeft class="h-4 w-4" /></button><div class="min-w-0 flex-1 text-center text-xs font-bold capitalize text-slate-800">{{ monthLabel(calendarMonth) }}</div><button type="button" class="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100" aria-label="Tháng sau" @click="moveCalendarMonth(1)"><ChevronRight class="h-4 w-4" /></button></header>
+                                        <div class="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1">{{ day }}</span></div><div class="grid grid-cols-7"><button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectPickerDate(cell.key)">{{ cell.day }}</button></div>
+                                    </section>
                                 </div>
-                                <header class="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5"><button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 hover:bg-slate-100" aria-label="Tháng trước" @click="moveCalendarMonth(-1)"><ChevronLeft class="h-3.5 w-3.5" /></button><h3 class="text-xs font-bold capitalize text-slate-800">{{ calendarMonthLabel }}</h3><button type="button" class="grid h-7 w-7 place-items-center rounded-md text-slate-600 hover:bg-slate-100" aria-label="Tháng sau" @click="moveCalendarMonth(1)"><ChevronRight class="h-3.5 w-3.5" /></button></header>
-                                <div class="grid grid-cols-7 bg-slate-50 text-center text-[9px] font-bold text-slate-500"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1.5">{{ day }}</span></div>
-                                <div class="grid grid-cols-7 p-1"><button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectPickerDate(cell.key)">{{ cell.day }}</button></div>
-                                <footer class="space-y-1.5 border-t border-slate-100 px-2.5 py-2"><p class="truncate text-center text-[10px] font-medium text-slate-600">{{ pickerRangeLabel }}</p><div class="flex items-center justify-between gap-2"><button type="button" class="px-1.5 py-1 text-[10px] font-semibold text-slate-500 hover:text-rose-600" @click="clearDateRange">Xóa</button><button type="button" :disabled="!pickerStart" class="rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCustomDateRange">Áp dụng</button></div></footer>
+                                <footer class="flex flex-col gap-2 border-t border-slate-200 bg-slate-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"><p class="truncate text-xs font-medium text-slate-600">Đã chọn: <span class="font-bold text-slate-800">{{ pickerRangeLabel }}</span></p><div class="flex items-center justify-end gap-2"><button type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-rose-600" @click="clearDateRange">Xóa</button><button type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white" @click="calendarOpen = false">Hủy</button><button type="button" :disabled="datePreset !== 'all' && !pickerStart" class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCustomDateRange">Áp dụng</button></div></footer>
                             </div>
-                        </div>
                     </div>
                 </div>
             </template>
@@ -886,7 +906,7 @@ const highlightedSearchSegments = (value) => {
                 <PaginationBar :data="salesData" :filters="activeFilters" />
             </div>
         </DataPanel>
-        </div>
+        
 
         <!-- MODAL CHI TIẾT HÓA ĐƠN -->
         <InvoiceDetailModal
