@@ -1,3 +1,11 @@
+Claude
+
+
+
+
+
+
+Index · VUE
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
@@ -7,7 +15,7 @@ import ProductImeisModal from './ProductImeisModal.vue'
 import ProductDetailModal from './ProductDetailModal.vue'
 import { ArrowUpDown, DollarSign, Plus, Printer, SquarePen, Trash2 } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
-import { openModal, registerUrlModal } from '@/Stores/modal'
+import { closeModal, openModal, registerUrlModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -21,7 +29,7 @@ import BulkPriceUpdateModal from './BulkPriceUpdateModal.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
 import { formatCurrency } from '@/utils/format'
-
+ 
 defineOptions({ layout: AdminLayout })
 const props = defineProps({
     products: Object,
@@ -33,33 +41,33 @@ const props = defineProps({
         default: () => [],
     },
 })
-
+ 
 const { categories, brands, units } = useReferenceData({
     categories: props.categories,
     brands: props.brands,
     units: props.units,
 })
-
+ 
 const confirmBox = useConfirm()
 const page = usePage()
-
+ 
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id || '')
 const brand_id = ref(props.filters?.brand_id || '')
 const per_page = ref(props.filters?.per_page || 10) 
-
+ 
 let timeout = null
 let isSyncingFilters = false
 const isEditingSearch = ref(false)
-
+ 
 watch([search, category_id, brand_id], () => {
     if (isSyncingFilters || isChangingPerPage.value) {
         isChangingPerPage.value = false
         return
     }
-
+ 
     clearTimeout(timeout)
-
+ 
     timeout = setTimeout(() => {
         router.get('/products', {
             search: search.value,
@@ -76,7 +84,7 @@ watch([search, category_id, brand_id], () => {
         })
     }, 300)
 })
-
+ 
 watch(() => props.filters, (filters) => {
     if (!filters) return
     isSyncingFilters = true
@@ -87,13 +95,13 @@ watch(() => props.filters, (filters) => {
     if (filters.per_page) per_page.value = Number(filters.per_page)
     nextTick(() => { isSyncingFilters = false })
 }, { deep: true })
-
-
-
+ 
+ 
+ 
 onBeforeUnmount(() => {
     if (timeout) clearTimeout(timeout)
 })
-
+ 
 const columns = [
     { key: 'id', label: 'ID', sortable: true, width: '60px' },
     { key: 'name', label: 'Tên hàng hóa', sortable: true },
@@ -102,29 +110,29 @@ const columns = [
     { key: 'stock', label: 'Tồn kho', sortable: true },
     { key: 'is_active', label: 'Trạng thái', sortable: true, width: '120px' }
 ]
-
+ 
 // Khai báo biến timeout phạm vi component
 let filterTimeout = null
-
-
+ 
+ 
 // Dọn dẹp bộ nhớ: Hủy bỏ hoàn toàn hành động chạy ngầm nếu chuyển trang giữa chừng
 onBeforeUnmount(() => {
     if (filterTimeout) {
         clearTimeout(filterTimeout)
     }
 })
-
+ 
 // Hàm loadData chuẩn hóa để cập nhật danh sách dựa trên chính bộ lọc hiện tại
 const loadData = () => {
     router.reload({ only: ['products'] })
     loadTrashCount()
 }
-
+ 
 /* ================= FORM ================= */
 const editingProduct = ref(null)
-
-
-
+ 
+ 
+ 
 const openCreate = () => {
     openModal(Form, {
         props: {
@@ -140,7 +148,7 @@ const openCreate = () => {
         }
     })
 }
-
+ 
 const openEdit = (item) => {
     openModal(Form, {
         props: {
@@ -157,20 +165,27 @@ const openEdit = (item) => {
         }
     })
 }
-
+ 
 const openProductDetail = (item) => {
     openModal(ProductDetailModal, {
-        props: { productId: item.id, productName: item.name },
+        props: {
+            productId: item.id,
+            productName: item.name,
+            onEdit: () => {
+                closeModal()
+                openEdit(item)
+            },
+        },
         deepLink: { type: 'product', id: item.id },
     })
 }
-
+ 
 registerUrlModal('product', ProductDetailModal, id => ({ productId: id }))
-
-
+ 
+ 
 /* ================= TRASH ================= */
 const trashCount = ref(0)
-
+ 
 const loadTrashCount = async () => {
     try {
         const res = await fetch('/products/trash', {
@@ -182,8 +197,8 @@ const loadTrashCount = async () => {
         trashCount.value = 0
     }
 }
-
-
+ 
+ 
 const openTrash = () => {
     openModal(TrashModal, {
         props: {
@@ -195,14 +210,14 @@ const openTrash = () => {
         }
     })
 }
-
-
+ 
+ 
 const openFromGlobalSearch = () => {
     const url = new URL(window.location.href)
     const productId = Number(url.searchParams.get('open_product'))
     const imeiProductId = Number(url.searchParams.get('open_imei_product'))
     if (!productId && !imeiProductId) return
-
+ 
     url.searchParams.delete('open_product')
     url.searchParams.delete('open_imei_product')
     router.replace({
@@ -212,31 +227,31 @@ const openFromGlobalSearch = () => {
         onSuccess: () => productId ? openProductDetail({ id: productId }) : openImeiList({ id: imeiProductId }),
     })
 }
-
+ 
 watch(() => page.url, () => nextTick(openFromGlobalSearch), { immediate: true })
 onMounted(loadTrashCount)
-
+ 
 /* ================= SELECT ================= */
 const selectedIds = ref([])
-
+ 
 const toggleOne = (id) => {
     selectedIds.value.includes(id)
         ? selectedIds.value = selectedIds.value.filter(i => i !== id)
         : selectedIds.value.push(id)
 }
-
+ 
 const toggleAll = () => {
     const ids = props.products?.data?.map(row => row.id) || []
     selectedIds.value = selectedIds.value.length === ids.length ? [] : ids
 }
-
+ 
 const selectedProducts = computed(() =>
     (props.products?.data ?? []).filter(product => selectedIds.value.includes(product.id))
 )
-
+ 
 const openPriceUpdate = (products) => {
     if (!products.length) return
-
+ 
     openModal(BulkPriceUpdateModal, {
         props: { products },
         onUpdated: () => {
@@ -245,27 +260,27 @@ const openPriceUpdate = (products) => {
         },
     })
 }
-
+ 
 const openBulkPriceUpdate = () => openPriceUpdate(selectedProducts.value)
-
+ 
 const loadingStatus = ref(null)
-
+ 
 const toggleStatus = (id) => {
     if (loadingStatus.value) return
-
+ 
     loadingStatus.value = id
-
+ 
     const item = props.products.data.find(i => i.id === id)
     if (item) item.is_active = !item.is_active
-
+ 
     router.patch(`/products/${id}/toggle-status`, {}, {
         onFinish: () => loadingStatus.value = null
     })
 }
-
+ 
 /* ================= DELETE ================= */
-
-
+ 
+ 
 const destroy = (id) => {
     confirmBox.show({
         title: 'Xác nhận',
@@ -283,10 +298,10 @@ const destroy = (id) => {
         }
     })
 }
-
+ 
 const bulkDelete = () => {
     if (!selectedIds.value.length) return
-
+ 
     confirmBox.show({
         title: 'Xác nhận',
         message: `Xóa ${selectedIds.value.length} sản phẩm?`,
@@ -306,19 +321,19 @@ const bulkDelete = () => {
         }
     })
 }
-
+ 
 /* ================= PRINT ================= */
 const printOne = (id) => {
     window.open(`/products/print?ids=${id}`, '_blank')
 }
-
+ 
 const printImei = () => {
     if (!selectedIds.value.length) return
     window.open(`/products/print?ids=${selectedIds.value.join(',')}`, '_blank')
 }
-
+ 
 /* ================= SORT ================= */
-
+ 
 const sort = ({ field, order }) => {
     router.get('/products', {
         search: search.value,
@@ -332,20 +347,20 @@ const sort = ({ field, order }) => {
         replace: true
     })
 }
-
+ 
 // ================= PER PAGE =================
 const isChangingPerPage = ref(false)
-
+ 
 watch(() => props.filters?.per_page, (val) => {
     if (val && val != per_page.value) {
         per_page.value = Number(val)
     }
 })
-
+ 
 const changePerPage = (value) => {
-
+ 
     isChangingPerPage.value = true
-
+ 
     per_page.value = value
     router.get('/products', {
         search: search.value,
@@ -360,20 +375,20 @@ const changePerPage = (value) => {
         replace: true
     })
 }
-
+ 
 onMounted(() => {
     const saved = localStorage.getItem('per_page')
-
+ 
     if (saved && saved != props.filters?.per_page) {
         changePerPage(Number(saved))
     }
 })
-
+ 
 watch(per_page, (val) => {
     localStorage.setItem('per_page', val)
 })
-
-
+ 
+ 
 // nhập xuất file
 const openImportExport = () => {
     openModal(ImportExportModal, {
@@ -383,22 +398,22 @@ const openImportExport = () => {
         onUpdated: loadData
     })
 }
-
+ 
 const formatMoney = formatCurrency
-
+ 
 const productUnitName = (row) =>
     row.unit?.short_name || row.unit?.name || 'Cái'
-
+ 
 const productStockDisplay = (row) => {
     const quantity = row.manage_stock_by_serial || row.imeis?.length
         ? (row.imeis || []).filter(imei => imei.status === 'in_stock').length
         : row.variants?.length
             ? row.variants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
             : Number(row.stock || 0)
-
+ 
     return `${quantity} ${productUnitName(row)}`
 }
-
+ 
 const productSellPriceLabel = (row) => {
     const batchPrices = (row.stock_batches || [])
         .filter(batch => Number(batch.remaining_quantity || 0) > 0 && Number(batch.sell_price || 0) > 0)
@@ -415,19 +430,19 @@ const productSellPriceLabel = (row) => {
     const max = Math.max(...prices)
     return min === max ? formatMoney(min) : `${formatMoney(min)} – ${formatMoney(max)}`
 }
-
+ 
 const openImeiList = (row) => {
     openModal(ProductImeisModal, {
         props: { productId: row.id, productName: row.name },
         onUpdated: () => router.reload({ only: ['products'] }),
     })
 }
-
+ 
 </script>
-
+ 
 <template>
 <div class="space-y-3">
-
+ 
     <PageHeader title="Sản phẩm">
         <template #actions>
             <ActionButton @click="openCreate"><Plus :size="16" />Thêm sản phẩm</ActionButton>
@@ -435,10 +450,10 @@ const openImeiList = (row) => {
             <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
         </template>
     </PageHeader>
-
+ 
    <!-- FILTER -->
     <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.2fr)_minmax(200px,1fr)_minmax(200px,1fr)]">
-
+ 
         <!-- SEARCH -->
         <div class="relative min-w-0">
             <FloatingInput
@@ -450,7 +465,7 @@ const openImeiList = (row) => {
             />
             <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="(code) => search = code" />
         </div>
-
+ 
         <!-- CATEGORY -->
         <FloatingSelect
             v-model="category_id"
@@ -460,7 +475,7 @@ const openImeiList = (row) => {
             option-value="id"
             placeholder-text="Tất cả danh mục"
         />
-
+ 
         <!-- BRAND -->
         <FloatingSelect
             v-model="brand_id"
@@ -470,26 +485,26 @@ const openImeiList = (row) => {
             option-value="id"
             placeholder-text="Tất cả thương hiệu"
         />
-
+ 
     </div>
-
+ 
     <!-- BULK ACTION -->
     <div 
         v-if="selectedIds.length"
         class="flex items-center gap-3 bg-blue-50 border rounded p-2 mb-3"
     >
-
+ 
         <span class="text-sm text-gray-600">
             Đã chọn <b>{{ selectedIds.length }}</b> sản phẩm
         </span>
-
+ 
         <button
             @click="printImei"
             class="flex items-center gap-1 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded"
         >
             In IMEI
         </button>
-
+ 
         <button
             type="button"
             @click="openBulkPriceUpdate"
@@ -497,16 +512,16 @@ const openImeiList = (row) => {
         >
             <DollarSign :size="16" />Sửa giá đã chọn
         </button>
-
+ 
         <button
             @click="bulkDelete"
             class="flex items-center gap-1 text-red-600 hover:bg-red-100 px-2 py-1 rounded"
         >
             Xóa
         </button>
-
+ 
     </div>
-
+ 
     <BaseTable
         :data="products"
         :columns="columns"
@@ -520,9 +535,9 @@ const openImeiList = (row) => {
         @row-click="openProductDetail"
     >
         <template #row="{ row }">
-
+ 
             <td class="border-r p-2 text-center">{{ row.id }}</td>
-
+ 
             <td class="border-r p-2 flex items-center gap-2">
                 <img
                     v-if="imageUrl(row.image_url ?? row.image)"
@@ -537,21 +552,21 @@ const openImeiList = (row) => {
                 </div>
                 {{ row.name }}
             </td>
-
+ 
             <td class="border-r px-1 py-2 text-center whitespace-nowrap">
                 <div class="font-medium text-slate-700 text-xs">
                     {{ productUnitName(row) }}
                 </div>
             </td>
-
+ 
             <td class="border-r p-2 text-right">
                 {{ productSellPriceLabel(row) }}
             </td>
-
+ 
             <td class="border-r p-2 text-center">
                 {{ productStockDisplay(row) }}
             </td>
-
+ 
             <!-- STATUS -->
             <td class="border-r p-2 text-center">
                 <button
@@ -566,7 +581,7 @@ const openImeiList = (row) => {
                     />
                 </button>
             </td>
-
+ 
             <!-- ACTION -->
             <td class="text-center p-1" @click.stop>
                 <div class="flex">
@@ -575,13 +590,13 @@ const openImeiList = (row) => {
                             <Printer size="17" class="text-gray-500 " />
                         </button>
                     </Tooltip>
-
+ 
                     <Tooltip text="Sửa">
                         <button @click="openEdit(row)" title="Sửa" class="p-1 hover:bg-gray-200 rounded">
                             <SquarePen size="17" class="text-blue-500" />
                         </button>
                     </Tooltip>
-
+ 
                     <Tooltip text="Cập nhật giá">
                         <button
                             type="button"
@@ -591,7 +606,7 @@ const openImeiList = (row) => {
                             <DollarSign size="17" class="text-emerald-600" />
                         </button>
                     </Tooltip>
-
+ 
                     <Tooltip text="Chuyển vào thùng rác" position="top">
                         <button @click="destroy(row.id)"  class="p-1 hover:bg-gray-200 rounded">
                             <Trash2 size="17" class="text-red-500" />
@@ -599,13 +614,13 @@ const openImeiList = (row) => {
                     </Tooltip>
                 </div>
             </td>
-
+ 
         </template>
     </BaseTable>
-
+ 
 </div>
 </template>
-
+ 
 <style>
 @keyframes scaleIn {
   from { transform: scale(0.95); opacity: 0 }
@@ -615,3 +630,4 @@ const openImeiList = (row) => {
   animation: scaleIn 0.15s ease;
 }
 </style>
+ 
