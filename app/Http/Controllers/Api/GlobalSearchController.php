@@ -118,8 +118,8 @@ class GlobalSearchController extends Controller
         }
 
         if ($user->can('brands.view')) {
-            $results = $results->concat(Brand::query()->with('category:id,name')->where('name', 'like', $like)->limit(4)->get()
-                ->map(fn (Brand $brand) => $this->result('Thương hiệu', $brand->name, $brand->category?->name, route('brands.index', ['open_brand' => $brand->id], false))));
+            $results = $results->concat(Brand::query()->with('categories:id,name')->where('name', 'like', $like)->limit(4)->get()
+                ->map(fn (Brand $brand) => $this->result('Thương hiệu', $brand->name, $brand->categories->pluck('name')->join(', ') ?: null, route('brands.index', ['open_brand' => $brand->id], false))));
         }
 
         if ($user->can('settings.view')) $results = $results->concat(Unit::query()->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('short_name', 'like', $like))

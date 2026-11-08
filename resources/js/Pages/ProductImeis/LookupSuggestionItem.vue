@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Building2, PackageCheck, ReceiptText, Smartphone, UserRound, Users, Wrench } from 'lucide-vue-next'
+import { Building2, Package, PackageCheck, ReceiptText, Smartphone, UserRound, Users, Wrench } from 'lucide-vue-next'
 
 // Một dòng gợi ý / kết quả trong trang Tra cứu: thiết bị (imei), phiếu sửa (repair),
 // khách hàng, người dùng, nhà cung cấp, hóa đơn, phiếu nhập, hoặc dòng thông tin (line, không bấm được).
@@ -21,6 +21,7 @@ const toneClass = {
     amber: 'bg-amber-100 text-amber-700',
     emerald: 'bg-emerald-100 text-emerald-700',
     purple: 'bg-purple-100 text-purple-700',
+    indigo: 'bg-indigo-100 text-indigo-700',
 }
 const tileClass = {
     imei: 'bg-indigo-50 text-indigo-600',
@@ -30,10 +31,11 @@ const tileClass = {
     supplier: 'bg-amber-50 text-amber-600',
     sale: 'bg-emerald-50 text-emerald-600',
     import: 'bg-purple-50 text-purple-600',
+    product: 'bg-indigo-50 text-indigo-600',
 }
 const icon = computed(() => ({
     imei: Smartphone, repair: Wrench, customer: UserRound, user: Users,
-    supplier: Building2, sale: ReceiptText, import: PackageCheck,
+    supplier: Building2, sale: ReceiptText, import: PackageCheck, product: Package,
 }[type.value] || Smartphone))
 
 const title = computed(() => {

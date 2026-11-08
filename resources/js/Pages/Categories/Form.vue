@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, h } from 'vue'
+import { ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -69,23 +69,9 @@ const handleAttrKey = (e) => {
 }
 
 
-const addAttribute = () => {
-    form.attributes.push({
-        name: '',
-        options: []
-    })
-}
 
 const removeAttribute = (index) => {
     form.attributes.splice(index, 1)
-}
-
-const addOption = (attr) => {
-    attr.options.push('')
-}
-
-const removeOption = (attr, index) => {
-    attr.options.splice(index, 1)
 }
 
 watch(() => props.category, (c) => {
@@ -103,7 +89,8 @@ watch(() => props.category, (c) => {
     form.attributes = (c.attributes ?? []).map(attr => ({
         id: attr.id ?? null,
         name: attr.name ?? '',
-        options: [...(attr.options ?? [])]
+        // Server trả `values: [{ value }]`; giữ lại để không làm mất giá trị khi lưu.
+        options: (attr.values ?? attr.options ?? []).map(v => typeof v === 'string' ? v : v.value)
     }))
 
 }, {
@@ -160,6 +147,7 @@ watch(() => props.category, (c) => {
                 />
 
             </div>
+            <p v-if="form.errors.attributes" class="mx-2 text-sm text-red-500">{{ form.errors.attributes }}</p>
         </div>
 
     </div>

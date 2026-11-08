@@ -1,8 +1,7 @@
 <script setup>
 import { router, usePage } from '@inertiajs/vue3'
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import BrandForm from './Form.vue'
 import { FilePlus, SquarePen, Trash2 } from 'lucide-vue-next'
 import TrashModal from '@/Components/TrashModal.vue'
@@ -41,11 +40,11 @@ const columns = [
 
     { key: 'name', label: 'Tên', sortable: true },
 
-    { 
-        key: 'category_name', 
-        label: 'Danh mục', 
-        sortable: true,
-        width: '150px'
+    // Thương hiệu dùng chung: một thương hiệu có thể thuộc nhiều danh mục (không sắp xếp theo cột này).
+    {
+        key: 'categories',
+        label: 'Danh mục',
+        width: '280px'
     },
 
     { 
@@ -169,6 +168,8 @@ const toggleStatus = (id) => {
 
     router.patch(`/brands/${id}/toggle-status`, {}, {
         preserveScroll: true,
+        // hoàn tác nếu server báo lỗi
+        onError: () => { if (item) item.is_active = !item.is_active },
         onFinish: () => {
             loadingStatus.value = null
         }
@@ -187,7 +188,10 @@ const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: or
         title="Danh mục & Thương hiệu"
     />
 
-    <CatalogTabs />
+    <CatalogTabs>
+        <ActionButton @click="openCreate"><FilePlus :size="16" />Thêm</ActionButton>
+        <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
+    </CatalogTabs>
 
     <DataPanel detached>
         <template #header>
@@ -202,7 +206,6 @@ const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: or
                         ...categories.map(c => ({ value: c.id, label: c.name }))
                     ]"
                 /></template>
-                <template #actions><ActionButton @click="openCreate"><FilePlus :size="16" />Thêm</ActionButton><ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton></template>
             </ListToolbar>
         </template>
 
@@ -223,15 +226,25 @@ const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: or
                 </td>
 
                 <td class="px-3.5 py-2.5">
-                    {{ row.category?.name || '---' }}
+                    <div v-if="row.categories?.length" class="flex flex-wrap gap-1">
+                        <span
+                            v-for="c in row.categories"
+                            :key="c.id"
+                            class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700"
+                        >{{ c.name }}</span>
+                    </div>
+                    <span v-else class="text-slate-400">---</span>
                 </td>
 
                 <td class="px-3.5 py-2.5 text-center">
                     <button
                         @click.stop="toggleStatus(row.id)"
                         :disabled="loadingStatus === row.id"
+                        role="switch"
+                        :aria-checked="!!row.is_active"
+                        aria-label="Bật/tắt trạng thái"
                         class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                        :class="row.is_active ? 'bg-green-500 ' : 'bg-gray-300'"
+                        :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'"
                     >
                         <span
                             class="inline-block h-4 w-4 transform rounded-full bg-white transition"
@@ -243,19 +256,43 @@ const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: or
                 <td class="px-3.5 py-2.5 text-center" @click.stop>
                     <div class="app-row-actions">
                         <Tooltip text="Sửa">
-                            <button type="button" @click="openEdit(row)" title="Sửa" class="app-row-action app-row-action--edit">
+                            <button type="button" @click="openEdit(row)" class="app-row-action app-row-action--edit">
                                 <SquarePen class="h-4 w-4" />
                             </button>
                         </Tooltip>
 
                         <Tooltip text="Chuyển vào thùng rác" position="top">
-                            <button type="button" @click="destroy(row.id)"  class="app-row-action app-row-action--danger">
+                            <button type="button" @click="destroy(row.id)" class="app-row-action app-row-action--danger">
                                 <Trash2 class="h-4 w-4" />
                             </button>
                         </Tooltip>
                     </div>
                 </td>
 
+            </template>
+
+            <!-- Thẻ trên điện thoại: có công tắc trạng thái và nút xóa -->
+            <template #mobile-actions="{ row }">
+                <div class="flex items-center justify-between gap-3 pl-6" @click.stop>
+                    <button
+                        type="button"
+                        @click="toggleStatus(row.id)"
+                        :disabled="loadingStatus === row.id"
+                        role="switch"
+                        :aria-checked="!!row.is_active"
+                        aria-label="Bật/tắt trạng thái"
+                        class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                        :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'"
+                    >
+                        <span
+                            class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                            :class="row.is_active ? 'translate-x-6' : 'translate-x-1'"
+                        />
+                    </button>
+                    <button type="button" @click="destroy(row.id)" class="app-row-action app-row-action--danger" aria-label="Chuyển vào thùng rác">
+                        <Trash2 class="h-4 w-4" />
+                    </button>
+                </div>
             </template>
         </BaseTable>
     </DataPanel>

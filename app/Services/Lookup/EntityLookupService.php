@@ -3,6 +3,7 @@
 namespace App\Services\Lookup;
 
 use App\Models\Customer;
+use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
 use App\Models\Repair;
@@ -22,7 +23,47 @@ use Illuminate\Support\Str;
  */
 class EntityLookupService
 {
-    public const TYPES = ['customer', 'user', 'supplier', 'sale', 'import'];
+    public const TYPES = ['customer', 'user', 'supplier', 'sale', 'import', 'product'];
+
+    /** Quyền xem tương ứng — người dùng không có quyền thì không tra cứu được loại dữ liệu đó. */
+    public const PERMISSIONS = [
+        'customer' => 'customers.view',
+        'user' => 'users.view',
+        'supplier' => 'suppliers.view',
+        'sale' => 'sales.view',
+        'import' => 'stock_imports.view',
+        'product' => 'products.view',
+    ];
+
+    /** Tách từ khóa thành các từ: mọi từ đều phải xuất hiện (ở bất kỳ trường nào) thì mới khớp. */
+    public static function tokens(string $keyword): array
+    {
+        return collect(preg_split('/\s+/u', trim($keyword)) ?: [])
+            ->filter(fn ($token) => $token !== '')
+            ->map(fn ($token) => mb_substr($token, 0, 60))
+            ->unique()
+            ->take(6)
+            ->values()
+            ->all();
+    }
+
+    public static function likeOf(string $value): string
+    {
+        return '%' . addcslashes($value, '\\%_') . '%';
+    }
+
+    /** Chữ thường, bỏ dấu tiếng Việt — khớp với cột search_text của hệ thống. */
+    public static function normalized(string $value): string
+    {
+        return Str::lower(Str::ascii($value));
+    }
+
+    private static function phoneLikeOf(string $token): string
+    {
+        $digits = preg_replace('/\D+/', '', $token) ?? '';
+
+        return strlen($digits) >= 3 ? '%' . $digits . '%' : self::likeOf($token);
+    }
 
     private const SALE_STATUS = [
         'completed' => 'Hoàn tất', 'paid' => 'Đã thanh toán', 'cancelled' => 'Đã hủy', 'pending' => 'Đang chờ',
@@ -38,64 +79,107 @@ class EntityLookupService
 
     public function suggest(string $type, string $keyword, int $limit): Collection
     {
-        $like = '%' . addcslashes($keyword, '\\%_') . '%';
-        $digits = preg_replace('/\D+/', '', $keyword) ?? '';
-        $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : $like;
+        $tokens = self::tokens($keyword);
+
+        if ($tokens === []) {
+            return collect();
+        }
 
         return match ($type) {
-            'customer' => Customer::query()
-                ->where(fn ($w) => $w->where('full_name', 'like', $like)
-                    ->orWhere('code', 'like', $like)
-                    ->orWhere('cccd', 'like', $like)
-                    ->orWhere('phone', 'like', $phoneLike))
-                ->orderBy('full_name')
-                ->limit($limit)
-                ->get()
+            'customer' => $this->tokenQuery(Customer::query(), $tokens, fn ($w, $t) => $w
+                    ->where('full_name', 'like', self::likeOf($t))
+                    ->orWhere('search_text', 'like', self::likeOf(self::normalized($t)))
+                    ->orWhere('code', 'like', self::likeOf($t))
+                    ->orWhere('cccd', 'like', self::likeOf($t))
+                    ->orWhere('email', 'like', self::likeOf($t))
+                    ->orWhere('phone', 'like', self::phoneLikeOf($t)))
+                ->orderBy('full_name')->limit($limit)->get()
                 ->map(fn (Customer $c) => $this->customerItem($c, $keyword)),
 
-            'user' => User::query()
-                ->where(fn ($w) => $w->where('name', 'like', $like)
-                    ->orWhere('username', 'like', $like)
-                    ->orWhere('phone', 'like', $phoneLike))
-                ->orderBy('name')
-                ->limit($limit)
-                ->get()
+            'user' => $this->tokenQuery(User::query(), $tokens, fn ($w, $t) => $w
+                    ->where('name', 'like', self::likeOf($t))
+                    ->orWhere('username', 'like', self::likeOf($t))
+                    ->orWhere('email', 'like', self::likeOf($t))
+                    ->orWhere('phone', 'like', self::phoneLikeOf($t)))
+                ->orderBy('name')->limit($limit)->get()
                 ->map(fn (User $u) => $this->userItem($u, $keyword)),
 
-            'supplier' => Supplier::query()
-                ->where(fn ($w) => $w->where('name', 'like', $like)
-                    ->orWhere('code', 'like', $like)
-                    ->orWhere('email', 'like', $like)
-                    ->orWhere('phone', 'like', $phoneLike))
-                ->orderBy('name')
-                ->limit($limit)
-                ->get()
+            'supplier' => $this->tokenQuery(Supplier::query(), $tokens, fn ($w, $t) => $w
+                    ->where('name', 'like', self::likeOf($t))
+                    ->orWhere('search_text', 'like', self::likeOf(self::normalized($t)))
+                    ->orWhere('code', 'like', self::likeOf($t))
+                    ->orWhere('email', 'like', self::likeOf($t))
+                    ->orWhere('phone', 'like', self::phoneLikeOf($t)))
+                ->orderBy('name')->limit($limit)->get()
                 ->map(fn (Supplier $s) => $this->supplierItem($s, $keyword)),
 
-            'sale' => Sale::query()
-                ->with('customer:id,full_name,phone')
-                ->where(fn ($w) => $w->where('code', 'like', $like)
-                    ->orWhereHas('customer', fn ($c) => $c->where('full_name', 'like', $like)
-                        ->orWhere('phone', 'like', $phoneLike)))
-                ->latest('id')
-                ->limit($limit)
-                ->get()
+            'sale' => $this->tokenQuery(Sale::query()->with('customer:id,full_name,phone'), $tokens, fn ($w, $t) => $w
+                    ->where('code', 'like', self::likeOf($t))
+                    ->orWhereHas('customer', fn ($c) => $c->where('full_name', 'like', self::likeOf($t))
+                        ->orWhere('search_text', 'like', self::likeOf(self::normalized($t)))
+                        ->orWhere('phone', 'like', self::phoneLikeOf($t))))
+                ->latest('id')->limit($limit)->get()
                 ->map(fn (Sale $s) => $this->saleItem($s, $keyword)),
 
-            'import' => StockImport::query()
-                ->with('supplier:id,name,phone')
-                ->where(fn ($w) => $w->where('code', 'like', $like)
-                    ->orWhere('party_name', 'like', $like)
-                    ->orWhere('party_phone', 'like', $phoneLike)
-                    ->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', $like)
-                        ->orWhere('phone', 'like', $phoneLike)))
-                ->latest('id')
-                ->limit($limit)
-                ->get()
+            'import' => $this->tokenQuery(StockImport::query()->with('supplier:id,name,phone'), $tokens, fn ($w, $t) => $w
+                    ->where('code', 'like', self::likeOf($t))
+                    ->orWhere('party_name', 'like', self::likeOf($t))
+                    ->orWhere('party_phone', 'like', self::phoneLikeOf($t))
+                    ->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', self::likeOf($t))
+                        ->orWhere('search_text', 'like', self::likeOf(self::normalized($t)))
+                        ->orWhere('phone', 'like', self::phoneLikeOf($t))))
+                ->latest('id')->limit($limit)->get()
                 ->map(fn (StockImport $i) => $this->importItem($i, $keyword)),
+
+            'product' => $this->suggestProducts($keyword, $limit),
 
             default => collect(),
         };
+    }
+
+    /**
+     * Sản phẩm trong danh mục hàng hóa (kể cả sản phẩm không quản lý theo IMEI như màn hình, linh kiện).
+     * $mode: null = tất cả · 'sold' = đã từng bán · 'in_stock' = còn tồn kho.
+     * Với 'sold' / 'in_stock' bỏ qua sản phẩm quản lý theo IMEI vì từng thiết bị đã được liệt kê riêng.
+     */
+    public function suggestProducts(string $keyword, int $limit, ?string $mode = null): Collection
+    {
+        $tokens = self::tokens($keyword);
+
+        if ($tokens === []) {
+            return collect();
+        }
+
+        $query = Product::query()->with(['category:id,name', 'brand:id,name']);
+
+        $this->tokenQuery($query, $tokens, fn ($w, $t) => $w
+            ->where('name', 'like', self::likeOf($t))
+            ->orWhere('search_text', 'like', self::likeOf(self::normalized($t)))
+            ->orWhere('sku', 'like', self::likeOf($t))
+            ->orWhere('barcode', 'like', self::likeOf($t))
+            ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', self::likeOf($t))
+                ->orWhere('barcode', 'like', self::likeOf($t))
+                ->orWhere('attributes', 'like', self::likeOf($t))));
+
+        if ($mode === 'in_stock') {
+            $query->where('stock', '>', 0)->where('manage_stock_by_serial', false);
+        } elseif ($mode === 'sold') {
+            $query->where('manage_stock_by_serial', false)
+                ->whereIn('id', fn ($sub) => $sub->select('product_id')->from('sale_items')->whereNotNull('product_id'));
+        }
+
+        return $query->orderBy('name')->limit($limit)->get()
+            ->map(fn (Product $p) => $this->productItem($p, $keyword));
+    }
+
+    /** Áp từng từ khóa: mọi từ đều phải khớp ít nhất một trường. */
+    private function tokenQuery($query, array $tokens, \Closure $match)
+    {
+        foreach ($tokens as $token) {
+            $query->where(fn ($w) => $match($w, $token));
+        }
+
+        return $query;
     }
 
     /* ------------------------------------------------------------------
@@ -110,6 +194,7 @@ class EntityLookupService
             'supplier' => $this->supplierProfile($id),
             'sale' => $this->saleProfile($id),
             'import' => $this->importProfile($id),
+            'product' => $this->productProfile($id),
             default => null,
         };
     }
@@ -227,6 +312,68 @@ class EntityLookupService
         ], [
             ['title' => 'Phiếu nhập gần đây', 'items' => $imports],
             ['title' => 'Thiết bị đã nhập từ nhà cung cấp', 'items' => $devices],
+        ]);
+    }
+
+
+    private function productProfile(int $id): ?array
+    {
+        $product = Product::query()
+            ->with(['category:id,name', 'brand:id,name', 'unit:id,name', 'variants'])
+            ->find($id);
+
+        if (! $product) {
+            return null;
+        }
+
+        $devices = ProductImei::query()
+            ->with(['product:id,name,sku', 'variant:id,product_id,sku,attributes'])
+            ->where('product_id', $product->id)
+            ->latest('id')
+            ->limit(60)
+            ->get()
+            ->map(fn (ProductImei $imei) => $this->deviceItem($imei));
+
+        $variants = $product->variants->map(fn ($variant) => [
+            'type' => 'line',
+            'title' => $this->variantLabel($variant) ?: ($variant->sku ?: 'Biến thể'),
+            'lines' => array_values(array_filter([
+                $variant->sku ? 'SKU ' . $variant->sku : null,
+                'Tồn: ' . (float) $variant->stock,
+                'Giá nhập ' . $this->money($variant->cost_price),
+                'Giá bán ' . $this->money($variant->sell_price),
+            ])),
+        ])->values();
+
+        $batches = $product->stockBatches()
+            ->where('remaining_quantity', '>', 0)
+            ->latest('id')
+            ->limit(15)
+            ->get()
+            ->map(fn ($batch) => [
+                'type' => 'line',
+                'title' => 'Lô nhập ' . ($batch->imported_at ? \Illuminate\Support\Carbon::parse($batch->imported_at)->format('d/m/Y') : ''),
+                'lines' => [
+                    'Còn: ' . (float) $batch->remaining_quantity,
+                    'Giá nhập ' . $this->money($batch->cost_price),
+                    'Giá bán ' . $this->money($batch->sell_price),
+                ],
+            ])->values();
+
+        return $this->entity('product', 'Sản phẩm', $product->name, $product->sku, [
+            ['label' => 'Mã vạch', 'value' => $product->barcode],
+            ['label' => 'Danh mục', 'value' => $product->category?->name],
+            ['label' => 'Thương hiệu', 'value' => $product->brand?->name],
+            ['label' => 'Đơn vị', 'value' => $product->unit?->name],
+            ['label' => 'Giá nhập', 'value' => $this->money($product->cost_price)],
+            ['label' => 'Giá bán', 'value' => $this->money($product->sell_price)],
+            ['label' => 'Tồn kho', 'value' => (float) $product->stock],
+            ['label' => 'Bảo hành', 'value' => $product->warranty_days ? $product->warranty_days . ' ngày' : null],
+            ['label' => 'Quản lý theo IMEI', 'value' => $product->manage_stock_by_serial ? 'Có' : 'Không'],
+        ], [
+            ['title' => 'Thiết bị IMEI / Serial', 'items' => $devices],
+            ['title' => 'Biến thể', 'items' => $variants],
+            ['title' => 'Lô hàng còn tồn', 'items' => $batches],
         ]);
     }
 
@@ -356,6 +503,20 @@ class EntityLookupService
             'customer_phone' => $repair->contact_phone,
             'match' => '',
         ];
+    }
+
+    private function productItem(Product $p, string $keyword = ''): array
+    {
+        return $this->generic('product', $p->id, $p->name, array_filter([
+            $p->sku,
+            $p->brand?->name,
+            'Tồn: ' . (float) $p->stock,
+            $this->money($p->sell_price),
+        ]), 'Sản phẩm', 'indigo', $keyword, [
+            'Tên sản phẩm' => [$p->name],
+            'SKU / Mã vạch' => [$p->sku, $p->barcode],
+            'Thương hiệu' => [$p->brand?->name],
+        ]);
     }
 
     private function customerItem(Customer $c, string $keyword = ''): array

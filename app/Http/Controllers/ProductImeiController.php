@@ -20,7 +20,7 @@ use Inertia\Response;
 
 class ProductImeiController extends Controller
 {
-    private const LOOKUP_SCOPES = ['all', 'sold', 'in_stock', 'repair', 'customer', 'user', 'supplier', 'sale', 'import'];
+    private const LOOKUP_SCOPES = ['all', 'sold', 'in_stock', 'repair', 'customer', 'user', 'supplier', 'sale', 'import', 'product'];
 
     public function index(
         Request $request,
@@ -322,11 +322,23 @@ class ProductImeiController extends Controller
         ]);
     }
 
-    private function lookupScope(Request $request): string
+    /** Phạm vi tìm kiếm: có thể chọn nhiều, truyền dạng "sold,customer,product". Rỗng hoặc có "all" = toàn bộ. */
+    private function lookupScopes(Request $request): array
     {
-        $scope = (string) $request->query('scope', 'all');
+        $scopes = collect(explode(',', (string) $request->query('scope', 'all')))
+            ->map(fn ($scope) => trim($scope))
+            ->filter(fn ($scope) => in_array($scope, self::LOOKUP_SCOPES, true))
+            ->unique()
+            ->values();
 
-        return in_array($scope, self::LOOKUP_SCOPES, true) ? $scope : 'all';
+        return $scopes->isEmpty() || $scopes->contains('all') ? ['all'] : $scopes->all();
+    }
+
+    private function allowed(Request $request, string $permission): bool
+    {
+        $user = $request->user();
+
+        return $user ? $user->can($permission) : false;
     }
 
     private function searchLookup(Request $request): JsonResponse
@@ -338,50 +350,48 @@ class ProductImeiController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $entities = app(EntityLookupService::class);
         $type = (string) $request->query('type', '');
 
-        // Chọn một đối tượng (khách hàng, người dùng, nhà cung cấp, hóa đơn, phiếu nhập).
-        if ($type !== '' && $request->filled('id')) {
-            return $this->resolveItem(['type' => $type, 'id' => (int) $request->query('id')]);
+        // Chọn một kết quả cụ thể (thiết bị, phiếu sửa, khách hàng, sản phẩm, hóa đơn...).
+        if ($request->filled('repair_id')) {
+            return $this->resolveItem(['type' => 'repair', 'repair_id' => (int) $request->query('repair_id')], $request);
         }
 
         if ($request->filled('id')) {
-            return $this->resolveItem(['type' => 'imei', 'id' => (int) $request->query('id')]);
-        }
-
-        if ($request->filled('repair_id')) {
-            return $this->resolveItem(['type' => 'repair', 'repair_id' => (int) $request->query('repair_id')]);
+            return $this->resolveItem(['type' => $type !== '' ? $type : 'imei', 'id' => (int) $request->query('id')], $request);
         }
 
         $keyword = trim((string) $request->query('q'));
-        $scope = $this->lookupScope($request);
+        $scopes = $this->lookupScopes($request);
 
         if ($keyword === '') {
             return $this->noMatchResponse();
         }
 
         // Khớp chính xác IMEI / Serial luôn được ưu tiên — nhưng vẫn phải đúng phạm vi đang chọn.
-        if (in_array($scope, ['all', 'sold', 'in_stock', 'repair'], true) && ($exact = $this->findImeiByCode($keyword))) {
-            $allowed = match ($scope) {
+        if ($this->allowed($request, 'products.view') && ($exact = $this->findImeiByCode($keyword))) {
+            $allowed = collect($scopes)->contains(fn (string $scope) => match ($scope) {
+                'all' => true,
                 'sold' => $exact->status === ProductImei::STATUS_SOLD,
                 'in_stock' => $exact->status === ProductImei::STATUS_IN_STOCK,
-                'repair' => Repair::query()->where(fn ($q) => $q->where('imei', $keyword)->orWhere('serial', $keyword)
-                    ->orWhere('imei', $exact->imei)->orWhere('serial', $exact->serial ?: $keyword))->exists(),
-                default => true,
-            };
+                'repair' => Repair::query()->where(fn ($q) => $q->where('imei', $exact->imei)
+                    ->orWhere('serial', $exact->serial ?: $exact->imei))->exists(),
+                default => false,
+            });
 
-            return $allowed ? $this->selectionResponse($exact, null) : $this->noMatchResponse();
+            if ($allowed) {
+                return $this->selectionResponse($exact, null);
+            }
         }
 
-        $items = $this->scopeSuggestions($keyword, $scope, 20, $entities);
+        $items = $this->scopeSuggestions($keyword, $scopes, 20, $request);
 
         if ($items->isEmpty()) {
             return $this->noMatchResponse();
         }
 
         if ($items->count() === 1) {
-            return $this->resolveItem($items->first());
+            return $this->resolveItem($items->first(), $request);
         }
 
         return response()->json([
@@ -392,12 +402,16 @@ class ProductImeiController extends Controller
         ]);
     }
 
-    /** Mở chi tiết một kết quả theo loại của nó. */
-    private function resolveItem(array $item): JsonResponse
+    /** Mở chi tiết một kết quả theo loại của nó (có kiểm tra quyền xem). */
+    private function resolveItem(array $item, Request $request): JsonResponse
     {
         $type = $item['type'] ?? '';
 
         if ($type === 'imei') {
+            if (! $this->allowed($request, 'products.view')) {
+                return $this->noMatchResponse();
+            }
+
             $imei = ProductImei::query()
                 ->with(['product:id,name,sku,warranty_days', 'variant:id,product_id,sku,attributes'])
                 ->find((int) ($item['id'] ?? 0));
@@ -406,6 +420,10 @@ class ProductImeiController extends Controller
         }
 
         if ($type === 'repair') {
+            if (! $this->allowed($request, 'repairs.view')) {
+                return $this->noMatchResponse();
+            }
+
             $repair = Repair::query()->find((int) ($item['repair_id'] ?? 0));
 
             if (! $repair) {
@@ -417,49 +435,81 @@ class ProductImeiController extends Controller
             return $this->selectionResponse($code !== '' ? $this->findImeiByCode($code) : null, $repair);
         }
 
-        $profile = in_array($type, EntityLookupService::TYPES, true)
-            ? app(EntityLookupService::class)->profile($type, (int) ($item['id'] ?? 0))
-            : null;
+        $permission = EntityLookupService::PERMISSIONS[$type] ?? null;
+
+        if (! $permission || ! $this->allowed($request, $permission)) {
+            return $this->noMatchResponse();
+        }
+
+        $profile = app(EntityLookupService::class)->profile($type, (int) ($item['id'] ?? 0));
 
         return $profile ? response()->json($profile) : $this->noMatchResponse();
     }
 
     /**
-     * Gợi ý theo phạm vi tìm kiếm:
-     *  all (mọi thứ) · sold (thiết bị đã bán) · in_stock (thiết bị trong kho) · repair (đã/đang sửa)
-     *  customer · user · supplier · sale (hóa đơn) · import (phiếu nhập)
+     * Gợi ý theo các phạm vi đã chọn (gộp kết quả, bỏ trùng):
+     *  all · sold (đã bán) · in_stock (trong kho) · repair (đã/đang sửa)
+     *  product · customer · user · supplier · sale (hóa đơn) · import (phiếu nhập)
      */
-    private function scopeSuggestions(string $keyword, string $scope, int $limit, EntityLookupService $entities): Collection
+    private function scopeSuggestions(string $keyword, array $scopes, int $limit, Request $request): Collection
     {
-        if (in_array($scope, EntityLookupService::TYPES, true)) {
-            return $entities->suggest($scope, $keyword, $limit)->values();
+        $share = in_array('all', $scopes, true) ? $limit : max(4, (int) ceil($limit / max(1, count($scopes))));
+
+        $result = collect();
+
+        foreach ($scopes as $scope) {
+            $result = $result->concat($this->singleScope($keyword, $scope, $share, $request));
+        }
+
+        return $result
+            ->unique(fn (array $item) => ($item['type'] ?? '') . '-' . ($item['id'] ?? $item['repair_id'] ?? ''))
+            ->values();
+    }
+
+    private function singleScope(string $keyword, string $scope, int $limit, Request $request): Collection
+    {
+        $entities = app(EntityLookupService::class);
+        $canProducts = $this->allowed($request, 'products.view');
+        $canRepairs = $this->allowed($request, 'repairs.view');
+
+        if (isset(EntityLookupService::PERMISSIONS[$scope])) {
+            return $this->allowed($request, EntityLookupService::PERMISSIONS[$scope])
+                ? $entities->suggest($scope, $keyword, $limit)->values()
+                : collect();
         }
 
         if ($scope === 'repair') {
-            $repairs = $this->searchRepairs($keyword, $limit);
-
-            return $this->buildSuggestions(collect(), $repairs, $keyword);
+            return $canRepairs
+                ? $this->buildSuggestions(collect(), $this->searchRepairs($keyword, $limit), $keyword)
+                : collect();
         }
 
         if ($scope === 'sold' || $scope === 'in_stock') {
-            [$imeis] = $this->searchCandidates(
-                $keyword,
-                $limit,
-                0,
-                $scope === 'sold' ? ProductImei::STATUS_SOLD : ProductImei::STATUS_IN_STOCK
-            );
+            if (! $canProducts) {
+                return collect();
+            }
 
-            return $this->buildSuggestions($imeis, collect(), $keyword);
+            $status = $scope === 'sold' ? ProductImei::STATUS_SOLD : ProductImei::STATUS_IN_STOCK;
+            [$imeis] = $this->searchCandidates($keyword, $limit, 0, $status);
+
+            // Kèm các sản phẩm không quản lý theo IMEI (màn hình, linh kiện...) đã bán / còn tồn.
+            return $this->buildSuggestions($imeis, collect(), $keyword)
+                ->concat($entities->suggestProducts($keyword, $limit, $scope));
         }
 
-        // all: thiết bị + phiếu sửa máy ngoài + khách hàng + người dùng + nhà cung cấp + hóa đơn + phiếu nhập
-        $each = max(2, intdiv($limit, 3));
-        [$imeis, $repairOnly] = $this->searchCandidates($keyword, $limit, $each);
+        // all: thiết bị + phiếu sửa máy ngoài + sản phẩm + khách hàng + người dùng + nhà cung cấp + hóa đơn + phiếu nhập
+        $each = max(5, intdiv($limit, 3));
+        $result = collect();
 
-        $result = $this->buildSuggestions($imeis, $repairOnly, $keyword);
+        if ($canProducts || $canRepairs) {
+            [$imeis, $repairOnly] = $this->searchCandidates($keyword, $canProducts ? $limit : 0, $canRepairs ? $each : 0);
+            $result = $this->buildSuggestions($canProducts ? $imeis : collect(), $canRepairs ? $repairOnly : collect(), $keyword);
+        }
 
         foreach (EntityLookupService::TYPES as $type) {
-            $result = $result->concat($entities->suggest($type, $keyword, $each));
+            if ($this->allowed($request, EntityLookupService::PERMISSIONS[$type])) {
+                $result = $result->concat($entities->suggest($type, $keyword, $each));
+            }
         }
 
         return $result->values();
@@ -467,35 +517,38 @@ class ProductImeiController extends Controller
 
     private function searchRepairs(string $keyword, int $limit): Collection
     {
-        $like = '%' . addcslashes($keyword, '\\%_') . '%';
-        $digits = preg_replace('/\D+/', '', $keyword) ?? '';
-        $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : null;
-
         return Repair::query()
             ->with('customer:id,full_name,phone')
-            ->where($this->repairMatcher($like, $phoneLike))
+            ->where($this->repairMatcher($keyword))
             ->latest('id')
             ->limit($limit)
             ->get();
     }
 
-    private function repairMatcher(string $like, ?string $phoneLike): \Closure
+    /** Phiếu sửa khớp từ khóa: mọi từ đều phải xuất hiện ở mã phiếu, tên máy, IMEI, khách hoặc SĐT. */
+    private function repairMatcher(string $keyword): \Closure
     {
-        // Bảng repairs không có cột tên/SĐT khách: khách nằm ở quan hệ customer, SĐT liên hệ ở contact_phone.
-        return function ($query) use ($like, $phoneLike): void {
-            $query
-                ->where('code', 'like', $like)
-                ->orWhere('device_name', 'like', $like)
-                ->orWhere('imei', 'like', $like)
-                ->orWhere('serial', 'like', $like)
-                ->orWhereHas('customer', function ($customer) use ($like, $phoneLike): void {
-                    $customer->where('full_name', 'like', $like)
-                        ->orWhere('code', 'like', $like)
-                        ->orWhere('phone', 'like', $phoneLike ?: $like);
-                });
+        $tokens = EntityLookupService::tokens($keyword);
 
-            if ($phoneLike) {
-                $query->orWhere('contact_phone', 'like', $phoneLike);
+        // Bảng repairs không có cột tên/SĐT khách: khách nằm ở quan hệ customer, SĐT liên hệ ở contact_phone.
+        return function ($query) use ($tokens): void {
+            foreach ($tokens as $token) {
+                $like = EntityLookupService::likeOf($token);
+                $digits = preg_replace('/\D+/', '', $token) ?? '';
+                $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : $like;
+
+                $query->where(function ($w) use ($like, $phoneLike, $token): void {
+                    $w->where('code', 'like', $like)
+                        ->orWhere('device_name', 'like', $like)
+                        ->orWhere('imei', 'like', $like)
+                        ->orWhere('serial', 'like', $like)
+                        ->orWhere('contact_phone', 'like', $phoneLike)
+                        ->orWhereHas('customer', fn ($customer) => $customer
+                            ->where('full_name', 'like', $like)
+                            ->orWhere('search_text', 'like', EntityLookupService::likeOf(EntityLookupService::normalized($token)))
+                            ->orWhere('code', 'like', $like)
+                            ->orWhere('phone', 'like', $phoneLike));
+                });
             }
         };
     }
@@ -524,16 +577,16 @@ class ProductImeiController extends Controller
     private function suggestions(Request $request): JsonResponse
     {
         $keyword = mb_substr(trim((string) $request->query('q', '')), 0, 100);
-        $scope = $this->lookupScope($request);
+        $scopes = $this->lookupScopes($request);
 
         if (mb_strlen($keyword) < 2) {
-            return response()->json(['query' => $keyword, 'scope' => $scope, 'suggestions' => []]);
+            return response()->json(['query' => $keyword, 'scope' => $scopes, 'suggestions' => []]);
         }
 
         return response()->json([
             'query' => $keyword,
-            'scope' => $scope,
-            'suggestions' => $this->scopeSuggestions($keyword, $scope, $scope === 'all' ? 12 : 8, app(EntityLookupService::class)),
+            'scope' => $scopes,
+            'suggestions' => $this->scopeSuggestions($keyword, $scopes, in_array('all', $scopes, true) ? 12 : 8, $request),
         ]);
     }
 
@@ -545,19 +598,16 @@ class ProductImeiController extends Controller
      */
     private function searchCandidates(string $keyword, int $imeiLimit, int $repairLimit, ?string $status = null): array
     {
-        $like = '%' . addcslashes($keyword, '\\%_') . '%';
-        $digits = preg_replace('/\D+/', '', $keyword) ?? '';
-        $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : null;
+        $tokens = EntityLookupService::tokens($keyword);
 
-        // Bảng repairs không có cột tên/SĐT khách: khách nằm ở quan hệ customer, SĐT liên hệ ở contact_phone.
-        $repairMatch = $this->repairMatcher($like, $phoneLike);
-
-        $matchedRepairs = Repair::query()
-            ->with('customer:id,full_name,phone')
-            ->where($repairMatch)
-            ->latest('id')
-            ->limit(100)
-            ->get();
+        $matchedRepairs = $repairLimit > 0 || $imeiLimit > 0
+            ? Repair::query()
+                ->with('customer:id,full_name,phone')
+                ->where($this->repairMatcher($keyword))
+                ->latest('id')
+                ->limit(100)
+                ->get()
+            : collect();
 
         $repairCodes = $matchedRepairs
             ->pluck('imei')
@@ -566,43 +616,37 @@ class ProductImeiController extends Controller
             ->unique()
             ->values();
 
-        $imeis = ProductImei::query()
-            ->with([
-                'product:id,name,sku,warranty_days',
-                'variant:id,product_id,sku,attributes',
-                'saleItems' => fn ($query) => $query->latest('id'),
-                'saleItems.sale:id,code,customer_id,created_at',
-                'saleItems.sale.customer:id,full_name,phone',
-            ])
-            ->where(function ($query) use ($like, $phoneLike, $repairCodes): void {
-                $query
-                    ->where('imei', 'like', $like)
-                    ->orWhere('serial', 'like', $like)
-                    ->orWhereHas('product', fn ($product) => $product
-                        ->where('name', 'like', $like)
-                        ->orWhere('sku', 'like', $like))
-                    ->orWhereHas('variant', fn ($variant) => $variant
-                        ->where('sku', 'like', $like)
-                        ->orWhere('attributes', 'like', $like))
-                    ->orWhere('extra_info', 'like', $like)
-                    ->orWhereHas('saleItems.sale', fn ($sale) => $sale
-                        ->where('code', 'like', $like)
-                        ->orWhereHas('customer', function ($customer) use ($like, $phoneLike): void {
-                            $customer->where('full_name', 'like', $like)
-                                ->orWhere('phone', 'like', $phoneLike ?: $like);
-                        }));
+        $imeis = collect();
 
-                if ($repairCodes->isNotEmpty()) {
-                    $query
-                        ->orWhereIn('imei', $repairCodes)
-                        ->orWhereIn('serial', $repairCodes);
-                }
-            })
-            ->when($status, fn ($query) => $query->where('status', $status))
-            ->orderByRaw('CASE WHEN imei = ? OR serial = ? THEN 0 ELSE 1 END', [$keyword, $keyword])
-            ->latest('id')
-            ->limit($imeiLimit)
-            ->get();
+        if ($imeiLimit > 0) {
+            $imeis = ProductImei::query()
+                ->with([
+                    'product:id,name,sku,warranty_days',
+                    'variant:id,product_id,sku,attributes',
+                    'saleItems' => fn ($query) => $query->latest('id'),
+                    'saleItems.sale:id,code,customer_id,created_at',
+                    'saleItems.sale.customer:id,full_name,phone',
+                ])
+                ->where(function ($query) use ($tokens, $repairCodes): void {
+                    // Mọi từ khóa đều phải xuất hiện ở đâu đó (IMEI, máy, thiết bị, khách, hóa đơn...).
+                    $query->where(function ($direct) use ($tokens): void {
+                        foreach ($tokens as $token) {
+                            $direct->where(fn ($w) => $this->imeiTokenMatch($w, $token));
+                        }
+                    });
+
+                    if ($repairCodes->isNotEmpty()) {
+                        $query
+                            ->orWhereIn('imei', $repairCodes)
+                            ->orWhereIn('serial', $repairCodes);
+                    }
+                })
+                ->when($status, fn ($query) => $query->where('status', $status))
+                ->orderByRaw('CASE WHEN imei = ? OR serial = ? THEN 0 ELSE 1 END', [$keyword, $keyword])
+                ->latest('id')
+                ->limit($imeiLimit)
+                ->get();
+        }
 
         // Phiếu sửa của máy không có trong kho (khách mang máy ngoài đến sửa).
         $knownCodes = $imeis->pluck('imei')->merge($imeis->pluck('serial'))->filter()->unique();
@@ -627,6 +671,33 @@ class ProductImeiController extends Controller
             ->values();
 
         return [$imeis, $repairOnly];
+    }
+
+    /** Một từ khóa khớp với thiết bị ở bất kỳ thông tin nào: IMEI, máy, thiết bị, ghi chú, khách, hóa đơn. */
+    private function imeiTokenMatch($w, string $token): void
+    {
+        $like = EntityLookupService::likeOf($token);
+        $normLike = EntityLookupService::likeOf(EntityLookupService::normalized($token));
+        $digits = preg_replace('/\D+/', '', $token) ?? '';
+        $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : $like;
+
+        $w->where('imei', 'like', $like)
+            ->orWhere('serial', 'like', $like)
+            ->orWhereHas('product', fn ($product) => $product
+                ->where('name', 'like', $like)
+                ->orWhere('search_text', 'like', $normLike)
+                ->orWhere('sku', 'like', $like)
+                ->orWhere('barcode', 'like', $like))
+            ->orWhereHas('variant', fn ($variant) => $variant
+                ->where('sku', 'like', $like)
+                ->orWhere('attributes', 'like', $like))
+            ->orWhere('extra_info', 'like', $like)
+            ->orWhereHas('saleItems.sale', fn ($sale) => $sale
+                ->where('code', 'like', $like)
+                ->orWhereHas('customer', fn ($customer) => $customer
+                    ->where('full_name', 'like', $like)
+                    ->orWhere('search_text', 'like', $normLike)
+                    ->orWhere('phone', 'like', $phoneLike)));
     }
 
     private function buildSuggestions(Collection $imeis, Collection $repairOnly, string $keyword): Collection

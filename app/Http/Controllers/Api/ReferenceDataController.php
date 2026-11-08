@@ -38,11 +38,7 @@ class ReferenceDataController extends Controller
 
         return response()->json([
             'categories' => $categories,
-            'brands' => Brand::query()
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get(['id', 'name', 'category_id'])
-                ->values(),
+            'brands' => Brand::optionsWithCategories(null, true),
             'units' => Unit::query()
                 ->where('is_active', true)
                 ->orderBy('name')

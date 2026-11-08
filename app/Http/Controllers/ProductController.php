@@ -65,13 +65,9 @@ class ProductController extends Controller
                         })
                     ];
                 }),
-            'brands'     => Brand::query()
-                ->select('id', 'name', 'category_id')
-                ->when($request->filled('category_id'), function ($q) use ($request) {
-                    $q->where('category_id', $request->category_id);
-                })
-                ->orderBy('name')
-                ->get(),
+            'brands'     => Brand::optionsWithCategories(
+                $request->filled('category_id') ? (int) $request->category_id : null
+            ),
             'units'      => Unit::query()
                 ->select('id', 'name', 'short_name')
                 ->where('is_active', true)
@@ -89,7 +85,7 @@ class ProductController extends Controller
             ->select('id', 'name')
             ->get(),
 
-            'brands' => Brand::select('id', 'name', 'category_id')->get(),
+            'brands' => Brand::optionsWithCategories(),
 
             'units' => Unit::query()
                 ->select('id', 'name', 'short_name')

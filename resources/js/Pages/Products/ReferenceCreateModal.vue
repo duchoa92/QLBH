@@ -23,7 +23,7 @@ const submit = async () => {
     form.processing = true
     const endpoints = { category: '/categories', brand: '/brands', unit: '/units' }
     const payload = { name: form.name.trim(), is_active: true }
-    if (props.type === 'brand') payload.category_id = props.categoryId
+    if (props.type === 'brand') payload.category_ids = [Number(props.categoryId)]
     if (props.type === 'unit') payload.short_name = form.short_name.trim() || null
 
     try {
@@ -50,8 +50,9 @@ const submit = async () => {
                 <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div class="text-xs font-semibold uppercase text-slate-400">Danh mục liên kết</div>
                     <div class="mt-1 font-semibold text-slate-800">{{ categoryName }}</div>
+                    <div class="mt-1 text-xs text-slate-400">Có thể gắn thêm danh mục khác trong trang Danh mục &amp; Thương hiệu.</div>
                 </div>
-                <p v-if="form.errors.category_id" class="text-sm text-red-500">{{ form.errors.category_id }}</p>
+                <p v-if="form.errors.category_ids || form.errors['category_ids.0']" class="text-sm text-red-500">{{ form.errors.category_ids || form.errors['category_ids.0'] }}</p>
             </template>
             <FloatingInput v-if="type === 'unit'" v-model="form.short_name" label="Tên viết tắt (không bắt buộc)" :error="form.errors.short_name" />
         </div>

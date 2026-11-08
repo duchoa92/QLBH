@@ -138,8 +138,8 @@ class RecordDetailController extends Controller
 
     private function brand(int $id): array
     {
-        $r = Brand::with('category:id,name')->findOrFail($id);
-        return ['Thương hiệu', null, $this->rows(['Tên thương hiệu' => $r->name, 'Danh mục' => $r->category?->name])];
+        $r = Brand::with('categories:id,name')->findOrFail($id);
+        return ['Thương hiệu', null, $this->rows(['Tên thương hiệu' => $r->name, 'Danh mục' => $r->categories->sortBy('name')->pluck('name')->join(', ')])];
     }
 
     private function unit(int $id): array

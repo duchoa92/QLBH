@@ -21,34 +21,38 @@ class BrandController extends Controller
     {
        $perPage = in_array((int) $request->query('per_page', 10), [10, 20, 50, 100], true)
            ? (int) $request->query('per_page', 10) : 10;
-        
-       $brands = Brand::with('category')
+
+       $brands = Brand::with('categories:id,name')
         ->when($request->filled('search'), fn ($q) =>
             $q->where('name', 'like', '%' . $request->search . '%')
         )
+        // Thương hiệu dùng chung: lọc theo danh mục = thương hiệu có liên kết với danh mục đó
         ->when($request->category_id !== null && $request->category_id !== '', fn ($q) =>
-            $q->where('category_id', $request->category_id)
+            $q->whereHas('categories', fn ($c) => $c->where('categories.id', $request->category_id))
         )
-        ->when(in_array($request->query('sort_by'), ['id', 'name', 'category_name', 'is_active'], true), function ($q) use ($request) {
+        ->when(in_array($request->query('sort_by'), ['id', 'name', 'is_active'], true), function ($q) use ($request) {
 
             $order = $request->query('sort_order') === 'desc' ? 'desc' : 'asc';
 
-            if ($request->sort_by === 'category_name') {
-                $q->leftJoin('categories', 'brands.category_id', '=', 'categories.id')
-                ->orderBy('categories.name', $order)
-                ->select('brands.*');
-            } else {
-                $q->orderBy($request->sort_by, $order);
-            }
+            $q->orderBy($request->sort_by, $order);
 
         }, function ($q) {
             $q->latest();
         })
         ->paginate($perPage)
+        ->through(function (Brand $brand) {
+            // Danh mục sắp theo tên, bỏ dữ liệu bảng trung gian khỏi JSON.
+            $brand->setRelation(
+                'categories',
+                $brand->categories->sortBy('name')->values()->each->makeHidden('pivot')
+            );
+
+            return $brand;
+        })
         ->withQueryString();
 
 
-        $categories = Category::select('id', 'name')->get();
+        $categories = Category::select('id', 'name')->orderBy('name')->get();
 
         return Inertia::render('Brands/Index', [
             'brands'     => $brands,
@@ -67,7 +71,12 @@ class BrandController extends Controller
     {
         $brand = $this->brandService->create($request->validated());
         if ($request->expectsJson()) {
-            return response()->json(['data' => $brand->load('category:id,name')], 201);
+            return response()->json(['data' => [
+                'id' => $brand->id,
+                'name' => $brand->name,
+                'is_active' => (bool) $brand->is_active,
+                'category_ids' => $brand->categories()->pluck('categories.id')->values()->all(),
+            ]], 201);
         }
         return back()->with('success', 'Đã thêm thương hiệu thành công');
     }
@@ -118,6 +127,7 @@ class BrandController extends Controller
             return back()->withErrors(['error' => "Không thể xóa vĩnh viễn thương hiệu vì còn {$productCount} sản phẩm thuộc thương hiệu này. Hãy đổi thương hiệu tại từng sản phẩm hoặc xóa vĩnh viễn các sản phẩm chưa có phát sinh trước. Sản phẩm đã có lịch sử bán/nhập phải được giữ lại."]);
         }
 
+        $brand->categories()->detach();
         $brand->forceDelete();
         return back()->with('success', 'Đã xóa vĩnh viễn thương hiệu');
     }

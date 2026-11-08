@@ -196,8 +196,9 @@ const filteredBrands = computed(() => {
         return []
     }
 
+    // Thương hiệu dùng chung: hiện mọi thương hiệu có liên kết với danh mục đang chọn.
     return brands.value.filter(
-        brand => Number(brand.category_id) === Number(form.category_id)
+        brand => (brand.category_ids ?? []).some(id => Number(id) === Number(form.category_id))
     )
 })
 
@@ -247,7 +248,8 @@ const handleReferenceCreated = (record) => {
         form.brand_id = null
     } else if (type === 'brand') {
         if (!brands.value.some(item => Number(item.id) === Number(record.id))) brands.value.push(record)
-        form.category_id = record.category_id
+        // Thương hiệu mới được tạo cho danh mục đang chọn nên giữ nguyên danh mục.
+        if (!form.category_id && record.category_ids?.length) form.category_id = record.category_ids[0]
         form.brand_id = record.id
     } else {
         if (!units.value.some(item => Number(item.id) === Number(record.id))) units.value.push(record)

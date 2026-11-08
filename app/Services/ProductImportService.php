@@ -222,15 +222,6 @@ class ProductImportService
             return 'Sản phẩm IMEI phải nhập tồn qua phiếu nhập hàng, không nhập tồn trực tiếp trong file sản phẩm';
         }
 
-        if ($row['brand'] !== '') {
-            $category = $this->findCategory($row['category']);
-            $brand = $this->findBrand($row['brand']);
-
-            if ($brand && $category && $brand->category_id && (int) $brand->category_id !== (int) $category->id) {
-                return 'Thương hiệu không thuộc danh mục đã nhập';
-            }
-        }
-
         if ($preview && in_array(Str::lower($row['sku']), $seenSku, true)) {
             return 'SKU trong file bị lặp';
         }
@@ -283,19 +274,25 @@ class ProductImportService
         $brand = $this->findBrand($name);
 
         if ($brand) {
-            if (! $brand->category_id && $category) {
-                $brand->update(['category_id' => $category->id]);
+            // Thương hiệu dùng chung: gặp thêm một danh mục mới thì liên kết thêm, không báo lỗi.
+            if ($category) {
+                $brand->categories()->syncWithoutDetaching([$category->id]);
             }
 
             return $brand;
         }
 
-        return Brand::query()->create([
+        $brand = Brand::query()->create([
             'name' => $name,
             'slug' => $this->uniqueSlug($name, Brand::class),
-            'category_id' => $category?->id,
             'is_active' => true,
         ]);
+
+        if ($category) {
+            $brand->categories()->attach($category->id);
+        }
+
+        return $brand;
     }
 
     private function findBrand(string $name): ?Brand

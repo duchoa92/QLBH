@@ -6,6 +6,7 @@ use App\Repositories\Brand\BrandRepository;
 use App\Models\Brand;
 use App\Services\Base\BaseService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class BrandService extends BaseService
@@ -21,10 +22,17 @@ class BrandService extends BaseService
         array $data
     ): Model {
 
-        $data['slug'] = $this->uniqueSlug($data['name'], $data['category_id']);
+        $categoryIds = $data['category_ids'] ?? [];
+        unset($data['category_ids']);
 
-        return $this->repository
-            ->create($data);
+        $data['slug'] = $this->uniqueSlug($data['name']);
+
+        return DB::transaction(function () use ($data, $categoryIds) {
+            $brand = $this->repository->create($data);
+            $brand->categories()->sync($categoryIds);
+
+            return $brand;
+        });
     }
 
     // Cập nhật thương hiệu
@@ -33,13 +41,20 @@ class BrandService extends BaseService
         array $data
     ): Model {
 
-        $data['slug'] = $this->uniqueSlug($data['name'], $data['category_id'], $model->getKey());
+        $categoryIds = $data['category_ids'] ?? null;
+        unset($data['category_ids']);
 
-        return $this->repository
-            ->update(
-                $model,
-                $data
-            );
+        $data['slug'] = $this->uniqueSlug($data['name'], $model->getKey());
+
+        return DB::transaction(function () use ($model, $data, $categoryIds) {
+            $brand = $this->repository->update($model, $data);
+
+            if ($categoryIds !== null) {
+                $brand->categories()->sync($categoryIds);
+            }
+
+            return $brand;
+        });
     }
 
     // Hiển thị thương hiệu đã xóa
@@ -50,13 +65,13 @@ class BrandService extends BaseService
             ->trash($perPage);
     }
 
-    private function uniqueSlug(string $name, int|string $categoryId, int|string|null $ignoreId = null): string
+    private function uniqueSlug(string $name, int|string|null $ignoreId = null): string
     {
         $base = Str::slug($name) ?: 'brand';
         $slug = $base;
-        $suffix = 0;
+        $suffix = 1;
 
-        do {
+        while (true) {
             $query = Brand::withTrashed()->where('slug', $slug);
 
             if ($ignoreId !== null) {
@@ -67,8 +82,7 @@ class BrandService extends BaseService
                 return $slug;
             }
 
-            $suffix++;
-            $slug = $base . '-' . $categoryId . ($suffix > 1 ? '-' . $suffix : '');
-        } while (true);
+            $slug = $base . '-' . ++$suffix;
+        }
     }
 }

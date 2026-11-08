@@ -16,6 +16,9 @@ import {
     ShieldX,
     UserRound,
     Wrench,
+    SlidersHorizontal,
+    Check,
+    X,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -36,21 +39,45 @@ const result = ref(null)
 const errorMessage = ref('')
 const historyFilter = ref('all')
 const selectedEvent = ref(null)
-// Phạm vi tìm kiếm: chọn loại dữ liệu muốn tra cứu.
+// Tìm kiếm nâng cao: chọn một hoặc nhiều loại dữ liệu để tìm.
 const scopeOptions = [
-    { value: 'all', label: 'Toàn bộ', placeholder: 'Tìm tất cả: IMEI, khách hàng, máy, người dùng, nhà cung cấp, hóa đơn, phiếu nhập...' },
-    { value: 'sold', label: 'Thiết bị đã bán', placeholder: 'Tìm trong các thiết bị đã bán: IMEI, tên máy, khách mua, mã hóa đơn...' },
-    { value: 'in_stock', label: 'Sản phẩm trong kho', placeholder: 'Tìm trong các thiết bị còn trong kho: IMEI, tên máy, biến thể...' },
-    { value: 'repair', label: 'Sản phẩm sửa chữa', placeholder: 'Tìm trong các máy đã/đang sửa: mã phiếu, tên máy, IMEI, khách, SĐT...' },
-    { value: 'customer', label: 'Khách hàng', placeholder: 'Tìm khách hàng theo tên, số điện thoại, mã, CCCD...' },
-    { value: 'user', label: 'Người dùng', placeholder: 'Tìm nhân viên/người dùng theo tên, tên đăng nhập, số điện thoại...' },
-    { value: 'supplier', label: 'Nhà cung cấp', placeholder: 'Tìm nhà cung cấp theo tên, mã, số điện thoại, email...' },
-    { value: 'sale', label: 'Hóa đơn bán', placeholder: 'Tìm hóa đơn theo mã hóa đơn, tên hoặc SĐT khách...' },
-    { value: 'import', label: 'Phiếu nhập', placeholder: 'Tìm phiếu nhập theo mã phiếu, nhà cung cấp, số điện thoại...' },
+    { value: 'all', label: 'Toàn bộ', hint: 'Tất cả dữ liệu trong hệ thống', group: 'Tất cả' },
+    { value: 'product', label: 'Sản phẩm', hint: 'Danh mục hàng hóa, linh kiện, màn hình... (kể cả không có IMEI)', group: 'Hàng hóa & thiết bị' },
+    { value: 'sold', label: 'Thiết bị đã bán', hint: 'Chỉ các sản phẩm đã bán ra', group: 'Hàng hóa & thiết bị' },
+    { value: 'in_stock', label: 'Sản phẩm trong kho', hint: 'Chỉ các sản phẩm còn tồn kho', group: 'Hàng hóa & thiết bị' },
+    { value: 'repair', label: 'Sản phẩm sửa chữa', hint: 'Chỉ các máy đã và đang sửa', group: 'Hàng hóa & thiết bị' },
+    { value: 'customer', label: 'Khách hàng', hint: 'Tên, số điện thoại, mã, CCCD, email', group: 'Đối tượng' },
+    { value: 'user', label: 'Người dùng', hint: 'Nhân viên: tên, tên đăng nhập, số điện thoại', group: 'Đối tượng' },
+    { value: 'supplier', label: 'Nhà cung cấp', hint: 'Tên, mã, số điện thoại, email', group: 'Đối tượng' },
+    { value: 'sale', label: 'Hóa đơn bán', hint: 'Mã hóa đơn, khách mua', group: 'Chứng từ' },
+    { value: 'import', label: 'Phiếu nhập', hint: 'Mã phiếu, nhà cung cấp', group: 'Chứng từ' },
 ]
-const scope = ref('all')
-const scopeLabel = computed(() => scopeOptions.find(option => option.value === scope.value)?.label || '')
-const searchPlaceholder = computed(() => scopeOptions.find(option => option.value === scope.value)?.placeholder || '')
+const scopeGroups = computed(() => ['Tất cả', 'Hàng hóa & thiết bị', 'Đối tượng', 'Chứng từ']
+    .map(title => ({ title, options: scopeOptions.filter(option => option.group === title) })))
+const scopes = ref(['all'])
+const advancedOpen = ref(false)
+const advancedRef = ref(null)
+const selectedScopeOptions = computed(() => scopeOptions.filter(option => scopes.value.includes(option.value)))
+const scopeLabel = computed(() => selectedScopeOptions.value.map(option => option.label).join(', ') || 'Toàn bộ')
+const isAdvanced = computed(() => !(scopes.value.length === 1 && scopes.value[0] === 'all'))
+const searchPlaceholder = computed(() => {
+    if (!isAdvanced.value) return 'Tìm tất cả: IMEI, sản phẩm, khách hàng, người dùng, nhà cung cấp, hóa đơn, phiếu nhập...'
+    if (selectedScopeOptions.value.length === 1) return `Tìm trong ${selectedScopeOptions.value[0].label.toLowerCase()}: ${selectedScopeOptions.value[0].hint.toLowerCase()}`
+
+    return `Tìm trong: ${scopeLabel.value}`
+})
+const toggleScope = (value) => {
+    if (value === 'all') {
+        scopes.value = ['all']
+        return
+    }
+
+    const current = scopes.value.filter(item => item !== 'all')
+    const next = current.includes(value) ? current.filter(item => item !== value) : [...current, value]
+
+    scopes.value = next.length ? next : ['all']
+}
+const resetScopes = () => { scopes.value = ['all'] }
 const backStack = ref([])
 
 const suggestions = ref([])
@@ -164,7 +191,7 @@ const lookup = () => {
     clearTimeout(suggestTimer)
     suggestRequest += 1
     suggestLoading.value = false
-    runLookup({ q, scope: scope.value })
+    runLookup({ q, scope: scopes.value.join(',') })
 }
 
 const paramsFor = (item) => {
@@ -195,7 +222,7 @@ const fetchSuggestions = async (q) => {
     suggestLoading.value = true
 
     try {
-        const response = await api.get('/api/imeis/lookup', { params: { suggest: 1, q, scope: scope.value } })
+        const response = await api.get('/api/imeis/lookup', { params: { suggest: 1, q, scope: scopes.value.join(',') } })
 
         if (requestId !== suggestRequest || keyword.value.trim() !== q) return
 
@@ -204,7 +231,7 @@ const fetchSuggestions = async (q) => {
         activeIndex.value = -1
 
         // Gõ/quét đúng IMEI hoặc Serial đầy đủ thì tra cứu luôn, không cần chọn gợi ý.
-        const exact = ['all', 'sold', 'in_stock', 'repair'].includes(scope.value) && suggestions.value.find(item =>
+        const exact = scopes.value.some(item => ['all', 'sold', 'in_stock', 'repair'].includes(item)) && suggestions.value.find(item =>
             item.type === 'imei' && [item.imei, item.serial].some(code => code && code === q))
 
         if (exact) selectSuggestion(exact)
@@ -224,7 +251,7 @@ const lookupScannedCode = async (code) => {
     lookup()
 }
 
-watch([keyword, scope], () => {
+watch([keyword, scopes], () => {
     const value = keyword.value
 
     backStack.value = []
@@ -276,6 +303,7 @@ const onKeydown = (event) => {
 
 const closeOnOutside = (event) => {
     if (searchBoxRef.value && !searchBoxRef.value.contains(event.target)) suggestOpen.value = false
+    if (advancedRef.value && !advancedRef.value.contains(event.target)) advancedOpen.value = false
 }
 
 onMounted(() => window.addEventListener('pointerdown', closeOnOutside))
@@ -384,17 +412,68 @@ const historyCount = type => type === 'all'
 
         <DataPanel>
             <div class="border-b border-slate-200 p-4">
-                <div class="mb-3 flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                <!-- Tìm kiếm nâng cao: gom mọi điều kiện, chọn được nhiều -->
+                <div ref="advancedRef" class="relative mb-3 flex flex-wrap items-center gap-2">
                     <button
-                        v-for="option in scopeOptions"
-                        :key="option.value"
                         type="button"
-                        class="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all"
-                        :class="scope === option.value ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'"
-                        @click="scope = option.value"
+                        class="inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold shadow-sm transition"
+                        :class="isAdvanced || advancedOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'"
+                        @click="advancedOpen = !advancedOpen"
                     >
-                        {{ option.label }}
+                        <SlidersHorizontal class="h-4 w-4" />
+                        Tìm kiếm nâng cao
+                        <span v-if="isAdvanced" class="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white">{{ scopes.length }}</span>
                     </button>
+
+                    <template v-if="isAdvanced">
+                        <span
+                            v-for="option in selectedScopeOptions"
+                            :key="option.value"
+                            class="inline-flex items-center gap-1 rounded-full bg-indigo-100 py-1 pl-3 pr-1.5 text-xs font-semibold text-indigo-800"
+                        >
+                            {{ option.label }}
+                            <button type="button" class="rounded-full p-0.5 transition hover:bg-indigo-200" :aria-label="`Bỏ ${option.label}`" @click="toggleScope(option.value)">
+                                <X class="h-3 w-3" />
+                            </button>
+                        </span>
+                    </template>
+                    <span v-else class="text-xs font-medium text-slate-400">Đang tìm trong toàn bộ dữ liệu</span>
+
+                    <div
+                        v-if="advancedOpen"
+                        class="absolute left-0 top-full z-40 mt-2 w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+                    >
+                        <div class="max-h-[420px] space-y-4 overflow-y-auto p-4">
+                            <div v-for="group in scopeGroups" :key="group.title">
+                                <div class="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{{ group.title }}</div>
+                                <div class="grid gap-1.5 sm:grid-cols-2">
+                                    <button
+                                        v-for="option in group.options"
+                                        :key="option.value"
+                                        type="button"
+                                        class="flex items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition"
+                                        :class="scopes.includes(option.value) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'"
+                                        @click="toggleScope(option.value)"
+                                    >
+                                        <span
+                                            class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                                            :class="scopes.includes(option.value) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'"
+                                        >
+                                            <Check v-if="scopes.includes(option.value)" class="h-3 w-3" />
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block text-sm font-bold text-slate-800">{{ option.label }}</span>
+                                            <span class="block text-xs text-slate-500">{{ option.hint }}</span>
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5">
+                            <button type="button" class="text-xs font-semibold text-slate-500 transition hover:text-rose-600" @click="resetScopes">Đặt lại (toàn bộ)</button>
+                            <button type="button" class="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700" @click="advancedOpen = false">Xong</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex flex-col gap-3 md:flex-row">
@@ -422,7 +501,7 @@ const historyCount = type => type === 'all'
                             </div>
                             <div v-else-if="suggestDone && !suggestions.length" class="px-4 py-5 text-center">
                                 <div class="text-sm font-bold text-slate-700">Không có kết quả phù hợp</div>
-                                <div class="mt-0.5 text-xs text-slate-400">Trong phạm vi “{{ scopeLabel }}” — thử từ khóa khác hoặc đổi phạm vi</div>
+                                <div class="mt-0.5 text-xs text-slate-400">Trong “{{ scopeLabel }}” — thử từ khóa khác hoặc đổi điều kiện tìm kiếm</div>
                             </div>
                             <div v-else class="divide-y divide-slate-100">
                                 <LookupSuggestionItem
@@ -466,7 +545,7 @@ const historyCount = type => type === 'all'
                     Nhập thông tin để bắt đầu tra cứu
                 </div>
                 <div class="mt-1 max-w-lg text-sm text-slate-500">
-                    Chọn phạm vi ở phía trên (toàn bộ, thiết bị đã bán, trong kho, sửa chữa, khách hàng, người dùng...), gõ từ khóa đúng hoặc gần đúng rồi chọn một gợi ý để xem chi tiết.
+                    Dùng “Tìm kiếm nâng cao” để chọn một hoặc nhiều loại dữ liệu (sản phẩm, đã bán, trong kho, sửa chữa, khách hàng, người dùng...), gõ từ khóa đúng hoặc gần đúng rồi chọn một gợi ý để xem chi tiết.
                 </div>
             </div>
 
@@ -480,7 +559,7 @@ const historyCount = type => type === 'all'
                 </div>
                 <div class="mt-4 text-base font-bold text-slate-900">Không có kết quả phù hợp</div>
                 <div class="mt-1 max-w-lg text-sm text-slate-500">
-                    Không có dữ liệu nào trong phạm vi “{{ scopeLabel }}” khớp với “{{ keyword }}”. Hãy kiểm tra lại từ khóa hoặc thử phạm vi khác.
+                    Không có dữ liệu nào trong “{{ scopeLabel }}” khớp với “{{ keyword }}”. Hãy kiểm tra lại từ khóa hoặc mở “Tìm kiếm nâng cao” để đổi điều kiện.
                 </div>
             </div>
 

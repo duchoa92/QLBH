@@ -13,7 +13,9 @@ class UpdateCategoryRequest extends FormRequest
 
     public function rules(): array
     {
-        $categoryId = $this->route('category');
+        $category = $this->route('category');
+        // route('category') là Model (route model binding) nên phải lấy khóa chính, không ép (int) trực tiếp.
+        $categoryId = $category instanceof \Illuminate\Database\Eloquent\Model ? $category->getKey() : $category;
 
         return [
             // Không được chọn chính nó làm cha

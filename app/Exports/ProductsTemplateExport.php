@@ -29,13 +29,13 @@ class ProductsTemplateExport implements WithMultipleSheets
                 'Thương hiệu',
                 ['ID', 'Tên thương hiệu', 'Danh mục', 'Trạng thái'],
                 Brand::query()
-                    ->with('category:id,name')
+                    ->with('categories:id,name')
                     ->orderBy('name')
-                    ->get(['id', 'name', 'category_id', 'is_active'])
+                    ->get(['id', 'name', 'is_active'])
                     ->map(fn (Brand $brand) => [
                         $brand->id,
                         $brand->name,
-                        $brand->category?->name,
+                        $brand->categories->sortBy('name')->pluck('name')->join(', '),
                         $brand->is_active ? 'Đang dùng' : 'Tạm tắt',
                     ])
             ),
