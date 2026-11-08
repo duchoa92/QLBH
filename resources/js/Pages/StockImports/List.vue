@@ -659,6 +659,12 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
     <div class="space-y-3">
         <PageHeader title="Phiếu nhập hàng" />
 
+        
+        <div class="flex justify-end gap-2">
+            <ActionButton variant="warning" @click="showReplenishmentModal = true"><ClipboardList :size="16" />Lập DS lấy hàng</ActionButton>
+            <ActionButton @click="openCreateModal('supplier')"><Plus :size="16" />Tạo đơn nhập</ActionButton>
+        </div>
+
         <DataPanel detached>
 
             <!-- SEARCH -->
@@ -668,10 +674,6 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                     <ListFilterSelect v-model="partyTypeFilter" label="Loại phiếu" :show-placeholder="false" :options="partyTypeOptions" />
                     <ListFilterSelect v-model="statusFilter" label="Trạng thái" :show-placeholder="false" :options="statusFilterOptions" />
                     <DateRangeFilter v-model:from="dateFrom" v-model:to="dateTo" />
-                </template>
-                <template #actions>
-                    <ActionButton variant="warning" @click="showReplenishmentModal = true"><ClipboardList :size="16" />Lập DS lấy hàng</ActionButton>
-                    <ActionButton @click="openCreateModal('supplier')"><Plus :size="16" />Tạo đơn nhập</ActionButton>
                 </template>
             </ListToolbar>
 

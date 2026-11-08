@@ -9,6 +9,8 @@ Index · VUE
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
+import HighlightText from '@/Components/UI/HighlightText.vue'
+import { useLiveList } from '@/Composables/useLiveList'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
 import ProductImeisModal from './ProductImeisModal.vue'
@@ -57,52 +59,26 @@ const category_id = ref(props.filters?.category_id || '')
 const brand_id = ref(props.filters?.brand_id || '')
 const per_page = ref(props.filters?.per_page || 10) 
  
-let timeout = null
-let isSyncingFilters = false
 const isEditingSearch = ref(false)
- 
-watch([search, category_id, brand_id], () => {
-    if (isSyncingFilters || isChangingPerPage.value) {
-        isChangingPerPage.value = false
-        return
-    }
- 
-    clearTimeout(timeout)
- 
-    timeout = setTimeout(() => {
-        router.get('/products', {
-            search: search.value,
-            category_id: category_id.value,
-            brand_id: brand_id.value,
-            sort_by: props.filters?.sort_by,
-            sort_order: props.filters?.sort_order,
-            per_page: per_page.value
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-            only: ['products', 'filters']
-        })
-    }, 300)
+
+// Tìm kiếm/lọc/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
+const list = useLiveList({
+    props,
+    dataKey: 'products',
+    params: () => ({
+        search: search.value.trim(),
+        category_id: category_id.value,
+        brand_id: brand_id.value,
+        per_page: per_page.value,
+    }),
 })
- 
-watch(() => props.filters, (filters) => {
-    if (!filters) return
-    isSyncingFilters = true
-    // Không ghi đè phần người dùng đang gõ bằng phản hồi của lần tìm trước.
-    if (!isEditingSearch.value) search.value = filters.search || ''
-    category_id.value = filters.category_id || ''
-    brand_id.value = filters.brand_id || ''
-    if (filters.per_page) per_page.value = Number(filters.per_page)
-    nextTick(() => { isSyncingFilters = false })
-}, { deep: true })
- 
- 
- 
-onBeforeUnmount(() => {
-    if (timeout) clearTimeout(timeout)
+const { data: productsData, filters: filtersData, loading } = list
+watch(search, () => list.schedule())
+watch([category_id, brand_id], () => list.request())
+watch(() => filtersData.value?.per_page, (value) => {
+    if (value && Number(value) !== Number(per_page.value)) per_page.value = Number(value)
 })
- 
+
 const columns = [
     { key: 'id', label: 'ID', sortable: true, width: '60px' },
     { key: 'name', label: 'Tên hàng hóa', sortable: true },
@@ -111,17 +87,6 @@ const columns = [
     { key: 'stock', label: 'Tồn kho', sortable: true },
     { key: 'is_active', label: 'Trạng thái', sortable: true, width: '120px' }
 ]
- 
-// Khai báo biến timeout phạm vi component
-let filterTimeout = null
- 
- 
-// Dọn dẹp bộ nhớ: Hủy bỏ hoàn toàn hành động chạy ngầm nếu chuyển trang giữa chừng
-onBeforeUnmount(() => {
-    if (filterTimeout) {
-        clearTimeout(filterTimeout)
-    }
-})
  
 // Hàm loadData chuẩn hóa để cập nhật danh sách dựa trên chính bộ lọc hiện tại
 const loadData = () => {
@@ -242,12 +207,12 @@ const toggleOne = (id) => {
 }
  
 const toggleAll = () => {
-    const ids = props.products?.data?.map(row => row.id) || []
+    const ids = productsData.value?.data?.map(row => row.id) || []
     selectedIds.value = selectedIds.value.length === ids.length ? [] : ids
 }
  
 const selectedProducts = computed(() =>
-    (props.products?.data ?? []).filter(product => selectedIds.value.includes(product.id))
+    (productsData.value?.data ?? []).filter(product => selectedIds.value.includes(product.id))
 )
  
 const openPriceUpdate = (products) => {
@@ -271,7 +236,7 @@ const toggleStatus = (id) => {
  
     loadingStatus.value = id
  
-    const item = props.products.data.find(i => i.id === id)
+    const item = productsData.value?.data?.find(i => i.id === id)
     if (item) item.is_active = !item.is_active
  
     router.patch(`/products/${id}/toggle-status`, {}, {
@@ -335,48 +300,14 @@ const printImei = () => {
  
 /* ================= SORT ================= */
  
-const sort = ({ field, order }) => {
-    router.get('/products', {
-        search: search.value,
-        category_id: category_id.value,
-        brand_id: brand_id.value,
-        per_page: per_page.value,
-        sort_by: field,
-        sort_order: order
-    }, {
-        preserveState: true,
-        replace: true
-    })
-}
- 
+const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
+
 // ================= PER PAGE =================
-const isChangingPerPage = ref(false)
- 
-watch(() => props.filters?.per_page, (val) => {
-    if (val && val != per_page.value) {
-        per_page.value = Number(val)
-    }
-})
- 
 const changePerPage = (value) => {
- 
-    isChangingPerPage.value = true
- 
     per_page.value = value
-    router.get('/products', {
-        search: search.value,
-        category_id: category_id.value,
-        brand_id: brand_id.value,
-        per_page: value,
-        sort_by: props.filters?.sort_by,
-        sort_order: props.filters?.sort_order,
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true
-    })
+    list.request({ per_page: value })
 }
- 
+
 onMounted(() => {
     const saved = localStorage.getItem('per_page')
  
@@ -446,7 +377,7 @@ const openImeiList = (row) => {
  
     <PageHeader title="Sản phẩm" />
 
-   <ListToolbar v-model="search" search-id="product-search" placeholder="Tìm tên, SKU hoặc barcode..." @focus="isEditingSearch = true" @blur="isEditingSearch = false">
+   <ListToolbar v-model="search" search-id="product-search" placeholder="Tìm tên, SKU hoặc barcode..." :loading="loading" @focus="isEditingSearch = true" @blur="isEditingSearch = false">
         <template #filters><ListFilterSelect
             v-model="category_id"
             label="Danh mục"
@@ -505,9 +436,9 @@ const openImeiList = (row) => {
     </div>
  
     <BaseTable
-        :data="products"
+        :data="productsData"
         :columns="columns"
-        :filters="{ ...filters, per_page }"
+        :filters="{ ...filtersData, per_page }"
         @sort="sort"
         :selectedIds="selectedIds"
         selectable
@@ -532,7 +463,7 @@ const openImeiList = (row) => {
                 >
                     SP
                 </div>
-                {{ row.name }}
+                <span class="min-w-0"><HighlightText :text="row.name" :keyword="search" /><span v-if="row.sku" class="block text-[11px] font-medium text-slate-400"><HighlightText :text="row.sku" :keyword="search" /></span></span>
             </div></td>
  
             <td class="px-3.5 py-2.5 text-center whitespace-nowrap">

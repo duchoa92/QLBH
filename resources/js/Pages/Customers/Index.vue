@@ -8,6 +8,8 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import HighlightText from '@/Components/UI/HighlightText.vue'
+import { useLiveList } from '@/Composables/useLiveList'
 import CustomerFormModal from './CustomerFormModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
@@ -34,28 +36,11 @@ const columns = [
     { key: 'debt_balance', label: 'Công nợ', sortable: true, class: 'text-right' },
     { key: 'customer_type', label: 'Loại', sortable: true, class: 'text-center' },
 ]
-let searchTimeout = null
-
-watch(search, (value) => {
-    clearTimeout(searchTimeout)
-
-    searchTimeout = setTimeout(() => {
-        router.get(
-            route('customers.index'),
-            { search: value, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-                only: ['customers', 'filters'],
-            }
-        )
-    }, 250)
-})
-
-const sort = ({ field, order }) => router.get(route('customers.index'), {
-    search: search.value, sort_by: field, sort_order: order, per_page: props.filters?.per_page,
-}, { preserveState: true, preserveScroll: true, replace: true, only: ['customers', 'filters'] })
+// Tìm kiếm/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
+const list = useLiveList({ props, dataKey: 'customers', params: () => ({ search: search.value.trim() }) })
+const { data: customersData, filters: filtersData, loading } = list
+watch(search, () => list.schedule())
+const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
 const reload = () => {
     router.reload({
@@ -149,7 +134,7 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
 
         <DataPanel detached>
             <template #header>
-                <ListToolbar v-model="search" placeholder="Tìm tên, SĐT, mã khách hàng hoặc CCCD...">
+                <ListToolbar v-model="search" :loading="loading" placeholder="Tìm tên, SĐT, mã khách hàng hoặc CCCD..." @submit="list.request()">
                     <template #actions><ActionButton class="shrink-0 whitespace-nowrap" @click="openCreate">
                         <Plus class="h-4 w-4" />
                         Thêm khách
@@ -157,14 +142,14 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
                 </ListToolbar>
             </template>
 
-            <BaseTable :data="customers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
+            <BaseTable :data="customersData" :columns="columns" :filters="filtersData" row-clickable @sort="sort" @row-click="openDetail">
                 <template #row="{ row }">
-                    <td class="px-3.5 py-2.5 font-medium text-slate-700">{{ row.code }}</td>
+                    <td class="px-3.5 py-2.5 font-medium text-slate-700"><HighlightText :text="row.code" :keyword="search" /></td>
                     <td class="px-3.5 py-2.5 font-semibold text-slate-900">
-                        <span :class="row.is_active === false ? 'text-slate-400 line-through decoration-slate-300' : ''">{{ row.full_name }}</span>
+                        <span :class="row.is_active === false ? 'text-slate-400 line-through decoration-slate-300' : ''"><HighlightText :text="row.full_name" :keyword="search" /></span>
                         <span v-if="row.is_active === false" class="ml-2 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 align-middle text-[10px] font-bold text-rose-700"><Ban class="h-3 w-3" />Đã chặn</span>
                     </td>
-                    <td class="px-3.5 py-2.5 text-slate-600">{{ row.phone || '—' }}</td>
+                    <td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.phone" :text="row.phone" :keyword="search" /><template v-else>—</template></td>
                     <td class="px-3.5 py-2.5 text-center font-semibold text-emerald-700">{{ row.point_balance }}</td>
                     <td class="px-3.5 py-2.5 text-right font-semibold" :class="[
                         row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500',

@@ -7,16 +7,21 @@ use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
 use App\Models\Repair;
 use App\Models\SaleItem;
+use App\Services\Lookup\EntityLookupService;
 use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ProductImeiController extends Controller
 {
+    private const LOOKUP_SCOPES = ['all', 'sold', 'in_stock', 'repair', 'customer', 'user', 'supplier', 'sale', 'import'];
+
     public function index(
         Request $request,
         Product $product
@@ -120,23 +125,47 @@ class ProductImeiController extends Controller
         return Inertia::render('ProductImeis/Lookup');
     }
 
+    /**
+     * Một endpoint, ba chế độ (route hiện có /api/imeis/lookup được giữ nguyên):
+     *  - ?imei=...            : kiểm tra khớp chính xác IMEI/Serial (form nhập hàng đang dùng — không đổi).
+     *  - ?suggest=1&q=...     : danh sách gợi ý khi gõ (IMEI, khách hàng, máy, thiết bị, mã phiếu...).
+     *  - ?q=... | ?id= | ?repair_id= : tra cứu đầy đủ theo từ khóa hoặc theo gợi ý được chọn.
+     */
     public function lookup(Request $request): JsonResponse
     {
+        if ($request->boolean('suggest')) {
+            return $this->suggestions($request);
+        }
+
+        if ($request->filled('id') || $request->filled('repair_id') || $request->filled('q')) {
+            return $this->searchLookup($request);
+        }
+
         $data = $request->validate([
             'imei' => ['required', 'string', 'max:100'],
         ]);
 
         $imeiCode = trim($data['imei']);
 
-        $imei = ProductImei::query()
+        return response()->json(
+            $this->lookupPayload($this->findImeiByCode($imeiCode), $imeiCode)
+        );
+    }
+
+    private function findImeiByCode(string $code): ?ProductImei
+    {
+        return ProductImei::query()
             ->with(['product:id,name,sku,warranty_days', 'variant:id,product_id,sku,attributes'])
-            ->where(function ($query) use ($imeiCode): void {
+            ->where(function ($query) use ($code): void {
                 $query
-                    ->where('imei', $imeiCode)
-                    ->orWhere('serial', $imeiCode);
+                    ->where('imei', $code)
+                    ->orWhere('serial', $code);
             })
             ->first();
+    }
 
+    private function lookupPayload(?ProductImei $imei, string $imeiCode, ?Collection $repairIds = null): array
+    {
         $saleItems = collect();
 
         if ($imei) {
@@ -164,30 +193,18 @@ class ProductImeiController extends Controller
             ->values();
 
         $repairs = Repair::query()
-            ->with('technician:id,name')
-            ->where(function ($query) use ($lookupCodes): void {
+            ->with(['technician:id,name', 'customer:id,full_name,phone'])
+            ->where(function ($query) use ($lookupCodes, $repairIds): void {
                 $query
                     ->whereIn('imei', $lookupCodes)
                     ->orWhereIn('serial', $lookupCodes);
+
+                if ($repairIds && $repairIds->isNotEmpty()) {
+                    $query->orWhereIn('id', $repairIds);
+                }
             })
             ->latest('id')
-            ->get([
-                'id',
-                'code',
-                'device_name',
-                'imei',
-                'contact_phone',
-                'repair_request',
-                'estimated_cost',
-                'final_cost',
-                'status',
-                'note',
-                'technician_id',
-                'received_at',
-                'completed_at',
-                'returned_at',
-                'created_at',
-            ]);
+            ->get();
 
         $importHistories = ProductImeiHistory::query()
             ->where('imei', $imei?->imei ?: $imeiCode)
@@ -196,7 +213,27 @@ class ProductImeiController extends Controller
             ->latest('id')
             ->get();
 
-        return response()->json([
+        $latestSale = $saleItems->first()?->sale;
+        $latestRepair = $repairs->first();
+        $customer = $latestSale?->customer
+            ? [
+                'name' => $latestSale->customer->full_name,
+                'phone' => $latestSale->customer->phone,
+                'source' => 'sale',
+                'reference_code' => $latestSale->code,
+                'happened_at' => $latestSale->created_at,
+            ]
+            : ($latestRepair && ($latestRepair->customer?->full_name || $latestRepair->customer?->phone || $latestRepair->contact_phone)
+                ? [
+                    'name' => $latestRepair->customer?->full_name,
+                    'phone' => $latestRepair->customer?->phone ?: $latestRepair->contact_phone,
+                    'source' => 'repair',
+                    'reference_code' => $latestRepair->code,
+                    'happened_at' => $latestRepair->received_at ?? $latestRepair->created_at,
+                ]
+                : null);
+
+        return [
             'exists' => (bool) $imei,
             'can_import' => ! $imei || $imei->status !== ProductImei::STATUS_IN_STOCK,
             'message' => $imei && $imei->status === ProductImei::STATUS_IN_STOCK
@@ -217,6 +254,9 @@ class ProductImeiController extends Controller
                 'variant' => $imei->variant,
             ] : null,
             'warranty' => $warranty,
+            'customer_warranty' => $this->customerWarrantyInfo($imei, $saleItems),
+            'repair_warranty' => $this->repairWarrantyInfo($repairs),
+            'customer' => $customer,
             'summary' => [
                 'import_count' => $importHistories->count() ?: ($imei ? 1 : 0),
                 'sale_count' => $saleItems->count(),
@@ -250,6 +290,8 @@ class ProductImeiController extends Controller
                 'code' => $repair->code,
                 'device_name' => $repair->device_name,
                 'contact_phone' => $repair->contact_phone,
+                'customer_name' => $repair->customer?->full_name,
+                'customer_phone' => $repair->customer?->phone,
                 'repair_request' => $repair->repair_request,
                 'estimated_cost' => $repair->estimated_cost,
                 'final_cost' => $repair->final_cost,
@@ -259,8 +301,430 @@ class ProductImeiController extends Controller
                 'completed_at' => $repair->completed_at,
                 'returned_at' => $repair->returned_at,
                 'note' => $repair->note,
+                'repair_warranty_days' => $repair->repair_warranty_days,
+                'repair_warranty_expires_at' => $repair->repair_warranty_expires_at,
+                'repair_warranty_voided_at' => $repair->repair_warranty_voided_at,
             ])->values(),
+        ];
+    }
+
+    /* ------------------------------------------------------------------
+     | Tra cứu theo từ khóa tự do / theo gợi ý được chọn
+     |------------------------------------------------------------------*/
+
+    private function noMatchResponse(): JsonResponse
+    {
+        return response()->json([
+            'exists' => false,
+            'no_match' => true,
+            'message' => 'Không có kết quả phù hợp.',
+            'candidates' => [],
         ]);
+    }
+
+    private function lookupScope(Request $request): string
+    {
+        $scope = (string) $request->query('scope', 'all');
+
+        return in_array($scope, self::LOOKUP_SCOPES, true) ? $scope : 'all';
+    }
+
+    private function searchLookup(Request $request): JsonResponse
+    {
+        $request->validate([
+            'id' => ['nullable', 'integer'],
+            'repair_id' => ['nullable', 'integer'],
+            'type' => ['nullable', 'string', 'max:20'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $entities = app(EntityLookupService::class);
+        $type = (string) $request->query('type', '');
+
+        // Chọn một đối tượng (khách hàng, người dùng, nhà cung cấp, hóa đơn, phiếu nhập).
+        if ($type !== '' && $request->filled('id')) {
+            return $this->resolveItem(['type' => $type, 'id' => (int) $request->query('id')]);
+        }
+
+        if ($request->filled('id')) {
+            return $this->resolveItem(['type' => 'imei', 'id' => (int) $request->query('id')]);
+        }
+
+        if ($request->filled('repair_id')) {
+            return $this->resolveItem(['type' => 'repair', 'repair_id' => (int) $request->query('repair_id')]);
+        }
+
+        $keyword = trim((string) $request->query('q'));
+        $scope = $this->lookupScope($request);
+
+        if ($keyword === '') {
+            return $this->noMatchResponse();
+        }
+
+        // Khớp chính xác IMEI / Serial luôn được ưu tiên — nhưng vẫn phải đúng phạm vi đang chọn.
+        if (in_array($scope, ['all', 'sold', 'in_stock', 'repair'], true) && ($exact = $this->findImeiByCode($keyword))) {
+            $allowed = match ($scope) {
+                'sold' => $exact->status === ProductImei::STATUS_SOLD,
+                'in_stock' => $exact->status === ProductImei::STATUS_IN_STOCK,
+                'repair' => Repair::query()->where(fn ($q) => $q->where('imei', $keyword)->orWhere('serial', $keyword)
+                    ->orWhere('imei', $exact->imei)->orWhere('serial', $exact->serial ?: $keyword))->exists(),
+                default => true,
+            };
+
+            return $allowed ? $this->selectionResponse($exact, null) : $this->noMatchResponse();
+        }
+
+        $items = $this->scopeSuggestions($keyword, $scope, 20, $entities);
+
+        if ($items->isEmpty()) {
+            return $this->noMatchResponse();
+        }
+
+        if ($items->count() === 1) {
+            return $this->resolveItem($items->first());
+        }
+
+        return response()->json([
+            'exists' => false,
+            'multiple' => true,
+            'message' => "Tìm thấy {$items->count()} kết quả phù hợp, vui lòng chọn một kết quả.",
+            'candidates' => $items->values(),
+        ]);
+    }
+
+    /** Mở chi tiết một kết quả theo loại của nó. */
+    private function resolveItem(array $item): JsonResponse
+    {
+        $type = $item['type'] ?? '';
+
+        if ($type === 'imei') {
+            $imei = ProductImei::query()
+                ->with(['product:id,name,sku,warranty_days', 'variant:id,product_id,sku,attributes'])
+                ->find((int) ($item['id'] ?? 0));
+
+            return $imei ? $this->selectionResponse($imei, null) : $this->noMatchResponse();
+        }
+
+        if ($type === 'repair') {
+            $repair = Repair::query()->find((int) ($item['repair_id'] ?? 0));
+
+            if (! $repair) {
+                return $this->noMatchResponse();
+            }
+
+            $code = (string) ($repair->imei ?: $repair->serial);
+
+            return $this->selectionResponse($code !== '' ? $this->findImeiByCode($code) : null, $repair);
+        }
+
+        $profile = in_array($type, EntityLookupService::TYPES, true)
+            ? app(EntityLookupService::class)->profile($type, (int) ($item['id'] ?? 0))
+            : null;
+
+        return $profile ? response()->json($profile) : $this->noMatchResponse();
+    }
+
+    /**
+     * Gợi ý theo phạm vi tìm kiếm:
+     *  all (mọi thứ) · sold (thiết bị đã bán) · in_stock (thiết bị trong kho) · repair (đã/đang sửa)
+     *  customer · user · supplier · sale (hóa đơn) · import (phiếu nhập)
+     */
+    private function scopeSuggestions(string $keyword, string $scope, int $limit, EntityLookupService $entities): Collection
+    {
+        if (in_array($scope, EntityLookupService::TYPES, true)) {
+            return $entities->suggest($scope, $keyword, $limit)->values();
+        }
+
+        if ($scope === 'repair') {
+            $repairs = $this->searchRepairs($keyword, $limit);
+
+            return $this->buildSuggestions(collect(), $repairs, $keyword);
+        }
+
+        if ($scope === 'sold' || $scope === 'in_stock') {
+            [$imeis] = $this->searchCandidates(
+                $keyword,
+                $limit,
+                0,
+                $scope === 'sold' ? ProductImei::STATUS_SOLD : ProductImei::STATUS_IN_STOCK
+            );
+
+            return $this->buildSuggestions($imeis, collect(), $keyword);
+        }
+
+        // all: thiết bị + phiếu sửa máy ngoài + khách hàng + người dùng + nhà cung cấp + hóa đơn + phiếu nhập
+        $each = max(2, intdiv($limit, 3));
+        [$imeis, $repairOnly] = $this->searchCandidates($keyword, $limit, $each);
+
+        $result = $this->buildSuggestions($imeis, $repairOnly, $keyword);
+
+        foreach (EntityLookupService::TYPES as $type) {
+            $result = $result->concat($entities->suggest($type, $keyword, $each));
+        }
+
+        return $result->values();
+    }
+
+    private function searchRepairs(string $keyword, int $limit): Collection
+    {
+        $like = '%' . addcslashes($keyword, '\\%_') . '%';
+        $digits = preg_replace('/\D+/', '', $keyword) ?? '';
+        $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : null;
+
+        return Repair::query()
+            ->with('customer:id,full_name,phone')
+            ->where($this->repairMatcher($like, $phoneLike))
+            ->latest('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    private function repairMatcher(string $like, ?string $phoneLike): \Closure
+    {
+        // Bảng repairs không có cột tên/SĐT khách: khách nằm ở quan hệ customer, SĐT liên hệ ở contact_phone.
+        return function ($query) use ($like, $phoneLike): void {
+            $query
+                ->where('code', 'like', $like)
+                ->orWhere('device_name', 'like', $like)
+                ->orWhere('imei', 'like', $like)
+                ->orWhere('serial', 'like', $like)
+                ->orWhereHas('customer', function ($customer) use ($like, $phoneLike): void {
+                    $customer->where('full_name', 'like', $like)
+                        ->orWhere('code', 'like', $like)
+                        ->orWhere('phone', 'like', $phoneLike ?: $like);
+                });
+
+            if ($phoneLike) {
+                $query->orWhere('contact_phone', 'like', $phoneLike);
+            }
+        };
+    }
+
+    private function selectionResponse(?ProductImei $imei, ?Repair $repair): JsonResponse
+    {
+        $code = (string) ($imei?->imei ?: $imei?->serial ?: $repair?->imei ?: $repair?->serial ?: '');
+
+        $payload = $this->lookupPayload(
+            $imei,
+            $code,
+            $repair ? collect([$repair->id]) : null
+        );
+
+        $payload['repair_only'] = ! $imei;
+        $payload['message'] = match (true) {
+            ! $imei => 'Thiết bị không có trong kho, hiển thị phiếu sửa chữa liên quan.',
+            $imei->status === ProductImei::STATUS_IN_STOCK => 'Máy đang còn trong kho.',
+            $imei->status === ProductImei::STATUS_SOLD => 'Máy đã bán cho khách.',
+            default => 'Máy đã rời kho.',
+        };
+
+        return response()->json($payload);
+    }
+
+    private function suggestions(Request $request): JsonResponse
+    {
+        $keyword = mb_substr(trim((string) $request->query('q', '')), 0, 100);
+        $scope = $this->lookupScope($request);
+
+        if (mb_strlen($keyword) < 2) {
+            return response()->json(['query' => $keyword, 'scope' => $scope, 'suggestions' => []]);
+        }
+
+        return response()->json([
+            'query' => $keyword,
+            'scope' => $scope,
+            'suggestions' => $this->scopeSuggestions($keyword, $scope, $scope === 'all' ? 12 : 8, app(EntityLookupService::class)),
+        ]);
+    }
+
+    /**
+     * Tìm theo: IMEI/Serial, khách hàng (tên, SĐT), mã hóa đơn, tên/SKU máy,
+     * biến thể + ghi chú thiết bị, và phiếu sửa chữa (mã phiếu, tên máy, khách, SĐT).
+     *
+     * @return array{0: Collection<int, ProductImei>, 1: Collection<int, Repair>}
+     */
+    private function searchCandidates(string $keyword, int $imeiLimit, int $repairLimit, ?string $status = null): array
+    {
+        $like = '%' . addcslashes($keyword, '\\%_') . '%';
+        $digits = preg_replace('/\D+/', '', $keyword) ?? '';
+        $phoneLike = strlen($digits) >= 3 ? '%' . $digits . '%' : null;
+
+        // Bảng repairs không có cột tên/SĐT khách: khách nằm ở quan hệ customer, SĐT liên hệ ở contact_phone.
+        $repairMatch = $this->repairMatcher($like, $phoneLike);
+
+        $matchedRepairs = Repair::query()
+            ->with('customer:id,full_name,phone')
+            ->where($repairMatch)
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        $repairCodes = $matchedRepairs
+            ->pluck('imei')
+            ->merge($matchedRepairs->pluck('serial'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $imeis = ProductImei::query()
+            ->with([
+                'product:id,name,sku,warranty_days',
+                'variant:id,product_id,sku,attributes',
+                'saleItems' => fn ($query) => $query->latest('id'),
+                'saleItems.sale:id,code,customer_id,created_at',
+                'saleItems.sale.customer:id,full_name,phone',
+            ])
+            ->where(function ($query) use ($like, $phoneLike, $repairCodes): void {
+                $query
+                    ->where('imei', 'like', $like)
+                    ->orWhere('serial', 'like', $like)
+                    ->orWhereHas('product', fn ($product) => $product
+                        ->where('name', 'like', $like)
+                        ->orWhere('sku', 'like', $like))
+                    ->orWhereHas('variant', fn ($variant) => $variant
+                        ->where('sku', 'like', $like)
+                        ->orWhere('attributes', 'like', $like))
+                    ->orWhere('extra_info', 'like', $like)
+                    ->orWhereHas('saleItems.sale', fn ($sale) => $sale
+                        ->where('code', 'like', $like)
+                        ->orWhereHas('customer', function ($customer) use ($like, $phoneLike): void {
+                            $customer->where('full_name', 'like', $like)
+                                ->orWhere('phone', 'like', $phoneLike ?: $like);
+                        }));
+
+                if ($repairCodes->isNotEmpty()) {
+                    $query
+                        ->orWhereIn('imei', $repairCodes)
+                        ->orWhereIn('serial', $repairCodes);
+                }
+            })
+            ->when($status, fn ($query) => $query->where('status', $status))
+            ->orderByRaw('CASE WHEN imei = ? OR serial = ? THEN 0 ELSE 1 END', [$keyword, $keyword])
+            ->latest('id')
+            ->limit($imeiLimit)
+            ->get();
+
+        // Phiếu sửa của máy không có trong kho (khách mang máy ngoài đến sửa).
+        $knownCodes = $imeis->pluck('imei')->merge($imeis->pluck('serial'))->filter()->unique();
+        $inventoryCodes = $repairCodes->isEmpty()
+            ? collect()
+            : ProductImei::query()
+                ->whereIn('imei', $repairCodes)
+                ->orWhereIn('serial', $repairCodes)
+                ->get(['imei', 'serial'])
+                ->flatMap(fn ($row) => [$row->imei, $row->serial])
+                ->filter()
+                ->unique();
+
+        $repairOnly = $matchedRepairs
+            ->filter(function (Repair $repair) use ($knownCodes, $inventoryCodes): bool {
+                $codes = collect([$repair->imei, $repair->serial])->filter();
+
+                return $codes->isEmpty()
+                    || ($codes->intersect($knownCodes)->isEmpty() && $codes->intersect($inventoryCodes)->isEmpty());
+            })
+            ->take(max(0, $repairLimit))
+            ->values();
+
+        return [$imeis, $repairOnly];
+    }
+
+    private function buildSuggestions(Collection $imeis, Collection $repairOnly, string $keyword): Collection
+    {
+        return $imeis
+            ->map(function (ProductImei $imei) use ($keyword): array {
+                $sale = $imei->saleItems->first()?->sale;
+                $customer = $sale?->customer;
+                $variant = $this->variantLabel($imei->variant);
+
+                return [
+                    'type' => 'imei',
+                    'id' => $imei->id,
+                    'imei' => $imei->imei,
+                    'serial' => $imei->serial,
+                    'product_name' => $imei->product?->name,
+                    'sku' => $imei->product?->sku,
+                    'variant' => $variant,
+                    'status' => $imei->status,
+                    'customer_name' => $customer?->full_name,
+                    'customer_phone' => $customer?->phone,
+                    'sale_code' => $sale?->code,
+                    'match' => $this->matchLabel($keyword, [
+                        'IMEI / Serial' => [$imei->imei, $imei->serial],
+                        'Khách hàng' => [$customer?->full_name, $customer?->phone],
+                        'Mã hóa đơn' => [$sale?->code],
+                        'Thông tin máy' => [$imei->product?->name, $imei->product?->sku],
+                        'Thông tin thiết bị' => [$variant, $imei->variant?->sku, json_encode($imei->extra_info, JSON_UNESCAPED_UNICODE)],
+                    ]),
+                ];
+            })
+            ->concat($repairOnly->map(fn (Repair $repair): array => [
+                'type' => 'repair',
+                'repair_id' => $repair->id,
+                'code' => $repair->code,
+                'device_name' => $repair->device_name,
+                'imei' => $repair->imei,
+                'serial' => $repair->serial,
+                'status' => $repair->status,
+                'customer_name' => $repair->customer?->full_name,
+                'customer_phone' => $repair->customer?->phone ?: $repair->contact_phone,
+                'match' => $this->matchLabel($keyword, [
+                    'Phiếu sửa chữa' => [$repair->code],
+                    'Khách hàng' => [$repair->customer?->full_name, $repair->customer?->phone, $repair->contact_phone],
+                    'Thông tin máy' => [$repair->device_name],
+                    'IMEI / Serial' => [$repair->imei, $repair->serial],
+                ]),
+            ]))
+            ->values();
+    }
+
+    /** Nhãn cho biết gợi ý khớp vì thông tin nào (không phân biệt hoa thường và dấu tiếng Việt). */
+    private function matchLabel(string $keyword, array $groups): string
+    {
+        $needle = Str::lower(Str::ascii($keyword));
+        $digits = preg_replace('/\D+/', '', $keyword) ?? '';
+
+        foreach ($groups as $label => $values) {
+            foreach ($values as $value) {
+                $value = (string) $value;
+
+                if ($value === '') {
+                    continue;
+                }
+
+                if (str_contains(Str::lower(Str::ascii($value)), $needle)) {
+                    return $label;
+                }
+
+                if (strlen($digits) >= 3 && str_contains(preg_replace('/\D+/', '', $value) ?? '', $digits)) {
+                    return $label;
+                }
+            }
+        }
+
+        return 'Thông tin liên quan';
+    }
+
+    private function variantLabel($variant): ?string
+    {
+        if (! $variant) {
+            return null;
+        }
+
+        $attributes = $variant->attributes;
+
+        if (is_array($attributes) && $attributes !== []) {
+            $text = collect($attributes)
+                ->map(fn ($value) => is_array($value) ? ($value['value'] ?? $value['name'] ?? $value['label'] ?? '') : $value)
+                ->filter()
+                ->implode(' / ');
+
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return $variant->sku;
     }
 
     private function warrantyInfo(?ProductImei $imei): array
@@ -314,6 +778,100 @@ class ProductImeiController extends Controller
         ];
     }
 
+
+    /** Bảo hành cửa hàng cấp cho khách (tính từ ngày bán). */
+    private function customerWarrantyInfo(?ProductImei $imei, Collection $saleItems): array
+    {
+        $empty = ['start_at' => null, 'expired_at' => null, 'remaining_days' => null, 'days' => null, 'reason' => null];
+
+        if (! $imei) {
+            return ['status' => 'not_found', 'label' => 'Chưa có dữ liệu bảo hành'] + $empty;
+        }
+
+        $soldAt = $imei->sold_at ? Carbon::parse($imei->sold_at) : null;
+
+        if ($imei->customer_warranty_voided_at) {
+            return [
+                'status' => 'voided',
+                'label' => 'Bảo hành đã bị hủy',
+                'start_at' => $soldAt,
+                'expired_at' => $imei->customer_warranty_expires_at,
+                'remaining_days' => null,
+                'days' => $imei->customer_warranty_days,
+                'reason' => $imei->customer_warranty_void_reason,
+            ];
+        }
+
+        $expiredAt = $imei->customer_warranty_expires_at ? Carbon::parse($imei->customer_warranty_expires_at) : null;
+        $days = (int) ($imei->customer_warranty_days ?: ($saleItems->first()?->warranty_days ?: $imei->product?->warranty_days));
+
+        if (! $expiredAt && $soldAt && $days > 0) {
+            $expiredAt = $soldAt->copy()->addDays($days);
+        }
+
+        if (! $soldAt && ! $expiredAt) {
+            return ['status' => 'not_sold', 'label' => 'Chưa bán cho khách'] + $empty;
+        }
+
+        if (! $expiredAt) {
+            return ['status' => 'none', 'label' => 'Không có bảo hành cửa hàng'] + array_merge($empty, ['start_at' => $soldAt]);
+        }
+
+        $remaining = now()->startOfDay()->diffInDays($expiredAt->copy()->startOfDay(), false);
+
+        return [
+            'status' => $remaining >= 0 ? 'active' : 'expired',
+            'label' => $remaining >= 0 ? 'Còn bảo hành' : 'Hết bảo hành',
+            'start_at' => $soldAt,
+            'expired_at' => $expiredAt,
+            'remaining_days' => $remaining,
+            'days' => $days ?: null,
+            'reason' => null,
+        ];
+    }
+
+    /** Bảo hành sau sửa chữa: lấy phiếu có hạn bảo hành mới nhất. */
+    private function repairWarrantyInfo(Collection $repairs): array
+    {
+        $empty = ['code' => null, 'start_at' => null, 'expired_at' => null, 'remaining_days' => null, 'days' => null, 'reason' => null];
+
+        $repair = $repairs
+            ->filter(fn (Repair $item) => $item->repair_warranty_expires_at || $item->repair_warranty_voided_at)
+            ->sortByDesc(fn (Repair $item) => $item->repair_warranty_expires_at ?? $item->repair_warranty_voided_at)
+            ->first();
+
+        if (! $repair) {
+            return ['status' => 'none', 'label' => 'Chưa có bảo hành sửa chữa'] + $empty;
+        }
+
+        $expiredAt = $repair->repair_warranty_expires_at ? Carbon::parse($repair->repair_warranty_expires_at) : null;
+
+        if ($repair->repair_warranty_voided_at) {
+            return [
+                'status' => 'voided',
+                'label' => 'Bảo hành sửa chữa đã bị hủy',
+                'code' => $repair->code,
+                'start_at' => $repair->repair_warranty_started_at,
+                'expired_at' => $expiredAt,
+                'remaining_days' => null,
+                'days' => $repair->repair_warranty_days,
+                'reason' => $repair->repair_warranty_void_reason,
+            ];
+        }
+
+        $remaining = $expiredAt ? now()->startOfDay()->diffInDays($expiredAt->copy()->startOfDay(), false) : null;
+
+        return [
+            'status' => $remaining === null ? 'none' : ($remaining >= 0 ? 'active' : 'expired'),
+            'label' => $remaining === null ? 'Chưa xác định hạn bảo hành' : ($remaining >= 0 ? 'Còn bảo hành sửa chữa' : 'Hết bảo hành sửa chữa'),
+            'code' => $repair->code,
+            'start_at' => $repair->repair_warranty_started_at,
+            'expired_at' => $expiredAt,
+            'remaining_days' => $remaining,
+            'days' => $repair->repair_warranty_days,
+            'reason' => null,
+        ];
+    }
 
     // Hiển thị chi tiết IMEI
     public function show(

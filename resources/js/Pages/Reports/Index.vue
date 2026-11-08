@@ -8,6 +8,7 @@ import SimpleBarChart from '@/Components/Charts/SimpleBarChart.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
+import HighlightText from '@/Components/UI/HighlightText.vue'
 import {
     TrendingUp,
     PiggyBank,
@@ -552,7 +553,7 @@ onMounted(() => {
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-xs font-medium">
                             <tr class="transition-colors hover:bg-emerald-50/70" v-for="row in profit.by_product" :key="row.id">
-                                <td class="px-3.5 py-2.5 font-semibold text-slate-800">{{ row.name }}</td>
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800"><HighlightText :text="row.name" :keyword="inventoryFilters.search || ''" /></td>
                                 <td class="px-3.5 py-2.5 text-right">{{ row.qty_sold }}</td>
                                 <td class="px-3.5 py-2.5 text-right">{{ formatMoney(row.revenue) }}</td>
                                 <td class="px-3.5 py-2.5 text-right text-slate-500">{{ formatMoney(row.cost) }}</td>
@@ -820,11 +821,11 @@ onMounted(() => {
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-xs font-medium">
                             <tr class="transition-colors hover:bg-emerald-50/70" v-for="row in debts.items?.data ?? []" :key="row.id">
-                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.code }}</td>
+                                <td class="px-3.5 py-2.5 text-slate-500"><HighlightText :text="row.code" :keyword="debtFilters.search || ''" /></td>
                                 <td class="px-3.5 py-2.5 font-semibold text-slate-800">
-                                    {{ row.full_name ?? row.name }}
+                                    <HighlightText :text="row.full_name ?? row.name" :keyword="debtFilters.search || ''" />
                                 </td>
-                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.phone ?? '—' }}</td>
+                                <td class="px-3.5 py-2.5 text-slate-500"><HighlightText v-if="row.phone" :text="row.phone" :keyword="debtFilters.search || ''" /><template v-else>—</template></td>
                                 <td class="px-3.5 py-2.5 text-right font-bold text-rose-600">
                                     {{ formatMoney(row.debt_balance) }}
                                 </td>

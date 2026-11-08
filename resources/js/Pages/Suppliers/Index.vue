@@ -9,6 +9,8 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import HighlightText from '@/Components/UI/HighlightText.vue'
+import { useLiveList } from '@/Composables/useLiveList'
 import SupplierForm from './Form.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
@@ -28,28 +30,11 @@ const columns = [
     { key: 'debt_balance', label: 'Công nợ', sortable: true, class: 'text-right' },
 ]
 
-let searchTimeout = null
-
-const searchSupplier = () => {
-    clearTimeout(searchTimeout)
-
-    searchTimeout = setTimeout(() => {
-        router.get(
-            route('suppliers.index'),
-            { search: search.value, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-                only: ['suppliers', 'filters'],
-            }
-        )
-    }, 250)
-}
-
-const sort = ({ field, order }) => router.get(route('suppliers.index'), {
-    search: search.value, sort_by: field, sort_order: order, per_page: props.filters?.per_page,
-}, { preserveState: true, preserveScroll: true, replace: true, only: ['suppliers', 'filters'] })
+// Tìm kiếm/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
+const list = useLiveList({ props, dataKey: 'suppliers', params: () => ({ search: search.value.trim() }) })
+const { data: suppliersData, filters: filtersData, loading } = list
+watch(search, () => list.schedule())
+const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
 const reload = () => {
     router.reload({
@@ -116,16 +101,16 @@ const destroy = (supplier) => {
 
         <DataPanel detached>
             <template #header>
-                <ListToolbar v-model="search" placeholder="Tìm tên, điện thoại hoặc email nhà cung cấp..." @update:model-value="searchSupplier" @submit="searchSupplier">
+                <ListToolbar v-model="search" :loading="loading" placeholder="Tìm tên, điện thoại hoặc email nhà cung cấp..." @submit="list.request()">
                     <template #actions><ActionButton @click="openCreate"><Plus class="h-4 w-4" />Thêm mới</ActionButton></template>
                 </ListToolbar>
             </template>
 
-            <BaseTable :data="suppliers" :columns="columns" :filters="filters" row-clickable @sort="sort" @row-click="openDetail">
+            <BaseTable :data="suppliersData" :columns="columns" :filters="filtersData" row-clickable @sort="sort" @row-click="openDetail">
                 <template #row="{ row }">
-                    <td class="px-3.5 py-2.5 font-medium text-slate-700">{{ row.code }}</td>
-                    <td class="px-3.5 py-2.5 font-semibold text-slate-900">{{ row.name }}</td>
-                    <td class="px-3.5 py-2.5 text-slate-600">{{ row.phone || '—' }}</td>
+                    <td class="px-3.5 py-2.5 font-medium text-slate-700"><HighlightText :text="row.code" :keyword="search" /></td>
+                    <td class="px-3.5 py-2.5 font-semibold text-slate-900"><HighlightText :text="row.name" :keyword="search" /></td>
+                    <td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.phone" :text="row.phone" :keyword="search" /><template v-else>—</template></td>
                     <td class="px-3.5 py-2.5 text-right font-semibold" :class="row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500'">{{ formatMoney(row.debt_balance) }}</td>
                     <td class="px-3.5 py-2.5 text-center" @click.stop>
                         <div class="app-row-actions">

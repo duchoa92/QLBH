@@ -1,7 +1,7 @@
 <script setup>
 import { formatCurrency, formatDateTime } from '@/utils/format'
 import { imageUrl } from '@/utils/imageUrl'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     AlertTriangle,
     ArrowDownLeft,
@@ -14,6 +14,7 @@ import {
     Search,
     ShieldCheck,
     ShieldX,
+    UserRound,
     Wrench,
 } from 'lucide-vue-next'
 
@@ -23,6 +24,7 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import api from '@/Services/api'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import LookupSuggestionItem from './LookupSuggestionItem.vue'
 
 defineOptions({
     layout: AdminLayout,
@@ -34,7 +36,31 @@ const result = ref(null)
 const errorMessage = ref('')
 const historyFilter = ref('all')
 const selectedEvent = ref(null)
-let lookupTimer = null
+// Phạm vi tìm kiếm: chọn loại dữ liệu muốn tra cứu.
+const scopeOptions = [
+    { value: 'all', label: 'Toàn bộ', placeholder: 'Tìm tất cả: IMEI, khách hàng, máy, người dùng, nhà cung cấp, hóa đơn, phiếu nhập...' },
+    { value: 'sold', label: 'Thiết bị đã bán', placeholder: 'Tìm trong các thiết bị đã bán: IMEI, tên máy, khách mua, mã hóa đơn...' },
+    { value: 'in_stock', label: 'Sản phẩm trong kho', placeholder: 'Tìm trong các thiết bị còn trong kho: IMEI, tên máy, biến thể...' },
+    { value: 'repair', label: 'Sản phẩm sửa chữa', placeholder: 'Tìm trong các máy đã/đang sửa: mã phiếu, tên máy, IMEI, khách, SĐT...' },
+    { value: 'customer', label: 'Khách hàng', placeholder: 'Tìm khách hàng theo tên, số điện thoại, mã, CCCD...' },
+    { value: 'user', label: 'Người dùng', placeholder: 'Tìm nhân viên/người dùng theo tên, tên đăng nhập, số điện thoại...' },
+    { value: 'supplier', label: 'Nhà cung cấp', placeholder: 'Tìm nhà cung cấp theo tên, mã, số điện thoại, email...' },
+    { value: 'sale', label: 'Hóa đơn bán', placeholder: 'Tìm hóa đơn theo mã hóa đơn, tên hoặc SĐT khách...' },
+    { value: 'import', label: 'Phiếu nhập', placeholder: 'Tìm phiếu nhập theo mã phiếu, nhà cung cấp, số điện thoại...' },
+]
+const scope = ref('all')
+const scopeLabel = computed(() => scopeOptions.find(option => option.value === scope.value)?.label || '')
+const searchPlaceholder = computed(() => scopeOptions.find(option => option.value === scope.value)?.placeholder || '')
+const backStack = ref([])
+
+const suggestions = ref([])
+const suggestOpen = ref(false)
+const suggestLoading = ref(false)
+const suggestDone = ref(false)
+const activeIndex = ref(-1)
+const searchBoxRef = ref(null)
+let suggestTimer = null
+let suggestRequest = 0
 let lookupRequest = 0
 
 const money = formatCurrency
@@ -62,28 +88,33 @@ const variantText = computed(() => {
         .join(' / ') || result.value?.imei?.variant?.sku || '-'
 })
 
-const warrantyMeta = computed(() => {
-    const status = result.value?.warranty?.status
-
+const metaFor = (status) => {
     if (status === 'active') {
-        return {
-            icon: ShieldCheck,
-            class: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
+        return { icon: ShieldCheck, class: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
     }
 
-    if (status === 'expired') {
-        return {
-            icon: ShieldX,
-            class: 'border-rose-200 bg-rose-50 text-rose-700',
-        }
+    if (status === 'expired' || status === 'voided') {
+        return { icon: ShieldX, class: 'border-rose-200 bg-rose-50 text-rose-700' }
     }
 
-    return {
-        icon: Clock,
-        class: 'border-slate-200 bg-slate-50 text-slate-600',
-    }
-})
+    return { icon: Clock, class: 'border-slate-200 bg-slate-50 text-slate-600' }
+}
+
+const warrantyMeta = computed(() => metaFor(result.value?.warranty?.status))
+const customerWarrantyMeta = computed(() => metaFor(result.value?.customer_warranty?.status))
+const repairWarrantyMeta = computed(() => metaFor(result.value?.repair_warranty?.status))
+
+// Máy không có trong kho (chỉ có phiếu sửa) thì lấy tên máy từ phiếu sửa.
+const deviceTitle = computed(() =>
+    result.value?.imei?.product?.name || result.value?.repairs?.[0]?.device_name || '-')
+
+const remainingText = (info) => {
+    if (info?.remaining_days === null || info?.remaining_days === undefined) return ''
+
+    return info.remaining_days >= 0
+        ? `Còn ${info.remaining_days} ngày`
+        : `Quá hạn ${Math.abs(info.remaining_days)} ngày`
+}
 
 const hasExtraInfo = computed(() => {
     const extraInfo = result.value?.imei?.extra_info || {}
@@ -100,59 +131,158 @@ const extraInfoImageUrl = computed(() => {
     return imageUrl(imagePath)
 })
 
-const lookup = async (expectedKeyword = keyword.value.trim()) => {
-    const imei = keyword.value.trim()
-
-    if (!imei || imei !== expectedKeyword) return
-
+const runLookup = async (params) => {
     const requestId = ++lookupRequest
 
     loading.value = true
     errorMessage.value = ''
     result.value = null
+    selectedEvent.value = null
+    suggestOpen.value = false
 
     try {
-        const response = await api.get('/api/imeis/lookup', {
-            params: {
-                imei,
-            },
-        })
+        const response = await api.get('/api/imeis/lookup', { params })
 
-        if (requestId === lookupRequest && keyword.value.trim() === imei) {
-            result.value = response.data
-        }
+        if (requestId === lookupRequest) result.value = response.data
     } catch (error) {
         if (requestId === lookupRequest) {
             errorMessage.value =
                 error.response?.data?.message ||
-                'Không tra cứu được IMEI. Vui lòng thử lại.'
+                'Không tra cứu được. Vui lòng thử lại.'
         }
     } finally {
         if (requestId === lookupRequest) loading.value = false
     }
 }
 
-const lookupScannedCode = (code) => {
-    keyword.value = code
+// Tra cứu theo từ khóa tự do (Enter / nút Tra cứu / quét mã).
+const lookup = () => {
+    const q = keyword.value.trim()
+
+    if (!q) return
+
+    clearTimeout(suggestTimer)
+    suggestRequest += 1
+    suggestLoading.value = false
+    runLookup({ q, scope: scope.value })
 }
 
-watch(keyword, value => {
-    clearTimeout(lookupTimer)
+const paramsFor = (item) => {
+    if (item.type === 'repair') return { repair_id: item.repair_id }
+
+    return { type: item.type, id: item.id }
+}
+
+const selectSuggestion = (item) => {
+    // Chọn từ bên trong một kết quả (danh sách / hồ sơ) thì nhớ để có nút Quay lại.
+    if (result.value && !result.value.no_match) backStack.value.push(result.value)
+
+    runLookup(paramsFor(item))
+}
+
+const goBack = () => {
+    const previous = backStack.value.pop()
+
+    if (previous) {
+        result.value = previous
+        selectedEvent.value = null
+    }
+}
+
+const fetchSuggestions = async (q) => {
+    const requestId = ++suggestRequest
+
+    suggestLoading.value = true
+
+    try {
+        const response = await api.get('/api/imeis/lookup', { params: { suggest: 1, q, scope: scope.value } })
+
+        if (requestId !== suggestRequest || keyword.value.trim() !== q) return
+
+        suggestions.value = response.data?.suggestions || []
+        suggestDone.value = true
+        activeIndex.value = -1
+
+        // Gõ/quét đúng IMEI hoặc Serial đầy đủ thì tra cứu luôn, không cần chọn gợi ý.
+        const exact = ['all', 'sold', 'in_stock', 'repair'].includes(scope.value) && suggestions.value.find(item =>
+            item.type === 'imei' && [item.imei, item.serial].some(code => code && code === q))
+
+        if (exact) selectSuggestion(exact)
+    } catch {
+        if (requestId === suggestRequest) {
+            suggestions.value = []
+            suggestDone.value = true
+        }
+    } finally {
+        if (requestId === suggestRequest) suggestLoading.value = false
+    }
+}
+
+const lookupScannedCode = async (code) => {
+    keyword.value = code
+    await nextTick()
+    lookup()
+}
+
+watch([keyword, scope], () => {
+    const value = keyword.value
+
+    backStack.value = []
+    clearTimeout(suggestTimer)
+    suggestRequest += 1
     lookupRequest += 1
     loading.value = false
+    suggestLoading.value = false
+    suggestDone.value = false
+    activeIndex.value = -1
     result.value = null
     errorMessage.value = ''
     selectedEvent.value = null
-    const imei = value.trim()
 
-    if (!imei) {
+    const q = value.trim()
+
+    if (q.length < 2) {
+        suggestions.value = []
+        suggestOpen.value = false
         return
     }
 
-    lookupTimer = setTimeout(() => lookup(imei), 400)
+    suggestOpen.value = true
+    suggestLoading.value = true
+    suggestTimer = setTimeout(() => fetchSuggestions(q), 250)
 })
 
-onBeforeUnmount(() => clearTimeout(lookupTimer))
+const onKeydown = (event) => {
+    const count = suggestions.value.length
+
+    if (event.key === 'ArrowDown' && count) {
+        event.preventDefault()
+        suggestOpen.value = true
+        activeIndex.value = (activeIndex.value + 1) % count
+    } else if (event.key === 'ArrowUp' && count) {
+        event.preventDefault()
+        suggestOpen.value = true
+        activeIndex.value = activeIndex.value <= 0 ? count - 1 : activeIndex.value - 1
+    } else if (event.key === 'Enter') {
+        event.preventDefault()
+        const item = suggestions.value[activeIndex.value]
+
+        if (suggestOpen.value && item) selectSuggestion(item)
+        else lookup()
+    } else if (event.key === 'Escape') {
+        suggestOpen.value = false
+    }
+}
+
+const closeOnOutside = (event) => {
+    if (searchBoxRef.value && !searchBoxRef.value.contains(event.target)) suggestOpen.value = false
+}
+
+onMounted(() => window.addEventListener('pointerdown', closeOnOutside))
+onBeforeUnmount(() => {
+    clearTimeout(suggestTimer)
+    window.removeEventListener('pointerdown', closeOnOutside)
+})
 
 const historyTypes = [
     { value: 'all', label: 'Tất cả' },
@@ -219,7 +349,7 @@ const eventDotClasses = type => ({
 
 const eventPartner = item => {
     if (item.type === 'sale') return item.customer_name || 'Khách lẻ'
-    if (item.type === 'repair') return item.contact_phone || 'Khách gửi sửa chữa'
+    if (item.type === 'repair') return item.customer_name || item.customer_phone || item.contact_phone || 'Khách gửi sửa chữa'
     return item.supplier_id ? `Nhà cung cấp #${item.supplier_id}` : '-'
 }
 
@@ -248,31 +378,73 @@ const historyCount = type => type === 'all'
 <template>
     <div class="space-y-3">
         <PageHeader
-            title="Tra cứu IMEI"
-            description="Kiểm tra thông tin máy, lịch sử nhập bán, sửa chữa và bảo hành"
+            title="Tra cứu IMEI, bảo hành & dữ liệu"
+            description="Chọn phạm vi tìm kiếm rồi gõ từ khóa đúng hoặc gần đúng — hệ thống gợi ý ngay khi bạn gõ"
         />
 
         <DataPanel>
             <div class="border-b border-slate-200 p-4">
+                <div class="mb-3 flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                    <button
+                        v-for="option in scopeOptions"
+                        :key="option.value"
+                        type="button"
+                        class="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all"
+                        :class="scope === option.value ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'"
+                        @click="scope = option.value"
+                    >
+                        {{ option.label }}
+                    </button>
+                </div>
+
                 <div class="flex flex-col gap-3 md:flex-row">
-                    <div class="flex min-w-0 flex-1 items-center gap-2">
-                      <div class="relative min-w-0 flex-1">
+                    <div ref="searchBoxRef" class="relative min-w-0 flex-1">
                         <Search class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                         <input
                             v-model="keyword"
                             type="text"
-                            placeholder="Nhập hoặc quét IMEI / Serial..."
+                            :placeholder="searchPlaceholder"
                             class="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-12 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             autocomplete="off"
+                            @focus="suggestOpen = keyword.trim().length >= 2"
+                            @keydown="onKeydown"
                         >
-                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2 " @scanned="lookupScannedCode" />
-                      </div>
+                        <BarcodeCameraButton class="absolute right-1 top-1/2 z-10 -translate-y-1/2" @scanned="lookupScannedCode" />
+
+                        <!-- Danh sách gợi ý khi gõ -->
+                        <div
+                            v-if="suggestOpen"
+                            class="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-[420px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+                        >
+                            <div v-if="suggestLoading && !suggestions.length" class="flex items-center gap-2 px-4 py-3 text-sm text-slate-500">
+                                <span class="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600"></span>
+                                Đang tìm gợi ý...
+                            </div>
+                            <div v-else-if="suggestDone && !suggestions.length" class="px-4 py-5 text-center">
+                                <div class="text-sm font-bold text-slate-700">Không có kết quả phù hợp</div>
+                                <div class="mt-0.5 text-xs text-slate-400">Trong phạm vi “{{ scopeLabel }}” — thử từ khóa khác hoặc đổi phạm vi</div>
+                            </div>
+                            <div v-else class="divide-y divide-slate-100">
+                                <LookupSuggestionItem
+                                    v-for="(item, index) in suggestions"
+                                    :key="`${item.type}-${item.id || item.repair_id}`"
+                                    :item="item"
+                                    :active="index === activeIndex"
+                                    @select="selectSuggestion"
+                                />
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="flex min-w-[130px] items-center justify-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-                        <span v-if="loading" class="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600"></span>
-                        {{ loading ? 'Đang tra cứu...' : 'Tự động tra cứu' }}
-                    </div>
+                    <button
+                        type="button"
+                        class="flex min-w-[130px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        :disabled="loading || !keyword.trim()"
+                        @click="lookup"
+                    >
+                        <span v-if="loading" class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                        {{ loading ? 'Đang tra cứu...' : 'Tra cứu' }}
+                    </button>
                 </div>
 
                 <p
@@ -291,17 +463,86 @@ const historyCount = type => type === 'all'
                     <Search class="h-7 w-7" />
                 </div>
                 <div class="mt-4 text-base font-bold text-slate-900">
-                    Nhập IMEI để bắt đầu tra cứu
+                    Nhập thông tin để bắt đầu tra cứu
                 </div>
                 <div class="mt-1 max-w-lg text-sm text-slate-500">
-                    Trang này dùng để xem nhanh lịch sử mua bán, sửa chữa, thông tin thiết bị và tình trạng bảo hành.
+                    Chọn phạm vi ở phía trên (toàn bộ, thiết bị đã bán, trong kho, sửa chữa, khách hàng, người dùng...), gõ từ khóa đúng hoặc gần đúng rồi chọn một gợi ý để xem chi tiết.
+                </div>
+            </div>
+
+            <!-- Không có kết quả -->
+            <div
+                v-if="result?.no_match"
+                class="flex flex-col items-center justify-center px-6 py-16 text-center"
+            >
+                <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                    <AlertTriangle class="h-7 w-7" />
+                </div>
+                <div class="mt-4 text-base font-bold text-slate-900">Không có kết quả phù hợp</div>
+                <div class="mt-1 max-w-lg text-sm text-slate-500">
+                    Không có dữ liệu nào trong phạm vi “{{ scopeLabel }}” khớp với “{{ keyword }}”. Hãy kiểm tra lại từ khóa hoặc thử phạm vi khác.
+                </div>
+            </div>
+
+            <!-- Nhiều kết quả: chọn một -->
+            <div v-else-if="result?.multiple" class="p-4">
+                <div class="mb-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-800">
+                    {{ result.message }}
+                </div>
+                <div class="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <LookupSuggestionItem
+                        v-for="item in result.candidates"
+                        :key="`${item.type}-${item.id || item.repair_id}`"
+                        :item="item"
+                        @select="selectSuggestion"
+                    />
+                </div>
+            </div>
+
+            <!-- Hồ sơ khách hàng / người dùng / nhà cung cấp / hóa đơn / phiếu nhập -->
+            <div v-else-if="result?.kind === 'entity'" class="space-y-5 p-4">
+                <button v-if="backStack.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50" @click="goBack">
+                    ← Quay lại
+                </button>
+
+                <div class="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                    <div class="text-xs font-bold uppercase text-indigo-500">{{ result.entity_label }}</div>
+                    <div class="mt-1 text-xl font-black text-slate-900">{{ result.title }}</div>
+                    <div v-if="result.subtitle" class="mt-0.5 text-sm font-medium text-slate-600">{{ result.subtitle }}</div>
+                </div>
+
+                <div v-if="result.fields?.length" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div v-for="field in result.fields" :key="field.label" class="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div class="text-xs font-bold uppercase text-slate-400">{{ field.label }}</div>
+                        <div class="mt-1.5 break-words font-bold text-slate-900">{{ field.value }}</div>
+                    </div>
+                </div>
+
+                <div v-for="section in result.sections" :key="section.title" class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+                        <span class="text-sm font-bold text-slate-800">{{ section.title }}</span>
+                        <span class="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-500">{{ section.items.length }}</span>
+                    </div>
+                    <div v-if="section.items.length" class="divide-y divide-slate-100">
+                        <LookupSuggestionItem
+                            v-for="(item, index) in section.items"
+                            :key="`${section.title}-${item.type}-${item.id || item.repair_id || index}`"
+                            :item="item"
+                            @select="selectSuggestion"
+                        />
+                    </div>
+                    <div v-else class="px-4 py-6 text-center text-sm text-slate-400">Chưa có dữ liệu</div>
                 </div>
             </div>
 
             <div
-                v-if="result"
+                v-else-if="result"
                 class="space-y-5 p-4"
             >
+                <button v-if="backStack.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50" @click="goBack">
+                    ← Quay lại
+                </button>
+
                 <div
                     class="rounded-2xl border p-4"
                     :class="result.exists ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'"
@@ -320,7 +561,7 @@ const historyCount = type => type === 'all'
                                 {{ result.message }}
                             </div>
                             <div class="mt-1 text-sm">
-                                {{ result.exists ? 'Đã tìm thấy dữ liệu IMEI trong hệ thống.' : 'Chưa có dữ liệu IMEI trong hệ thống.' }}
+                                {{ result.exists ? 'Đã tìm thấy dữ liệu IMEI trong hệ thống.' : (result.repair_only ? 'Chỉ có phiếu sửa chữa liên quan; thiết bị này không nhập/bán tại cửa hàng.' : 'Chưa có dữ liệu IMEI trong hệ thống.') }}
                             </div>
                         </div>
                     </div>
@@ -333,7 +574,7 @@ const historyCount = type => type === 'all'
                             Sản phẩm
                         </div>
                         <div class="mt-2 font-bold text-slate-900">
-                            {{ result.imei?.product?.name || '-' }}
+                            {{ deviceTitle }}
                         </div>
                         <div class="mt-1 text-xs text-slate-500">
                             SKU: {{ result.imei?.product?.sku || '-' }}
@@ -381,6 +622,54 @@ const historyCount = type => type === 'all'
                         >
                             {{ result.warranty.remaining_days >= 0 ? `Còn ${result.warranty.remaining_days} ngày` : `Quá hạn ${Math.abs(result.warranty.remaining_days)} ngày` }}
                         </div>
+                    </div>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-3">
+                    <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
+                            <UserRound class="h-4 w-4" />
+                            Khách hàng
+                        </div>
+                        <template v-if="result.customer">
+                            <div class="mt-2 font-bold text-slate-900">{{ result.customer.name || 'Khách lẻ' }}</div>
+                            <div class="mt-1 text-xs font-semibold text-slate-600">{{ result.customer.phone || 'Chưa có số điện thoại' }}</div>
+                            <div class="mt-1 text-xs text-slate-500">
+                                {{ result.customer.source === 'sale' ? 'Mua tại hóa đơn' : 'Gửi sửa tại phiếu' }}
+                                {{ result.customer.reference_code }} · {{ formatDate(result.customer.happened_at) }}
+                            </div>
+                        </template>
+                        <div v-else class="mt-2 text-sm font-semibold text-slate-500">Chưa bán / chưa có thông tin khách</div>
+                    </div>
+
+                    <div class="rounded-2xl border p-4" :class="customerWarrantyMeta.class">
+                        <div class="flex items-center gap-2 text-xs font-bold uppercase">
+                            <component :is="customerWarrantyMeta.icon" class="h-4 w-4" />
+                            Bảo hành cửa hàng (khách)
+                        </div>
+                        <div class="mt-2 font-black">{{ result.customer_warranty?.label || '-' }}</div>
+                        <div v-if="result.customer_warranty?.expired_at" class="mt-1 text-xs font-semibold">
+                            Hạn: {{ formatDate(result.customer_warranty.expired_at) }}
+                            <span v-if="remainingText(result.customer_warranty)"> · {{ remainingText(result.customer_warranty) }}</span>
+                        </div>
+                        <div v-if="result.customer_warranty?.start_at" class="mt-0.5 text-xs opacity-80">
+                            Tính từ ngày bán: {{ formatDate(result.customer_warranty.start_at) }}
+                        </div>
+                        <div v-if="result.customer_warranty?.reason" class="mt-0.5 text-xs">Lý do hủy: {{ result.customer_warranty.reason }}</div>
+                    </div>
+
+                    <div class="rounded-2xl border p-4" :class="repairWarrantyMeta.class">
+                        <div class="flex items-center gap-2 text-xs font-bold uppercase">
+                            <component :is="repairWarrantyMeta.icon" class="h-4 w-4" />
+                            Bảo hành sửa chữa
+                        </div>
+                        <div class="mt-2 font-black">{{ result.repair_warranty?.label || '-' }}</div>
+                        <div v-if="result.repair_warranty?.code" class="mt-1 text-xs font-semibold">Phiếu {{ result.repair_warranty.code }}</div>
+                        <div v-if="result.repair_warranty?.expired_at" class="mt-0.5 text-xs font-semibold">
+                            Hạn: {{ formatDate(result.repair_warranty.expired_at) }}
+                            <span v-if="remainingText(result.repair_warranty)"> · {{ remainingText(result.repair_warranty) }}</span>
+                        </div>
+                        <div v-if="result.repair_warranty?.reason" class="mt-0.5 text-xs">Lý do hủy: {{ result.repair_warranty.reason }}</div>
                     </div>
                 </div>
 

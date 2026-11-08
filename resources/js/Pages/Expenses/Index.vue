@@ -10,6 +10,8 @@ import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 import { formatMoney } from '@/utils/format'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import HighlightText from '@/Components/UI/HighlightText.vue'
+import { useLiveList } from '@/Composables/useLiveList'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 
 defineOptions({ layout: AdminLayout })
@@ -42,17 +44,24 @@ const closeScheduleReminder = () => {
     router.visit(`${url.pathname}${url.search}`, { preserveState: true, preserveScroll: true, replace: true })
 }
 const reminderDueDate = computed(() => {
-    if (!reminderSchedule.value || !props.filters?.month) return ''
-    const [year, monthNumber] = props.filters.month.split('-').map(Number)
+    if (!reminderSchedule.value || !month.value) return ''
+    const [year, monthNumber] = month.value.split('-').map(Number)
     const date = new Date(year, monthNumber - 1, Math.min(Number(reminderSchedule.value.due_day), new Date(year, monthNumber, 0).getDate()))
     return date.toLocaleDateString('vi-VN')
 })
 watch(() => page.url, openScheduleReminder, { immediate: true })
 watch(() => props.recurringExpenses, openScheduleReminder)
-watch([month, search, category], () => {
-    clearTimeout(timer)
-    timer = setTimeout(() => router.get(route('expenses.index'), { month: month.value, search: search.value || undefined, category: category.value || undefined, sort_by: props.filters?.sort_by, sort_order: props.filters?.sort_order, per_page: props.filters?.per_page }, { preserveState: true, preserveScroll: true, replace: true, only: ['expenses', 'summary', 'filters'] }), 250)
+// Tìm kiếm/lọc/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
+const list = useLiveList({
+    props,
+    dataKey: 'expenses',
+    extraKeys: ['summary'],
+    params: () => ({ month: month.value, search: search.value.trim(), category: category.value }),
 })
+const { data: expensesData, filters: filtersData, extras, loading } = list
+const summaryData = extras.summary
+watch(search, () => list.schedule())
+watch([month, category], () => list.request())
 const openCreate = () => { editing.value = null; form.reset(); form.category = 'utilities'; form.expense_date = new Date().toISOString().slice(0, 10); form.payment_method = 'cash'; modal.value = true }
 const openEdit = row => { editing.value = row; form.category = row.category; form.description = row.description; form.amount = row.amount; form.expense_date = row.expense_date; form.payment_method = row.payment_method; form.recipient = row.recipient || ''; form.note = row.note || ''; modal.value = true }
 const submit = () => form[editing.value ? 'put' : 'post'](editing.value ? route('expenses.update', editing.value.id) : route('expenses.store'), { preserveScroll: true, onSuccess: () => { modal.value = false } })
@@ -61,12 +70,12 @@ const openSchedule = row => { editingSchedule.value = row || null; scheduleForm.
 const saveSchedule = () => scheduleForm[editingSchedule.value ? 'put' : 'post'](editingSchedule.value ? route('expenses.recurring.update', editingSchedule.value.id) : route('expenses.recurring.store'), { preserveScroll: true, onSuccess: () => { scheduleModal.value = false } })
 const deleteSchedule = row => { if (confirm(`Xóa lịch nhắc “${row.description}”?`)) router.delete(route('expenses.recurring.destroy', row.id), { preserveScroll: true }) }
 const markPaid = row => {
-    if (!confirm(`Ghi nhận đã thanh toán ${row.description} trong tháng ${props.filters.month}?`)) return
+    if (!confirm(`Ghi nhận đã thanh toán ${row.description} trong tháng ${month.value}?`)) return
     const entered = window.prompt('Số tiền thực tế đã đóng (VNĐ):', String(Number(row.amount)))
     if (entered === null) return
     const amount = Number(entered.replace(/[,.\s]/g, ''))
     if (!Number.isFinite(amount) || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ.')
-    router.post(route('expenses.recurring.paid', row.id), { period: props.filters.month, paid_date: new Date().toISOString().slice(0, 10), amount, payment_method: row.payment_method }, { preserveScroll: true })
+    router.post(route('expenses.recurring.paid', row.id), { period: month.value, paid_date: new Date().toISOString().slice(0, 10), amount, payment_method: row.payment_method }, { preserveScroll: true })
 }
 const columns = [
     { key: 'expense_date', label: 'Ngày', sortable: true },
@@ -76,30 +85,27 @@ const columns = [
     { key: 'payment_method', label: 'Thanh toán' },
     { key: 'amount', label: 'Số tiền', sortable: true, class: 'text-right' },
 ]
-const applySort = ({ field, order }) => router.get(route('expenses.index'), {
-    month: month.value, category: category.value || undefined, search: search.value || undefined,
-    sort_by: field, sort_order: order, per_page: props.filters?.per_page,
-}, { preserveState: true, preserveScroll: true, replace: true, only: ['expenses', 'summary', 'filters'] })
+const applySort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 </script>
 
 <template>
     <div class="space-y-3">
         <PageHeader title="Chi phí cửa hàng" />
         <div class="grid gap-3 sm:grid-cols-2">
-            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Tổng chi tháng {{ month }}</p><p class="mt-1 text-2xl font-black text-rose-700">{{ formatMoney(summary.total) }}</p></div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Số khoản chi trong tháng</p><p class="mt-1 text-2xl font-black text-slate-900">{{ summary.count }}</p></div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Tổng chi tháng {{ month }}</p><p class="mt-1 text-2xl font-black text-rose-700">{{ formatMoney(summaryData?.total) }}</p></div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p class="text-xs font-semibold text-slate-500">Số khoản chi trong tháng</p><p class="mt-1 text-2xl font-black text-slate-900">{{ summaryData?.count }}</p></div>
         </div>
         <div class="space-y-3">
-            <ListToolbar v-model="search" placeholder="Tìm nội dung hoặc người nhận...">
+            <ListToolbar v-model="search" :loading="loading" placeholder="Tìm nội dung hoặc người nhận..." @submit="list.request()">
                 <template #filters><input v-model="month" type="month" class="app-filter-control w-full sm:w-[170px]" /><ListFilterSelect v-model="category" label="Loại chi" :show-placeholder="false" :options="categoryOptions" /></template>
                 <template #actions><ActionButton v-if="canManage" @click="openCreate"><Plus :size="16" />Thêm chi phí</ActionButton></template>
             </ListToolbar>
-            <BaseTable :data="expenses" :columns="columns" :filters="filters" :row-clickable="canManage" @sort="applySort" @row-click="openEdit($event)">
+            <BaseTable :data="expensesData" :columns="columns" :filters="filtersData" :row-clickable="canManage" @sort="applySort" @row-click="openEdit($event)">
                 <template #row="{ row }">
                     <td class="px-3.5 py-2.5 text-slate-700">{{ row.expense_date }}</td>
                     <td class="px-3.5 py-2.5"><span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ categoryLabels[row.category] || row.category }}</span></td>
-                    <td class="px-3.5 py-2.5"><div class="font-semibold text-slate-800">{{ row.description }}</div><div v-if="row.note" class="mt-0.5 text-xs text-slate-500">{{ row.note }}</div></td>
-                    <td class="px-3.5 py-2.5 text-slate-600">{{ row.recipient || '—' }}</td>
+                    <td class="px-3.5 py-2.5"><div class="font-semibold text-slate-800"><HighlightText :text="row.description" :keyword="search" /></div><div v-if="row.note" class="mt-0.5 text-xs text-slate-500">{{ row.note }}</div></td>
+                    <td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.recipient" :text="row.recipient" :keyword="search" /><template v-else>—</template></td>
                     <td class="px-3.5 py-2.5 text-slate-600">{{ paymentLabels[row.payment_method] || row.payment_method }}</td>
                     <td class="px-3.5 py-2.5 text-right font-bold text-emerald-700">{{ formatMoney(row.amount) }}</td>
                     <td class="px-3.5 py-2.5 text-center" @click.stop><div v-if="canManage" class="app-row-actions"><button type="button" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa" @click="openEdit(row)"><Pencil class="h-4 w-4" /></button><button type="button" class="app-row-action app-row-action--danger" title="Xóa" aria-label="Xóa" @click="remove(row)"><Trash2 class="h-4 w-4" /></button></div></td>
@@ -149,7 +155,7 @@ const applySort = ({ field, order }) => router.get(route('expenses.index'), {
                     <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Ngày đến hạn</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ reminderDueDate }}</dd></div>
                     <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Đơn vị nhận</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ reminderSchedule.recipient || '—' }}</dd></div>
                     <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Hình thức dự kiến</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ paymentLabels[reminderSchedule.payment_method] || reminderSchedule.payment_method }}</dd></div>
-                    <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Kỳ thanh toán</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ props.filters.month }}</dd></div>
+                    <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">Kỳ thanh toán</dt><dd class="mt-1 text-sm font-bold text-slate-800">{{ month }}</dd></div>
                 </dl>
                 <p v-if="reminderSchedule.note" class="rounded-lg border border-slate-200 p-3 text-sm text-slate-600">{{ reminderSchedule.note }}</p>
             </div>

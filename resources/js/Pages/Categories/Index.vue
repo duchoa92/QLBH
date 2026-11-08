@@ -15,6 +15,8 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import HighlightText from '@/Components/UI/HighlightText.vue'
+import { useLiveList } from '@/Composables/useLiveList'
 import CatalogTabs from '@/Components/CatalogTabs.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
 
@@ -48,30 +50,15 @@ const confirmBox = useConfirm()
 const search = ref(props.filters?.search || '')
 const status = ref(props.filters?.status || '')
 
-let timeout = null
-
-watch([search, status], () => {
-    clearTimeout(timeout)
-
-    timeout = setTimeout(() => {
-        router.get('/categories', {
-            search: search.value,
-            status: status.value,
-            sort_by: props.filters?.sort_by,
-            sort_order: props.filters?.sort_order,
-            per_page: props.filters?.per_page
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-            only: ['categories', 'filters'],
-        })
-    }, 300)
+// Tìm kiếm/lọc/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
+const list = useLiveList({
+    props,
+    dataKey: 'categories',
+    params: () => ({ search: search.value.trim(), status: status.value }),
 })
-
-onBeforeUnmount(() => {
-    if (timeout) clearTimeout(timeout)
-})
+const { data: categoriesData, filters: filtersData, loading } = list
+watch(search, () => list.schedule())
+watch(status, () => list.request())
 
 /* ================= RELOAD ================= */
 const loadData = () => {
@@ -163,7 +150,7 @@ const toggleStatus = (id) => {
     loadingStatus.value = id
 
     // 👉 update UI trước
-    const item = props.categories.data.find(i => i.id === id)
+    const item = categoriesData.value?.data?.find(i => i.id === id)
     if (item) item.is_active = !item.is_active
 
     router.patch(`/categories/${id}/toggle-status`, {}, {
@@ -171,20 +158,7 @@ const toggleStatus = (id) => {
     })
 }
 
-const sort = ({ field, order }) => {
-    router.get('/categories', {
-        search: search.value,
-        status: status.value,
-        sort_by: field,
-        sort_order: order,
-        per_page: props.filters?.per_page
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        only: ['categories', 'filters'],
-    })
-}
+const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 </script>
 
 <template>
@@ -197,7 +171,7 @@ const sort = ({ field, order }) => {
 
     <DataPanel detached>
         <template #header>
-            <ListToolbar v-model="search" placeholder="Tìm danh mục...">
+            <ListToolbar v-model="search" :loading="loading" placeholder="Tìm danh mục...">
                 <template #filters><ListFilterSelect
                     v-model="status"
                     label="Trạng thái"
@@ -213,9 +187,9 @@ const sort = ({ field, order }) => {
         </template>
 
         <BaseTable
-            :data="categories"
+            :data="categoriesData"
             :columns="columns"
-            :filters="filters"
+            :filters="filtersData"
             row-clickable
             @sort="sort"
             @row-click="openEdit($event)"
@@ -225,7 +199,7 @@ const sort = ({ field, order }) => {
                 <td class="px-3.5 py-2.5 text-center">{{ row.id }}</td>
 
                 <td class="px-3.5 py-2.5 font-medium">
-                    {{ row.name }}
+                    <HighlightText :text="row.name" :keyword="search" />
                 </td>
 
                 <td class="px-3.5 py-2.5 text-center">

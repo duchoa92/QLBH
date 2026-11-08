@@ -15,6 +15,8 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
+import HighlightText from '@/Components/UI/HighlightText.vue'
+import { useLiveList } from '@/Composables/useLiveList'
 import { useReferenceData } from '@/Stores/referenceData'
 import CatalogTabs from '@/Components/CatalogTabs.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
@@ -63,35 +65,15 @@ const confirmBox = useConfirm()
 const search = ref(props.filters?.search || '')
 const category_id = ref(props.filters?.category_id ?? '') // Đồng bộ với value trống '' của option Tất cả
 
-let timeout = null
-onBeforeUnmount(() => {
-    if (timeout) clearTimeout(timeout)
+// Tìm kiếm/lọc/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
+const list = useLiveList({
+    props,
+    dataKey: 'brands',
+    params: () => ({ search: search.value.trim(), category_id: category_id.value }),
 })
-
-// HÀM TRIGGER CHUNG ĐỂ GET DỮ LIỆU
-const handleFilter = () => {
-    router.get('/brands', {
-        search: search.value,
-        category_id: category_id.value,
-        sort_by: props.filters?.sort_by,
-        sort_order: props.filters?.sort_order,
-        per_page: props.filters?.per_page
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        only: ['brands', 'filters'],
-    })
-}
-
-// Chỉ debounce với ô tìm kiếm văn bản (Search)
-watch(search, () => {
-    clearTimeout(timeout)
-    timeout = setTimeout(handleFilter, 300)
-})
-
-// Lập tức trigger filter khi người dùng thay đổi select Category
-watch(category_id, handleFilter)
+const { data: brandsData, filters: filtersData, loading } = list
+watch(search, () => list.schedule())
+watch(category_id, () => list.request())
 
 /* RELOAD */
 const loadData = () => {
@@ -182,7 +164,7 @@ const toggleStatus = (id) => {
     loadingStatus.value = id
 
     // update UI trước
-    const item = props.brands.data.find(i => i.id === id)
+    const item = brandsData.value?.data?.find(i => i.id === id)
     if (item) item.is_active = !item.is_active
 
     router.patch(`/brands/${id}/toggle-status`, {}, {
@@ -195,20 +177,7 @@ const toggleStatus = (id) => {
 
 // Sort
 
-const sort = ({ field, order }) => {
-    router.get('/brands', {
-        search: search.value,
-        category_id: category_id.value,
-        sort_by: field,
-        sort_order: order,
-        per_page: props.filters?.per_page
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true
-        ,only: ['brands', 'filters']
-    })
-}
+const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
 </script>
 
@@ -222,7 +191,7 @@ const sort = ({ field, order }) => {
 
     <DataPanel detached>
         <template #header>
-            <ListToolbar v-model="search" placeholder="Tìm thương hiệu...">
+            <ListToolbar v-model="search" :loading="loading" placeholder="Tìm thương hiệu...">
                 <template #filters><ListFilterSelect
                     v-model="category_id"
                     name="category_id"
@@ -238,9 +207,9 @@ const sort = ({ field, order }) => {
         </template>
 
         <BaseTable
-            :data="brands"
+            :data="brandsData"
             :columns="columns"
-            :filters="filters"
+            :filters="filtersData"
             row-clickable
             @sort="sort"
             @row-click="openEdit($event)"
@@ -250,7 +219,7 @@ const sort = ({ field, order }) => {
                 <td class="px-3.5 py-2.5 text-center">{{ row.id }}</td>
 
                 <td class="px-3.5 py-2.5 font-medium">
-                    {{ row.name }}
+                    <HighlightText :text="row.name" :keyword="search" />
                 </td>
 
                 <td class="px-3.5 py-2.5">
