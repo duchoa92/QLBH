@@ -194,10 +194,43 @@ const lookup = () => {
     runLookup({ q, scope: scopes.value.join(',') })
 }
 
+// Gom kết quả theo nhóm: sản phẩm, thiết bị, phiếu sửa, khách hàng...
+const groupTitles = {
+    product: 'Sản phẩm',
+    imei: 'Thiết bị (IMEI / Serial)',
+    repair: 'Phiếu sửa chữa',
+    customer: 'Khách hàng',
+    user: 'Người dùng',
+    supplier: 'Nhà cung cấp',
+    sale: 'Hóa đơn bán',
+    import: 'Phiếu nhập',
+}
+const groupOrder = Object.keys(groupTitles)
+
+// Trả về các nhóm theo thứ tự cố định; mỗi mục giữ chỉ số phẳng để điều khiển bằng phím ↑ ↓.
+const buildGroups = (items = []) => {
+    const buckets = new Map(groupOrder.map(type => [type, []]))
+
+    items.forEach(item => buckets.get(buckets.has(item.type) ? item.type : 'imei').push(item))
+
+    let index = 0
+
+    return groupOrder
+        .filter(type => buckets.get(type).length)
+        .map(type => ({
+            key: type,
+            title: groupTitles[type],
+            entries: buckets.get(type).map(item => ({ item, index: index++ })),
+        }))
+}
+const groupedSuggestions = computed(() => buildGroups(suggestions.value))
+const flatSuggestions = computed(() => groupedSuggestions.value.flatMap(group => group.entries.map(entry => entry.item)))
+const groupedCandidates = computed(() => buildGroups(result.value?.candidates || []))
+
 const paramsFor = (item) => {
     if (item.type === 'repair') return { repair_id: item.repair_id }
 
-    return { type: item.type, id: item.id }
+    return { type: item.type, id: item.id, ...(item.filter_status ? { status: item.filter_status } : {}) }
 }
 
 const selectSuggestion = (item) => {
@@ -292,7 +325,7 @@ const onKeydown = (event) => {
         activeIndex.value = activeIndex.value <= 0 ? count - 1 : activeIndex.value - 1
     } else if (event.key === 'Enter') {
         event.preventDefault()
-        const item = suggestions.value[activeIndex.value]
+        const item = flatSuggestions.value[activeIndex.value]
 
         if (suggestOpen.value && item) selectSuggestion(item)
         else lookup()
@@ -406,11 +439,11 @@ const historyCount = type => type === 'all'
 <template>
     <div class="space-y-3">
         <PageHeader
-            title="Tra cứu IMEI, bảo hành & dữ liệu"
-            description="Chọn phạm vi tìm kiếm rồi gõ từ khóa đúng hoặc gần đúng — hệ thống gợi ý ngay khi bạn gõ"
+            title="Tra cứu"
+            description="Tìm sản phẩm, IMEI / Serial, bảo hành, khách hàng, nhà cung cấp, hóa đơn, phiếu nhập... — hệ thống gợi ý ngay khi bạn gõ"
         />
 
-        <DataPanel>
+        <DataPanel allow-overflow>
             <div class="border-b border-slate-200 p-4">
                 <!-- Tìm kiếm nâng cao: gom mọi điều kiện, chọn được nhiều -->
                 <div ref="advancedRef" class="relative mb-3 flex flex-wrap items-center gap-2">
@@ -503,14 +536,22 @@ const historyCount = type => type === 'all'
                                 <div class="text-sm font-bold text-slate-700">Không có kết quả phù hợp</div>
                                 <div class="mt-0.5 text-xs text-slate-400">Trong “{{ scopeLabel }}” — thử từ khóa khác hoặc đổi điều kiện tìm kiếm</div>
                             </div>
-                            <div v-else class="divide-y divide-slate-100">
-                                <LookupSuggestionItem
-                                    v-for="(item, index) in suggestions"
-                                    :key="`${item.type}-${item.id || item.repair_id}`"
-                                    :item="item"
-                                    :active="index === activeIndex"
-                                    @select="selectSuggestion"
-                                />
+                            <div v-else>
+                                <div v-for="group in groupedSuggestions" :key="group.key">
+                                    <div class="sticky top-0 z-10 flex items-center justify-between border-y border-slate-100 bg-slate-50 px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 first:border-t-0">
+                                        <span>{{ group.title }}</span>
+                                        <span class="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-slate-500">{{ group.entries.length }}</span>
+                                    </div>
+                                    <div class="divide-y divide-slate-100">
+                                        <LookupSuggestionItem
+                                            v-for="entry in group.entries"
+                                            :key="`${entry.item.type}-${entry.item.id || entry.item.repair_id}`"
+                                            :item="entry.item"
+                                            :active="entry.index === activeIndex"
+                                            @select="selectSuggestion"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -568,13 +609,21 @@ const historyCount = type => type === 'all'
                 <div class="mb-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-800">
                     {{ result.message }}
                 </div>
-                <div class="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    <LookupSuggestionItem
-                        v-for="item in result.candidates"
-                        :key="`${item.type}-${item.id || item.repair_id}`"
-                        :item="item"
-                        @select="selectSuggestion"
-                    />
+                <div class="space-y-3">
+                    <div v-for="group in groupedCandidates" :key="group.key" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3.5 py-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                            <span>{{ group.title }}</span>
+                            <span class="rounded-full bg-white px-2 py-0.5 text-[10px] text-slate-500">{{ group.entries.length }}</span>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            <LookupSuggestionItem
+                                v-for="entry in group.entries"
+                                :key="`${entry.item.type}-${entry.item.id || entry.item.repair_id}`"
+                                :item="entry.item"
+                                @select="selectSuggestion"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 

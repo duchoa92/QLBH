@@ -20,6 +20,9 @@ class SupplierController extends Controller
         $search = $request->string(
             'search'
         )->toString();
+        $debt = in_array($request->query('debt'), ['owing', 'clear'], true) ? $request->query('debt') : '';
+        $dateFrom = $this->validDate($request->query('date_from'));
+        $dateTo = $this->validDate($request->query('date_to'));
         $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
             ? (int) $request->query('per_page', 20) : 20;
         $sortBy = in_array($request->query('sort_by'), ['code', 'name', 'phone', 'debt_balance'], true)
@@ -70,6 +73,12 @@ class SupplierController extends Controller
                 }
             )
 
+            ->when($debt === 'owing', fn ($query) => $query->where('debt_balance', '>', 0))
+            ->when($debt === 'clear', fn ($query) => $query->where(
+                fn ($sub) => $sub->whereNull('debt_balance')->orWhere('debt_balance', '<=', 0)
+            ))
+            ->when($dateFrom !== '', fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
+            ->when($dateTo !== '', fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
             ->orderBy($sortBy, $sortOrder)
             ->paginate($perPage)
             ->withQueryString();
@@ -81,12 +90,21 @@ class SupplierController extends Controller
 
                 'filters' => [
                     'search' => $search,
+                    'debt' => $debt,
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
                     'sort_by' => $sortBy,
                     'sort_order' => $sortOrder,
                     'per_page' => $perPage,
                 ],
             ]
         );
+    }
+
+    /** Chỉ nhận ngày dạng YYYY-MM-DD, giá trị lạ bị bỏ qua thay vì gây lỗi 500. */
+    private function validDate(mixed $value): string
+    {
+        return is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? $value : '';
     }
 
     public function create(): Response

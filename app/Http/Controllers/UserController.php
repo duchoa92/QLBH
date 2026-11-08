@@ -22,6 +22,7 @@ class UserController extends Controller
     public function index(Request $request): Response
     {
         $search = trim((string) $request->query('search', ''));
+        $role = is_string($request->query('role')) ? trim($request->query('role')) : '';
         $perPage = in_array((int) $request->query('per_page', 10), [10, 20, 50, 100], true)
             ? (int) $request->query('per_page', 10) : 10;
         $sortBy = in_array($request->query('sort_by'), ['id', 'name', 'username', 'phone'], true)
@@ -35,6 +36,7 @@ class UserController extends Controller
                 'users' => $this->service->paginate(),
                 'filters' => [
                     'search' => $search,
+                    'role' => $role,
                     'sort_by' => $sortBy,
                     'sort_order' => $sortOrder,
                     'per_page' => $perPage,

@@ -7,6 +7,7 @@ import { formatMoney, formatDate } from '@/utils/format'
 import SimpleBarChart from '@/Components/Charts/SimpleBarChart.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import {
@@ -17,6 +18,35 @@ import {
     Wallet,
     Loader2,
 } from 'lucide-vue-next'
+
+const props = defineProps({
+    categories: { type: Array, default: () => [] },
+    brands: { type: Array, default: () => [] },
+    staff: { type: Array, default: () => [] },
+})
+
+// Tùy chọn cho các ô lọc dùng chung giữa các tab
+const withAll = (label, items) => [{ value: '', label }, ...items]
+const categoryOptions = computed(() => withAll('Tất cả danh mục', props.categories.map(item => ({ value: item.id, label: item.name }))))
+const brandOptions = computed(() => withAll('Tất cả thương hiệu', props.brands.map(item => ({ value: item.id, label: item.name }))))
+const staffOptions = computed(() => withAll('Tất cả nhân viên', props.staff.map(item => ({ value: item.id, label: item.name }))))
+const paymentOptions = withAll('Mọi thanh toán', [
+    { value: 'cash', label: 'Tiền mặt' },
+    { value: 'bank', label: 'Chuyển khoản' },
+    { value: 'card', label: 'Thẻ' },
+    { value: 'mixed', label: 'Kết hợp' },
+])
+const stockStatusOptions = withAll('Mọi tình trạng tồn', [
+    { value: 'in', label: 'Còn hàng' },
+    { value: 'low', label: 'Sắp hết hàng' },
+    { value: 'out', label: 'Hết hàng' },
+])
+const debtLevelOptions = withAll('Mọi mức nợ', [
+    { value: 'lt1m', label: 'Dưới 1 triệu' },
+    { value: '1m_5m', label: '1 – 5 triệu' },
+    { value: '5m_20m', label: '5 – 20 triệu' },
+    { value: 'gt20m', label: 'Trên 20 triệu' },
+])
 
 /*
 |--------------------------------------------------------------------------
@@ -124,12 +154,19 @@ const revenue = reactive({
     by_payment_method: [],
 })
 
+const revenueFilters = reactive({ payment_method: '', user_id: '' })
+
 const loadRevenue = async () => {
     loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.revenue'), {
-            params: { from: filters.from, to: filters.to },
+            params: {
+                from: filters.from,
+                to: filters.to,
+                payment_method: revenueFilters.payment_method || undefined,
+                user_id: revenueFilters.user_id || undefined,
+            },
         })
 
         revenue.summary = data.summary
@@ -152,6 +189,8 @@ const paymentMethodLabel = (method) => ({
     card: 'Thẻ',
     transfer: 'Chuyển khoản',
     bank_transfer: 'Chuyển khoản',
+    bank: 'Chuyển khoản',
+    mixed: 'Kết hợp',
     momo: 'Momo',
     vnpay: 'VNPay',
 }[method] ?? method)
@@ -168,12 +207,20 @@ const profit = reactive({
     by_product: [],
 })
 
+const profitFilters = reactive({ search: '', category_id: '', user_id: '' })
+
 const loadProfit = async () => {
     loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.profit'), {
-            params: { from: filters.from, to: filters.to },
+            params: {
+                from: filters.from,
+                to: filters.to,
+                search: profitFilters.search.trim() || undefined,
+                category_id: profitFilters.category_id || undefined,
+                user_id: profitFilters.user_id || undefined,
+            },
         })
 
         profit.summary = data.summary
@@ -203,6 +250,7 @@ const bestSellers = reactive({
 
 const bestSellerOrder = ref('best') // best | worst
 const bestSellerLimit = ref(10)
+const bestSellerFilters = reactive({ search: '', category_id: '', brand_id: '' })
 
 const loadBestSellers = async () => {
     loading.value = true
@@ -214,6 +262,9 @@ const loadBestSellers = async () => {
                 to: filters.to,
                 order: bestSellerOrder.value,
                 limit: bestSellerLimit.value,
+                search: bestSellerFilters.search.trim() || undefined,
+                category_id: bestSellerFilters.category_id || undefined,
+                brand_id: bestSellerFilters.brand_id || undefined,
             },
         })
 
@@ -236,7 +287,9 @@ const inventory = reactive({
 
 const inventoryFilters = reactive({
     search: '',
-    low_stock: false,
+    category_id: '',
+    brand_id: '',
+    stock_status: '',
     page: 1,
 })
 
@@ -246,8 +299,10 @@ const loadInventory = async (page = 1) => {
     try {
         const { data } = await axios.get(route('reports.inventory'), {
             params: {
-                search: inventoryFilters.search || undefined,
-                low_stock: inventoryFilters.low_stock ? 1 : undefined,
+                search: inventoryFilters.search.trim() || undefined,
+                category_id: inventoryFilters.category_id || undefined,
+                brand_id: inventoryFilters.brand_id || undefined,
+                stock_status: inventoryFilters.stock_status || undefined,
                 page,
             },
         })
@@ -273,6 +328,7 @@ const debts = reactive({
 const debtFilters = reactive({
     type: 'customer', // customer | supplier
     search: '',
+    level: '',
 })
 
 const loadDebts = async (page = 1) => {
@@ -282,7 +338,8 @@ const loadDebts = async (page = 1) => {
         const { data } = await axios.get(route('reports.debts'), {
             params: {
                 type: debtFilters.type,
-                search: debtFilters.search || undefined,
+                search: debtFilters.search.trim() || undefined,
+                level: debtFilters.level || undefined,
                 page,
             },
         })
@@ -342,8 +399,45 @@ watch(() => inventoryFilters.search, () => {
     }, 350)
 })
 
-watch(() => inventoryFilters.low_stock, () => {
-    if (activeTab.value === 'inventory') loadInventory()
+watch(
+    () => [inventoryFilters.category_id, inventoryFilters.brand_id, inventoryFilters.stock_status],
+    () => {
+        if (activeTab.value === 'inventory') loadInventory()
+    }
+)
+
+watch(() => debtFilters.level, () => {
+    if (activeTab.value === 'debts') loadDebts()
+})
+
+watch(() => [revenueFilters.payment_method, revenueFilters.user_id], () => {
+    if (activeTab.value === 'revenue') loadRevenue()
+})
+
+watch(() => [profitFilters.category_id, profitFilters.user_id], () => {
+    if (activeTab.value === 'profit') loadProfit()
+})
+
+let profitSearchDebounce = null
+
+watch(() => profitFilters.search, () => {
+    clearTimeout(profitSearchDebounce)
+    profitSearchDebounce = setTimeout(() => {
+        if (activeTab.value === 'profit') loadProfit()
+    }, 350)
+})
+
+watch(() => [bestSellerFilters.category_id, bestSellerFilters.brand_id], () => {
+    if (activeTab.value === 'best-sellers') loadBestSellers()
+})
+
+let bestSellerSearchDebounce = null
+
+watch(() => bestSellerFilters.search, () => {
+    clearTimeout(bestSellerSearchDebounce)
+    bestSellerSearchDebounce = setTimeout(() => {
+        if (activeTab.value === 'best-sellers') loadBestSellers()
+    }, 350)
 })
 
 let debtSearchDebounce = null
@@ -398,6 +492,10 @@ onMounted(() => {
                 class="flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4"
             >
                 <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" align="left" @change="resetEmptyRange" />
+                <template v-if="activeTab === 'revenue'">
+                    <ListFilterSelect v-model="revenueFilters.payment_method" label="Thanh toán" :show-placeholder="false" :options="paymentOptions" />
+                    <ListFilterSelect v-model="revenueFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
+                </template>
                 <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:ml-auto">
                     <button
                         v-for="range in quickRanges"
@@ -496,6 +594,13 @@ onMounted(() => {
             <!-- ================================================= -->
             <template v-if="activeTab === 'profit'">
 
+                <ListToolbar v-model="profitFilters.search" placeholder="Tìm sản phẩm theo tên...">
+                    <template #filters>
+                        <ListFilterSelect v-model="profitFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />
+                        <ListFilterSelect v-model="profitFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
+                    </template>
+                </ListToolbar>
+
                 <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                         <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Doanh thu</div>
@@ -553,7 +658,7 @@ onMounted(() => {
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-xs font-medium">
                             <tr class="transition-colors hover:bg-emerald-50/70" v-for="row in profit.by_product" :key="row.id">
-                                <td class="px-3.5 py-2.5 font-semibold text-slate-800"><HighlightText :text="row.name" :keyword="inventoryFilters.search || ''" /></td>
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800"><HighlightText :text="row.name" :keyword="profitFilters.search" /></td>
                                 <td class="px-3.5 py-2.5 text-right">{{ row.qty_sold }}</td>
                                 <td class="px-3.5 py-2.5 text-right">{{ formatMoney(row.revenue) }}</td>
                                 <td class="px-3.5 py-2.5 text-right text-slate-500">{{ formatMoney(row.cost) }}</td>
@@ -567,7 +672,7 @@ onMounted(() => {
 
                             <tr v-if="!profit.by_product.length">
                                 <td colspan="5" class="px-4 py-8 text-center text-slate-400">
-                                    Chưa có dữ liệu trong khoảng thời gian này
+                                    Không có dữ liệu phù hợp trong khoảng thời gian và bộ lọc này
                                 </td>
                             </tr>
                         </tbody>
@@ -580,6 +685,13 @@ onMounted(() => {
             <!-- TAB: BÁN CHẠY -->
             <!-- ================================================= -->
             <template v-if="activeTab === 'best-sellers'">
+
+                <ListToolbar v-model="bestSellerFilters.search" placeholder="Tìm sản phẩm theo tên hoặc SKU...">
+                    <template #filters>
+                        <ListFilterSelect v-model="bestSellerFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />
+                        <ListFilterSelect v-model="bestSellerFilters.brand_id" label="Thương hiệu" :show-placeholder="false" :options="brandOptions" />
+                    </template>
+                </ListToolbar>
 
                 <section class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <div class="flex overflow-hidden rounded-md border border-slate-200">
@@ -626,8 +738,8 @@ onMounted(() => {
                         <tbody class="divide-y divide-slate-100 text-xs font-medium">
                             <tr class="transition-colors hover:bg-emerald-50/70" v-for="(row, index) in bestSellers.items" :key="row.id">
                                 <td class="px-3.5 py-2.5 text-slate-400">{{ index + 1 }}</td>
-                                <td class="px-3.5 py-2.5 font-semibold text-slate-800">{{ row.name }}</td>
-                                <td class="px-3.5 py-2.5 text-slate-500">{{ row.sku }}</td>
+                                <td class="px-3.5 py-2.5 font-semibold text-slate-800"><HighlightText :text="row.name" :keyword="bestSellerFilters.search" /></td>
+                                <td class="px-3.5 py-2.5 text-slate-500"><HighlightText :text="row.sku" :keyword="bestSellerFilters.search" /></td>
                                 <td class="px-3.5 py-2.5 text-right font-bold text-blue-600">{{ row.qty_sold }}</td>
                                 <td class="px-3.5 py-2.5 text-right">{{ formatMoney(row.revenue) }}</td>
                                 <td class="px-3.5 py-2.5 text-right text-slate-500">{{ row.stock }}</td>
@@ -635,7 +747,7 @@ onMounted(() => {
 
                             <tr v-if="!bestSellers.items.length">
                                 <td colspan="6" class="px-4 py-8 text-center text-slate-400">
-                                    Chưa có dữ liệu trong khoảng thời gian này
+                                    Không có dữ liệu phù hợp trong khoảng thời gian và bộ lọc này
                                 </td>
                             </tr>
                         </tbody>
@@ -681,14 +793,11 @@ onMounted(() => {
 
                 <ListToolbar v-model="inventoryFilters.search" placeholder="Tìm sản phẩm theo tên, SKU hoặc barcode...">
                     <template #search-end><BarcodeCameraButton class="absolute right-8 top-1/2 z-10 -translate-y-1/2" @scanned="(code) => inventoryFilters.search = code" /></template>
-                    <template #filters><label class="flex h-[42px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm">
-                        <input
-                            v-model="inventoryFilters.low_stock"
-                            type="checkbox"
-                            class="rounded border-slate-300"
-                        >
-                        Chỉ hiện sắp hết hàng
-                    </label></template>
+                    <template #filters>
+                        <ListFilterSelect v-model="inventoryFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />
+                        <ListFilterSelect v-model="inventoryFilters.brand_id" label="Thương hiệu" :show-placeholder="false" :options="brandOptions" />
+                        <ListFilterSelect v-model="inventoryFilters.stock_status" label="Tình trạng tồn" :show-placeholder="false" :options="stockStatusOptions" />
+                    </template>
                 </ListToolbar>
 
                 <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -787,7 +896,7 @@ onMounted(() => {
                 </section>
 
                 <ListToolbar v-model="debtFilters.search" placeholder="Tìm theo tên, mã hoặc điện thoại...">
-                    <template #filters><div class="flex h-[42px] overflow-hidden rounded-xl border border-slate-200">
+                    <template #filters><ListFilterSelect v-model="debtFilters.level" label="Mức nợ" :show-placeholder="false" :options="debtLevelOptions" /><div class="flex h-[42px] overflow-hidden rounded-xl border border-slate-200">
                         <button
                             type="button"
                             class="px-4 py-2 text-xs font-bold"

@@ -108,7 +108,7 @@ onMounted(() => document.addEventListener('mousedown', closeIfOutside))
                 type="input"
                 autocomplete="off"
                 placeholder="Tìm nhanh toàn hệ thống..."
-                class="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-20 text-xs font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                class="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-20 text-xs font-normal text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
                 @focus="open = true"
                 @keydown="onKeydown"
             />

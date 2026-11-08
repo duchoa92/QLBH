@@ -329,7 +329,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{product}', 'index')->middleware('permission:products.view')->name('index');
         Route::post('/{product}', 'store')->middleware('permission:products.edit')->name('store');
     });
-    Route::get('/imeis/lookup', [ProductImeiController::class, 'lookupPage'])->middleware('permission:products.view')->name('product-imeis.lookup');
+    Route::get('/lookup', [ProductImeiController::class, 'lookupPage'])->middleware('permission:products.view')->name('product-imeis.lookup');
+    // Link cũ của trang Tra cứu — phải đặt trước /imeis/{imei} để không bị hiểu là một IMEI.
+    Route::redirect('/imeis/lookup', '/lookup');
     Route::get('/imeis/{imei}', [ProductImeiController::class, 'show'])->middleware('permission:products.view')->name('product-imeis.show');
 
     Route::resource('customers', CustomerController::class)

@@ -36,11 +36,26 @@ class StockBatchAllocator
             $remaining -= $taken;
         }
 
+        // Hàng có tồn từ trước khi quản lý theo lô (tạo sản phẩm, import Excel...) chưa có lô nào.
+        // Không phân bổ được thì để luồng gọi tự kiểm tra và trừ theo cột tồn kho như trước,
+        // thay vì báo thiếu tồn theo lô khiến hàng đang có tồn không bán được.
+        if ($remaining > 0 && $batches->isEmpty() && ! $this->hasAnyBatch($productId, $variantId)) {
+            return ['total_cost' => 0.0, 'allocated_quantity' => 0];
+        }
+
         if ($remaining > 0 && ! filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)) {
             throw ValidationException::withMessages(['items' => 'Không đủ tồn kho theo lô. Vui lòng tải lại trang và thử lại.']);
         }
 
         return ['total_cost' => $totalCost, 'allocated_quantity' => $quantity - $remaining];
+    }
+
+    private function hasAnyBatch(int $productId, ?int $variantId): bool
+    {
+        return ProductStockBatch::query()
+            ->where('product_id', $productId)
+            ->when($variantId, fn ($query) => $query->where('variant_id', $variantId), fn ($query) => $query->whereNull('variant_id'))
+            ->exists();
     }
 
     public function restore(SaleItem|SaleItemGift $line): void

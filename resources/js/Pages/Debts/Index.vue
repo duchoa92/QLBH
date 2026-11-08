@@ -9,6 +9,7 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import SupplierPaymentModal from '@/Pages/Debts/SupplierPaymentModal.vue'
 import { formatMoney } from '@/utils/format'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
@@ -27,6 +28,14 @@ const props = defineProps({
 const isCustomer = computed(() => props.entity === 'customer')
 const title = computed(() => isCustomer.value ? 'Thu công nợ khách hàng' : 'Thanh toán công nợ nhà cung cấp')
 const search = ref(props.filters.search || '')
+const level = ref(props.filters.level || '')
+const levelOptions = [
+    { value: '', label: 'Mọi mức nợ' },
+    { value: 'lt1m', label: 'Dưới 1 triệu' },
+    { value: '1m_5m', label: '1 – 5 triệu' },
+    { value: '5m_20m', label: '5 – 20 triệu' },
+    { value: 'gt20m', label: 'Trên 20 triệu' },
+]
 const selected = ref(null)
 const supplierModal = ref(null) // { supplier, orderId }
 const expandedId = ref(null)
@@ -40,11 +49,12 @@ const list = useLiveList({
     props,
     dataKey: 'rows',
     extraKeys: ['orders'],
-    params: () => ({ search: search.value.trim() }),
+    params: () => ({ search: search.value.trim(), level: level.value }),
 })
 const { data: rowsData, filters: filtersData, extras, loading } = list
 const ordersData = extras.orders
 watch(search, () => list.schedule())
+watch(level, () => list.request())
 
 const nameOf = row => isCustomer.value ? row.full_name : row.name
 const pay = (row, order = null) => {
@@ -108,7 +118,11 @@ const submit = () => {
             </div>
         </div>
 
-        <ListToolbar v-model="search" :loading="loading" @submit="list.request()" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại...' : 'Tìm nhà cung cấp, mã hoặc số điện thoại...'" />
+        <ListToolbar v-model="search" :loading="loading" @submit="list.request()" :placeholder="isCustomer ? 'Tìm tên, mã hoặc số điện thoại...' : 'Tìm nhà cung cấp, mã hoặc số điện thoại...'">
+            <template #filters>
+                <ListFilterSelect v-model="level" label="Mức nợ" :show-placeholder="false" :options="levelOptions" />
+            </template>
+        </ListToolbar>
         <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="overflow-x-auto">
                 <table class="app-data-table w-full min-w-[720px] border-collapse text-left text-xs">
@@ -118,7 +132,7 @@ const submit = () => {
                             <tr class="transition-colors hover:bg-emerald-50/70"><td class="px-3.5 py-2.5 font-bold text-slate-900"><HighlightText :text="nameOf(row)" :keyword="search" /></td><td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.code" :text="row.code" :keyword="search" /><template v-else>—</template></td><td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.phone" :text="row.phone" :keyword="search" /><template v-else>—</template></td><td class="px-3.5 py-2.5 text-right text-sm font-black text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-3.5 py-2.5 text-center"><div class="inline-flex items-center justify-center gap-1"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="expandedId = expandedId === row.id ? null : row.id"><ChevronDown :size="14" :class="expandedId === row.id ? 'rotate-180' : ''" />Đơn nợ</button><ActionButton @click="pay(row)"><HandCoins :size="15" />{{ isCustomer ? 'Ghi nhận thu' : 'Thanh toán' }}</ActionButton></div></td></tr>
                             <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id))" :key="order.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><a :href="order.href" class="font-bold text-blue-700 hover:underline">{{ order.code }}</a><div class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có hóa đơn/phiếu nhập nợ riêng để đối chiếu. Có thể ghi nhận khoản thanh toán tổng bằng nút phía trên.</p></div></td></tr>
                         </template>
-                        <tr v-if="!rowsData.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
+                        <tr v-if="!rowsData.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search || level ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
                     </tbody>
                 </table>
             </div>

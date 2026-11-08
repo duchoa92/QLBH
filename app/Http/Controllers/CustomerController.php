@@ -21,6 +21,11 @@ class CustomerController extends Controller
     public function index(Request $request): Response
     {
         $search = (string) $request->get('search', '');
+        $debt = in_array($request->query('debt'), ['owing', 'clear'], true) ? $request->query('debt') : '';
+        $status = in_array($request->query('status'), ['active', 'blocked'], true) ? $request->query('status') : '';
+        $points = in_array($request->query('points'), ['has', 'none'], true) ? $request->query('points') : '';
+        $dateFrom = $this->validDate($request->query('date_from'));
+        $dateTo = $this->validDate($request->query('date_to'));
         $perPage = in_array((int) $request->query('per_page', 20), [10, 20, 50, 100], true)
             ? (int) $request->query('per_page', 20) : 20;
         $sortBy = in_array($request->query('sort_by'), ['code', 'full_name', 'phone', 'point_balance', 'debt_balance', 'customer_type'], true)
@@ -57,6 +62,20 @@ class CustomerController extends Controller
 
                 });
             })
+            ->when($debt === 'owing', fn ($query) => $query->where('debt_balance', '>', 0))
+            ->when($debt === 'clear', fn ($query) => $query->where(
+                fn ($sub) => $sub->whereNull('debt_balance')->orWhere('debt_balance', '<=', 0)
+            ))
+            ->when($status === 'active', fn ($query) => $query->where(
+                fn ($sub) => $sub->where('is_active', true)->orWhereNull('is_active')
+            ))
+            ->when($status === 'blocked', fn ($query) => $query->where('is_active', false))
+            ->when($points === 'has', fn ($query) => $query->where('point_balance', '>', 0))
+            ->when($points === 'none', fn ($query) => $query->where(
+                fn ($sub) => $sub->whereNull('point_balance')->orWhere('point_balance', '<=', 0)
+            ))
+            ->when($dateFrom !== '', fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
+            ->when($dateTo !== '', fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
             ->withCount(['sales', 'repairs', 'debts', 'points'])
             ->orderBy($sortBy, $sortOrder)
             ->paginate($perPage)
@@ -76,11 +95,22 @@ class CustomerController extends Controller
             'customers' => $customers,
             'filters' => [
                 'search' => $search,
+                'debt' => $debt,
+                'status' => $status,
+                'points' => $points,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
                 'sort_by' => $sortBy,
                 'sort_order' => $sortOrder,
                 'per_page' => $perPage,
             ],
         ]);
+    }
+
+    /** Chỉ nhận ngày dạng YYYY-MM-DD, giá trị lạ bị bỏ qua thay vì gây lỗi 500. */
+    private function validDate(mixed $value): string
+    {
+        return is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? $value : '';
     }
 
     /*

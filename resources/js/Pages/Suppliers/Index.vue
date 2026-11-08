@@ -9,6 +9,8 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import SupplierForm from './Form.vue'
@@ -23,6 +25,14 @@ const page = usePage()
 
 const confirmBox = useConfirm()
 const search = ref(props.filters?.search ?? '')
+const debt = ref(props.filters?.debt ?? '')
+const dateFrom = ref(props.filters?.date_from ?? '')
+const dateTo = ref(props.filters?.date_to ?? '')
+const debtOptions = [
+    { value: '', label: 'Tất cả công nợ' },
+    { value: 'owing', label: 'Đang còn nợ' },
+    { value: 'clear', label: 'Không còn nợ' },
+]
 const columns = [
     { key: 'code', label: 'Mã', sortable: true },
     { key: 'name', label: 'Tên', sortable: true },
@@ -31,9 +41,14 @@ const columns = [
 ]
 
 // Tìm kiếm/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
-const list = useLiveList({ props, dataKey: 'suppliers', params: () => ({ search: search.value.trim() }) })
+const list = useLiveList({
+    props,
+    dataKey: 'suppliers',
+    params: () => ({ search: search.value.trim(), debt: debt.value, date_from: dateFrom.value, date_to: dateTo.value }),
+})
 const { data: suppliersData, filters: filtersData, loading } = list
 watch(search, () => list.schedule())
+watch([debt, dateFrom, dateTo], () => list.request())
 const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
 const reload = () => {
@@ -102,6 +117,10 @@ const destroy = (supplier) => {
         <DataPanel detached>
             <template #header>
                 <ListToolbar v-model="search" :loading="loading" placeholder="Tìm tên, điện thoại hoặc email nhà cung cấp..." @submit="list.request()">
+                    <template #filters>
+                        <ListFilterSelect v-model="debt" label="Công nợ" :show-placeholder="false" :options="debtOptions" />
+                        <DateRangeFilter v-model:from="dateFrom" v-model:to="dateTo" />
+                    </template>
                     <template #actions><ActionButton @click="openCreate"><Plus class="h-4 w-4" />Thêm mới</ActionButton></template>
                 </ListToolbar>
             </template>

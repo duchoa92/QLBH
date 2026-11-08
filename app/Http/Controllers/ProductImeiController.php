@@ -347,6 +347,7 @@ class ProductImeiController extends Controller
             'id' => ['nullable', 'integer'],
             'repair_id' => ['nullable', 'integer'],
             'type' => ['nullable', 'string', 'max:20'],
+            'status' => ['nullable', 'string', 'max:20'],
             'q' => ['nullable', 'string', 'max:100'],
         ]);
 
@@ -358,7 +359,13 @@ class ProductImeiController extends Controller
         }
 
         if ($request->filled('id')) {
-            return $this->resolveItem(['type' => $type !== '' ? $type : 'imei', 'id' => (int) $request->query('id')], $request);
+            $filter = (string) $request->query('status', '');
+
+            return $this->resolveItem([
+                'type' => $type !== '' ? $type : 'imei',
+                'id' => (int) $request->query('id'),
+                'filter_status' => in_array($filter, [ProductImei::STATUS_SOLD, ProductImei::STATUS_IN_STOCK], true) ? $filter : null,
+            ], $request);
         }
 
         $keyword = trim((string) $request->query('q'));
@@ -441,7 +448,7 @@ class ProductImeiController extends Controller
             return $this->noMatchResponse();
         }
 
-        $profile = app(EntityLookupService::class)->profile($type, (int) ($item['id'] ?? 0));
+        $profile = app(EntityLookupService::class)->profile($type, (int) ($item['id'] ?? 0), $item['filter_status'] ?? null);
 
         return $profile ? response()->json($profile) : $this->noMatchResponse();
     }
@@ -461,9 +468,102 @@ class ProductImeiController extends Controller
             $result = $result->concat($this->singleScope($keyword, $scope, $share, $request));
         }
 
-        return $result
-            ->unique(fn (array $item) => ($item['type'] ?? '') . '-' . ($item['id'] ?? $item['repair_id'] ?? ''))
-            ->values();
+        return $this->collapseDevices(
+            $result
+                ->unique(fn (array $item) => ($item['type'] ?? '') . '-' . ($item['id'] ?? $item['repair_id'] ?? ''))
+                ->values()
+        );
+    }
+
+    /**
+     * Gom kết quả giống nhau: nhiều thiết bị IMEI cùng một sản phẩm (khớp theo tên máy / biến thể)
+     * chỉ hiện MỘT dòng sản phẩm, kèm số lượng thiết bị. Thiết bị khớp theo chính IMEI/Serial,
+     * khách hàng hoặc mã hóa đơn vẫn hiện riêng từng thiết bị.
+     */
+    private function collapseDevices(Collection $items): Collection
+    {
+        $byProduct = [];
+        $merged = [];
+
+        foreach ($items as $item) {
+            $type = $item['type'] ?? '';
+            $productId = (int) ($item['product_id'] ?? ($type === 'product' ? $item['id'] : 0));
+            $collapsible = $type === 'product'
+                || ($type === 'imei' && $productId > 0 && in_array($item['match'] ?? '', ['Thông tin máy', 'Thông tin thiết bị'], true));
+
+            if (! $collapsible) {
+                $merged[] = $item;
+
+                continue;
+            }
+
+            if (! isset($byProduct[$productId])) {
+                $byProduct[$productId] = count($merged);
+                $merged[] = $type === 'product' ? $item : [
+                    'type' => 'product',
+                    'id' => $productId,
+                    'title' => $item['product_name'] ?? 'Sản phẩm',
+                    'lines' => array_values(array_filter([$item['sku'] ?? null])),
+                    'badge' => 'Sản phẩm',
+                    'tone' => 'indigo',
+                    'match' => $item['match'] ?? '',
+                    'filter_status' => $item['filter_status'] ?? null,
+                    'placeholder' => true,
+                ];
+
+                continue;
+            }
+
+            $position = $byProduct[$productId];
+
+            // Cùng một sản phẩm đã có: ưu tiên dòng sản phẩm đầy đủ (có tồn kho, giá) trong danh mục.
+            if ($type === 'product' && ($merged[$position]['type'] ?? '') === 'product' && ($merged[$position]['placeholder'] ?? false)) {
+                $merged[$position] = $item + ['filter_status' => $merged[$position]['filter_status'] ?? null];
+            }
+
+            // Xuất hiện ở cả "đã bán" và "trong kho" thì không lọc theo trạng thái nữa.
+            if (($merged[$position]['filter_status'] ?? null) !== ($item['filter_status'] ?? null)) {
+                $merged[$position]['filter_status'] = null;
+            }
+        }
+
+        // Bổ sung số lượng thiết bị IMEI cho các dòng sản phẩm.
+        $ids = collect($merged)->where('type', 'product')->pluck('id')->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect($merged);
+        }
+
+        $counts = ProductImei::query()
+            ->selectRaw('product_id, status, COUNT(*) as total')
+            ->whereIn('product_id', $ids)
+            ->groupBy('product_id', 'status')
+            ->get()
+            ->groupBy('product_id');
+
+        return collect($merged)->map(function (array $item) use ($counts): array {
+            if (($item['type'] ?? '') !== 'product') {
+                return $item;
+            }
+
+            $rows = $counts->get($item['id'], collect());
+            $total = (int) $rows->sum('total');
+
+            if ($total === 0) {
+                return $item;
+            }
+
+            $inStock = (int) $rows->where('status', ProductImei::STATUS_IN_STOCK)->sum('total');
+            $sold = (int) $rows->where('status', ProductImei::STATUS_SOLD)->sum('total');
+
+            $item['imei_total'] = $total;
+            $item['lines'] = array_values(array_merge(
+                array_filter($item['lines'] ?? [], fn ($line) => ! str_starts_with((string) $line, 'Tồn:')),
+                ["{$total} thiết bị ({$inStock} trong kho · {$sold} đã bán)"]
+            ));
+
+            return $item;
+        })->values();
     }
 
     private function singleScope(string $keyword, string $scope, int $limit, Request $request): Collection
@@ -494,7 +594,8 @@ class ProductImeiController extends Controller
 
             // Kèm các sản phẩm không quản lý theo IMEI (màn hình, linh kiện...) đã bán / còn tồn.
             return $this->buildSuggestions($imeis, collect(), $keyword)
-                ->concat($entities->suggestProducts($keyword, $limit, $scope));
+                ->concat($entities->suggestProducts($keyword, $limit, $scope))
+                ->map(fn (array $item) => $item + ['filter_status' => $status]);
         }
 
         // all: thiết bị + phiếu sửa máy ngoài + sản phẩm + khách hàng + người dùng + nhà cung cấp + hóa đơn + phiếu nhập
@@ -711,6 +812,7 @@ class ProductImeiController extends Controller
                 return [
                     'type' => 'imei',
                     'id' => $imei->id,
+                    'product_id' => $imei->product_id,
                     'imei' => $imei->imei,
                     'serial' => $imei->serial,
                     'product_name' => $imei->product?->name,

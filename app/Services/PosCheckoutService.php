@@ -376,6 +376,8 @@ class PosCheckoutService
 
                 if (!empty($item['gifts'])) {
                     foreach ($item['gifts'] as $gift) {
+                        // Khởi tạo lại mỗi vòng: tránh lỗi biến chưa khai báo và lấy nhầm giá vốn của quà IMEI ở vòng trước.
+                        $giftImei = null;
                         $giftProduct = Product::query()->findOrFail($gift['id']);
                         $giftQuantity = max(1, (int) ($gift['quantity'] ?? 1));
                         $giftFactor = 1;
@@ -701,7 +703,14 @@ class PosCheckoutService
     */
     private function generateCode(): string
     {
-        return 'INV-' . now()->format('YmdHis');
+        // Giữ đúng định dạng INV-14 chữ số (POS và webhook ngân hàng đều kiểm tra regex này),
+        // nhưng nếu giây này đã có hóa đơn thì dời sang giây kế tiếp để không trùng mã.
+        $moment = now();
+        while (Sale::query()->where('code', 'INV-' . $moment->format('YmdHis'))->exists()) {
+            $moment = $moment->copy()->addSecond();
+        }
+
+        return 'INV-' . $moment->format('YmdHis');
     }
 
     private function itemQuantity(array $item): int

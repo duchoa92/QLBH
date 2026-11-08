@@ -69,6 +69,8 @@ class StockImportService
             ->get();
         $itemIds = $items->pluck('id');
 
+        $this->assertNoLaterSupplierActivity($stockImport, 'sửa');
+
         $batches = ProductStockBatch::query()
             ->whereIn('stock_import_item_id', $itemIds)
             ->lockForUpdate()
@@ -88,10 +90,7 @@ class StockImportService
             throw ValidationException::withMessages(['import' => 'Không thể sửa phiếu vì có IMEI đã bán hoặc không còn trong kho.']);
         }
 
-        foreach ($items as $item) {
-            if ($item->variant_id) ProductVariant::query()->whereKey($item->variant_id)->decrement('stock', $item->base_quantity);
-            else Product::query()->whereKey($item->product_id)->decrement('stock', $item->base_quantity);
-        }
+        $this->reverseImportedStock($items);
 
         $histories->each(fn (ProductImeiHistory $history) => $history->productImei?->delete());
         ProductImeiHistory::query()->whereKey($histories->pluck('id'))->delete();
@@ -134,6 +133,8 @@ class StockImportService
                 ->get();
             $itemIds = $items->pluck('id');
 
+            $this->assertNoLaterSupplierActivity($import, 'hủy');
+
             $batches = ProductStockBatch::query()
                 ->whereIn('stock_import_item_id', $itemIds)
                 ->lockForUpdate()
@@ -157,13 +158,7 @@ class StockImportService
                 ]);
             }
 
-            foreach ($items as $item) {
-                if ($item->variant_id) {
-                    ProductVariant::query()->whereKey($item->variant_id)->decrement('stock', $item->base_quantity);
-                } else {
-                    Product::query()->whereKey($item->product_id)->decrement('stock', $item->base_quantity);
-                }
-            }
+            $this->reverseImportedStock($items);
 
             $histories->each(function (ProductImeiHistory $history): void {
                 $history->productImei?->delete();
@@ -294,7 +289,7 @@ class StockImportService
              */
 
             $import = StockImport::create([
-                'code' => 'IMP-' . now()->format('YmdHis'),
+                'code' => $this->generateCode(),
 
                 'supplier_id' => $data['supplier_id'],
                 'party_type' => $data['party_type'] ?? 'supplier',
@@ -499,6 +494,12 @@ class StockImportService
                 ]);
 
 
+                // Hàng đang có tồn nhưng chưa có lô nào (tạo sản phẩm, import Excel...):
+                // tạo lô đầu kỳ trước khi thêm lô mới, nếu không tồn cũ sẽ bị mất khi bán lần đầu.
+                if (! $product->manage_stock_by_serial) {
+                    $this->ensureOpeningBatch($product, $variantId, $data['import_date'] ?? null);
+                }
+
                 /*
                  * ------------------------------------------------------
                  * CỘNG TỒN KHO
@@ -546,6 +547,10 @@ class StockImportService
 
                 }
 
+
+                if ($variantId !== null && ! $product->manage_stock_by_serial) {
+                    $this->syncVariantProductStock($productId);
+                }
 
                 /*
                  * ------------------------------------------------------
@@ -613,6 +618,146 @@ class StockImportService
 
             return $import;
         });
+    }
+
+    private function generateCode(): string
+    {
+        // Giữ định dạng IMP-YmdHis; nếu giây này đã có phiếu thì dời sang giây kế tiếp.
+        $moment = now();
+        while (StockImport::query()->where('code', 'IMP-' . $moment->format('YmdHis'))->exists()) {
+            $moment = $moment->copy()->addSecond();
+        }
+
+        return 'IMP-' . $moment->format('YmdHis');
+    }
+
+    /** Tạo lô đầu kỳ cho lượng tồn có sẵn mà chưa thuộc lô nào. */
+    private function ensureOpeningBatch(Product $product, ?int $variantId, ?string $importDate): void
+    {
+        $hasBatch = ProductStockBatch::query()
+            ->where('product_id', $product->id)
+            ->when($variantId, fn ($query) => $query->where('variant_id', $variantId), fn ($query) => $query->whereNull('variant_id'))
+            ->exists();
+        if ($hasBatch) {
+            return;
+        }
+
+        $holder = $variantId
+            ? ProductVariant::query()->lockForUpdate()->find($variantId)
+            : Product::query()->lockForUpdate()->find($product->id);
+        $legacyStock = (int) ($holder?->stock ?? 0);
+        if ($legacyStock <= 0) {
+            return;
+        }
+
+        // Lô đầu kỳ phải xếp trước lô vừa nhập theo FIFO.
+        $openingDate = collect([$product->created_at, $importDate ? Carbon::parse($importDate) : null])
+            ->filter()
+            ->min();
+
+        ProductStockBatch::create([
+            'product_id' => $product->id,
+            'variant_id' => $variantId,
+            'initial_quantity' => $legacyStock,
+            'remaining_quantity' => $legacyStock,
+            'cost_price' => round((float) ($holder->cost_price ?? 0), 2),
+            'sell_price' => (float) ($holder->sell_price ?? 0),
+            'imported_at' => ($openingDate ?? now())->toDateString(),
+            'is_opening_balance' => true,
+        ]);
+    }
+
+    /** Sản phẩm có biến thể: tồn tổng của sản phẩm luôn bằng tổng tồn các biến thể (cùng quy ước với luồng bán hàng). */
+    private function syncVariantProductStock(int $productId): void
+    {
+        $product = Product::query()->find($productId);
+        if (! $product || $product->manage_stock_by_serial) {
+            return;
+        }
+        if (! ProductVariant::query()->where('product_id', $productId)->exists()) {
+            return;
+        }
+
+        $product->update(['stock' => (int) ProductVariant::query()->where('product_id', $productId)->sum('stock')]);
+    }
+
+    /** Trừ lại tồn đã cộng khi hủy/sửa phiếu; chặn nếu tồn hiện tại không đủ để hoàn tác. */
+    private function reverseImportedStock($items): void
+    {
+        $products = Product::query()
+            ->whereIn('id', $items->pluck('product_id')->unique())
+            ->get(['id', 'name', 'manage_stock_by_serial'])
+            ->keyBy('id');
+
+        if (! filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)) {
+            $required = [];
+            foreach ($items as $item) {
+                if ($products->get($item->product_id)?->manage_stock_by_serial) {
+                    continue; // Hàng IMEI: tồn lấy theo số IMEI, được kiểm tra ở bước IMEI.
+                }
+                $key = $item->variant_id ? 'v' . $item->variant_id : 'p' . $item->product_id;
+                $required[$key] ??= ['product_id' => $item->product_id, 'variant_id' => $item->variant_id, 'quantity' => 0];
+                $required[$key]['quantity'] += (int) $item->base_quantity;
+            }
+
+            foreach ($required as $row) {
+                $holder = $row['variant_id']
+                    ? ProductVariant::query()->lockForUpdate()->find($row['variant_id'])
+                    : Product::query()->lockForUpdate()->find($row['product_id']);
+                $current = (int) ($holder?->stock ?? 0);
+
+                if ($current < $row['quantity']) {
+                    $name = $products->get($row['product_id'])?->name ?? 'sản phẩm';
+                    throw ValidationException::withMessages([
+                        'import' => "Không thể hoàn tác phiếu nhập: tồn kho hiện tại của {$name} ({$current}) thấp hơn số lượng đã nhập ({$row['quantity']}). Hàng có thể đã bán hoặc đã được điều chỉnh tồn.",
+                    ]);
+                }
+            }
+        }
+
+        foreach ($items as $item) {
+            if ($item->variant_id) {
+                ProductVariant::query()->whereKey($item->variant_id)->decrement('stock', $item->base_quantity);
+            } else {
+                Product::query()->whereKey($item->product_id)->decrement('stock', $item->base_quantity);
+            }
+        }
+
+        $items->pluck('product_id')->unique()->each(fn ($productId) => $this->syncVariantProductStock((int) $productId));
+    }
+
+    /** Không cho hủy/sửa phiếu đã có tiền trả bổ sung sau khi lập, vì sẽ làm mất lịch sử chi tiền. */
+    private function assertNoLaterSupplierActivity(StockImport $import, string $action): void
+    {
+        if (! $import->supplier_id) {
+            return;
+        }
+
+        $hasLaterPayment = SupplierDebt::query()
+            ->where('source_type', StockImport::class)
+            ->where('source_id', $import->id)
+            ->where('type', 'decrease')
+            ->where(fn ($query) => $query
+                ->whereNull('note')
+                ->orWhere(fn ($note) => $note
+                    ->where('note', 'not like', 'Thanh toán khi tạo phiếu nhập%')
+                    ->where('note', 'not like', 'Thanh toán nợ cũ khi tạo phiếu nhập%')))
+            ->exists();
+
+        $paidByLaterImport = StockImport::query()
+            ->where('supplier_id', $import->supplier_id)
+            ->where('status', 'completed')
+            ->where('id', '!=', $import->id)
+            ->whereNotNull('old_debt_allocations')
+            ->get(['id', 'old_debt_allocations'])
+            ->contains(fn (StockImport $other) => collect($other->old_debt_allocations ?? [])
+                ->contains(fn ($allocation) => (int) ($allocation['stock_import_id'] ?? 0) === (int) $import->id));
+
+        if ($hasLaterPayment || $paidByLaterImport) {
+            throw ValidationException::withMessages([
+                'import' => "Không thể {$action} phiếu nhập vì đã có khoản thanh toán công nợ phát sinh sau khi lập phiếu. Hủy hoặc sửa sẽ làm mất lịch sử chi tiền cho nhà cung cấp.",
+            ]);
+        }
     }
 
     private function normalizeImeis(array $rawImeis, ?string $importDate = null): array

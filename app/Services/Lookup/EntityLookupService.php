@@ -186,7 +186,7 @@ class EntityLookupService
      | Hồ sơ chi tiết
      |------------------------------------------------------------------*/
 
-    public function profile(string $type, int $id): ?array
+    public function profile(string $type, int $id, ?string $deviceStatus = null): ?array
     {
         return match ($type) {
             'customer' => $this->customerProfile($id),
@@ -194,7 +194,7 @@ class EntityLookupService
             'supplier' => $this->supplierProfile($id),
             'sale' => $this->saleProfile($id),
             'import' => $this->importProfile($id),
-            'product' => $this->productProfile($id),
+            'product' => $this->productProfile($id, $deviceStatus),
             default => null,
         };
     }
@@ -316,7 +316,7 @@ class EntityLookupService
     }
 
 
-    private function productProfile(int $id): ?array
+    private function productProfile(int $id, ?string $deviceStatus = null): ?array
     {
         $product = Product::query()
             ->with(['category:id,name', 'brand:id,name', 'unit:id,name', 'variants'])
@@ -329,6 +329,7 @@ class EntityLookupService
         $devices = ProductImei::query()
             ->with(['product:id,name,sku', 'variant:id,product_id,sku,attributes'])
             ->where('product_id', $product->id)
+            ->when($deviceStatus, fn ($query) => $query->where('status', $deviceStatus))
             ->latest('id')
             ->limit(60)
             ->get()
@@ -371,7 +372,11 @@ class EntityLookupService
             ['label' => 'Bảo hành', 'value' => $product->warranty_days ? $product->warranty_days . ' ngày' : null],
             ['label' => 'Quản lý theo IMEI', 'value' => $product->manage_stock_by_serial ? 'Có' : 'Không'],
         ], [
-            ['title' => 'Thiết bị IMEI / Serial', 'items' => $devices],
+            ['title' => match ($deviceStatus) {
+                ProductImei::STATUS_SOLD => 'Thiết bị đã bán',
+                ProductImei::STATUS_IN_STOCK => 'Thiết bị trong kho',
+                default => 'Thiết bị IMEI / Serial',
+            }, 'items' => $devices],
             ['title' => 'Biến thể', 'items' => $variants],
             ['title' => 'Lô hàng còn tồn', 'items' => $batches],
         ]);

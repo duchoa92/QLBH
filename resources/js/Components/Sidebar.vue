@@ -123,17 +123,17 @@ const menuGroups = [
                 permission: 'stock_imports.view',
             },
             {
-                label: 'Sản phẩm & IMEI',
+                label: 'Sản phẩm',
                 icon: Boxes,
                 href: '/products',
                 paths: ['/products', '/products-trash', '/product-imeis'],
                 permission: 'products.view',
             },
             {
-                label: 'Tra cứu IMEI',
+                label: 'Tra cứu',
                 icon: SearchCheck,
-                href: '/imeis/lookup',
-                paths: ['/imeis/lookup'],
+                href: '/lookup',
+                paths: ['/lookup'],
                 permission: 'products.view',
             },
             {

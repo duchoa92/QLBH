@@ -17,6 +17,17 @@ textarea[data-submit-invalid="true"]:focus {
     --tw-ring-color: rgb(254 202 202 / 0.8) !important;
 }
 
+/* Ẩn nút "x" xóa mặc định của trình duyệt trong mọi ô input[type="search"]
+   (các ô tìm kiếm đã có nút xóa riêng, tránh hiện hai dấu x chồng nhau). */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+}
+
 /* iOS zooms the page when a focused form control is smaller than 16px. */
 @media (max-width: 767px) and (pointer: coarse) {
     input,

@@ -50,7 +50,7 @@ const pageTitleFor = (page) => {
     const titles = {
         Dashboard: 'Dashboard',
         'Products/Index': 'Sản phẩm', 'Products/Form': 'Thông tin sản phẩm', 'Products/Show': 'Chi tiết sản phẩm',
-        'ProductImeis/Index': 'IMEI', 'ProductImeis/Lookup': 'Tra cứu IMEI', 'ProductImeis/Show': 'Chi tiết IMEI',
+        'ProductImeis/Index': 'IMEI', 'ProductImeis/Lookup': 'Tra cứu', 'ProductImeis/Show': 'Chi tiết IMEI',
         'Categories/Index': 'Danh mục', 'Categories/Form': 'Thông tin danh mục', 'Brands/Index': 'Thương hiệu',
         'Customers/Index': 'Khách hàng', 'Customers/Create': 'Thêm khách hàng', 'Customers/Edit': 'Sửa khách hàng', 'Customers/Show': 'Chi tiết khách hàng',
         'Sales/Index': 'Hóa đơn bán hàng', 'Sales/Show': 'Chi tiết hóa đơn', 'Sales/Edit': 'Sửa hóa đơn', 'Sales/Receipt': 'Hóa đơn bán hàng',

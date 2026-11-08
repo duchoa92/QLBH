@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Brand;
+use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SaleItemGift;
 use App\Models\Supplier;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -20,7 +23,41 @@ class ReportController extends Controller
      */
     public function index(): Response
     {
-        return Inertia::render('Reports/Index');
+        return Inertia::render('Reports/Index', [
+            // Dữ liệu cho các ô lọc (danh mục, thương hiệu, nhân viên bán hàng).
+            'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
+            'brands' => Brand::query()->orderBy('name')->get(['id', 'name']),
+            'staff' => User::query()->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
+    /** Mức nợ: [lớn hơn, nhỏ hơn hoặc bằng] — null là không giới hạn. */
+    private const DEBT_LEVELS = [
+        'lt1m' => [0, 1_000_000],
+        '1m_5m' => [1_000_000, 5_000_000],
+        '5m_20m' => [5_000_000, 20_000_000],
+        'gt20m' => [20_000_000, null],
+    ];
+
+    /**
+     * Lọc theo sản phẩm / danh mục / nhân viên bán cho báo cáo lợi nhuận.
+     * Truy vấn truyền vào phải đã join `products` và `sales`.
+     */
+    private function applyProfitFilters($query): void
+    {
+        $keyword = trim((string) request('search', ''));
+        $categoryId = (int) request('category_id');
+        $staffId = (int) request('user_id');
+
+        if ($keyword !== '') {
+            $query->where('products.name', 'like', "%{$keyword}%");
+        }
+        if ($categoryId > 0) {
+            $query->where('products.category_id', $categoryId);
+        }
+        if ($staffId > 0) {
+            $query->where('sales.user_id', $staffId);
+        }
     }
 
     /**
@@ -48,9 +85,15 @@ class ReportController extends Controller
     {
         [$from, $to] = $this->dateRange();
 
+        $paymentMethod = in_array(request('payment_method'), ['cash', 'bank', 'mixed', 'card'], true)
+            ? request('payment_method') : '';
+        $staffId = (int) request('user_id');
+
         $base = Sale::query()
             ->where('status', '!=', 'cancelled')
-            ->whereBetween('created_at', [$from, $to]);
+            ->whereBetween('created_at', [$from, $to])
+            ->when($paymentMethod !== '', fn ($query) => $query->where('payment_method', $paymentMethod))
+            ->when($staffId > 0, fn ($query) => $query->where('user_id', $staffId));
 
         $totalRevenue = (clone $base)->sum('grand_total');
         $totalOrders = (clone $base)->count();
@@ -92,7 +135,7 @@ class ReportController extends Controller
     {
         [$from, $to] = $this->dateRange();
 
-        $limit = (int) (request('limit', 10));
+        $limit = in_array((int) request('limit', 10), [10, 20, 50], true) ? (int) request('limit', 10) : 10;
         $order = request('order', 'best'); // best | worst
 
         $items = SaleItem::query()
@@ -100,6 +143,14 @@ class ReportController extends Controller
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
+            ->when(trim((string) request('search', '')) !== '', function ($query) {
+                $keyword = trim((string) request('search'));
+                $query->where(fn ($sub) => $sub
+                    ->where('products.name', 'like', "%{$keyword}%")
+                    ->orWhere('products.sku', 'like', "%{$keyword}%"));
+            })
+            ->when((int) request('category_id') > 0, fn ($query) => $query->where('products.category_id', (int) request('category_id')))
+            ->when((int) request('brand_id') > 0, fn ($query) => $query->where('products.brand_id', (int) request('brand_id')))
             ->selectRaw('
                 products.id,
                 products.name,
@@ -146,8 +197,20 @@ class ReportController extends Controller
         };
         $query = Product::query()->where('is_active', true);
 
-        if (request()->boolean('low_stock')) {
+        $stockStatus = in_array(request('stock_status'), ['low', 'out', 'in'], true) ? request('stock_status') : '';
+        if (request()->boolean('low_stock') || $stockStatus === 'low') {
             $alertsEnabled ? $query->where($lowStock) : $query->whereRaw('1 = 0');
+        } elseif ($stockStatus === 'out') {
+            $query->where('stock', '<=', 0);
+        } elseif ($stockStatus === 'in') {
+            $query->where('stock', '>', 0);
+        }
+
+        if ((int) request('category_id') > 0) {
+            $query->where('category_id', (int) request('category_id'));
+        }
+        if ((int) request('brand_id') > 0) {
+            $query->where('brand_id', (int) request('brand_id'));
         }
 
         if (request('search')) {
@@ -197,13 +260,29 @@ class ReportController extends Controller
     public function debts(): JsonResponse
     {
         $type = request('type', 'customer'); // customer | supplier
+        $keyword = trim((string) request('search', ''));
+        $level = array_key_exists((string) request('level'), self::DEBT_LEVELS) ? (string) request('level') : '';
+        $applyLevel = function ($query) use ($level) {
+            if ($level === '') {
+                return;
+            }
+            [$min, $max] = self::DEBT_LEVELS[$level];
+            $query->where('debt_balance', '>', $min);
+            if ($max !== null) {
+                $query->where('debt_balance', '<=', $max);
+            }
+        };
 
         if ($type === 'supplier') {
             $query = Supplier::query()->where('debt_balance', '>', 0);
 
-            if (request('search')) {
-                $query->where('name', 'like', '%' . request('search') . '%');
+            if ($keyword !== '') {
+                $query->where(fn ($sub) => $sub
+                    ->where('name', 'like', "%{$keyword}%")
+                    ->orWhere('code', 'like', "%{$keyword}%")
+                    ->orWhere('phone', 'like', "%{$keyword}%"));
             }
+            $applyLevel($query);
 
             $items = $query
                 ->select('id', 'code', 'name', 'phone', 'debt_balance')
@@ -224,9 +303,13 @@ class ReportController extends Controller
 
         $query = Customer::query()->where('debt_balance', '>', 0);
 
-        if (request('search')) {
-            $query->where('full_name', 'like', '%' . request('search') . '%');
+        if ($keyword !== '') {
+            $query->where(fn ($sub) => $sub
+                ->where('full_name', 'like', "%{$keyword}%")
+                ->orWhere('code', 'like', "%{$keyword}%")
+                ->orWhere('phone', 'like', "%{$keyword}%"));
         }
+        $applyLevel($query);
 
         $items = $query
             ->select('id', 'code', 'full_name', 'phone', 'debt_balance')
@@ -258,7 +341,8 @@ class ReportController extends Controller
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->where('sales.status', '!=', 'cancelled')
-            ->whereBetween('sales.created_at', [$from, $to]);
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->tap(fn ($query) => $this->applyProfitFilters($query));
 
         $summaryRow = (clone $base)
             ->selectRaw('
@@ -275,6 +359,7 @@ class ReportController extends Controller
             ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
+            ->tap(fn ($query) => $this->applyProfitFilters($query))
             ->selectRaw('COALESCE(SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price), 0) as cost')
             ->value('cost');
         $cost = (float) $summaryRow->cost + (float) $giftCost;
@@ -286,6 +371,7 @@ class ReportController extends Controller
             ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
+            ->tap(fn ($query) => $this->applyProfitFilters($query))
             ->selectRaw('DATE(sales.created_at) as date, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
             ->groupBy('date')
             ->get()
@@ -327,6 +413,7 @@ class ReportController extends Controller
             ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
+            ->tap(fn ($query) => $this->applyProfitFilters($query))
             ->selectRaw('products.id, products.name, SUM(sale_item_gifts.quantity) as qty_sold, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
             ->groupBy('products.id', 'products.name')
             ->get();

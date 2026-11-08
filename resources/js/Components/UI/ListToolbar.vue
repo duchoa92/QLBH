@@ -59,7 +59,7 @@ const clear = () => {
 .app-list-toolbar__top { @apply flex w-full justify-end; }
 .app-list-toolbar { @apply flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4; }
 .app-list-toolbar__search { @apply relative min-w-0 w-full sm:min-w-[220px] sm:flex-1; }
-.app-list-toolbar__input { @apply w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100; }
+.app-list-toolbar__input { @apply w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-normal text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100; }
 .app-list-toolbar__clear { @apply absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300; }
 .app-list-toolbar__filters { @apply flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center; }
 .app-list-toolbar__actions { @apply flex w-full flex-wrap items-center justify-end gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:w-auto; }

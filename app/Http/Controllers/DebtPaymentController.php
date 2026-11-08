@@ -31,6 +31,14 @@ class DebtPaymentController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
         $perPage = in_array((int) $request->query('per_page'), [10, 20, 50, 100], true) ? (int) $request->query('per_page') : 10;
+        // Mức nợ: [từ (không gồm), đến (gồm)] — null nghĩa là không giới hạn.
+        $levels = [
+            'lt1m' => [0, 1_000_000],
+            '1m_5m' => [1_000_000, 5_000_000],
+            '5m_20m' => [5_000_000, 20_000_000],
+            'gt20m' => [20_000_000, null],
+        ];
+        $level = array_key_exists((string) $request->query('level'), $levels) ? (string) $request->query('level') : '';
         $isCustomer = $entity === 'customer';
         $model = $isCustomer ? Customer::query() : Supplier::query();
         $nameColumn = $isCustomer ? 'full_name' : 'name';
@@ -40,6 +48,13 @@ class DebtPaymentController extends Controller
                 ->where($nameColumn, 'like', "%{$search}%")
                 ->orWhere('code', 'like', "%{$search}%")
                 ->orWhere('phone', 'like', "%{$search}%")))
+            ->when($level !== '', function ($query) use ($levels, $level) {
+                [$min, $max] = $levels[$level];
+                $query->where('debt_balance', '>', $min);
+                if ($max !== null) {
+                    $query->where('debt_balance', '<=', $max);
+                }
+            })
             ->orderByDesc('debt_balance')
             ->paginate($perPage)->withQueryString();
 
@@ -71,7 +86,7 @@ class DebtPaymentController extends Controller
         return Inertia::render('Debts/Index', [
             'entity' => $entity,
             'rows' => $rows,
-            'filters' => ['search' => $search, 'per_page' => $perPage],
+            'filters' => ['search' => $search, 'level' => $level, 'per_page' => $perPage],
             'summary' => [
                 'total' => (float) ($isCustomer ? Customer::sum('debt_balance') : Supplier::sum('debt_balance')),
                 'count' => (int) ($isCustomer ? Customer::where('debt_balance', '>', 0)->count() : Supplier::where('debt_balance', '>', 0)->count()),

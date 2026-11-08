@@ -382,7 +382,7 @@ const confirm = () => {
                         v-model="imeiKeyword"
                         type="text"
                         placeholder="Tìm kiếm mã IMEI / Seri / Biến thể..."
-                        class="w-full pl-9 pr-4 py-2 text-xs font-medium rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                        class="w-full pl-9 pr-4 py-2 text-xs font-normal rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                     />
                     <Search class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 </div>

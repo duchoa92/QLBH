@@ -58,7 +58,7 @@ const currentTitle = computed(() => {
         'Products/Form': 'Thông tin sản phẩm',
         'Products/Show': 'Chi tiết sản phẩm',
         'ProductImeis/Index': 'IMEI',
-        'ProductImeis/Lookup': 'Tra cứu IMEI',
+        'ProductImeis/Lookup': 'Tra cứu',
         'ProductImeis/Show': 'Chi tiết IMEI',
         'Categories/Index': 'Danh mục',
         'Brands/Index': 'Thương hiệu',

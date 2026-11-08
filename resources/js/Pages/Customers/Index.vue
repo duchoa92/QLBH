@@ -8,6 +8,8 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import CustomerFormModal from './CustomerFormModal.vue'
@@ -28,6 +30,26 @@ const permissions = computed(() => page.props.auth?.permissions || [])
 const canManageCustomers = computed(() => permissions.value.includes('customers.edit'))
 
 const search = ref(props.filters.search || '')
+const debt = ref(props.filters.debt || '')
+const status = ref(props.filters.status || '')
+const points = ref(props.filters.points || '')
+const dateFrom = ref(props.filters.date_from || '')
+const dateTo = ref(props.filters.date_to || '')
+const debtOptions = [
+    { value: '', label: 'Tất cả công nợ' },
+    { value: 'owing', label: 'Đang còn nợ' },
+    { value: 'clear', label: 'Không còn nợ' },
+]
+const statusOptions = [
+    { value: '', label: 'Mọi trạng thái' },
+    { value: 'active', label: 'Đang giao dịch' },
+    { value: 'blocked', label: 'Đã chặn' },
+]
+const pointOptions = [
+    { value: '', label: 'Tất cả điểm' },
+    { value: 'has', label: 'Có điểm tích lũy' },
+    { value: 'none', label: 'Chưa có điểm' },
+]
 const columns = [
     { key: 'code', label: 'Mã KH', sortable: true },
     { key: 'full_name', label: 'Họ tên', sortable: true },
@@ -37,9 +59,21 @@ const columns = [
     { key: 'customer_type', label: 'Loại', sortable: true, class: 'text-center' },
 ]
 // Tìm kiếm/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
-const list = useLiveList({ props, dataKey: 'customers', params: () => ({ search: search.value.trim() }) })
+const list = useLiveList({
+    props,
+    dataKey: 'customers',
+    params: () => ({
+        search: search.value.trim(),
+        debt: debt.value,
+        status: status.value,
+        points: points.value,
+        date_from: dateFrom.value,
+        date_to: dateTo.value,
+    }),
+})
 const { data: customersData, filters: filtersData, loading } = list
 watch(search, () => list.schedule())
+watch([debt, status, points, dateFrom, dateTo], () => list.request())
 const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
 const reload = () => {
@@ -135,6 +169,12 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
         <DataPanel detached>
             <template #header>
                 <ListToolbar v-model="search" :loading="loading" placeholder="Tìm tên, SĐT, mã khách hàng hoặc CCCD..." @submit="list.request()">
+                    <template #filters>
+                        <ListFilterSelect v-model="debt" label="Công nợ" :show-placeholder="false" :options="debtOptions" />
+                        <ListFilterSelect v-model="status" label="Trạng thái" :show-placeholder="false" :options="statusOptions" />
+                        <ListFilterSelect v-model="points" label="Điểm tích lũy" :show-placeholder="false" :options="pointOptions" />
+                        <DateRangeFilter v-model:from="dateFrom" v-model:to="dateTo" />
+                    </template>
                     <template #actions><ActionButton class="shrink-0 whitespace-nowrap" @click="openCreate">
                         <Plus class="h-4 w-4" />
                         Thêm khách

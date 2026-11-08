@@ -54,6 +54,14 @@ class UserRepository extends BaseRepository
                 }
             )
 
+            ->when(
+                is_string(request('role')) && request('role') !== '',
+                fn ($query) => $query->whereHas(
+                    'roles',
+                    fn ($roleQuery) => $roleQuery->where('name', request('role'))
+                )
+            )
+
             ->orderBy($sortBy, $sortOrder)
 
             ->paginate($perPage)

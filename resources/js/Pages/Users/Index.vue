@@ -2,13 +2,14 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router, usePage } from '@inertiajs/vue3'
 import { Plus, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal, registerUrlModal } from '@/Stores/modal'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import UserFormModal from './FormModal.vue'
@@ -35,6 +36,11 @@ const page = usePage()
 const confirmBox = useConfirm()
 const showRoleManager = ref(false)
 const searchValue = ref(props.filters?.search ?? '')
+const roleFilter = ref(props.filters?.role ?? '')
+const roleOptions = computed(() => [
+    { value: '', label: 'Tất cả vai trò' },
+    ...props.roles.map(role => ({ value: role.name, label: role.name })),
+])
 const columns = [
     { key: 'id', label: 'ID', sortable: true, width: '64px' },
     { key: 'name', label: 'Tên', sortable: true },
@@ -44,9 +50,10 @@ const columns = [
 ]
 
 // Tìm kiếm/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
-const list = useLiveList({ props, dataKey: 'users', params: () => ({ search: searchValue.value.trim() }) })
+const list = useLiveList({ props, dataKey: 'users', params: () => ({ search: searchValue.value.trim(), role: roleFilter.value }) })
 const { data: usersData, filters: filtersData, loading } = list
 watch(searchValue, () => list.schedule())
+watch(roleFilter, () => list.request())
 const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
 const reload = () => {
@@ -134,6 +141,9 @@ const destroy = (user) => {
             <DataPanel detached>
                 <template #header>
                     <ListToolbar v-model="searchValue" :loading="loading" placeholder="Tìm tên, tên đăng nhập hoặc điện thoại..." @submit="list.request()">
+                        <template #filters>
+                            <ListFilterSelect v-model="roleFilter" label="Vai trò" :show-placeholder="false" :options="roleOptions" />
+                        </template>
                         <template #actions><div class="flex flex-wrap items-center gap-2 sm:justify-end">
                             <ActionButton v-if="can_manage_roles" variant="secondary" @click="showRoleManager = true">
                                 <ShieldCheck class="h-4 w-4" />
