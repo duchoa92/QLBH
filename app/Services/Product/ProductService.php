@@ -59,7 +59,8 @@ class ProductService extends BaseService
             $variants = $data['variants'] ?? [];
             $imeis = $data['imeis'] ?? null;
 
-            unset($data['variants'], $data['imeis']);
+            // Tồn kho chỉ được cộng qua phiếu nhập hàng (để có lô và giá vốn); bỏ qua stock gửi kèm khi tạo sản phẩm.
+            unset($data['variants'], $data['imeis'], $data['stock']);
 
             $data = $this->normalizeProductData($data);
             $data['slug'] = $this->generateUniqueSlug($data['name']);

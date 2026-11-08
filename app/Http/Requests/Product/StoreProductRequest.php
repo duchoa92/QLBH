@@ -25,6 +25,7 @@ class StoreProductRequest extends FormRequest
                 'nullable',
                 'string',
                 'max:100',
+                Rule::unique('products', 'sku'),
             ],
 
             'cost_price' => [

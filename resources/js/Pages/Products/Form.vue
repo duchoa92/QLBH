@@ -594,9 +594,13 @@ const makeCode = (text) => {
     return words.slice(0, 3).map(w => w[0]).join('').toUpperCase()
 }
 
+let skuPreviewRequestId = 0
+
 watch(
     [() => form.category_id, () => form.brand_id],
     async ([categoryId, brandId]) => {
+        // Mỗi lần đổi danh mục/thương hiệu là một yêu cầu mới; phản hồi của yêu cầu cũ đến muộn sẽ bị bỏ qua.
+        const requestId = ++skuPreviewRequestId
 
         // Đang sửa → tuyệt đối không tự đổi SKU
         if (form.id) {
@@ -628,6 +632,8 @@ watch(
             }
 
             const result = await response.json()
+
+            if (requestId !== skuPreviewRequestId) return
 
             form.sku = result.sku || ''
             autoSku.value = result.sku || ''
@@ -971,6 +977,11 @@ const submit = () => {
     }
 
     const options = {
+        onError: () => {
+            nextTick(() => {
+                document.querySelector('p.text-red-500')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+            })
+        },
         onSuccess: (page) => {
             const createdProductId = page?.props?.flash?.createdProductId ?? null
             form.reset()
@@ -1080,7 +1091,7 @@ const submit = () => {
                         name="product-brand"
                         option-label="name"
                         option-value="id"
-                        placeholder-text="Chọn thương hiệu"
+                        :placeholder-text="form.category_id ? 'Chọn thương hiệu' : 'Chọn danh mục trước'"
                         create-label="Thêm thương hiệu"
                         :disabled="!form.category_id"
                         :error="form.errors.brand_id"
