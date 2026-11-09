@@ -3,6 +3,7 @@
 namespace App\Services\Product;
 
 use App\Models\CategoryAttribute;
+use App\Services\Stock\OpeningStockBatchService;
 use App\Models\CategoryAttributeValue;
 use App\Models\Product;
 use App\Models\ProductImei;
@@ -11,6 +12,7 @@ use App\Repositories\Product\ProductRepository;
 use App\Services\Base\BaseService;
 use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -55,34 +57,68 @@ class ProductService extends BaseService
 
     public function create(array $data): Model
     {
-        return DB::transaction(function () use ($data) {
+        // SKU tự nhập (sku_manual) thì giữ nguyên; không thì server tự cấp số kế tiếp ngay lúc lưu.
+        // Không gửi sku_manual (API cũ) thì coi SKU có giá trị là SKU tự nhập.
+        $skuIsManual = array_key_exists('sku_manual', $data)
+            ? filter_var($data['sku_manual'], FILTER_VALIDATE_BOOLEAN)
+            : filled($data['sku'] ?? null);
+        unset($data['sku_manual']);
+
+        // Lưu ảnh một lần, không lưu lại mỗi lần thử.
+        if (isset($data['image'])) {
+            $data['image'] = $data['image']->store('products', 'public');
+        }
+
+        $maxAttempts = $skuIsManual ? 1 : 3;
+
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return $this->createProduct($data, $skuIsManual);
+            } catch (QueryException $exception) {
+                // 23000 = vi phạm ràng buộc duy nhất: hai người tạo cùng lúc có thể lấy trùng số SKU kế tiếp.
+                $isDuplicate = (string) $exception->getCode() === '23000';
+
+                if (! $isDuplicate || $attempt >= $maxAttempts) {
+                    throw $exception;
+                }
+            }
+        }
+    }
+
+    private function createProduct(array $data, bool $skuIsManual): Model
+    {
+        return DB::transaction(function () use ($data, $skuIsManual) {
             $variants = $data['variants'] ?? [];
             $imeis = $data['imeis'] ?? null;
 
-            // Tồn kho chỉ được cộng qua phiếu nhập hàng (để có lô và giá vốn); bỏ qua stock gửi kèm khi tạo sản phẩm.
-            unset($data['variants'], $data['imeis'], $data['stock']);
+            unset($data['variants'], $data['imeis']);
 
             $data = $this->normalizeProductData($data);
             $data['slug'] = $this->generateUniqueSlug($data['name']);
             $data['barcode'] = $data['barcode'] ?? null;
 
-            if (isset($data['image'])) {
-                $data['image'] = $data['image']->store('products', 'public');
-            }
-
-            if (empty($data['sku'])) {
-                $data['sku'] = 'TEMP-' . time();
+            if (! $skuIsManual || empty($data['sku'])) {
+                $data['sku'] = $this->nextProductSku(
+                    isset($data['category_id']) ? (int) $data['category_id'] : null,
+                    isset($data['brand_id']) ? (int) $data['brand_id'] : null
+                );
             }
 
             $product = $this->repository->create($data);
 
-            if (str_starts_with($product->sku, 'TEMP-')) {
-                $product->sku = $this->generateSku($product);
-                $product->save();
-            }
-
             $this->syncVariants($product, $variants);
             $this->syncProductImeis($product, $imeis);
+
+            // Tồn nhập trực tiếp khi tạo sản phẩm cần có lô tồn đầu kỳ, nếu không bán hàng
+            // (trừ kho theo lô) sẽ báo "Không đủ tồn kho theo lô".
+            if (! $product->manage_stock_by_serial && empty($variants) && (int) $product->stock > 0) {
+                app(OpeningStockBatchService::class)->create(
+                    $product,
+                    (int) $product->stock,
+                    (float) $product->cost_price,
+                    (float) $product->sell_price
+                );
+            }
 
             return $product;
         });
@@ -398,91 +434,110 @@ class ProductService extends BaseService
         }
     }
 
-    private function makeCodeFromWords($text)
+    /**
+     * Mã ngắn từ tên: nhiều từ thì lấy chữ cái đầu mỗi từ, một từ thì lấy các chữ cái đầu của từ đó
+     * (tối đa $maxLength ký tự, bỏ dấu). Vd. "Điện thoại" => DT, "Máy tính bảng" => MTB, "Samsung" => SAM.
+     */
+    private function makeCodeFromWords(?string $text, int $maxLength = 3): string
     {
-        $text = Str::slug($text);
-        $words = explode('-', $text);
+        $words = array_values(array_filter(explode('-', Str::slug((string) $text))));
 
-        if (count($words) === 1) {
-            return strtoupper(substr($words[0], 0, 3));
-        }
-
-        if (count($words) === 2) {
-            return strtoupper(substr($words[0], 0, 1) . substr($words[1], 0, 2));
-        }
-
-        return strtoupper(implode('', array_map(fn ($word) => substr($word, 0, 1), $words)));
-    }
-
-
-    public function previewNextSku(?int $categoryId, ?int $brandId): string
-    {
-        if (!$categoryId || !$brandId) {
+        if ($words === []) {
             return '';
         }
 
-        $category = \App\Models\Category::find($categoryId)?->name ?? 'GEN';
-        $brand = \App\Models\Brand::find($brandId)?->name ?? 'GEN';
-
-        $base = $this->makeCodeFromWords($category)
-            . $this->makeCodeFromWords($brand);
-
-        // Nếu base chưa tồn tại thì vẫn giữ logic SKU đầu tiên
-        if (!Product::where('sku', $base)->exists()) {
-            return $base;
+        if (count($words) === 1) {
+            return strtoupper(substr($words[0], 0, $maxLength));
         }
 
-        $i = 1;
-
-        while (
-            Product::where(
-                'sku',
-                $base . '-' . str_pad($i, 3, '0', STR_PAD_LEFT)
-            )->exists()
-        ) {
-            $i++;
-        }
-
-        return $base . '-' . str_pad($i, 3, '0', STR_PAD_LEFT);
+        return strtoupper(substr(implode('', array_map(fn ($word) => $word[0], $words)), 0, $maxLength));
     }
 
+    /** Tiền tố SKU theo danh mục và thương hiệu, vd. "DT-SAM"; không có cả hai thì dùng "SP". */
+    private function skuPrefix(?int $categoryId, ?int $brandId): string
+    {
+        $category = $categoryId ? \App\Models\Category::query()->whereKey($categoryId)->value('name') : null;
+        $brand = $brandId ? \App\Models\Brand::query()->whereKey($brandId)->value('name') : null;
 
+        $parts = array_filter([
+            $this->makeCodeFromWords($category),
+            $this->makeCodeFromWords($brand),
+        ]);
+
+        return $parts === [] ? 'SP' : implode('-', $parts);
+    }
+
+    /**
+     * SKU sản phẩm dạng TIỀN_TỐ-SỐ_THỨ_TỰ, vd. DT-SAM-0001, DT-SAM-0002...
+     * Số thứ tự tăng dần theo từng tiền tố và tính cả sản phẩm đã xóa (cột SKU là duy nhất kể cả khi đã xóa mềm).
+     */
+    public function nextProductSku(?int $categoryId, ?int $brandId): string
+    {
+        $prefix = $this->skuPrefix($categoryId, $brandId);
+        $pattern = '/^' . preg_quote($prefix, '/') . '-(\d+)$/';
+
+        $max = Product::withTrashed()
+            ->where('sku', 'like', $prefix . '-%')
+            ->pluck('sku')
+            ->map(fn ($sku) => preg_match($pattern, (string) $sku, $matches) ? (int) $matches[1] : 0)
+            ->max() ?? 0;
+
+        $next = $max + 1;
+
+        do {
+            $sku = $prefix . '-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+            $taken = Product::withTrashed()->where('sku', $sku)->exists();
+            $next++;
+        } while ($taken);
+
+        return $sku;
+    }
+
+    /** Gợi ý SKU hiển thị trên form; số thật được cấp lại ngay lúc lưu để tránh trùng khi nhiều người tạo cùng lúc. */
+    public function previewNextSku(?int $categoryId, ?int $brandId): string
+    {
+        if (! $categoryId && ! $brandId) {
+            return '';
+        }
+
+        return $this->nextProductSku($categoryId, $brandId);
+    }
+
+    /**
+     * SKU biến thể = SKU sản phẩm + mã các giá trị thuộc tính, vd. DT-SAM-0001-DEN-128GB,
+     * để biến thể luôn gắn với đúng sản phẩm của nó (trước đây dùng chung tiền tố danh mục/thương hiệu nên dễ trùng).
+     */
     private function generateSku($product, $variant = null)
     {
-        $category = \App\Models\Category::find($product->category_id)?->name ?? 'GEN';
-        $brand = \App\Models\Brand::find($product->brand_id)?->name ?? 'GEN';
-
-        $base = $this->makeCodeFromWords($category) . $this->makeCodeFromWords($brand);
-
-        if (!$variant) {
-            $sku = $base;
-            $i = 1;
-
-            while (Product::where('sku', $sku)->exists()) {
-                $sku = $base . '-' . str_pad($i, 3, '0', STR_PAD_LEFT);
-                $i++;
-            }
-
-            return $sku;
+        if (! $variant) {
+            return $this->nextProductSku(
+                $product->category_id ? (int) $product->category_id : null,
+                $product->brand_id ? (int) $product->brand_id : null
+            );
         }
+
+        $base = $product->sku ?: $this->nextProductSku(
+            $product->category_id ? (int) $product->category_id : null,
+            $product->brand_id ? (int) $product->brand_id : null
+        );
 
         $parts = [];
 
         foreach ($variant['attributes'] ?? [] as $attribute) {
-            if (empty($attribute['value'])) {
-                continue;
+            $value = $attribute['value'] ?? null;
+
+            if (is_array($value)) {
+                $value = $value[0] ?? null;
             }
 
-            $value = is_array($attribute['value'])
-                ? $attribute['value'][0]
-                : $attribute['value'];
+            $code = strtoupper(substr(Str::slug((string) $value, ''), 0, 5));
 
-            $parts[] = strtoupper(substr(Str::slug($value), 0, 4));
+            if ($code !== '') {
+                $parts[] = $code;
+            }
         }
 
-        $suffix = implode('-', $parts);
-
-        return $base . ($suffix ? "-{$suffix}" : '');
+        return $base . ($parts ? '-' . implode('-', $parts) : '');
     }
 
     private function generateUniqueSlug($name, ?int $ignoreId = null)

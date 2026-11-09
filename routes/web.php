@@ -117,6 +117,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/template', [ProductController::class, 'template'])->middleware('permission:products.import')->name('template');
         Route::post('/import', [ProductController::class, 'import'])->middleware('permission:products.import')->name('import');
         Route::post('/validate', [ProductController::class, 'previewImport'])->middleware('permission:products.import')->name('validate');
+        Route::post('/import-images', [ProductController::class, 'uploadImportImages'])->middleware('permission:products.import')->name('import.images');
         Route::get('/list-import', [ProductController::class, 'listForImport'])->middleware('permission:products.view|stock_imports.view|stock_imports.create')->name('listImport');
         Route::get('/search', [ProductController::class, 'search'])->middleware('permission:products.view')->name('search');
 

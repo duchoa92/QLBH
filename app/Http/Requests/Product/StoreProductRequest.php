@@ -14,6 +14,11 @@ class StoreProductRequest extends FormRequest
 
     public function rules(): array
     {
+        // SKU tự nhập mới phải kiểm tra trùng; SKU tự sinh do server cấp số kế tiếp khi lưu.
+        $skuIsManual = $this->has('sku_manual')
+            ? $this->boolean('sku_manual')
+            : $this->filled('sku');
+
         return [
             'name' => [
                 'required',
@@ -21,12 +26,13 @@ class StoreProductRequest extends FormRequest
                 'max:255',
             ],
 
-            'sku' => [
+            'sku' => array_filter([
                 'nullable',
                 'string',
                 'max:100',
-                Rule::unique('products', 'sku'),
-            ],
+                $skuIsManual ? Rule::unique('products', 'sku') : null,
+            ]),
+            'sku_manual' => ['nullable', 'boolean'],
 
             'cost_price' => [
                 'nullable',

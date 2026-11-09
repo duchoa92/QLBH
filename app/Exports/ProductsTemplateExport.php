@@ -52,6 +52,7 @@ class ProductsTemplateExport implements WithMultipleSheets
                         $unit->is_active ? 'Đang dùng' : 'Tạm tắt',
                     ])
             ),
+            new ProductImportGuideSheet(),
         ];
     }
 }

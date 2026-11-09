@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { closeModal } from '@/Stores/modal'
 import axios from 'axios'
@@ -7,18 +7,28 @@ import { ArrowDownToLine, Check, CheckCheck, CircleFadingArrowUp, Download, File
 import { toast } from 'vue-sonner'
 import JSZip from 'jszip'
 
+const emit = defineEmits(['close', 'updated'])
 
+const MAX_IMAGE_MB = 5
+const MAX_EXCEL_MB = 10
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+const EXCEL_EXTENSIONS = ['xlsx', 'xls', 'csv']
 
 const file = ref(null)
 const images = ref([])
 const previewData = ref([])
 const step = ref('upload') // upload | preview
-const checking = ref(false) 
+const checking = ref(false)
 const exporting = ref(false)
 const isSkipping = ref(false)
 const importing = ref(false)
 const progress = ref(0)
 let interval = null
+
+const uploadingImages = ref(false)
+const uploadProgress = ref(0)
+const imageToken = ref(null)
+let uploadedSignature = ''
 
 const duplicateModal = ref(false)
 const duplicateData = ref(null)
@@ -26,62 +36,192 @@ const duplicateData = ref(null)
 const report = ref(null)
 const showReport = ref(false)
 
+onBeforeUnmount(() => {
+    if (interval) clearInterval(interval)
+})
 
+/* ================= TIỆN ÍCH ================= */
+const extensionOf = (name = '') => name.split('.').pop().toLowerCase()
+
+// Lấy thông báo lỗi từ máy chủ (422 có message hoặc errors), nếu không có thì dùng câu mặc định
+const apiError = (e, fallback) => {
+    const data = e?.response?.data
+    if (data?.message && !data?.errors) return data.message
+    const first = data?.errors ? Object.values(data.errors)[0] : null
+    return (Array.isArray(first) ? first[0] : first) || data?.message || fallback
+}
+
+/* ================= ẢNH: TẢI THEO ĐỢT ================= */
+const imageSignature = () => images.value.map(i => `${i.file.name}:${i.file.size}`).join('|')
+
+// Chia ảnh thành các đợt ≤ 10 file và ≤ ~6MB để không vượt giới hạn upload của PHP
+const makeBatches = (list) => {
+    const batches = []
+    let current = []
+    let bytes = 0
+
+    for (const img of list) {
+        if (current.length && (current.length >= 10 || bytes + img.file.size > 6 * 1024 * 1024)) {
+            batches.push(current)
+            current = []
+            bytes = 0
+        }
+        current.push(img)
+        bytes += img.file.size
+    }
+
+    if (current.length) batches.push(current)
+    return batches
+}
+
+// Tải ảnh lên máy chủ (một lần cho cả bước kiểm tra và bước nhập), trả về token
+const ensureImagesUploaded = async () => {
+    if (!images.value.length) {
+        imageToken.value = null
+        uploadedSignature = ''
+        return null
+    }
+
+    const signature = imageSignature()
+    if (imageToken.value && signature === uploadedSignature) return imageToken.value
+
+    uploadingImages.value = true
+    uploadProgress.value = 0
+
+    try {
+        let token = null
+        const batches = makeBatches(images.value)
+
+        for (let i = 0; i < batches.length; i++) {
+            const form = new FormData()
+            if (token) form.append('token', token)
+            batches[i].forEach(img => form.append('images[]', img.file))
+
+            const res = await axios.post(route('products.import.images'), form)
+            token = res.data.token
+            uploadProgress.value = Math.round(((i + 1) / batches.length) * 100)
+        }
+
+        imageToken.value = token
+        uploadedSignature = signature
+        return token
+    } finally {
+        uploadingImages.value = false
+    }
+}
+
+/* ================= IMPORT ================= */
 const importSkip = async () => {
 
     isSkipping.value = true
 
-    const form = new FormData()
-    form.append('file', file.value)
-
-    images.value.forEach(img => {
-    form.append('images[]', img.file)
-})
     try {
+        const form = new FormData()
+        form.append('file', file.value)
+
+        const token = await ensureImagesUploaded()
+        if (token) form.append('image_token', token)
+
         const res = await axios.post(route('products.import'), form)
 
         report.value = res.data
         showReport.value = true
-        // reset
-        isSkipping.value = false
         duplicateModal.value = false
 
-        // ✅ THÊM ĐOẠN NÀY
         if (res.data.success) {
-            toast.success(`Import ${res.data.count} sản phẩm thành công`)
+            // Máy chủ đã xóa ảnh tạm sau khi nhập xong
+            imageToken.value = null
+            uploadedSignature = ''
+
+            if (res.data.count > 0) {
+                toast.success(`Import ${res.data.count} sản phẩm thành công`)
+                emit('updated')
+            }
+        } else {
+            toast.error(res.data.errors?.[0]?.error || 'Import thất bại, chưa có sản phẩm nào được thêm')
         }
 
-        if (res.data.error_count > 0) {
+        if (res.data.error_count > 0 && res.data.success) {
             toast.warning(`Có ${res.data.error_count} sản phẩm lỗi`)
         }
 
     } catch (e) {
-        toast.error('Import thất bại')
+        toast.error(apiError(e, 'Import thất bại'))
+    } finally {
+        isSkipping.value = false
     }
 }
 
 /* ================= FILE ================= */
-const handleFile = (e) => {
-    const f = e.target.files[0]
+const acceptExcelFile = (f) => {
+    if (!f) return false
 
-    if (!f) return
+    if (!EXCEL_EXTENSIONS.includes(extensionOf(f.name))) {
+        toast.error('Chỉ được chọn file Excel (.xlsx, .xls, .csv)')
+        return false
+    }
 
-    const allowed = [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-        'application/vnd.ms-excel', // xls
-        'text/csv'
-    ]
-
-    if (!allowed.includes(f.type)) {
-        toast.error('❌ Chỉ được chọn file Excel!')
-        e.target.value = ''
-        return
+    if (f.size > MAX_EXCEL_MB * 1024 * 1024) {
+        toast.error(`File quá lớn (tối đa ${MAX_EXCEL_MB}MB)`)
+        return false
     }
 
     file.value = f
-    
+    return true
+}
+
+const handleFile = (e) => {
+    acceptExcelFile(e.target.files[0])
+
     // reset input để lần sau chọn lại vẫn trigger
     e.target.value = null
+}
+
+// Thêm ảnh vào danh sách: bỏ ảnh sai định dạng / quá lớn
+const addImageFiles = (files) => {
+    let tooBig = 0
+    let invalid = 0
+    const accepted = []
+
+    for (const f of files) {
+        const ext = extensionOf(f.name)
+
+        if (!IMAGE_EXTENSIONS.includes(ext)) {
+            invalid++
+            continue
+        }
+
+        if (f.size > MAX_IMAGE_MB * 1024 * 1024) {
+            tooBig++
+            continue
+        }
+
+        accepted.push({ file: f, preview: URL.createObjectURL(f) })
+    }
+
+    images.value = [...images.value, ...accepted]
+
+    if (tooBig) toast.warning(`${tooBig} ảnh lớn hơn ${MAX_IMAGE_MB}MB đã bị bỏ qua`)
+    if (invalid && accepted.length === 0) toast.error('Chỉ nhận ảnh jpg, png, webp, gif hoặc file zip chứa ảnh')
+}
+
+const extractZip = async (zipFile) => {
+    const zip = await JSZip.loadAsync(zipFile)
+    const extracted = []
+
+    for (const entryName in zip.files) {
+        const entry = zip.files[entryName]
+        const baseName = entryName.split('/').pop()
+
+        // Bỏ thư mục, file ẩn và rác của macOS
+        if (entry.dir || entryName.includes('__MACOSX') || baseName.startsWith('.')) continue
+        if (!IMAGE_EXTENSIONS.includes(extensionOf(baseName))) continue
+
+        const blob = await entry.async('blob')
+        extracted.push(new File([blob], baseName, { type: blob.type || 'image/jpeg' }))
+    }
+
+    return extracted
 }
 
 const handleImages = async (e) => {
@@ -91,89 +231,49 @@ const handleImages = async (e) => {
     // 1. Nếu là 1 file ZIP đơn lẻ
     if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
         try {
-            const zip = await JSZip.loadAsync(files[0])
-            const extracted = []
-
-            for (const fileName in zip.files) {
-                const zipEntry = zip.files[fileName]
-                // Bỏ qua folder và file ẩn, chỉ lấy file ảnh
-                if (!zipEntry.dir && fileName.match(/\.(jpg|jpeg|png|webp)$/i)) {
-                    const blob = await zipEntry.async('blob')
-                    const imgFile = new File([blob], fileName.split('/').pop(), {
-                        type: blob.type || 'image/jpeg'
-                    })
-
-                    extracted.push({
-                        file: imgFile,
-                        preview: URL.createObjectURL(blob)
-                    })
-                }
-            }
-
-            images.value = [...images.value, ...extracted]
+            addImageFiles(await extractZip(files[0]))
         } catch (err) {
-            toast.error('❌ File ZIP không hợp lệ hoặc bị lỗi!')
+            toast.error('File ZIP không hợp lệ hoặc bị lỗi!')
         }
-        e.target.value = '' // Reset input
+        e.target.value = ''
         return
     }
 
-    // 2. Nếu là chọn File lẻ hoặc chọn Thư mục (Folder)
-    const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif']
-    
-    const validImages = files
-        .filter(f => {
-            const ext = f.name.split('.').pop().toLowerCase()
-            return f.type.startsWith('image/') || imageExtensions.includes(ext)
-        })
-        .map(f => ({
-            file: f,
-            preview: URL.createObjectURL(f)
-        }))
-
-    // Nối thêm vào danh sách ảnh hiện có (tránh đè mất ảnh cũ)
-    images.value = [...images.value, ...validImages]
-
-    // Reset input để có thể chọn lại cùng file/folder lần sau
+    // 2. Chọn file lẻ hoặc cả thư mục: nối thêm vào danh sách hiện có
+    addImageFiles(files)
     e.target.value = ''
-}
-
-const normalize = (str) => {
-    return str
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '') // 🔥 giống backend
 }
 
 const findImage = (name) => {
     if (!name) return null
 
-    const normalize = (str) =>
-        str.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const normalize = (str) => {
+        const base = str.replace(/\\/g, '/').split('/').pop().replace(/\.[^.]*$/, '')
+        return base.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '')
+    }
 
     const target = normalize(name)
+    if (!target) return null
 
-    const img = images.value.find(i =>
-        normalize(i.file.name) === target
-    )
+    const img = images.value.find(i => normalize(i.file.name) === target)
 
     return img ? img.preview : null
 }
+
 /* ================= PREVIEW ================= */
 const previewFile = async () => {
-    if (!file.value) return toast.error('Bạn phải chọn file tước')
-
-    const form = new FormData()
-    form.append('file', file.value)
-
-    // thêm ảnh
-    images.value.forEach(img => {
-        form.append('images[]', img.file)
-    })
+    if (!file.value) return toast.error('Bạn phải chọn file trước')
 
     checking.value = true   // bật loading
 
     try {
-        const res = await axios.post('/products/validate', form)
+        const form = new FormData()
+        form.append('file', file.value)
+
+        const token = await ensureImagesUploaded()
+        if (token) form.append('image_token', token)
+
+        const res = await axios.post(route('products.validate'), form)
 
         previewData.value = res.data.valid
         step.value = 'preview'
@@ -188,13 +288,11 @@ const previewFile = async () => {
             valid: previewData.value.length - errorRows.length
         }
 
-      
-
     } catch (e) {
-        toast.error('File lỗi')
+        toast.error(apiError(e, 'Không đọc được file, vui lòng kiểm tra lại'))
+    } finally {
+        checking.value = false  // loading
     }
-
-    checking.value = false  // loading
 }
 
 
@@ -213,7 +311,6 @@ const handleWheel = (e) => {
     previewContainer.value.scrollLeft += e.deltaY * 0.7
 }
 
-/* ================= IMPORT ================= */
 const importFile = async () => {
 
     importing.value = true
@@ -225,22 +322,26 @@ const importFile = async () => {
     }
 }
 
-// kéo thể file
+// kéo thả file Excel
 const handleDropExcel = (e) => {
     e.preventDefault()
-    file.value = e.dataTransfer.files[0]
+    acceptExcelFile(e.dataTransfer.files[0])
 }
 
-// kéo thả ảnh
-const handleDropImages = (e) => {
+// kéo thả ảnh (nối thêm, hỗ trợ cả zip)
+const handleDropImages = async (e) => {
     const files = Array.from(e.dataTransfer.files)
 
-    images.value = files
-        .filter(f => f.type.startsWith('image/'))
-        .map(f => ({
-            file: f,
-            preview: URL.createObjectURL(f)
-        }))
+    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
+        try {
+            addImageFiles(await extractZip(files[0]))
+        } catch (err) {
+            toast.error('File ZIP không hợp lệ hoặc bị lỗi!')
+        }
+        return
+    }
+
+    addImageFiles(files)
 }
 
 const removeImage = (index) => {
@@ -258,26 +359,51 @@ const clearImages = () => {
         URL.revokeObjectURL(img.preview)
     })
     images.value = []
+    imageToken.value = null
+    uploadedSignature = ''
 }
 
 /* ================= EXPORT ================= */
 
 const exportFile = async () => {
+    if (exporting.value) return
+
     try {
         exporting.value = true
         progress.value = 0
 
         const res = await axios.post(route('products.export.start'))
         const id = res.data.id
+        const startedAt = Date.now()
+
+        const stop = () => {
+            clearInterval(interval)
+            interval = null
+            exporting.value = false
+        }
 
         interval = setInterval(async () => {
+            // Quá 15 phút mà chưa xong (thường do chưa chạy queue worker) thì thôi chờ
+            if (Date.now() - startedAt > 15 * 60 * 1000) {
+                stop()
+                toast.error('Xuất file quá lâu. Vui lòng kiểm tra tiến trình xử lý nền (queue) rồi thử lại.')
+                return
+            }
+
             try {
                 const check = await axios.get(route('products.export.check', { id }))
 
                 progress.value = check.data.progress || 0
 
+                if (check.data.status === 'failed') {
+                    stop()
+                    toast.error('Xuất file thất bại, vui lòng thử lại.')
+                    return
+                }
+
                 if (check.data.status === 'done') {
                     clearInterval(interval)
+                    interval = null
 
                     progress.value = 100
 
@@ -290,13 +416,14 @@ const exportFile = async () => {
                 }
 
             } catch (e) {
-                clearInterval(interval)
-                exporting.value = false
+                stop()
+                toast.error(apiError(e, 'Không kiểm tra được tiến trình xuất file'))
             }
         }, 800)
 
     } catch (e) {
         exporting.value = false
+        toast.error(apiError(e, 'Không thể bắt đầu xuất file'))
     }
 }
 
@@ -305,18 +432,24 @@ const downloadErrorFile = async () => {
 
     if (!report.value?.errors?.length) return
 
-    const res = await axios.post(
-        route('products.export.errors'),
-        { errors: report.value.errors },
-        { responseType: 'blob' }
-    )
+    try {
+        const res = await axios.post(
+            route('products.export.errors'),
+            { errors: report.value.errors },
+            { responseType: 'blob' }
+        )
 
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'loi_import.xlsx')
-    document.body.appendChild(link)
-    link.click()
+        const url = window.URL.createObjectURL(new Blob([res.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', 'loi_import.xlsx')
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+    } catch (e) {
+        toast.error('Không xuất được file lỗi')
+    }
 }
 
 // Tải file mẫu
@@ -594,7 +727,7 @@ const downloadTemplate = () => {
                             <!-- Text -->
                             <span class="flex gap-1">
                                 <template v-if="checking">
-                                    Đang kiểm tra...
+                                    {{ uploadingImages ? `Đang tải ảnh... ${uploadProgress}%` : 'Đang kiểm tra...' }}
                                 </template>
                                 <template v-else>
                                     <Check /> Kiểm tra file
@@ -695,6 +828,7 @@ const downloadTemplate = () => {
                                 class="font-semibold border"
                             >
                                 {{ item.status }}
+                                <div v-if="item.warning" class="text-xs font-normal text-amber-600">{{ item.warning }}</div>
                             </td>
                         </tr>
                     </table>

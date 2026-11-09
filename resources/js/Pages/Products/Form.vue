@@ -8,7 +8,7 @@ import SearchableReferenceSelect from '@/Components/UI/SearchableReferenceSelect
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
 import {toast} from 'vue-sonner'
-import { Layers, Plus } from 'lucide-vue-next'
+import { ImagePlus, Layers, Plus } from 'lucide-vue-next'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
 import ReferenceCreateModal from './ReferenceCreateModal.vue'
@@ -135,6 +135,7 @@ const form = useForm({
     conversion_unit_id: props.product?.conversion_unit_id ?? null,
     conversion_factor: props.product?.conversion_factor ?? 1,
     sku: props.product?.sku ?? '',
+    barcode: props.product?.barcode ?? '',
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
     warranty_days: existingWarrantyDays,
@@ -299,6 +300,7 @@ watch(() => props.product, (p) => {
     form.conversion_unit_id = p.conversion_unit_id ?? null
     form.conversion_factor = p.conversion_factor ?? 1
     form.sku = p.sku ?? ''
+    form.barcode = p.barcode ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
     priceUnitBasis.value = 'base'
@@ -607,8 +609,13 @@ watch(
             return
         }
 
-        // Chưa đủ thông tin
-        if (!categoryId || !brandId) {
+        // SKU do người dùng tự nhập thì giữ nguyên, không ghi đè khi đổi danh mục/thương hiệu
+        if (form.sku && form.sku !== autoSku.value) {
+            return
+        }
+
+        // Chưa chọn gì thì để trống, hệ thống tự cấp SKU khi lưu
+        if (!categoryId && !brandId) {
             form.sku = ''
             autoSku.value = ''
             return
@@ -966,6 +973,9 @@ const submit = () => {
             payload.conversion_factor = null
         }
 
+        // SKU khác bản gợi ý tự sinh = người dùng tự nhập; ngược lại server tự cấp số mới khi lưu (tránh trùng).
+        payload.sku_manual = Boolean(payload.sku) && payload.sku !== autoSku.value
+
         const warrantyValue = Math.max(0, Number(payload.warranty_value || 0))
         payload.warranty_days = Math.min(3650, Math.round(
             warrantyValue * (payload.warranty_unit === 'month' ? 30 : 1)
@@ -1025,50 +1035,57 @@ const submit = () => {
         :size="size"
         @close="closeModal()"
     >
-        <div class="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-            <!-- LEFT -->
-            <div class="flex items-start gap-3 lg:block lg:space-y-3">
-                <label class="group flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-emerald-400 hover:bg-emerald-50/40 sm:h-28 sm:w-28 lg:aspect-square lg:h-auto lg:w-full">
-
-                    <img
-                        v-if="preview"
-                        :src="preview"
-                        class="h-full w-full object-cover"
-                        @error="preview = null"
-                    />
-
-                    <span
-                        v-else
-                        class="px-2 text-center text-xs font-semibold text-slate-400 group-hover:text-emerald-600 sm:px-4 sm:text-sm"
-                    >
-                        Bấm để thêm ảnh sản phẩm
-                    </span>
-
-                    <input
-                        type="file"
-                        class="hidden"
-                        accept="image/*"
-                        @change="handleImage"
-                    />
-                </label>
-
-                <div class="min-w-0 flex-1 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500 lg:flex-none">
-                    Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm.
-                </div>
-            </div>
-
+        <div class="space-y-5">
             <!-- RIGHT -->
             <div class="min-w-0 space-y-5">
 
                 <!-- FORM -->
                 <div class="grid gap-4 md:grid-cols-2">
 
-                    <div class="md:col-span-2">
-                        <FloatingInput
-                            v-model="form.name"
-                            label="Tên hàng hóa"
-                            :error="form.errors.name"
-                        />
+                    <!-- ẢNH (nhỏ gọn) + TÊN -->
+                    <div class="flex items-start gap-4 md:col-span-2">
+                        <label
+                            class="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-emerald-400 hover:bg-emerald-50/40"
+                            title="Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm"
+                        >
+                            <img
+                                v-if="preview"
+                                :src="preview"
+                                class="h-full w-full object-cover"
+                                @error="preview = null"
+                            />
+
+                            <span
+                                v-else
+                                class="flex flex-col items-center gap-1 px-1 text-center text-[11px] font-semibold text-slate-400 group-hover:text-emerald-600"
+                            >
+                                <ImagePlus :size="22" />
+                                Thêm ảnh
+                            </span>
+
+                            <span
+                                v-if="preview"
+                                class="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100"
+                            >
+                                Đổi ảnh
+                            </span>
+
+                            <input
+                                type="file"
+                                class="hidden"
+                                accept="image/*"
+                                @change="handleImage"
+                            />
+                        </label>
+
+                        <div class="min-w-0 flex-1 space-y-1.5">
+                            <FloatingInput
+                                v-model="form.name"
+                                label="Tên hàng hóa"
+                                :error="form.errors.name"
+                            />
+                            <p class="text-xs text-slate-500">Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm.</p>
+                        </div>
                     </div>
 
                     <FloatingSelect
@@ -1098,28 +1115,40 @@ const submit = () => {
                         @create="openReferenceCreate('brand')"
                     />
 
-                    <FloatingSelect
-                        v-model="form.unit_id"
-                        :options="unitOptions"
-                        label="Đơn vị bán và tồn kho"
-                        name="product-unit"
-                        option-label="name"
-                        option-value="id"
-                        placeholder-text="Chọn đơn vị"
-                        create-label="Thêm đơn vị"
-                        :error="form.errors.unit_id"
-                        @create="openReferenceCreate('unit')"
-                    />
+                    <!-- ĐƠN VỊ + SKU + MÃ VẠCH -->
+                    <div class="grid gap-4 sm:grid-cols-3 md:col-span-2">
+                        <FloatingSelect
+                            v-model="form.unit_id"
+                            :options="unitOptions"
+                            label="Đơn vị bán và tồn kho"
+                            name="product-unit"
+                            option-label="name"
+                            option-value="id"
+                            placeholder-text="Chọn đơn vị"
+                            create-label="Thêm đơn vị"
+                            :error="form.errors.unit_id"
+                            @create="openReferenceCreate('unit')"
+                        />
 
-                    <!-- SKU + IMEI + BIẾN THỂ -->
-                    <div class="grid gap-3 md:col-span-2">
-
-                        <!-- SKU -->
                         <FloatingInput
                             v-model="form.sku"
                             label="SKU"
                             :error="form.errors.sku"
                         />
+
+                        <FloatingInput
+                            v-model="form.barcode"
+                            label="Mã vạch (nếu có)"
+                            :error="form.errors.barcode"
+                        />
+
+                        <p class="text-xs text-slate-500 sm:col-span-3">
+                            SKU tự sinh theo danh mục + thương hiệu (vd. DT-SAM-0001). Để nguyên hoặc để trống thì hệ thống tự cấp số kế tiếp khi lưu; bạn cũng có thể tự nhập SKU riêng.
+                        </p>
+                    </div>
+
+                    <!-- IMEI + BIẾN THỂ -->
+                    <div class="grid gap-3 md:col-span-2">
 
                         <!-- CÓ IMEI + NÚT BIẾN THỂ -->
                         <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">

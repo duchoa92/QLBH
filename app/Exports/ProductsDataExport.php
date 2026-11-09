@@ -4,36 +4,48 @@ namespace App\Exports;
 
 use App\Models\Product;
 use App\Support\ProductImportColumns;
+use App\Support\SafeSpreadsheetValues;
 use Maatwebsite\Excel\Concerns\{
     FromQuery,
     ShouldAutoSize,
+    WithCustomValueBinder,
     WithEvents,
     WithHeadings,
     WithMapping,
     WithTitle,
 };
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
 
 
-class ProductsDataExport implements
+class ProductsDataExport extends DefaultValueBinder implements
     FromQuery,
     ShouldAutoSize,
+    WithCustomValueBinder,
     WithEvents,
     WithHeadings,
     WithMapping,
     WithTitle
 {
+    use SafeSpreadsheetValues;
+
     protected $export;
+
+    protected int $rowNumber = 0;
+
+    protected int $total;
 
     public function __construct($export)
     {
         $this->export = $export;
+        $this->total = max(1, Product::count());
     }
 
     public function query()
     {
+        // Số thứ tự đếm trong map() nên không cần ROW_NUMBER() (chạy được cả MySQL 5.7).
         return Product::with(['category', 'brand', 'unit'])
-            ->selectRaw('products.*, ROW_NUMBER() OVER (ORDER BY products.id) as row_num');
+            ->orderBy('products.id');
     }
 
     public function headings(): array
@@ -45,14 +57,10 @@ class ProductsDataExport implements
     {
         // 👉 mỗi dòng chạy qua đây → update progress
 
-        static $count = 0;
+        $this->rowNumber++;
 
-        $count++;
-
-        if ($count % 100 == 0) {
-            $total = Product::count();
-
-            $percent = intval(($count / $total) * 100);
+        if ($this->rowNumber % 100 == 0) {
+            $percent = intval(($this->rowNumber / $this->total) * 100);
 
             $this->export->update([
                 'progress' => min($percent, 99)
@@ -60,7 +68,7 @@ class ProductsDataExport implements
         }
 
         return [
-            $p->row_num,
+            $this->rowNumber,
             $p->name,
             $p->sku,
             $p->barcode,
@@ -73,7 +81,8 @@ class ProductsDataExport implements
             $p->product_type,
             $p->manage_stock_by_serial ? 1 : 0,
             $p->is_active ? 1 : 0,
-            $p->image,
+            // Chỉ ghi tên file ảnh (không kèm thư mục) để nhập lại file này vẫn khớp ảnh đã lưu.
+            $p->image ? basename($p->image) : '',
             $p->description,
         ];
     }

@@ -22,6 +22,9 @@ use Illuminate\Support\Str;
 use App\Exports\ImportErrorExport;
 use App\Models\ProductVariant;
 use App\Models\StockImportItem;
+use App\Models\ExportHistory;
+use App\Services\ProductImportException;
+use App\Services\ProductImportImageStore;
 
 
 
@@ -543,19 +546,71 @@ class ProductController extends Controller
     }
 
 /*================ Nhập xuất file excel ================================ */
-   public function import(Request $request, ProductImportService $service)
+
+    /** Quy tắc kiểm tra file tải lên của bước kiểm tra và bước nhập. */
+    private function importRules(): array
     {
-        $rows = Excel::toArray([], $request->file('file'))[0];
+        return [
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
+            'image_token' => ['nullable', 'uuid'],
+            'images' => ['nullable', 'array', 'max:20'],
+            'images.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+        ];
+    }
 
-        $allowDuplicate = $request->boolean('force');
+    private function importMessages(): array
+    {
+        return [
+            'file.required' => 'Vui lòng chọn file Excel.',
+            'file.mimes' => 'Chỉ nhận file .xlsx, .xls hoặc .csv.',
+            'file.max' => 'File quá lớn (tối đa 10MB).',
+            'images.max' => 'Mỗi lần chỉ gửi tối đa 20 ảnh trực tiếp.',
+            'images.*.image' => 'Có file ảnh không hợp lệ.',
+            'images.*.mimes' => 'Ảnh chỉ nhận jpg, png, webp, gif.',
+            'images.*.max' => 'Mỗi ảnh tối đa 5MB.',
+        ];
+    }
 
-        $images = [];
+    private function readSpreadsheetRows(Request $request): array
+    {
+        try {
+            return Excel::toArray([], $request->file('file'))[0] ?? [];
+        } catch (\Throwable $e) {
+            report($e);
 
-        foreach ($request->file('images', []) as $file) {
-            $images[] = $file;
+            throw new ProductImportException('Không đọc được file. Hãy dùng file mẫu (.xlsx) và chắc chắn file không bị hỏng hoặc đặt mật khẩu.');
+        }
+    }
+
+    /** @return array<int, mixed> */
+    private function importImages(Request $request, ProductImportImageStore $imageStore): array
+    {
+        if ($request->filled('image_token')) {
+            return $imageStore->resolve((string) $request->input('image_token'), (int) $request->user()->id);
         }
 
-        $result = $service->handle($rows, $allowDuplicate, $images);
+        return array_values($request->file('images', []));
+    }
+
+    public function import(Request $request, ProductImportService $service, ProductImportImageStore $imageStore)
+    {
+        $request->validate($this->importRules(), $this->importMessages());
+
+        // Nhập nhiều dòng + lưu ảnh có thể lâu hơn mặc định của PHP.
+        @set_time_limit(300);
+
+        try {
+            $rows = $this->readSpreadsheetRows($request);
+            $images = $this->importImages($request, $imageStore);
+            $result = $service->handle($rows, $request->boolean('force'), $images);
+        } catch (ProductImportException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        // Dọn ảnh tạm sau khi nhập xong (thành công hoặc đã hoàn tác thì người dùng cũng phải xem trước lại).
+        if ($request->filled('image_token') && ($result['success'] ?? false)) {
+            $imageStore->forget((string) $request->input('image_token'));
+        }
 
         return response()->json([
             'success' => $result['success'] ?? true,
@@ -563,27 +618,26 @@ class ProductController extends Controller
             'errors' => $result['errors'] ?? [],
             'error_count' => $result['error_count'] ?? 0,
         ]);
-
     }
-
-
 
     public function template()
     {
         return Excel::download(new ProductsTemplateExport, 'file_mau_products.xlsx');
     }
 
-
-    public function previewImport(Request $request, ProductImportService $service)
+    public function previewImport(Request $request, ProductImportService $service, ProductImportImageStore $imageStore)
     {
-        $rows = Excel::toArray([], $request->file('file'))[0];
-        $images = [];
+        $request->validate($this->importRules(), $this->importMessages());
 
-        foreach ($request->file('images', []) as $file) {
-            $images[] = $file;
+        @set_time_limit(300);
+
+        try {
+            $rows = $this->readSpreadsheetRows($request);
+            $images = $this->importImages($request, $imageStore);
+            $valid = $service->preview($rows, $images);
+        } catch (ProductImportException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
-
-        $valid = $service->preview($rows, $images);
 
         return response()->json([
             'valid' => $valid,
@@ -591,13 +645,35 @@ class ProductController extends Controller
         ]);
     }
 
+    /** Tải ảnh lên theo từng đợt nhỏ; trả về token dùng cho bước kiểm tra/nhập. */
+    public function uploadImportImages(Request $request, ProductImportImageStore $imageStore)
+    {
+        $request->validate([
+            'token' => ['nullable', 'uuid'],
+            'images' => ['required', 'array', 'min:1', 'max:20'],
+            'images.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+        ], [
+            'images.*.image' => 'Có file ảnh không hợp lệ.',
+            'images.*.mimes' => 'Ảnh chỉ nhận jpg, png, webp, gif.',
+            'images.*.max' => 'Mỗi ảnh tối đa 5MB.',
+        ]);
 
-    
+        $token = (string) ($request->input('token') ?: $imageStore->newToken());
+
+        try {
+            $count = $imageStore->add($token, array_values($request->file('images', [])), (int) $request->user()->id);
+        } catch (ProductImportException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['token' => $token, 'count' => $count]);
+    }
+
     public function startExport()
     {
         try {
 
-            $export = \App\Models\ExportHistory::create([
+            $export = ExportHistory::create([
                 'type' => 'products'
             ]);
 
@@ -609,15 +685,17 @@ class ProductController extends Controller
 
         } catch (\Throwable $e) {
 
+            report($e);
+
             return response()->json([
-                'error' => $e->getMessage()
+                'error' => 'Không thể bắt đầu xuất file: ' . $e->getMessage()
             ], 500);
         }
     }
 
     public function checkExport($id)
     {
-        $export = \App\Models\ExportHistory::findOrFail($id);
+        $export = ExportHistory::where('type', 'products')->findOrFail($id);
 
         return response()->json([
             'progress' => $export->progress,
@@ -629,34 +707,38 @@ class ProductController extends Controller
     // Tải file trích xuất
     public function downloadExport($id)
     {
-        $export = \App\Models\ExportHistory::findOrFail($id);
+        $export = ExportHistory::where('type', 'products')->findOrFail($id);
 
-        if (!$export->file) {
+        if ($export->status !== 'done' || !$export->file) {
             return response()->json([
-                'error' => 'Chưa có file'
+                'error' => 'File chưa sẵn sàng'
             ], 404);
         }
 
         if (!Storage::disk('local')->exists($export->file)) {
             return response()->json([
-                'error' => 'File không tồn tại: ' . $export->file
+                'error' => 'File không còn tồn tại, vui lòng xuất lại'
             ], 404);
         }
 
-        return Storage::disk('local')->download($export->file);
+        return Storage::disk('local')->download(
+            $export->file,
+            'san_pham_' . now()->format('Ymd_His') . '.xlsx'
+        );
     }
 
     // Tải file lỗi
     public function exportErrors(Request $request)
     {
-        $errors = $request->input('errors', []);
-
-        if (!$errors || !count($errors)) {
-            return response()->json(['error' => 'Không có lỗi'], 400);
-        }
+        $request->validate([
+            'errors' => ['required', 'array', 'min:1', 'max:5000'],
+            'errors.*' => ['array'],
+        ], [
+            'errors.required' => 'Không có lỗi để xuất.',
+        ]);
 
         return Excel::download(
-            new ImportErrorExport($errors),
+            new ImportErrorExport($request->input('errors', [])),
             'loi_import.xlsx'
         );
     }
