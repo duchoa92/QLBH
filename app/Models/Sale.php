@@ -46,6 +46,18 @@ class Sale extends Model
         return $this->morphMany(CustomerDebt::class, 'source');
     }
 
+    /**
+     * Gắn `old_debt_paid`: số tiền thừa của hóa đơn này đã dùng để trả nợ cũ.
+     * Dùng chung cho trang Hóa đơn, phiếu in và API (trước đây lặp ở 3 nơi).
+     */
+    public function withOldDebtPaid(): static
+    {
+        return $this->setAttribute('old_debt_paid', (float) $this->customerDebtEntries()
+            ->where('type', 'decrease')
+            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
+            ->sum('amount'));
+    }
+
     // Khách hàng
     public function customer()
     {

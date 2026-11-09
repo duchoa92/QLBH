@@ -4,10 +4,11 @@ import { usePage } from '@inertiajs/vue3'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import QrPayment from './QrPayment.vue'
-import { X, CreditCard, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
+import { X, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
 import { formatCurrency, formatNumber } from '@/utils/format'
 import { announceBankPayment, armBankPaymentAudio } from '@/Modules/POS/Payment/Utils/paymentAlerts'
 import axios from 'axios'
+import { buildCheckoutItems } from '@/Modules/POS/Payment/Utils/checkoutPayload'
 
 const props = defineProps({
     loading: Boolean,
@@ -376,25 +377,7 @@ const startBankPayment = async () => {
     bankError.value = ''
     bankManualFallback.value = false
     try {
-        const items = props.cart.map(item => ({
-            id: item.id,
-            price: item.price,
-            quantity: item.quantity,
-            unit_id: item.unit_id ?? null,
-            unit_name: item.unit_name ?? 'Cái',
-            conversion_factor: item.conversion_factor ?? 1,
-            variant_id: item.variant_id ?? null,
-            imei_id: item.imei_id ?? null,
-            apply_vat: Boolean(item.apply_vat),
-            warranty_days: item.customer_warranty_days ?? item.warranty_days ?? null,
-            warranty_value: item.customer_warranty_value ?? null,
-            warranty_unit: item.customer_warranty_unit ?? null,
-            warranty_note: item.customer_warranty_note ?? null,
-            note: item.note,
-            discount_type: item.discount_type ?? null,
-            discount_value: Number(item.discount_value ?? 0),
-            gifts: (item.gifts ?? []).map(gift => ({ id: gift.id, quantity: gift.quantity, variant_id: gift.variant_id ?? null, imei_id: gift.imei_id ?? null })),
-        }))
+        const items = buildCheckoutItems(props.cart)
         const { data } = await axios.post(route('pos.bank-payments.start'), {
             items,
             customer_id: props.selectedCustomer?.id ?? null,

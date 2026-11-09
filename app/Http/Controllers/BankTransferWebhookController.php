@@ -176,8 +176,9 @@ class BankTransferWebhookController extends Controller
                     invoiceDiscountType: ($payload['invoice_discount_type'] ?? 'amount') === 'percent' ? 'percent' : 'amount',
                     extraFee: (float) ($payload['extra_fee'] ?? 0),
                     vatRate: (float) ($payload['vat_rate'] ?? setting('pos_vat_rate', 10)),
+                    workShiftId: $locked->work_shift_id ? (int) $locked->work_shift_id : null,
+                    bankAccount: $locked->bank_account,
                 );
-                $sale->update(['work_shift_id' => $locked->work_shift_id, 'bank_account' => $locked->bank_account]);
                 $sale->load(['items.product', 'items.variant', 'items.productImei', 'customer']);
                 $saleResponse = $this->saleResponse($sale);
                 $locked->update(['status' => 'paid', 'sale_id' => $sale->id, 'sale_response' => $saleResponse]);

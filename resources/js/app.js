@@ -60,7 +60,7 @@ const pageTitleFor = (page) => {
         'Debts/Index': 'Quản lý công nợ', 'Expenses/Index': 'Chi phí cửa hàng',
         'Taxes/Index': 'Khai thuế', 'Reports/Index': 'Báo cáo & Thống kê', 'WorkShifts/History': 'Lịch sử kiểm kê',
         'Settings/Index': 'Thiết lập', 'Profile/Edit': 'Tài khoản cá nhân',
-        'Pos/Index': 'POS bán hàng', 'Pos/SaleInvoice': 'Hóa đơn POS', 'Auth/Login': 'Đăng nhập',
+        'Pos/Index': 'POS bán hàng', 'Auth/Login': 'Đăng nhập',
         'Auth/ForgotPassword': 'Quên mật khẩu', 'Auth/ResetPassword': 'Đặt lại mật khẩu', 'Auth/VerifyEmail': 'Xác minh email',
         'Auth/ConfirmPassword': 'Xác nhận mật khẩu', 'Setup/Index': 'Thiết lập ban đầu',
     }
@@ -269,7 +269,7 @@ createInertiaApp({
             }
 
             const component = page.component || ''
-            const printComponents = ['Sales/Receipt', 'Sales/Show', 'Pos/SaleInvoice']
+            const printComponents = ['Sales/Receipt', 'Sales/Show']
             if (!printComponents.some((name) => component.endsWith(name))) {
                 printStyle.textContent = ''
                 return

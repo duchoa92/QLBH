@@ -16,7 +16,7 @@ import { toast } from 'vue-sonner';
 import api from '@/Services/api';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
-import { FileText, Plus, UserRound, Smartphone, Wrench, RotateCcw, Play, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { FileText, Plus, UserRound, Smartphone, Wrench, RotateCcw, Play } from 'lucide-vue-next';
 
 const props = defineProps({
     repairs: Object,
@@ -45,12 +45,6 @@ const search = ref(props.filters?.search ?? '');
 const status = ref(props.filters?.status ?? '');
 const dateFrom = ref(props.filters?.date_from ?? '');
 const dateTo = ref(props.filters?.date_to ?? '');
-const datePreset = ref('all');
-const customDatePickerOpen = ref(false);
-const customDatePickerRef = ref(null);
-const pickerStart = ref('');
-const pickerEnd = ref('');
-const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 const sortBy = ref(props.filters?.sort_by ?? 'created_at');
 const sortOrder = ref(props.filters?.sort_order ?? 'desc');
 
@@ -59,133 +53,6 @@ const detailCredentials = ref(null);
 const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
-const datePresetOptions = [
-    { value: 'all', label: 'Toàn thời gian' },
-    { value: 'today', label: 'Hôm nay' },
-    { value: 'yesterday', label: 'Hôm qua' },
-    { value: 'this_month', label: 'Tháng này' },
-    { value: 'last_month', label: 'Tháng trước' },
-    { value: 'custom', label: 'Tùy chọn' },
-];
-const inputDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
-const dateFromInput = (value) => value ? new Date(`${value}T12:00:00`) : null;
-const formatPickerDate = (value) => value
-    ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
-    : '';
-const dateRangeFor = (preset) => {
-    const today = new Date();
-    if (preset === 'all') return { from: '', to: '' };
-    if (preset === 'today') {
-        const value = inputDate(today);
-        return { from: value, to: value };
-    }
-    if (preset === 'yesterday') {
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
-        const value = inputDate(yesterday);
-        return { from: value, to: value };
-    }
-    if (preset === 'this_month') {
-        return { from: inputDate(new Date(today.getFullYear(), today.getMonth(), 1)), to: inputDate(today) };
-    }
-    if (preset === 'last_month') {
-        return {
-            from: inputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
-            to: inputDate(new Date(today.getFullYear(), today.getMonth(), 0)),
-        };
-    }
-    return null;
-};
-const applyDatePreset = (preset) => {
-    datePreset.value = preset || 'all';
-    const range = dateRangeFor(datePreset.value);
-    if (!range) {
-        pickerStart.value = dateFrom.value;
-        pickerEnd.value = dateTo.value;
-        const anchor = dateFromInput(pickerStart.value) || new Date();
-        calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-        customDatePickerOpen.value = true;
-        return;
-    }
-    customDatePickerOpen.value = false;
-    dateFrom.value = range.from;
-    dateTo.value = range.to;
-};
-const syncDatePresetFromDates = () => {
-    const matchingPreset = ['all', 'today', 'yesterday', 'this_month', 'last_month'].find((preset) => {
-        const range = dateRangeFor(preset);
-        return range.from === dateFrom.value && range.to === dateTo.value;
-    });
-    datePreset.value = matchingPreset || 'custom';
-};
-syncDatePresetFromDates();
-
-const calendarMonthLabel = computed(() => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(calendarMonth.value));
-const rangeCalendarCells = computed(() => {
-    const first = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth(), 1);
-    const start = new Date(first);
-    start.setDate(1 - ((first.getDay() + 6) % 7));
-    return Array.from({ length: 42 }, (_, index) => {
-        const date = new Date(start);
-        date.setDate(start.getDate() + index);
-        return {
-            key: inputDate(date),
-            day: date.getDate(),
-            currentMonth: date.getMonth() === calendarMonth.value.getMonth(),
-        };
-    });
-});
-const pickerRangeLabel = computed(() => {
-    if (!pickerStart.value) return 'Chọn ngày bắt đầu, rồi chọn ngày kết thúc';
-    if (!pickerEnd.value) return `Từ ${formatPickerDate(pickerStart.value)} · chọn ngày kết thúc`;
-    return `${formatPickerDate(pickerStart.value)} – ${formatPickerDate(pickerEnd.value)}`;
-});
-const isPickerSelected = (key) => key === pickerStart.value || key === pickerEnd.value;
-const isPickerInRange = (key) => Boolean(pickerStart.value && pickerEnd.value && key > pickerStart.value && key < pickerEnd.value);
-const moveCalendarMonth = (amount) => {
-    calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + amount, 1);
-};
-const applyCustomDateRange = () => {
-    if (!pickerStart.value) return;
-    dateFrom.value = pickerStart.value;
-    dateTo.value = pickerEnd.value || pickerStart.value;
-    datePreset.value = 'custom';
-    customDatePickerOpen.value = false;
-};
-const selectPickerDate = (key) => {
-    if (!pickerStart.value || pickerEnd.value) {
-        pickerStart.value = key;
-        pickerEnd.value = '';
-        return;
-    }
-    if (key < pickerStart.value) {
-        pickerEnd.value = pickerStart.value;
-        pickerStart.value = key;
-    } else {
-        pickerEnd.value = key;
-    }
-};
-const clearCustomDateRange = () => {
-    applyDatePreset('all');
-};
-const openDatePicker = () => {
-    pickerStart.value = dateFrom.value;
-    pickerEnd.value = dateTo.value;
-    const anchor = dateFromInput(pickerStart.value) || new Date();
-    calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    customDatePickerOpen.value = true;
-};
-const closeCustomDatePickerOnOutside = (event) => {
-    if (customDatePickerOpen.value && customDatePickerRef.value && !customDatePickerRef.value.contains(event.target)) {
-        customDatePickerOpen.value = false;
-    }
-};
-
 const reload = () => {
     router.reload({ only: ['repairs', 'stats'], preserveScroll: true });
 };
@@ -197,7 +64,6 @@ onBeforeUnmount(() => {
     clearTimeout(filterTimeout);
     repairsRequestController?.abort();
     window.removeEventListener('popstate', openRepairFromQuery);
-    window.removeEventListener('pointerdown', closeCustomDatePickerOnOutside);
 });
 
 const syncFilterUrl = (filters) => {
@@ -287,9 +153,7 @@ watch(() => props.filters, (value) => {
     sortBy.value = value.sort_by ?? 'created_at';
     sortOrder.value = value.sort_order ?? 'desc';
     perPage.value = Number(value.per_page ?? 20);
-    syncDatePresetFromDates();
 }, { deep: true });
-watch([dateFrom, dateTo], syncDatePresetFromDates);
 watch([search, status, dateFrom, dateTo, sortBy, sortOrder], applyFilters);
 
 const openCreate = () => {
@@ -367,7 +231,6 @@ window.addEventListener('popstate', openRepairFromQuery);
 onMounted(() => {
     openCreateFromQuery();
     openRepairFromQuery();
-    window.addEventListener('pointerdown', closeCustomDatePickerOnOutside);
 });
 watch(() => page.url, () => { openCreateFromQuery(); openRepairFromQuery(); });
 watch(repairsData, openRepairFromQuery);

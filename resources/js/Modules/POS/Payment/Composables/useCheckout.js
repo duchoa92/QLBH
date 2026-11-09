@@ -1,6 +1,7 @@
 import { toast } from 'vue-sonner'
 import { useEventBus } from '@/Composables/useEventBus'
 import { paymentService } from '@/Modules/POS/Payment/Services/paymentService'
+import { buildCheckoutItems } from '@/Modules/POS/Payment/Utils/checkoutPayload'
 
 
 export function useCheckout(
@@ -75,64 +76,7 @@ export function useCheckout(
             const response =
            
                 await paymentService.checkout({
-                   items: cart.value.map(item => ({
-
-                        id: item.id,
-
-                        price: item.price,
-
-                        quantity: item.quantity,
-
-                        unit_id:
-                            item.unit_id ?? null,
-
-                        unit_name:
-                            item.unit_name ?? 'Cái',
-
-                        conversion_factor:
-                            item.conversion_factor ?? 1,
-
-                        variant_id:
-                            item.variant_id ?? null,
-
-                        imei_id:
-                            item.imei_id ?? null,
-
-                        apply_vat: Boolean(item.apply_vat),
-
-                        warranty_days:
-                            item.customer_warranty_days ?? item.warranty_days ?? null,
-
-                        warranty_value:
-                            item.customer_warranty_value ?? null,
-
-                        warranty_unit:
-                            item.customer_warranty_unit ?? null,
-
-                        warranty_note:
-                            item.customer_warranty_note ?? null,
-
-                        note:
-                            item.note,
-
-                        discount_type:
-                            item.discount_type ?? null,
-
-                        discount_value:
-                            Number(
-                                item.discount_value ?? 0
-                            ),
-
-                        gifts:
-                            (item.gifts ?? []).map(gift => ({
-                                id: gift.id,
-                                quantity: gift.quantity,
-                                variant_id: gift.variant_id ?? null,
-                                imei_id: gift.imei_id ?? null,
-                            })),
-
-                    })),
-
+                    items: buildCheckoutItems(cart.value),
                     customer_id:
                         selectedCustomer.value?.id
                         || null,

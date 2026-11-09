@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ProductImei;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -13,7 +12,7 @@ use App\Models\BankPaymentIntent;
 use App\Models\Customer;
 use App\Notifications\SystemNotification;
 use App\Support\NotificationRecipients;
-use App\Support\PosVatCalculator;
+use App\Support\PosTotals;
 use Illuminate\Support\Facades\Notification;
 
 class PosController extends Controller
@@ -106,24 +105,12 @@ class PosController extends Controller
         $hasApiPayKeys = $apiAccessKey !== '' && $apiSecretKey !== '';
         abort_unless(($provider === 'apipay' && $hasSecret && $hasApiPayKeys && filled($bankAccountConfig['payment_provider_account_id'] ?? null)) || ($provider === 'sepay' && ($hasSecret || $hasApiKey)), 422, 'Tài khoản ngân hàng này chưa cấu hình đầy đủ dịch vụ nhận giao dịch.');
 
-        $subtotal = collect($data['items'])->sum(fn ($item) => (float) $item['price'] * max(1, (int) ($item['quantity'] ?? 1)));
-        $discount = collect($data['items'])->sum(function ($item) {
-            $line = (float) $item['price'] * max(1, (int) ($item['quantity'] ?? 1));
-            return ($item['discount_type'] ?? null) === 'percent'
-                ? $line * (float) ($item['discount_value'] ?? 0) / 100
-                : (($item['discount_type'] ?? null) === 'amount' ? (float) ($item['discount_value'] ?? 0) : 0);
-        });
-        $invoiceDiscountBase = max(0, $subtotal - $discount);
         $invoiceDiscountType = ($data['invoice_discount_type'] ?? 'amount') === 'percent' ? 'percent' : 'amount';
-        $invoiceDiscountValue = max(0, (float) ($data['invoice_discount'] ?? 0));
-        abort_if($invoiceDiscountType === 'percent' && $invoiceDiscountValue > 100, 422, 'Chiết khấu phần trăm không được vượt quá 100%.');
-        $invoiceDiscount = $invoiceDiscountType === 'percent'
-            ? $invoiceDiscountBase * $invoiceDiscountValue / 100
-            : min($invoiceDiscountBase, $invoiceDiscountValue);
+        abort_if($invoiceDiscountType === 'percent' && (float) ($data['invoice_discount'] ?? 0) > 100, 422, 'Chiết khấu phần trăm không được vượt quá 100%.');
         $vatRate = (float) setting('pos_vat_rate', 10);
-        $tax = PosVatCalculator::calculate($data['items'], $invoiceDiscount, $vatRate);
-        $extraFee = max(0, (float) ($data['extra_fee'] ?? 0));
-        $checkoutTotal = (int) round(max(0, $subtotal - $discount - $invoiceDiscount + $tax + $extraFee));
+        $totals = PosTotals::calculate($data['items'], (float) ($data['invoice_discount'] ?? 0), $invoiceDiscountType, (float) ($data['extra_fee'] ?? 0), $vatRate);
+        $extraFee = $totals['extra_fee'];
+        $checkoutTotal = (int) round($totals['grand_total']);
         if ($data['pay_old_debt']) {
             $customer = Customer::query()->findOrFail($data['customer_id'] ?? null);
             $checkoutTotal += (int) round((float) $customer->debt_balance);
@@ -146,7 +133,8 @@ class PosController extends Controller
                 'customer_id' => $data['customer_id'] ?? null,
                 'pay_old_debt' => $data['pay_old_debt'],
                 'cash_received_amount' => $cashReceivedAmount,
-                'invoice_discount' => $invoiceDiscount,
+                // Lưu giá trị gốc người dùng nhập (không phải số tiền đã quy đổi) để webhook tính lại đúng theo loại giảm giá.
+                'invoice_discount' => (float) ($data['invoice_discount'] ?? 0),
                 'invoice_discount_type' => $invoiceDiscountType,
                 'extra_fee' => $extraFee,
                 'vat_rate' => $vatRate,
@@ -228,54 +216,6 @@ class PosController extends Controller
         );
     }
 
-    public function scanImei(Request $request) 
-    {
-        $request->validate([
-            'imei' => [
-                'required',
-            ],
-        ]);
-
-        $imei = ProductImei::query()
-            ->with([
-                'product.unit:id,name,short_name',
-            ])
-            ->where(
-                'imei',
-                $request->imei
-            )
-            ->first();
-
-        if (! $imei) {
-            return response()->json([
-                'message' => 'IMEI không tồn tại',
-            ], 404);
-        }
-
-        if (
-            $imei->status !==
-            ProductImei::STATUS_IN_STOCK
-        ) {
-            return response()->json([
-                'message' => 'IMEI không khả dụng',
-            ], 422);
-        }
-
-        return response()->json([
-            'id' => $imei->id,
-            'product_id' => $imei->product->id,
-            'imei' => $imei->imei,
-                'product' => [
-                    'id' => $imei->product->id,
-                    'name' => $imei->product->name,
-                    'sell_price' => $imei->product->sell_price,
-                    'product_type' => $imei->product->product_type,
-                    'unit_id' => $imei->product->unit_id,
-                    'unit_name' => $imei->product->unit?->short_name ?: $imei->product->unit?->name,
-                ],
-            ]);
-    }
-
     // Thanh toán
     public function checkout(
         Request $request,
@@ -296,7 +236,10 @@ class PosController extends Controller
         // 1. THÊM VALIDATE: Kiểm tra dữ liệu đầu vào chặt chẽ
         $request->validate([
 
-            'items' => 'required|array',
+            'items' => 'required|array|min:1',
+            'items.*.id' => 'required|integer|exists:products,id',
+            'items.*.price' => 'required|numeric|min:0',
+            'items.*.quantity' => 'nullable|numeric|min:0',
 
             'payment_method' => 'required|in:cash,bank,mixed,card',
             'bank_account' => 'nullable|string|max:50',
@@ -310,10 +253,10 @@ class PosController extends Controller
 
             'items.*.discount_type' => 'nullable|string',
 
-            'items.*.discount_value' => 'nullable|numeric',
+            'items.*.discount_value' => 'nullable|numeric|min:0',
             'items.*.apply_vat' => 'sometimes|boolean',
 
-            'items.*.variant_id' => 'nullable|integer',
+            'items.*.variant_id' => 'nullable|integer|exists:product_variants,id',
             
             'items.*.imei_id' => 'nullable|integer|exists:product_imeis,id',
 
@@ -346,6 +289,7 @@ class PosController extends Controller
         ],
         [
             'items.required' => 'Giỏ hàng không được để trống.',
+            'items.min' => 'Giỏ hàng không được để trống.',
             'payment_method.required' => 'Vui lòng chọn phương thức thanh toán.',
         ]);
 
@@ -381,12 +325,9 @@ class PosController extends Controller
                 invoiceDiscountType: ($request->input('invoice_discount_type') ?? 'amount') === 'percent' ? 'percent' : 'amount',
                 extraFee: (float) ($request->input('extra_fee') ?? 0),
                 vatRate: (float) setting('pos_vat_rate', 10),
+                workShiftId: $workShift?->id,
+                bankAccount: $request->input('bank_account'),
             );
-
-            $sale->update([
-                'work_shift_id' => $workShift?->id,
-                'bank_account' => in_array($request->payment_method, ['bank', 'mixed'], true) ? $request->bank_account : null,
-            ]);
 
             $sale->load([
                 'items.product.conversionUnit',
@@ -459,25 +400,5 @@ class PosController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
-    }
-
-    // Xem hóa đơn bán hàng
-    public function showSale(Sale $sale): Response 
-    {
-        $sale->load([
-            'items.product.conversionUnit',
-            'items.variant',
-            'items.productImei',
-            'items.gifts.product',
-            'customer',
-            'user'
-        ]);
-
-        return Inertia::render(
-            'Pos/SaleInvoice',
-            [
-                'sale' => $sale,
-            ]
-        );
     }
 }

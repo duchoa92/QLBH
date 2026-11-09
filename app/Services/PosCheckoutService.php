@@ -16,7 +16,7 @@ use App\Models\SaleItemGift;
 use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
 use App\Services\Stock\StockBatchAllocator;
-use App\Support\PosVatCalculator;
+use App\Support\PosTotals;
 
 class PosCheckoutService
 {
@@ -34,6 +34,8 @@ class PosCheckoutService
         string $invoiceDiscountType = 'amount',
         float $extraFee = 0,
         float $vatRate = 0,
+        ?int $workShiftId = null,
+        ?string $bankAccount = null,
     ): Sale {
 
         return DB::transaction(function () use (
@@ -50,6 +52,8 @@ class PosCheckoutService
             $invoiceDiscountType,
             $extraFee,
             $vatRate,
+            $workShiftId,
+            $bankAccount,
         ): Sale {
 
             /*
@@ -58,51 +62,14 @@ class PosCheckoutService
             |--------------------------------------------------------------------------
             */
 
-            $subtotal = collect($items)
-                ->sum(function (array $item): float {
-                    return (float) $item['price'] * $this->itemQuantity($item);
-                });
-
-            //
-            $discount = collect($items)
-                ->sum(function ($item) {
-
-                    $lineTotal =
-
-                        (float) $item['price']
-                        *
-                        $this->itemQuantity($item);
-
-                    if (
-                        ($item['discount_type'] ?? null)
-                        === 'percent'
-                    ) {
-
-                        return
-                            $lineTotal
-                            *
-                            ((float) $item['discount_value'])
-                            / 100;
-                    }
-
-                    if (
-                        ($item['discount_type'] ?? null)
-                        === 'amount'
-                    ) {
-
-                        return
-                            (float) $item['discount_value'];
-                    }
-
-                    return 0;
-                });
-
-            $invoiceDiscountBase = max(0, $subtotal - $discount);
-            $invoiceDiscount = $invoiceDiscountType === 'percent'
-                ? $invoiceDiscountBase * min(100, max(0, $invoiceDiscount)) / 100
-                : min($invoiceDiscountBase, max(0, $invoiceDiscount));
-            $extraFee = max(0, $extraFee);
-            $tax = PosVatCalculator::calculate($items, $invoiceDiscount, $vatRate);
+            [
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'invoice_discount' => $invoiceDiscount,
+                'tax' => $tax,
+                'extra_fee' => $extraFee,
+                'grand_total' => $grandTotal,
+            ] = PosTotals::calculate($items, $invoiceDiscount, $invoiceDiscountType, $extraFee, $vatRate);
             $vatProductIds = StockImportItem::query()
                 ->whereIn('product_id', collect($items)->pluck('id')->unique())
                 ->where('has_vat', true)
@@ -110,7 +77,6 @@ class PosCheckoutService
                 ->pluck('product_id')
                 ->map(fn ($id) => (int) $id)
                 ->all();
-            $grandTotal = max(0, $subtotal - $discount - $invoiceDiscount + $tax + $extraFee);
 
             // Nếu không có khách hàng và tiền thanh toán chưa đủ thì báo lỗi
             if (!$customerId && $paidAmount < $grandTotal) {
@@ -141,6 +107,8 @@ class PosCheckoutService
                 'bank_received_amount' => $bankReceivedAmount,
                 'change_amount' => 0, // Sẽ cập nhật lại ở cuối sau khi tính toán chính xác
                 'payment_method' => $paymentMethod ?? 'cash', // Phòng hờ nếu null thì lưu là 'cash'
+                'work_shift_id' => $workShiftId,
+                'bank_account' => in_array($paymentMethod, ['bank', 'mixed'], true) ? $bankAccount : null,
             ]);
 
             /*
@@ -148,7 +116,6 @@ class PosCheckoutService
             | Xử lý từng sản phẩm trong hóa đơn
             |--------------------------------------------------------------------------
             */
-            $totalDiscount = 0;
 
             foreach ($items as $item) {
                 /*
@@ -166,7 +133,7 @@ class PosCheckoutService
 
                 $quantity = $requiresImei
                     ? 1
-                    : $this->itemQuantity($item);
+                    : PosTotals::lineQuantity($item);
                 // POS luôn bán theo đơn vị tồn kho (chiếc, mét...). Quy cách
                 // cuộn/thùng chỉ được áp dụng khi nhập hàng.
                 $conversionFactor = 1;
@@ -237,9 +204,10 @@ class PosCheckoutService
                 | Kiểm tra tồn kho sản phẩm thường (theo biến thể nếu có)
                 |--------------------------------------------------------------------------
                 */
+                $isBatchBacked = ! $requiresImei && $this->hasStockBatches($product->id, $variant?->id);
+
                 if (! $requiresImei) {
                     $allowNegativeStock = filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN);
-                    $isBatchBacked = $this->hasStockBatches($product->id, $variant?->id);
 
                     if (! $allowNegativeStock && $isBatchBacked && $this->availableBatchQuantity($product->id, $variant?->id) < $baseQuantity) {
                         throw new \Exception("Sản phẩm {$product->name} không đủ tồn kho theo lô");
@@ -259,37 +227,9 @@ class PosCheckoutService
 
 
 
-                $lineTotal =
-                    (float) $item['price']
-                    *
-                    $quantity;
+                $lineTotal = (float) $item['price'] * $quantity;
+                $lineDiscount = PosTotals::lineDiscount($item);
 
-                $lineDiscount = 0;
-
-                if (
-                    ($item['discount_type'] ?? null)
-                    === 'percent'
-                ) {
-
-                    $lineDiscount =
-
-                        $lineTotal
-                        *
-                        ((float) $item['discount_value'])
-                        / 100;
-                }
-
-                if (
-                    ($item['discount_type'] ?? null)
-                    === 'amount'
-                ) {
-
-                    $lineDiscount =
-                        (float) $item['discount_value'];
-                }
-
-                $totalDiscount +=
-                    $lineDiscount;
                 /*
                 |--------------------------------------------------------------------------
                 | Lưu chi tiết hóa đơn
@@ -302,7 +242,7 @@ class PosCheckoutService
                         $variant?->id,
 
                     'product_imei_id' =>
-                        $item['imei_id'] ?? null,
+                        $imei?->id,
 
                     'unit_id' => $product->unit_id,
 
@@ -479,7 +419,7 @@ class PosCheckoutService
 
                     app(ImeiStockSynchronizer::class)->sync($product);
 
-                } elseif ($this->hasStockBatches($product->id, $variant?->id)) {
+                } elseif ($isBatchBacked) {
 
                     // StockBatchAllocator đã trừ đúng từng lô ở trên. Đồng bộ
                     // lại cột tồn tổng để các luồng cũ, báo cáo và lần bán sau
@@ -711,11 +651,6 @@ class PosCheckoutService
         }
 
         return 'INV-' . $moment->format('YmdHis');
-    }
-
-    private function itemQuantity(array $item): int
-    {
-        return max(1, (int) ($item['quantity'] ?? 1));
     }
 
     /*

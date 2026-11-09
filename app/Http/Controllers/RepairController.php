@@ -844,6 +844,64 @@ class RepairController extends Controller
         return $query->first();
     }
 
+    /**
+     * Tìm hoặc tạo khách theo thông tin tiếp nhận. Dùng chung cho tạo và sửa phiếu.
+     * `$currentCustomerId` là khách đang gắn với phiếu (khi sửa) để không chặn lại khách cũ.
+     */
+    private function resolveIntakeCustomer(array $input, ?int $currentCustomerId = null): ?Customer
+    {
+        $customerName = trim((string) ($input['customer_name'] ?? ''));
+        if (mb_strtolower($customerName) === 'khách lẻ') {
+            $customerName = '';
+        }
+
+        $customer = !empty($input['customer_id'])
+            ? Customer::query()->findOrFail($input['customer_id'])
+            : (!empty($input['customer_phone'])
+                ? Customer::query()->where('phone', $input['customer_phone'])->first()
+                : null);
+        if ($customer && ($currentCustomerId === null || (int) $customer->id !== $currentCustomerId)) {
+            $customer->assertCanTransact();
+        }
+
+        $hasCustomerDetails = $customerName !== ''
+            || filled($input['customer_phone'] ?? null)
+            || filled($input['identity_card'] ?? null);
+        if (!$customer && $hasCustomerDetails && $customerName === '') {
+            throw ValidationException::withMessages(['customer_name' => 'Nhập tên khách hàng hoặc để trống toàn bộ thông tin để tiếp nhận khách lẻ.']);
+        }
+
+        if (!$customer && $hasCustomerDetails) {
+            return app(\App\Services\CustomerService::class)->create([
+                'full_name' => $customerName,
+                'phone' => $input['customer_phone'] ?? null,
+                'cccd' => $input['identity_card'] ?? null,
+            ]);
+        }
+
+        if ($customer) {
+            // Giữ thông tin khách trong hồ sơ đồng bộ với thông tin nhập lúc tiếp nhận.
+            $customer->update([
+                'full_name' => $customerName ?: $customer->full_name,
+                'phone' => $input['customer_phone'] ?? null,
+                'cccd' => $input['identity_card'] ?? null,
+            ]);
+        }
+
+        return $customer;
+    }
+
+    /** Mã phiếu SC-14 chữ số; nếu giây này đã có phiếu (kể cả đã xóa) thì dời sang giây kế tiếp. */
+    private function generateCode(): string
+    {
+        $moment = now();
+        while (Repair::withTrashed()->where('code', 'SC-' . $moment->format('YmdHis'))->exists()) {
+            $moment = $moment->copy()->addSecond();
+        }
+
+        return 'SC-' . $moment->format('YmdHis');
+    }
+
     /** Require an explicit choice before a matching phone can overwrite a different customer. */
     private function applyCustomerPhoneConflictChoice(array &$data): void
     {
@@ -905,11 +963,6 @@ class RepairController extends Controller
             'customer_id', 'customer_conflict_action', 'customer_name', 'customer_phone', 'contact_phone', 'identity_card',
         ]);
         $this->applyCustomerPhoneConflictChoice($customerInput);
-        $customerName = trim((string) ($customerInput['customer_name'] ?? ''));
-        if (mb_strtolower($customerName) === 'khách lẻ') {
-            $customerName = '';
-        }
-        $customerInput['customer_name'] = $customerName;
 
         DB::beginTransaction();
 
@@ -923,34 +976,7 @@ class RepairController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $customer = !empty($customerInput['customer_id'])
-                ? Customer::query()->findOrFail($customerInput['customer_id'])
-                : (!empty($customerInput['customer_phone'])
-                    ? Customer::query()->where('phone', $customerInput['customer_phone'])->first()
-                    : null);
-            $customer?->assertCanTransact();
-
-            $hasCustomerDetails = $customerName !== ''
-                || filled($customerInput['customer_phone'] ?? null)
-                || filled($customerInput['identity_card'] ?? null);
-            if (!$customer && $hasCustomerDetails && $customerName === '') {
-                throw ValidationException::withMessages(['customer_name' => 'Nhập tên khách hàng hoặc để trống toàn bộ thông tin để tiếp nhận khách lẻ.']);
-            }
-
-            if (!$customer && $hasCustomerDetails) {
-                $customer = app(\App\Services\CustomerService::class)->create([
-                    'full_name' => $customerName,
-                    'phone' => $customerInput['customer_phone'] ?? null,
-                    'cccd' => $customerInput['identity_card'] ?? null,
-                ]);
-            } elseif ($customer) {
-                // Keep the selected customer's editable intake fields in sync with the customer record.
-                $customer->fill([
-                    'full_name' => $customerName ?: $customer->full_name,
-                    'phone' => $customerInput['customer_phone'] ?? null,
-                    'cccd' => $customerInput['identity_card'] ?? null,
-                ])->save();
-            }
+            $customer = $this->resolveIntakeCustomer($customerInput);
 
             $hasWarrantySource = $request->filled('warranty_source_type') && $request->filled('warranty_source_id');
             if ($hasWarrantySource && ! $customer) {
@@ -975,8 +1001,7 @@ class RepairController extends Controller
 
                 ->create([
 
-                    'code' =>
-                        'SC-' . now()->format('YmdHis'),
+                    'code' => $this->generateCode(),
 
                     'customer_id' => $customer?->id,
 
@@ -1233,61 +1258,63 @@ class RepairController extends Controller
             ->value('waiting_for_parts');
         $waitingForParts = $status !== 'cancelled' && $isWaiting;
 
-        $progressIssues = $request->input('issue', []);
-        $repairChanges = ['status' => $status];
-        if ($progressIssues !== []) {
-            $repairChanges['issue'] = array_values(array_unique(array_merge($repair->issue ?? [], $progressIssues)));
-        }
-        $repair->update($repairChanges);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Tiêu đề timeline
-        |--------------------------------------------------------------------------
-        */
-
-        $titles = [
-            'cancelled' => 'Đã hủy phiếu sửa',
-        ];
-        $title = $status === 'cancelled'
-            ? $titles['cancelled']
-            : ($waitingMode === 'parts'
-                ? 'Chờ linh kiện'
-                : ($waitingMode === 'wait_repair'
-                    ? 'Tạm chờ sửa'
-                    : ($wasWaitingForParts ? 'Tiếp tục sửa sau khi chờ' : 'Đang sửa')));
-
-        $timeline = RepairTimeline::create([
-
-            'repair_id' =>
-                $repair->id,
-
-            'user_id' =>
-                auth()->id(),
-
-            'status' => $status,
-
-            'title' => $title,
-
-            'description' =>
-                $request->input('description'),
-            'issue' => $request->input('issue', []),
-            'parts_needed' => $waitingMode === 'parts' ? $request->input('parts_needed') : null,
-            'expected_days' => $waitingMode === 'parts' ? $request->input('expected_days') : null,
-            'waiting_for_parts' => $waitingForParts,
-            'waiting_mode' => $waitingMode,
-        ]);
-
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $image) {
-                $path = $image->store('repairs', 'public');
-                RepairImage::create([
-                    'repair_id' => $repair->id,
-                    'timeline_id' => $timeline->id,
-                    'image_path' => $path,
-                ]);
+        DB::transaction(function () use ($request, $repair, $status, $waitingMode, $wasWaitingForParts, $waitingForParts): void {
+            $progressIssues = $request->input('issue', []);
+            $repairChanges = ['status' => $status];
+            if ($progressIssues !== []) {
+                $repairChanges['issue'] = array_values(array_unique(array_merge($repair->issue ?? [], $progressIssues)));
             }
-        }
+            $repair->update($repairChanges);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Tiêu đề timeline
+            |--------------------------------------------------------------------------
+            */
+
+            $titles = [
+                'cancelled' => 'Đã hủy phiếu sửa',
+            ];
+            $title = $status === 'cancelled'
+                ? $titles['cancelled']
+                : ($waitingMode === 'parts'
+                    ? 'Chờ linh kiện'
+                    : ($waitingMode === 'wait_repair'
+                        ? 'Tạm chờ sửa'
+                        : ($wasWaitingForParts ? 'Tiếp tục sửa sau khi chờ' : 'Đang sửa')));
+
+            $timeline = RepairTimeline::create([
+
+                'repair_id' =>
+                    $repair->id,
+
+                'user_id' =>
+                    auth()->id(),
+
+                'status' => $status,
+
+                'title' => $title,
+
+                'description' =>
+                    $request->input('description'),
+                'issue' => $request->input('issue', []),
+                'parts_needed' => $waitingMode === 'parts' ? $request->input('parts_needed') : null,
+                'expected_days' => $waitingMode === 'parts' ? $request->input('expected_days') : null,
+                'waiting_for_parts' => $waitingForParts,
+                'waiting_mode' => $waitingMode,
+            ]);
+
+            if ($request->hasFile('images')) {
+                foreach ($request->file('images') as $image) {
+                    $path = $image->store('repairs', 'public');
+                    RepairImage::create([
+                        'repair_id' => $repair->id,
+                        'timeline_id' => $timeline->id,
+                        'image_path' => $path,
+                    ]);
+                }
+            }
+        });
 
         $statusLabel = $status === 'cancelled'
             ? 'đã hủy phiếu'
@@ -1845,11 +1872,6 @@ class RepairController extends Controller
         ]);
 
         $this->applyCustomerPhoneConflictChoice($validated);
-        $customerName = trim((string) ($validated['customer_name'] ?? ''));
-        if (mb_strtolower($customerName) === 'khách lẻ') {
-            $customerName = '';
-        }
-        $validated['customer_name'] = $customerName;
 
         DB::beginTransaction();
 
@@ -1857,35 +1879,7 @@ class RepairController extends Controller
 
             $this->ensureImeiHasNoOpenRepair($validated['imei'] ?? null, $repair->id);
 
-            $customer = !empty($validated['customer_id'])
-                ? Customer::query()->findOrFail($validated['customer_id'])
-                : (!empty($validated['customer_phone'])
-                    ? Customer::query()->where('phone', $validated['customer_phone'])->first()
-                    : null);
-            if ($customer && (int) $customer->id !== (int) $repair->customer_id) {
-                $customer->assertCanTransact();
-            }
-
-            $hasCustomerDetails = $customerName !== ''
-                || filled($validated['customer_phone'] ?? null)
-                || filled($validated['identity_card'] ?? null);
-            if (!$customer && $hasCustomerDetails && $customerName === '') {
-                throw ValidationException::withMessages(['customer_name' => 'Nhập tên khách hàng hoặc để trống toàn bộ thông tin để tiếp nhận khách lẻ.']);
-            }
-
-            if (!$customer && $hasCustomerDetails) {
-                $customer = app(\App\Services\CustomerService::class)->create([
-                    'full_name' => $customerName,
-                    'phone' => $validated['customer_phone'] ?? null,
-                    'cccd' => $validated['identity_card'] ?? null,
-                ]);
-            } elseif ($customer) {
-                $customer->update([
-                    'full_name' => $customerName ?: $customer->full_name,
-                    'phone' => $validated['customer_phone'] ?? null,
-                    'cccd' => $validated['identity_card'] ?? null,
-                ]);
-            }
+            $customer = $this->resolveIntakeCustomer($validated, $repair->customer_id ? (int) $repair->customer_id : null);
 
             $hasWarrantySource = ! empty($validated['warranty_source_type']) && ! empty($validated['warranty_source_id']);
             if ($hasWarrantySource && ! $customer) {

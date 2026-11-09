@@ -8,7 +8,8 @@ import SearchableReferenceSelect from '@/Components/UI/SearchableReferenceSelect
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
 import {toast} from 'vue-sonner'
-import { ImagePlus, Layers, Plus } from 'lucide-vue-next'
+import { ImagePlus, Layers, Plus, Trash2 } from 'lucide-vue-next'
+import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
 import ReferenceCreateModal from './ReferenceCreateModal.vue'
@@ -504,8 +505,9 @@ const variantOverrideFor = (row) => {
     if (!draft.overrides[row.key]) {
         draft.overrides[row.key] = {
             sku: '',
-            cost_price: draft.cost_price || form.cost_price || 0,
-            sell_price: draft.sell_price || form.sell_price || 0,
+            // Giá chung đã điền thì phiên bản mới lấy giá chung làm mặc định, sau đó sửa giá riêng ngay trong bảng
+            cost_price: Number(form.cost_price) > 0 ? form.cost_price : (draft.cost_price || 0),
+            sell_price: Number(form.sell_price) > 0 ? form.sell_price : (draft.sell_price || 0),
             stock: 0,
         }
     }
@@ -1033,253 +1035,350 @@ const submit = () => {
     <BaseModal
         :title="title"
         :size="size"
+        modal-class="!rounded-3xl !bg-slate-50"
+        header-class="!bg-white !px-6 !py-4"
+        body-class="!bg-slate-50 p-3 sm:p-4"
         @close="closeModal()"
     >
-        <div class="space-y-5">
-            <!-- RIGHT -->
-            <div class="min-w-0 space-y-5">
+        <!-- HEADER -->
+        <template #header>
+            <div class="min-w-0">
+                <h2 class="truncate text-xl font-bold tracking-tight text-slate-800">{{ title }}</h2>
+            </div>
+            <button
+                type="button"
+                class="ml-3 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Đóng"
+                @click="closeModal()"
+            >
+                ✕
+            </button>
+        </template>
 
-                <!-- FORM -->
-                <div class="grid gap-4 md:grid-cols-2">
+        <div class="space-y-3">
 
-                    <!-- ẢNH (nhỏ gọn) + TÊN -->
-                    <div class="flex items-start gap-4 md:col-span-2">
-                        <label
-                            class="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-emerald-400 hover:bg-emerald-50/40"
-                            title="Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm"
+            <!-- ========================= -->
+            <!-- 1. THÔNG TIN CƠ BẢN -->
+            <!-- ========================= -->
+            <section class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+                    <div class="h-4 w-2 rounded-full bg-blue-600"></div>
+                    <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">1. Thông tin cơ bản</h3>
+                </div>
+
+                <!-- ẢNH + TÊN | DANH MỤC | THƯƠNG HIỆU -->
+                <div class="flex items-start gap-3 sm:gap-4">
+                    <label
+                        class="group relative flex h-32 w-32 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 transition hover:border-blue-500"
+                    >
+                        <img
+                            v-if="preview"
+                            :src="preview"
+                            class="h-full w-full object-cover"
+                            @error="preview = null"
+                        />
+
+                        <span
+                            v-else
+                            class="flex flex-col items-center gap-1 px-1 text-center text-[11px] font-semibold text-slate-400 group-hover:text-blue-600"
                         >
-                            <img
-                                v-if="preview"
-                                :src="preview"
-                                class="h-full w-full object-cover"
-                                @error="preview = null"
+                            <ImagePlus :size="22" />
+                            Thêm ảnh
+                        </span>
+
+                        <span
+                            v-if="preview"
+                            class="absolute inset-x-0 bottom-0 bg-slate-900/55 py-0.5 text-center text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100"
+                        >
+                            Đổi ảnh
+                        </span>
+
+                        <input
+                            type="file"
+                            class="hidden"
+                            accept="image/*"
+                            @change="handleImage"
+                        />
+                    </label>
+
+                    <div class="min-w-0 flex-1 space-y-3">
+                        <FloatingInput
+                            v-model="form.name"
+                            label="Tên hàng hóa"
+                            input-class="!rounded-xl"
+                            :error="form.errors.name"
+                        />
+
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <FloatingSelect
+                                v-model="form.category_id"
+                                :options="categories"
+                                label="Danh mục"
+                                name="product-category"
+                                option-label="name"
+                                option-value="id"
+                                placeholder-text="Chọn danh mục"
+                                create-label="Thêm danh mục"
+                                create-in-list
+                                input-class="!rounded-xl"
+                                :error="form.errors.category_id"
+                                @create="openReferenceCreate('category')"
                             />
 
-                            <span
-                                v-else
-                                class="flex flex-col items-center gap-1 px-1 text-center text-[11px] font-semibold text-slate-400 group-hover:text-emerald-600"
-                            >
-                                <ImagePlus :size="22" />
-                                Thêm ảnh
-                            </span>
-
-                            <span
-                                v-if="preview"
-                                class="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100"
-                            >
-                                Đổi ảnh
-                            </span>
-
-                            <input
-                                type="file"
-                                class="hidden"
-                                accept="image/*"
-                                @change="handleImage"
+                            <FloatingSelect
+                                v-model="form.brand_id"
+                                :options="filteredBrands"
+                                label="Thương hiệu"
+                                name="product-brand"
+                                option-label="name"
+                                option-value="id"
+                                :placeholder-text="form.category_id ? 'Chọn thương hiệu' : 'Chọn danh mục trước'"
+                                create-label="Thêm thương hiệu"
+                                create-in-list
+                                :disabled="!form.category_id"
+                                input-class="!rounded-xl"
+                                :error="form.errors.brand_id"
+                                @create="openReferenceCreate('brand')"
                             />
-                        </label>
-
-                        <div class="min-w-0 flex-1 space-y-1.5">
-                            <FloatingInput
-                                v-model="form.name"
-                                label="Tên hàng hóa"
-                                :error="form.errors.name"
-                            />
-                            <p class="text-xs text-slate-500">Ảnh nên vuông, nền sáng để hiển thị đẹp ở POS và danh sách sản phẩm.</p>
                         </div>
                     </div>
+                </div>
 
+                <!-- Đơn vị bán, SKU, Mã vạch -->
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <FloatingSelect
-                        v-model="form.category_id"
-                        :options="categories"
-                        label="Danh mục"
-                        name="product-category"
+                        v-model="form.unit_id"
+                        :options="unitOptions"
+                        label="Đơn vị bán và tồn kho"
+                        name="product-unit"
                         option-label="name"
                         option-value="id"
-                        placeholder-text="Chọn danh mục"
-                        create-label="Thêm danh mục"
-                        :error="form.errors.category_id"
-                        @create="openReferenceCreate('category')"
+                        placeholder-text="Chọn đơn vị"
+                        create-label="Thêm đơn vị"
+                        create-in-list
+                        input-class="!rounded-xl"
+                        :error="form.errors.unit_id"
+                        @create="openReferenceCreate('unit')"
                     />
 
-                    <FloatingSelect
-                        v-model="form.brand_id"
-                        :options="filteredBrands"
-                        label="Thương hiệu"
-                        name="product-brand"
-                        option-label="name"
-                        option-value="id"
-                        :placeholder-text="form.category_id ? 'Chọn thương hiệu' : 'Chọn danh mục trước'"
-                        create-label="Thêm thương hiệu"
-                        :disabled="!form.category_id"
-                        :error="form.errors.brand_id"
-                        @create="openReferenceCreate('brand')"
+                    <FloatingInput
+                        v-model="form.sku"
+                        label="SKU"
+                        input-class="!rounded-xl"
+                        :error="form.errors.sku"
                     />
 
-                    <!-- ĐƠN VỊ + SKU + MÃ VẠCH -->
-                    <div class="grid gap-4 sm:grid-cols-3 md:col-span-2">
-                        <FloatingSelect
-                            v-model="form.unit_id"
-                            :options="unitOptions"
-                            label="Đơn vị bán và tồn kho"
-                            name="product-unit"
-                            option-label="name"
-                            option-value="id"
-                            placeholder-text="Chọn đơn vị"
-                            create-label="Thêm đơn vị"
-                            :error="form.errors.unit_id"
-                            @create="openReferenceCreate('unit')"
-                        />
-
-                        <FloatingInput
-                            v-model="form.sku"
-                            label="SKU"
-                            :error="form.errors.sku"
-                        />
-
+                    <div class="relative">
                         <FloatingInput
                             v-model="form.barcode"
                             label="Mã vạch (nếu có)"
+                            input-class="!rounded-xl !pr-12"
                             :error="form.errors.barcode"
                         />
+                        <BarcodeCameraButton class="absolute right-1 top-5 z-10 -translate-y-1/2" @scanned="(code) => { form.barcode = code }" />
+                    </div>
+                </div>
 
-                        <p class="text-xs text-slate-500 sm:col-span-3">
-                            SKU tự sinh theo danh mục + thương hiệu (vd. DT-SAM-0001). Để nguyên hoặc để trống thì hệ thống tự cấp số kế tiếp khi lưu; bạn cũng có thể tự nhập SKU riêng.
-                        </p>
+                <p class="text-[11px] italic text-slate-400">
+                    SKU tự sinh theo danh mục + thương hiệu (vd. DT-SAM-0001). Để nguyên hoặc để trống thì hệ thống tự cấp số kế tiếp khi lưu; bạn cũng có thể tự nhập SKU riêng.
+                </p>
+            </section>
+
+            <!-- ========================= -->
+            <!-- 2. THUỘC TÍNH ĐẶC THÙ & BẢO HÀNH -->
+            <!-- ========================= -->
+            <section class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+                    <div class="h-4 w-2 rounded-full bg-indigo-600"></div>
+                    <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">2. Thuộc tính đặc thù &amp; Bảo hành</h3>
+                </div>
+
+                <!-- 2 lựa chọn xếp dọc bên trái | khối Bảo hành bên phải (chật thì khối Bảo hành xuống dưới) -->
+                <div class="flex flex-wrap items-start gap-3">
+                    <div class="flex shrink-0 flex-col gap-3 pt-1">
+                        <label :class="['group flex items-center gap-2', form.has_unit_conversion ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']">
+                            <input
+                                v-model="form.manage_stock_by_serial"
+                                type="checkbox"
+                                :disabled="form.has_unit_conversion"
+                                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span class="text-xs font-semibold">Có Serial / IMEI</span>
+                        </label>
+
+                        <label :class="['group flex items-center gap-2', form.manage_stock_by_serial ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']">
+                            <input
+                                v-model="form.has_unit_conversion"
+                                type="checkbox"
+                                :disabled="form.manage_stock_by_serial"
+                                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span class="text-xs font-semibold">Nhập theo cuộn / thùng</span>
+                        </label>
                     </div>
 
-                    <!-- IMEI + BIẾN THỂ -->
-                    <div class="grid gap-3 md:col-span-2">
-
-                        <!-- CÓ IMEI + NÚT BIẾN THỂ -->
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
-                            <!-- IMEI -->
-                            <label
-                                :class="['inline-flex items-center gap-2 text-sm font-semibold', form.has_unit_conversion ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']"
-                            >
-                                <input
-                                    v-model="form.manage_stock_by_serial"
-                                    type="checkbox"
-                                    :disabled="form.has_unit_conversion"
-                                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                />
-                                Có IMEI
-                            </label>
-
-                            <!-- VARIANT -->
-                            <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
-                                <input
-                                    v-model="showVariants"
-                                    type="checkbox"
-                                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                />
-                                Có thuộc tính
-                            </label>
-                            <label
-                                :class="['inline-flex items-center gap-2 text-sm font-semibold', form.manage_stock_by_serial ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']"
-                            >
-                                <input
-                                    v-model="form.has_unit_conversion"
-                                    type="checkbox"
-                                    :disabled="form.manage_stock_by_serial"
-                                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                />
-                                Nhập theo cuộn / thùng
-                            </label>
-
-                            <div class="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 p-2 sm:basis-auto sm:flex-nowrap">
-                                <span class="shrink-0 text-xs font-semibold text-emerald-900">Bảo hành cho khách</span>
-                                <div class="grid min-w-0 flex-1 grid-cols-[minmax(76px,1fr)_minmax(95px,0.8fr)] gap-2 sm:max-w-xs">
-                                    <FloatingInput
-                                        v-model="form.warranty_value"
-                                        type="number"
-                                        min="0"
-                                        :max="form.warranty_unit === 'month' ? 121 : 3650"
-                                        step="1"
-                                        label="Thời hạn"
-                                        input-class="!py-2 !text-xs"
-                                    />
-                                    <FloatingSelect
-                                        v-model="form.warranty_unit"
-                                        :options="warrantyUnitOptions"
-                                        label="Đơn vị"
-                                        name="product-warranty-unit"
-                                        placeholder-text="Đơn vị"
-                                    />
-                                </div>
-                                <span v-if="Number(form.warranty_value || 0) > 0" class="w-full text-[10px] text-slate-500 sm:w-auto">
-                                    Tương đương {{ Math.min(3650, Number(form.warranty_value) * (form.warranty_unit === 'month' ? 30 : 1)) }} ngày
-                                </span>
-                                <span v-else class="w-full text-[10px] text-slate-500 sm:w-auto">Để trống nếu không bảo hành</span>
-                                <span v-if="form.errors.warranty_days" class="w-full text-[11px] text-red-600">{{ form.errors.warranty_days }}</span>
-                            </div>
-                            </div>
-
-                            <div
-                                v-if="form.has_unit_conversion"
-                                class="mt-3 grid items-end gap-3 border-t border-slate-200 pt-3 md:grid-cols-[minmax(180px,1fr)_minmax(110px,0.55fr)_auto]"
-                                :class="{ 'opacity-50': form.manage_stock_by_serial }"
-                            >
-                                <SearchableReferenceSelect
-                                    v-model="form.conversion_unit_id"
-                                    :options="conversionUnitOptions"
-                                    label="Đơn vị nhập"
-                                    :disabled="form.manage_stock_by_serial"
-                                    :error="form.errors.conversion_unit_id"
-                                    @create="openReferenceCreate('unit', $event, 'conversion')"
-                                />
-
+                    <!-- Bảo hành -->
+                    <div class="min-w-[17rem] flex-1 space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                        <span class="block text-xs font-bold text-slate-700">Bảo hành cho khách</span>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="grid w-full max-w-[15rem] grid-cols-2 gap-2">
                                 <FloatingInput
-                                    v-model.number="form.conversion_factor"
+                                    v-model="form.warranty_value"
                                     type="number"
-                                    min="2"
-                                    label="Số lượng"
-                                    :error="form.errors.conversion_factor"
-                                    :disabled="form.manage_stock_by_serial"
+                                    min="0"
+                                    :max="form.warranty_unit === 'month' ? 121 : 3650"
+                                    step="1"
+                                    label="Thời hạn"
+                                    input-class="!h-10 !rounded-xl !py-0 !text-sm"
                                 />
-
-                                <div class="pb-2 text-sm font-bold text-slate-700">
-                                    1 {{ selectedImportUnitName }} = {{ form.conversion_factor || 0 }} {{ selectedUnitName }}
-                                </div>
+                                <FloatingSelect
+                                    v-model="form.warranty_unit"
+                                    :options="warrantyUnitOptions"
+                                    label="Đơn vị"
+                                    name="product-warranty-unit"
+                                    :show-placeholder="false"
+                                    input-class="!h-10 !rounded-xl !py-0 !text-sm"
+                                />
                             </div>
-
-                            <p class="mt-2 text-xs font-medium text-slate-500">
-                                IMEI có thể đi cùng thuộc tính; quy đổi đơn vị không dùng cho sản phẩm IMEI.
-                            </p>
+                            <span v-if="Number(form.warranty_value || 0) > 0" class="text-xs text-slate-500">
+                                Tương đương {{ Math.min(3650, Number(form.warranty_value) * (form.warranty_unit === 'month' ? 30 : 1)) }} ngày
+                            </span>
+                            <span v-else class="text-xs italic text-slate-400">(Để trống nếu không bảo hành)</span>
                         </div>
+                        <span v-if="form.errors.warranty_days" class="block text-[11px] text-red-600">{{ form.errors.warranty_days }}</span>
+                    </div>
+                </div>
+
+                <!-- Quy đổi đơn vị -->
+                <div
+                    v-if="form.has_unit_conversion"
+                    class="grid items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[minmax(180px,1fr)_minmax(110px,0.55fr)_auto]"
+                    :class="{ 'opacity-50': form.manage_stock_by_serial }"
+                >
+                    <FloatingSelect
+                        v-model="form.conversion_unit_id"
+                        :options="conversionUnitOptions"
+                        label="Đơn vị nhập"
+                        name="product-conversion-unit"
+                        option-label="name"
+                        option-value="id"
+                        placeholder-text="Chọn đơn vị nhập"
+                        create-label="Thêm đơn vị"
+                        create-in-list
+                        input-class="!rounded-xl"
+                        :disabled="form.manage_stock_by_serial"
+                        :error="form.errors.conversion_unit_id"
+                        @create="openReferenceCreate('unit', '', 'conversion')"
+                    />
+
+                    <FloatingInput
+                        v-model.number="form.conversion_factor"
+                        type="number"
+                        min="2"
+                        label="Số lượng"
+                        input-class="!rounded-xl"
+                        :error="form.errors.conversion_factor"
+                        :disabled="form.manage_stock_by_serial"
+                    />
+
+                    <div class="pb-2 text-sm font-bold text-slate-700">
+                        1 {{ selectedImportUnitName }} = {{ form.conversion_factor || 0 }} {{ selectedUnitName }}
+                    </div>
+                </div>
+
+                <p v-if="form.manage_stock_by_serial" class="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-700">
+                    Lưu ý: Sản phẩm IMEI sẽ yêu cầu quét mã IMEI riêng khi nhập kho và tạo hóa đơn bán lẻ.
+                </p>
+            </section>
+
+            <!-- ========================= -->
+            <!-- 3. GIÁ CHUNG -->
+            <!-- ========================= -->
+            <section class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="h-4 w-2 rounded-full bg-emerald-500"></div>
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">3. Giá chung</h3>
+                    </div>
+                    <span v-if="form.variants.length" class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                        Phiên bản mới tự lấy giá chung, chỉnh giá riêng ở bảng mục 4 bên dưới
+                    </span>
+                </div>
+
+                <div v-if="form.has_unit_conversion" class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <span class="font-semibold text-slate-700">Nhập giá theo:</span>
+                    <label class="inline-flex cursor-pointer items-center gap-2">
+                        <input :checked="priceUnitBasis === 'base'" type="radio" value="base" name="product-price-unit-basis" class="text-blue-600 focus:ring-blue-500" @change="changePriceUnitBasis('base')" />
+                        <span>Đơn vị cơ sở ({{ selectedUnitName }})</span>
+                    </label>
+                    <label class="inline-flex cursor-pointer items-center gap-2">
+                        <input :checked="priceUnitBasis === 'conversion'" type="radio" value="conversion" name="product-price-unit-basis" class="text-blue-600 focus:ring-blue-500" @change="changePriceUnitBasis('conversion')" />
+                        <span>Đơn vị quy đổi ({{ selectedImportUnitName }})</span>
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <FloatingInput
+                        v-model="form.cost_price"
+                        :label="`Giá vốn / ${priceUnitBasis === 'conversion' ? selectedImportUnitName : selectedUnitName}`"
+                        type="number"
+                        format-thousands
+                        input-class="!rounded-xl"
+                        :error="form.errors.cost_price"
+                    />
+
+                    <FloatingInput
+                        v-model="form.sell_price"
+                        :label="`Giá bán / ${priceUnitBasis === 'conversion' ? selectedImportUnitName : selectedUnitName}`"
+                        type="number"
+                        format-thousands
+                        input-class="!rounded-xl"
+                        :error="form.errors.sell_price"
+                    />
+                </div>
+            </section>
+
+            <!-- ========================= -->
+            <!-- 4. THUỘC TÍNH & BIẾN THỂ -->
+            <!-- ========================= -->
+            <section class="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="h-4 w-2 rounded-full bg-purple-600"></div>
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">4. Quản lý thuộc tính &amp; Biến thể</h3>
                     </div>
 
+                    <!-- Toggle (vẫn là checkbox v-model="showVariants") -->
+                    <label class="relative flex cursor-pointer items-center gap-3">
+                        <span class="text-xs font-semibold text-slate-700">Có thuộc tính (nhiều biến thể)</span>
+                        <input v-model="showVariants" type="checkbox" class="peer sr-only" />
+                        <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors duration-200 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform after:duration-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500/40"></span>
+                    </label>
+                </div>
 
-                    <!-- ========================= -->
-                    <!-- DANH SÁCH Thuộc tính-->
-                    <!-- ========================= -->
-                    <div
-                        v-if="form.variants.length"
-                        class="space-y-5 rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2"
-                    >
-                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                            <div class="flex items-center gap-2">
-                                <Layers :size="18" class="text-blue-600" />
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-800">Cấu hình thuộc tính sản phẩm</h3>
-                                    <p class="mt-0.5 text-xs text-slate-500">Thêm giá trị để tạo danh sách biến thể bên dưới.</p>
-                                </div>
-                            </div>
-                            <button type="button" class="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-800" @click="openAttrDropdown(0)"><Plus :size="16" />Thêm nhóm thuộc tính</button>
+                <p v-if="!form.variants.length" class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
+                    Bật công tắc "Có thuộc tính" để cấu hình thuộc tính (màu sắc, dung lượng...) và tạo danh sách biến thể.
+                </p>
+
+                <!-- DANH SÁCH THUỘC TÍNH -->
+                <div v-if="form.variants.length" class="space-y-5">
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-end gap-3">
+                            <button type="button" class="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700" @click="openAttrDropdown(0)"><Plus :size="14" />Thêm nhóm thuộc tính</button>
                         </div>
 
                         <div v-for="(v, i) in form.variants" :key="v.id || i" class="space-y-3">
-                            <div v-for="(attr, i2) in v.attributes" :key="attr.id || attr.name" class="relative rounded-lg border border-slate-200 bg-white p-3">
+                            <div v-for="(attr, i2) in v.attributes" :key="attr.id || attr.name" class="relative space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
                                 <div class="flex items-center justify-between gap-3">
-                                    <p class="text-xs font-bold uppercase tracking-wide text-slate-700">{{ attr.name }}</p>
-                                    <button type="button" class="text-xs font-medium text-slate-500 hover:text-red-600" @click="removeAttribute(v, i2)">Xóa nhóm</button>
+                                    <p class="text-sm font-bold text-slate-800">{{ attr.name }}</p>
+                                    <button type="button" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600" title="Xóa nhóm" aria-label="Xóa nhóm" @click="removeAttribute(v, i2)"><Trash2 :size="16" /></button>
                                 </div>
-                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
                                     <TagBadge v-for="(val, idx) in attr.value" :key="idx" :label="val" removable size="lg" color="blue" @remove="attr.value.splice(idx, 1)" />
                                     <div class="relative" :ref="el => setDropdownRef(el, 'value', i, i2)">
                                         <input
                                             :value="pendingValueDrafts[valueDraftKey(i, attr)] || ''"
-                                            class="h-8 w-36 rounded-full border border-slate-300 bg-slate-50 px-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                            class="h-8 w-36 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                             placeholder="Thêm giá trị..."
                                             @focus="openValueDropdown(i, i2)"
                                             @input="e => { pendingValueDrafts[valueDraftKey(i, attr)] = e.target.value; if (dropdown.type === 'value' && dropdown.variantIndex === i && dropdown.attrIndex === i2) dropdown.keyword = e.target.value }"
@@ -1290,81 +1389,87 @@ const submit = () => {
                                             <div v-for="(item, idx) in suggestions" :key="item + '-' + idx" class="suggestion-item cursor-pointer px-3 py-2 text-sm hover:bg-slate-50" @mousedown.prevent="selectSuggestion(item)">{{ item }}</div>
                                         </div>
                                     </div>
-                                    <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-700" aria-label="Thêm giá trị" @click="addAttrValue(attr, pendingValueDrafts[valueDraftKey(i, attr)] || '', i, i2)"><Plus :size="16" /></button>
+                                    <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300" aria-label="Thêm giá trị" @click="addAttrValue(attr, pendingValueDrafts[valueDraftKey(i, attr)] || '', i, i2)"><Plus :size="16" /></button>
                                 </div>
                             </div>
 
                             <div v-if="addingAttributeFor[variantDraftKey(i)]" class="relative" :ref="el => setDropdownRef(el, 'attr', i)">
-                                <input :id="'attr-input-' + i" :value="pendingAttributeDrafts[variantDraftKey(i)] || ''" class="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" placeholder="Nhập hoặc chọn nhóm thuộc tính..." @focus="openAttrDropdown(i)" @input="e => { pendingAttributeDrafts[variantDraftKey(i)] = e.target.value; dropdown.type = 'attr'; dropdown.variantIndex = i; dropdown.keyword = e.target.value }" @keydown="e => handleKeyDown(e, null, i)" @blur="e => handleAttributeInputBlur(i, e)" />
+                                <input :id="'attr-input-' + i" :value="pendingAttributeDrafts[variantDraftKey(i)] || ''" class="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Nhập hoặc chọn nhóm thuộc tính..." @focus="openAttrDropdown(i)" @input="e => { pendingAttributeDrafts[variantDraftKey(i)] = e.target.value; dropdown.type = 'attr'; dropdown.variantIndex = i; dropdown.keyword = e.target.value }" @keydown="e => handleKeyDown(e, null, i)" @blur="e => handleAttributeInputBlur(i, e)" />
                                 <div v-if="dropdown.type === 'attr' && dropdown.variantIndex === i && suggestions.length" class="absolute z-10 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
                                     <div v-for="(item, idx) in suggestions" :key="idx" :class="['cursor-pointer px-3 py-2 text-sm', idx === activeIndex ? 'bg-blue-100' : 'hover:bg-slate-50']" @mousedown.prevent="selectSuggestion(item)">{{ item }}</div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="border-t border-slate-200 pt-4">
-                            <div class="mb-3 flex items-center justify-between gap-3"><h4 class="text-sm font-bold text-slate-800">Danh sách phiên bản biến thể ({{ variantPreviewRows.length }})</h4><span class="text-xs text-slate-500">Tồn kho quản lý từ nhập hàng</span></div>
-                            <div v-if="variantPreviewRows.length" class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                                <table class="min-w-[760px] w-full text-sm"><thead class="bg-slate-100 text-left text-xs font-semibold text-slate-600"><tr><th class="px-3 py-2">Phiên bản</th><th class="px-3 py-2">Mã SKU</th><th class="px-3 py-2">Giá nhập (đ)</th><th class="px-3 py-2">Giá bán (đ)</th><th class="px-3 py-2 text-right">Tồn kho</th></tr></thead><tbody><tr v-for="row in variantPreviewRows" :key="row.key" class="border-t border-slate-100"><td class="px-3 py-2 font-semibold text-slate-800"><span class="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500"></span>{{ row.label }}</td><td class="px-3 py-2"><input v-model="variantOverrideFor(row).sku" class="h-8 w-44 rounded border border-slate-300 bg-slate-50 px-2 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:ring-emerald-500" placeholder="Tự tạo khi lưu" /></td><td class="px-3 py-2"><input v-model.number="variantOverrideFor(row).cost_price" type="number" min="0" class="h-8 w-32 rounded border border-slate-300 bg-slate-50 px-2 text-right text-xs font-semibold focus:border-emerald-500 focus:ring-emerald-500" /></td><td class="px-3 py-2"><input v-model.number="variantOverrideFor(row).sell_price" type="number" min="0" class="h-8 w-32 rounded border border-slate-300 bg-slate-50 px-2 text-right text-xs font-semibold text-emerald-700 focus:border-emerald-500 focus:ring-emerald-500" /></td><td class="px-3 py-2 text-right font-semibold text-slate-600">{{ variantOverrideFor(row).stock || 0 }}</td></tr></tbody></table>
+                    <!-- MA TRẬN BIẾN THỂ -->
+                    <div class="space-y-2 pt-1">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Danh sách phiên bản biến thể</span>
+                                <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">{{ variantPreviewRows.length }} mẫu</span>
                             </div>
-                            <p v-else class="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">Thêm ít nhất một giá trị cho mỗi nhóm thuộc tính để tạo phiên bản.</p>
                         </div>
 
-                    </div>
-
-                    <div class="grid gap-4 md:col-span-2 md:grid-cols-2">
-                        <div v-if="form.has_unit_conversion" class="md:col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                            <span class="font-semibold text-slate-700">Nhập giá theo:</span>
-                            <label class="inline-flex cursor-pointer items-center gap-2">
-                                <input :checked="priceUnitBasis === 'base'" type="radio" value="base" name="product-price-unit-basis" class="text-emerald-600 focus:ring-emerald-500" @change="changePriceUnitBasis('base')" />
-                                <span>Đơn vị cơ sở ({{ selectedUnitName }})</span>
-                            </label>
-                            <label class="inline-flex cursor-pointer items-center gap-2">
-                                <input :checked="priceUnitBasis === 'conversion'" type="radio" value="conversion" name="product-price-unit-basis" class="text-emerald-600 focus:ring-emerald-500" @change="changePriceUnitBasis('conversion')" />
-                                <span>Đơn vị quy đổi ({{ selectedImportUnitName }})</span>
-                            </label>
+                        <div v-if="variantPreviewRows.length" class="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                            <div class="max-h-72 overflow-auto">
+                                <table class="w-full min-w-[760px] text-left text-xs">
+                                    <thead class="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">
+                                        <tr>
+                                            <th class="p-3">Biến thể</th>
+                                            <th class="p-3">SKU riêng</th>
+                                            <th class="w-32 p-3">Giá vốn (đ)</th>
+                                            <th class="w-32 p-3">Giá bán (đ)</th>
+                                            <th class="w-20 p-3 text-right">Tồn kho</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 bg-white">
+                                        <tr v-for="row in variantPreviewRows" :key="row.key" class="transition hover:bg-slate-50">
+                                            <td class="p-3 font-bold text-slate-800"><span class="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500"></span>{{ row.label }}</td>
+                                            <td class="p-3"><input v-model="variantOverrideFor(row).sku" class="h-8 w-full min-w-[10rem] rounded border border-slate-200 bg-slate-50 px-2 font-mono text-xs focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="Tự tạo khi lưu" /></td>
+                                            <td class="p-3"><FloatingInput v-model.number="variantOverrideFor(row).cost_price" label="Giá vốn" :floating-label="false" format-thousands input-class="!h-8 !rounded !px-2 !py-0 !text-right !text-xs" /></td>
+                                            <td class="p-3"><FloatingInput v-model.number="variantOverrideFor(row).sell_price" label="Giá bán" :floating-label="false" format-thousands input-class="!h-8 !rounded !px-2 !py-0 !text-right !text-xs !font-semibold !text-emerald-600" /></td>
+                                            <td class="p-3 text-right font-semibold text-slate-600">{{ variantOverrideFor(row).stock || 0 }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <FloatingInput
-                            v-model="form.cost_price"
-                            :label="`Giá vốn / ${priceUnitBasis === 'conversion' ? selectedImportUnitName : selectedUnitName}`"
-                            type="number"
-                            format-thousands
-                            :error="form.errors.cost_price"
-                        />
-
-                        <FloatingInput
-                            v-model="form.sell_price"
-                            :label="`Giá bán / ${priceUnitBasis === 'conversion' ? selectedImportUnitName : selectedUnitName}`"
-                            type="number"
-                            format-thousands
-                            :error="form.errors.sell_price"
-
-                        />
-
+                        <p v-else class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">Thêm ít nhất một giá trị cho mỗi nhóm thuộc tính để tạo phiên bản.</p>
                     </div>
+                </div>
+            </section>
 
+        </div>
+
+        <!-- FOOTER -->
+        <template #footer>
+            <div class="-mx-4 -my-3 flex items-center justify-between gap-3 bg-white px-6 py-4 shadow-lg">
+                <div class="text-xs text-slate-500">
+                    <span v-if="showVariants && variantPreviewRows.length">Tổng số biến thể: <strong class="font-bold text-blue-600">{{ variantPreviewRows.length }}</strong> mẫu</span>
                     
+                </div>
 
+                <div class="flex items-center gap-3">
+                    <button
+                        type="button"
+                        class="rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none"
+                        @click="closeModal()"
+                    >
+                        Hủy
+                    </button>
+
+                    <button
+                        type="button"
+                        class="flex items-center gap-1.5 rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                        :disabled="form.processing"
+                        @click="submit"
+                    >
+                        {{ form.processing ? 'Đang lưu...' : 'Lưu' }}
+                    </button>
                 </div>
             </div>
-
-        </div>
-
-        <template #footer>
-        <div class="flex justify-end gap-2">
-            <button @click="closeModal()" class="px-4 py-2 bg-gray-200 rounded">
-                Hủy
-            </button>
-
-            <button 
-                @click="submit"
-                class="px-4 py-2 bg-green-600 text-white rounded"
-                :disabled="form.processing"
-            >
-                {{ form.processing ? 'Đang lưu...' : 'Lưu' }}
-            </button>
-        </div>
-    </template>
+        </template>
 
     </BaseModal>
 

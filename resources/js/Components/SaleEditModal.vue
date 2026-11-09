@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
-import { Plus, Search, Save, Trash2, MessageSquare, Gift, Receipt } from 'lucide-vue-next'
+import { Plus, Save, Trash2, MessageSquare, Gift, Receipt } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { formatMoney, formatDate, formatDatePlusDays } from '@/utils/format'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -131,13 +131,6 @@ const searchingProducts = ref(false)
 let customerTimer
 let productTimer
 const imeiRequests = new Map()
-const filteredChoiceImeis = computed(() => {
-    const keyword = choiceKeyword.value.trim().toLowerCase()
-    const imeis = editorDraft.value?.imei_options || []
-    if (!keyword) return imeis
-    return imeis.filter(imei => [imei.imei, imei.serial, imei.variant_name].some(value => String(value || '').toLowerCase().includes(keyword)))
-})
-const filteredChoiceVariants = computed(() => (editorDraft.value?.variant_options || []).filter(variant => allowNegativeStock.value || Number(variant.stock || 0) > 0 || String(variant.id) === String(editorDraft.value?.variant_id)))
 
 const blockedReason = computed(() => {
     if (props.blockedReason) return props.blockedReason
@@ -319,37 +312,6 @@ const addProduct = async (product, variant = null, selectedImei = null) => {
     productResults.value = []
     productSearchOpen.value = false
 }
-const toggleEditor = (index, editor) => {
-    if (activeEditorIndex.value === index && activeEditor.value === editor) {
-        closeEditor()
-        return
-    }
-    activeEditorIndex.value = index
-    activeEditor.value = editor
-    editorDraft.value = JSON.parse(JSON.stringify(form.items[index]))
-    choiceKeyword.value = ''
-    giftTargetIndex.value = editor === 'gifts' ? index : null
-    productQuery.value = ''
-    productResults.value = []
-    productSearchOpen.value = false
-}
-const openImeiSelector = async (index) => {
-    const item = form.items[index]
-    if (!item?.is_imei) return
-    toggleEditor(index, 'imei')
-    const available = await loadImeis(item.product_id)
-    editorDraft.value.imei_options = available.filter(imei => imei.status === 'in_stock' || String(imei.id) === String(item.imei_id))
-}
-const openVariantSelector = async (index) => {
-    const item = form.items[index]
-    if (!item) return
-    toggleEditor(index, 'variant')
-    const variants = saleProductsById.get(Number(item.product_id))?.variants || []
-    const adjustedStocks = variantStocksForSale(item.product_id, variants, index)
-    editorDraft.value.variant_options = variants
-        .map(variant => ({ ...variant, stock: adjustedStocks.get(Number(variant.id)) ?? Number(variant.stock || 0) }))
-        .filter(variant => allowNegativeStock.value || Number(variant.stock || 0) > 0 || String(variant.id) === String(item.variant_id))
-}
 const closeEditor = () => {
     activeEditorIndex.value = null
     activeEditor.value = null
@@ -359,11 +321,6 @@ const closeEditor = () => {
     productQuery.value = ''
     productResults.value = []
 }
-const saveEditor = () => {
-    if (activeEditorIndex.value === null || !editorDraft.value) return
-    Object.assign(form.items[activeEditorIndex.value], editorDraft.value)
-    closeEditor()
-}
 const removeItem = (index) => {
     form.items.splice(index, 1)
     if (activeEditorIndex.value === index) {
@@ -372,16 +329,6 @@ const removeItem = (index) => {
         activeEditorIndex.value--
     }
     if (giftTargetIndex.value !== null && giftTargetIndex.value > index) giftTargetIndex.value--
-}
-const startAddingGift = (index) => {
-    if (activeEditorIndex.value !== index || activeEditor.value !== 'gifts') toggleEditor(index, 'gifts')
-    giftTargetIndex.value = index
-    productQuery.value = ''
-    productResults.value = []
-}
-const setImei = (row, value) => {
-    row.imei_id = value
-    row.imei = row.imei_options.find(imei => String(imei.id) === String(value))?.imei || ''
 }
 const scanProduct = async () => {
     const code = productQuery.value.trim()

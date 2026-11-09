@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\CustomerDebt;
 use App\Models\Sale;
 use Illuminate\Http\Request;
 
@@ -102,12 +101,7 @@ class SaleController extends Controller
 
         ]);
 
-        $sale->setAttribute('old_debt_paid', (float) CustomerDebt::query()
-            ->where('source_type', Sale::class)
-            ->where('source_id', $sale->id)
-            ->where('type', 'decrease')
-            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
-            ->sum('amount'));
+        $sale->withOldDebtPaid();
 
 
         return response()->json(

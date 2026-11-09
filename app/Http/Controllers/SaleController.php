@@ -690,12 +690,12 @@ class SaleController extends Controller
             [
                 'sales' => $sales,
                 'selectedSale' => $request->filled('open_sale')
-                    ? $this->withOldDebtPaid(Sale::query()->with([
+                    ? Sale::query()->with([
                         'customer', 'user', 'items.product.conversionUnit',
                         'items.product.variants' => fn ($variants) => $variants->where('is_active', true),
                         'items.variant',
                         'items.productImei', 'items.gifts.product', 'items.gifts.productImei',
-                    ])->findOrFail((int) $request->query('open_sale')))
+                    ])->findOrFail((int) $request->query('open_sale'))->withOldDebtPaid()
                     : null,
                 'stats' => $stats,
                 'filters' => $filters,
@@ -714,44 +714,11 @@ class SaleController extends Controller
             'items.productImei',
             'items.gifts.product',
         ]);
-        $this->withOldDebtPaid($sale);
+        $sale->withOldDebtPaid();
 
         return Inertia::render('Sales/Show', [
             'sale' => $sale,
         ]);
-    }
-
-    // Hiển thị hóa đơn để in
-    public function receipt(Sale $sale)
-    {
-        $sale->load([
-            'customer',
-            'user',
-            'items.product.conversionUnit',
-            'items.variant',
-            'items.productImei',
-            'items.gifts.product',
-        ]);
-        $this->withOldDebtPaid($sale);
-
-        return Inertia::render(
-            'Sales/Receipt',
-            [
-                'sale' => $sale,
-            ]
-        );
-    }
-
-    private function withOldDebtPaid(Sale $sale): Sale
-    {
-        $sale->setAttribute('old_debt_paid', (float) CustomerDebt::query()
-            ->where('source_type', Sale::class)
-            ->where('source_id', $sale->id)
-            ->where('type', 'decrease')
-            ->where('note', 'like', 'Trích tiền thừa hóa đơn%')
-            ->sum('amount'));
-
-        return $sale;
     }
 
     /**
@@ -766,6 +733,8 @@ class SaleController extends Controller
                 $this->reverseCancelledSaleDebt($lockedSale);
                 $this->restoreCancelledSaleImeis($sale);
             });
+
+            if ($this->wantsPlainJson($request)) return response()->json(['success' => true]);
 
             return back()->with('success', 'Hóa đơn đã hủy trước đó, hệ thống đã đồng bộ lại IMEI về kho.');
         }
@@ -810,7 +779,15 @@ class SaleController extends Controller
             }
         });
 
+        if ($this->wantsPlainJson($request)) return response()->json(['success' => true]);
+
         return redirect()->route('sales.index')->with('success', 'Đã hủy hóa đơn thành công!');
+    }
+
+    // Gọi bằng axios (lịch sử hóa đơn trong POS) thì trả JSON, không redirect về trang danh sách nặng.
+    private function wantsPlainJson(Request $request): bool
+    {
+        return $request->expectsJson() && ! $request->header('X-Inertia');
     }
 
     private function reverseCancelledSaleDebt(Sale $sale): void

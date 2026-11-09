@@ -15,7 +15,7 @@ import ActionButton from '@/Components/UI/ActionButton.vue';
 import RepairProgressModal from './RepairProgressModal.vue';
 import RepairStatusProgress from './RepairStatusProgress.vue';
 import { toast } from 'vue-sonner';
-import { formatCurrency, formatDate } from '@/utils/format';
+import { formatDate } from '@/utils/format';
 import { imageUrl } from '@/utils/imageUrl';
 import { Barcode, History, KeyRound, Search, ShieldAlert, Smartphone, Trash2, UserRound } from 'lucide-vue-next';
 
@@ -174,15 +174,6 @@ const isSelectedCustomerActiveWarranty = (purchaser) =>
     && Boolean(purchaser?.warranty_active)
     && Boolean(purchaser?.warranty_expires_at)
     && !purchaser?.warranty_voided_at;
-
-const selectedDeviceWarranty = computed(() => {
-    if (!selectedDevice.value?.imei) return null;
-    const catalogMatch = deviceSuggestions.value.find((device) =>
-        String(device.imei || '').trim().toLocaleLowerCase() === String(selectedDevice.value.imei).trim().toLocaleLowerCase()
-        && device.warranty
-    );
-    return warrantyForDeviceSuggestion(catalogMatch || selectedDevice.value);
-});
 
 const loadCustomerDeviceSuggestions = async (customerId) => {
     const requestId = ++customerDeviceRequest;
@@ -778,31 +769,6 @@ const selectDeviceForPurchaser = async (device, purchaser) => {
         } : (customerDevice?.warranty?.active ? customerDevice.warranty : null),
     };
     selectDevice(selected);
-};
-
-const selectDeviceForCurrentCustomer = async (device) => {
-    if (isImeiBlocked(device.imei || device.serial)) {
-        const activeRepair = activeRepairForImei(device.imei || device.serial);
-        toast.error(`IMEI này đang có phiếu ${activeRepair.code} chưa hoàn tất.`);
-        return;
-    }
-    const customer = selectedCustomer.value;
-    const history = customer?.id ? await loadCustomerDeviceSuggestions(customer.id) : [];
-    const identifier = String(device.imei || device.serial || '').trim().toLocaleLowerCase();
-    const customerDevice = history.find((candidate) =>
-        [candidate.imei, candidate.serial]
-            .filter(Boolean)
-            .some((value) => String(value).trim().toLocaleLowerCase() === identifier)
-    );
-    selectDevice({
-        ...device,
-        ...(customerDevice || {}),
-        name: device.name || customerDevice?.device_name || '',
-        imei: device.imei || device.serial,
-        customer: customer || null,
-        device_data: customerDevice || {},
-        warranty: customerDevice?.warranty || device.warranty,
-    });
 };
 
 const prepareNewDevice = (name, imei) => {

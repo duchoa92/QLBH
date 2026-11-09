@@ -7,6 +7,7 @@ import { AlertTriangle } from 'lucide-vue-next'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { fetchPageProps } from '@/utils/inertiaFetch'
+import { DEFAULT_CANCEL_REASONS, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
 
 defineOptions({ inheritAttrs: false })
 
@@ -41,43 +42,10 @@ const openPrintWindow = (saleId) => {
     printFrameUrl.value = route('sales.receipt', saleId)
     printFrameKey.value++
 }
-const printReceiptFrame = (event) => {
-    const frame = event.target
-    const frameWindow = frame?.contentWindow
-    const frameDocument = frame?.contentDocument
-    if (!frameWindow || !frameDocument) return
-
-    const settings = page.props.settings || {}
-    const paper = settings.print_paper_size || 'a4'
-    const landscape = settings.print_orientation === 'landscape'
-    const sizes = { a4: 'A4', a5: 'A5', '80mm': '80mm 200mm', '58mm': '58mm 150mm' }
-    const thermal = paper === '80mm' || paper === '58mm'
-    const width = paper === '58mm' ? '54mm'
-        : paper === '80mm' ? '76mm'
-            : paper === 'a5' ? (landscape ? '190mm' : '128mm')
-                : (landscape ? '277mm' : '190mm')
-
-    let style = frameDocument.getElementById('direct-print-settings')
-    if (!style) {
-        style = frameDocument.createElement('style')
-        style.id = 'direct-print-settings'
-        frameDocument.head.appendChild(style)
-    }
-    style.textContent = `.no-print,.print-bar,.btn-print{display:none!important} :root{--configured-receipt-width:${width}} @page{size:${sizes[paper] || 'A4'}${thermal ? '' : ` ${landscape ? 'landscape' : 'portrait'}`};margin:${thermal ? '0' : '10mm'}} .receipt-container{width:var(--configured-receipt-width)!important;margin-left:auto!important;margin-right:auto!important}`
-
-    frameWindow.addEventListener('afterprint', () => { printFrameUrl.value = '' }, { once: true })
-    window.setTimeout(() => frameWindow.print(), 120)
-}
+const printReceiptFrame = (event) => printReceiptInFrame(event, page.props.settings || {}, () => { printFrameUrl.value = '' })
 
 /* ---- Hủy hóa đơn (giống trang Hóa đơn) ---- */
-const defaultReasons = [
-    'Khách đổi ý không mua nữa',
-    'Đổi sang sản phẩm khác',
-    'Nhầm sản phẩm / số lượng',
-    'Nhập sai giá / giảm giá',
-    'Chưa nhận được tiền',
-    'Trùng hóa đơn',
-]
+const defaultReasons = DEFAULT_CANCEL_REASONS
 const showCancelModal = ref(false)
 const cancelReason = ref('')
 const confirmCancel = () => { cancelReason.value = ''; showCancelModal.value = true }

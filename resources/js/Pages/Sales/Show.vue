@@ -1,6 +1,6 @@
 <script setup>
 import { formatDateTime, formatMoney, formatNumber } from '@/utils/format'
-import { Printer, ArrowLeft, Tag, Calendar, User, DollarSign } from 'lucide-vue-next'
+import { Printer, ArrowLeft, Tag, Calendar, User } from 'lucide-vue-next'
 import { Link, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({

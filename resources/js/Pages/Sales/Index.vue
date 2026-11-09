@@ -5,8 +5,6 @@ import {
     Search,
     Printer,
     FileText,
-    DollarSign,
-    CreditCard,
     AlertTriangle,
     CheckCircle2,
     XCircle,
@@ -34,6 +32,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import api from '@/Services/api'
+import { DEFAULT_CANCEL_REASONS, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
 
 defineOptions({
     layout: AdminLayout
@@ -402,35 +401,9 @@ const openPrintWindow = (saleId) => {
     printFrameKey.value++
 }
 
-const printReceiptFrame = (event) => {
-    const frame = event.target
-    const frameWindow = frame?.contentWindow
-    const frameDocument = frame?.contentDocument
-    if (!frameWindow || !frameDocument) return
-
-    const settings = page.props.settings || {}
-    const paper = settings.print_paper_size || 'a4'
-    const landscape = settings.print_orientation === 'landscape'
-    const sizes = { a4: 'A4', a5: 'A5', '80mm': '80mm 200mm', '58mm': '58mm 150mm' }
-    const thermal = paper === '80mm' || paper === '58mm'
-    const width = paper === '58mm' ? '54mm'
-        : paper === '80mm' ? '76mm'
-            : paper === 'a5' ? (landscape ? '190mm' : '128mm')
-                : (landscape ? '277mm' : '190mm')
-
-    let style = frameDocument.getElementById('direct-print-settings')
-    if (!style) {
-        style = frameDocument.createElement('style')
-        style.id = 'direct-print-settings'
-        frameDocument.head.appendChild(style)
-    }
-    style.textContent = `.no-print,.print-bar,.btn-print{display:none!important} :root{--configured-receipt-width:${width}} @page{size:${sizes[paper] || 'A4'}${thermal ? '' : ` ${landscape ? 'landscape' : 'portrait'}`};margin:${thermal ? '0' : '10mm'}} .receipt-container{width:var(--configured-receipt-width)!important;margin-left:auto!important;margin-right:auto!important}`
-
-    frameWindow.addEventListener('afterprint', () => {
-        printFrameUrl.value = ''
-    }, { once: true })
-    window.setTimeout(() => frameWindow.print(), 120)
-}
+const printReceiptFrame = (event) => printReceiptInFrame(event, page.props.settings || {}, () => {
+    printFrameUrl.value = ''
+})
 
 // Xác nhận Hủy
 const confirmCancel = (sale) => {
@@ -464,14 +437,7 @@ const onSaleEdited = () => {
 }
 
 // Lý do hủy mẫu
-const defaultReasons = [
-    'Khách đổi ý không mua nữa',
-    'Đổi sang sản phẩm khác',
-    'Nhầm sản phẩm / số lượng',
-    'Nhập sai giá / giảm giá',
-    'Chưa nhận được tiền',
-    'Trùng hóa đơn'
-]
+const defaultReasons = DEFAULT_CANCEL_REASONS
 
 const predefinedCancelReasons = computed(() => {
     const existingReasons = (salesData.value?.data || [])

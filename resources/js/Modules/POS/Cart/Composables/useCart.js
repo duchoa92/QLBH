@@ -161,8 +161,6 @@ export function useCart() {
 
         load,
 
-        remove,
-
     } = useLocalStorage()
 
     /*
@@ -747,7 +745,7 @@ export function useCart() {
                 price: Number(batch?.sell_price > 0 ? batch.sell_price : (
                     (variant.sell_price > 0 ? variant.sell_price : null)
                     ?? (variant.price > 0 ? variant.price : null)
-                    ?? product.price ?? 0
+                    ?? product.price ?? product.sell_price ?? 0
                 )),
 
                 quantity: 1,
@@ -833,7 +831,7 @@ export function useCart() {
             showWarranty:
                 false,
 
-            price: Number(batch?.sell_price > 0 ? batch.sell_price : product.price),
+            price: Number(batch?.sell_price > 0 ? batch.sell_price : (product.price ?? product.sell_price ?? 0)),
 
             quantity: 1,
 
@@ -849,89 +847,28 @@ export function useCart() {
 
     /*
     |--------------------------------------------------------------------------
-    | UPDATE QUANTITY
-    |--------------------------------------------------------------------------
-    */
-
-    const increaseQty = (item) => {
-
-        if (item.imei_id) {
-
-            return
-        }
-
-        if (canIncreaseItem(item)) {
-            increaseExistingItem(item)
-            return
-        }
-
-        // Nếu lô đang ở dòng này đã hết, thêm một dòng mới từ lô kế tiếp.
-        // Không tăng vào dòng cũ vì sẽ làm giá của hai lô bị trộn lẫn.
-        const product = {
-            id: item.id,
-            name: item.name,
-            variant: item.variant_id ? { id: item.variant_id, sell_price: item.price } : null,
-            unit_id: item.unit_id,
-            unit_name: item.unit_name,
-            image_url: item.image_url,
-            stock: item.stock_limit,
-            stock_batches: item.stock_batches || [],
-            warranty_days: item.warranty_days,
-            has_vat: item.has_vat,
-            tax_percent: item.tax_percent,
-            price: item.price,
-            sell_price: item.price,
-        }
-        addToCart(product)
-    }
-
-
-    const decreaseQty = (item) => {
-
-        if (item.imei_id) {
-
-            return
-        }
-
-        if (item.quantity > 1) {
-
-            item.quantity--
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
     | REMOVE ITEM
     |--------------------------------------------------------------------------
     */
 
     const removeItem = (item) => {
+        // Ưu tiên đúng dòng được bấm; khi không có (gọi từ phím tắt/luồng khác)
+        // mới dò theo sản phẩm + biến thể + lô để không xóa nhầm dòng lô khác.
+        let index = cart.value.findIndex(cartItem => cartItem === item)
 
-        const index = cart.value.findIndex(cartItem => {
+        if (index === -1) {
+            index = cart.value.findIndex(cartItem => {
+                if (item.imei_id) {
+                    return cartItem.imei_id === item.imei_id
+                }
 
-            if (item.imei_id) {
-
-                return cartItem.imei_id === item.imei_id
-            }
-
-            if (item.variant_id) {
-
-                return (
-                    cartItem.id === item.id
-                    &&
-                    cartItem.variant_id === item.variant_id
-                )
-            }
-
-            return (
-                cartItem.id === item.id
-                &&
-                !cartItem.variant_id
-            )
-        })
+                return cartItem.id === item.id
+                    && (cartItem.variant_id ?? null) === (item.variant_id ?? null)
+                    && Number(cartItem.batch_id || 0) === Number(item.batch_id || 0)
+            })
+        }
 
         if (index !== -1) {
-
             cart.value.splice(index, 1)
 
             if (cart.value.length === 0) {
@@ -1000,9 +937,5 @@ export function useCart() {
         removeItem,
 
         clearCart,
-
-        increaseQty,
-
-        decreaseQty,
     }
 }

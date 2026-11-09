@@ -39,6 +39,8 @@ const props = defineProps({
     showPlaceholder: { type: Boolean, default: true },
     floatOnValue: { type: Boolean, default: false },
     createLabel: { type: String, default: '' },
+    // true: mục "+ createLabel" nằm cuối danh sách chọn thay vì nút nhỏ bên dưới ô
+    createInList: { type: Boolean, default: false },
 
 })
 
@@ -47,9 +49,18 @@ const emit = defineEmits([
     'create',
 ])
 
+const CREATE_VALUE = '__create__'
+
 const handleChange = (event) => {
 
     const selectedValue = event.target.value
+
+    // Chọn mục "+ Thêm ..." trong danh sách: giữ nguyên giá trị đang chọn và báo cho form mở màn hình tạo mới
+    if (props.createInList && selectedValue === CREATE_VALUE) {
+        event.target.value = props.modelValue ?? ''
+        emit('create')
+        return
+    }
 
     // Không chọn gì
     if (selectedValue === '') {
@@ -135,6 +146,8 @@ const handleChange = (event) => {
                 {{ item[optionLabel] }}
             </option>
 
+            <option v-if="createInList && createLabel" :value="CREATE_VALUE">+ {{ createLabel }}</option>
+
         </select>
 
         <p
@@ -145,7 +158,7 @@ const handleChange = (event) => {
         </p>
 
         <button
-            v-if="createLabel"
+            v-if="createLabel && !createInList"
             type="button"
             class="mt-1 text-xs font-medium text-blue-700 hover:underline"
             @click="emit('create')"

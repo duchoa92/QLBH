@@ -1,7 +1,6 @@
 <script setup>
 import {
     ref,
-    computed,
     onMounted,
     onBeforeUnmount,
     watch ,
@@ -111,20 +110,6 @@ const showCreateCustomerModal = ref(false)
 // Tạo ref cho vùng tìm kiếm
 const customerSearchRef = ref(null)
 
-
-// Hiện nút tạo KH
-const showCreateButton = computed(() => {
-
-    return (
-
-        keyword.value?.trim()
-
-        &&
-
-        customers.value.length === 0
-
-    )
-})
 
 // Lưu KH
 const saveCustomer = async (

@@ -19,6 +19,7 @@ import SelectProductModal from '@/Modules/POS/Product/Components/SelectProductMo
 import { getPosReturnUrl, exitPosFullscreen } from '@/utils/pos'
 import { enqueueOfflineSale, readOfflineSales, removeOfflineSale } from '@/utils/offlinePos'
 import { paymentService } from '@/Modules/POS/Payment/Services/paymentService'
+import { buildCheckoutItems } from '@/Modules/POS/Payment/Utils/checkoutPayload'
 import { useEventBus } from '@/Composables/useEventBus'
 
 const {
@@ -262,10 +263,8 @@ const closePos = () => {
     )
 }
 
-const invoiceData = ref(null)
 const cartItemCount = computed(() => cart.value.reduce((count, item) => count + Number(item.quantity || 1), 0))
 
-const showInvoice = ref(false)
 const paymentOutcome = ref(null)
 const showPaymentOutcome = ref(false)
 const presentPaymentOutcome = (saleResponse, expectedAmount = null, showDialog = false) => {
@@ -313,12 +312,12 @@ const syncOfflineSales = async () => {
                 window.dispatchEvent(new CustomEvent('qlbh:offline-queue-changed'))
                 toast.success(`Đã đồng bộ hóa đơn ${sale.code}`)
             } catch (error) {
-                // Retain rejected entries for staff review; stop on network loss.
+                // Mất mạng: dừng lại. Máy chủ từ chối: giữ đơn để nhân viên xử lý nhưng
+                // vẫn đồng bộ tiếp các đơn sau (trước đây một đơn lỗi chặn cả hàng đợi).
                 if (!error.response) break
                 sale.syncError = error.response?.data?.message || 'Máy chủ từ chối đơn hàng.'
                 sale.failedAt = Date.now()
                 await enqueueOfflineSale(sale)
-                break
             }
         }
     } finally {
@@ -455,17 +454,7 @@ const handleCheckout = async (data) => {
             }
 
             const payload = {
-                items: cart.value.map(item => ({
-                    id: item.id, price: item.price, quantity: item.quantity,
-                    unit_id: item.unit_id ?? null, unit_name: item.unit_name ?? 'Cái',
-                    conversion_factor: item.conversion_factor ?? 1, variant_id: item.variant_id ?? null,
-                    imei_id: null, warranty_days: item.customer_warranty_days ?? item.warranty_days ?? null,
-                    apply_vat: Boolean(item.apply_vat),
-                    warranty_value: item.customer_warranty_value ?? null, warranty_unit: item.customer_warranty_unit ?? null,
-                    note: item.note, discount_type: item.discount_type ?? null,
-                    discount_value: Number(item.discount_value ?? 0),
-                    gifts: (item.gifts ?? []).map(gift => ({ id: gift.id, quantity: gift.quantity, imei_id: null })),
-                })),
+                items: buildCheckoutItems(cart.value, { offline: true }),
                 customer_id: selectedCustomer.value?.id || null,
                 paid_amount: Number(data.paid_amount || 0),
                 invoice_discount: invoiceDiscount.value,
@@ -499,8 +488,6 @@ const handleCheckout = async (data) => {
             return
         }
 
-        invoiceData.value = res
-        showInvoice.value = true
         presentPaymentOutcome(res?.data, expectedAmount)
         await refreshShiftSummary()
         // sau khi TT thành công chuyển về tab có DL
@@ -521,8 +508,6 @@ const handleCheckout = async (data) => {
 const handleBankCheckoutCompleted = async (saleResponse) => {
     clearCart()
     showCheckoutModal.value = false
-    invoiceData.value = saleResponse
-    showInvoice.value = true
     presentPaymentOutcome(saleResponse, null, true)
     // Luồng ngân hàng hoàn tất trực tiếp, không đi qua useCheckout nên cần
     // yêu cầu catalog đọc lại giá/tồn của lô còn lại.
@@ -539,10 +524,6 @@ const handleBackgroundBankCheckoutCompleted = async (saleResponse, cartSnapshot)
     presentPaymentOutcome(saleResponse, null, true)
     emitEvent('products:refresh')
     await refreshShiftSummary()
-}
-
-const handlePartialBankTransfer = () => {
-    // Partial transfers remain visible in the checkout status while polling continues.
 }
 
 
@@ -713,7 +694,6 @@ useBarcodeScanner(
         @confirm="checkout($event)"
         @bank-completed="handleBankCheckoutCompleted"
         @bank-completed-background="handleBackgroundBankCheckoutCompleted"
-        @bank-transfer-partial="handlePartialBankTransfer"
     />
 
     <div v-if="showPaymentOutcome && paymentOutcome" class="fixed inset-0 z-[10050] flex min-h-screen items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
