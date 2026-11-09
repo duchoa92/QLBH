@@ -14,6 +14,7 @@ use App\Models\StockImport;
 use App\Models\Supplier;
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\FuzzyMatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,119 +27,231 @@ class GlobalSearchController extends Controller
             return response()->json(['results' => []]);
         }
 
-        $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $term) . '%';
+        $tokens = FuzzyMatcher::tokens($term);
+        if ($tokens === []) {
+            return response()->json(['results' => []]);
+        }
+
         $results = collect();
         $user = $request->user();
 
         if ($user->can('products.view')) {
-            $results = $results->concat(Product::query()
-                ->with(['category:id,name', 'brand:id,name'])
-                ->where(function ($query) use ($like) {
-                    $query->where('name', 'like', $like)
-                        ->orWhere('sku', 'like', $like)
-                        ->orWhere('barcode', 'like', $like)
-                        ->orWhere('search_text', 'like', $like)
-                        ->orWhereHas('imeis', fn ($imei) => $imei
-                            ->where('imei', 'like', $like)
-                            ->orWhere('serial', 'like', $like));
-                })
-                ->limit(5)->get()
-                ->map(fn (Product $product) => $this->result(
-                    'Sản phẩm', $product->name,
-                    collect([$product->sku, $product->barcode, $product->brand?->name])->filter()->join(' · '),
-                    route('products.index', ['open_product' => $product->id], false)
-                )));
+            $results = $results->concat($this->search(
+                Product::query()->with(['category:id,name', 'brand:id,name']),
+                $tokens, ['name', 'sku', 'barcode', 'search_text'],
+                ['imeis' => ['imei', 'serial']], 5,
+                fn (Product $p) => [$p->name, $p->sku, $p->barcode, $p->brand?->name, $p->category?->name],
+                fn (Product $p) => $this->result('Sản phẩm', 'product', $p->id, $p->name,
+                    collect([$p->sku, $p->barcode, $p->brand?->name])->filter()->join(' · '),
+                    route('products.index', ['open_product' => $p->id], false), ['name' => $p->name]),
+            ));
 
-            $imeis = ProductImei::query()
-                ->with('product:id,name')
-                ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like))
-                ->limit(4)->get()
-                ->map(fn (ProductImei $imei) => $this->result(
-                    'IMEI / Serial', $imei->imei ?: $imei->serial,
-                    $imei->product?->name ?: 'Sản phẩm', route('products.index', ['open_imei_product' => $imei->product_id], false)
-                ));
-            $results = $results->concat($imeis);
+            $results = $results->concat($this->search(
+                ProductImei::query()->with('product:id,name'),
+                $tokens, ['imei', 'serial'], [], 4,
+                fn (ProductImei $i) => [$i->imei, $i->serial, $i->product?->name],
+                fn (ProductImei $i) => $this->result('IMEI / Serial', 'imei', $i->id, $i->imei ?: $i->serial,
+                    $i->product?->name ?: 'Sản phẩm', route('products.index', ['open_imei_product' => $i->product_id], false),
+                    ['product_id' => $i->product_id, 'name' => $i->product?->name]),
+            ));
         }
 
-        if ($user->can('customers.view')) $results = $results->concat(Customer::query()
-            ->where(fn ($query) => $query->where('full_name', 'like', $like)
-                ->orWhere('phone', 'like', $like)->orWhere('email', 'like', $like)->orWhere('code', 'like', $like))
-            ->limit(5)->get()
-            ->map(fn (Customer $customer) => $this->result(
-                'Khách hàng', $customer->full_name,
-                collect([$customer->phone, $customer->code])->filter()->join(' · '),
-                route('customers.index', ['open_customer' => $customer->id], false)
-            )));
+        if ($user->can('customers.view')) {
+            $results = $results->concat($this->search(
+                Customer::query(), $tokens, ['full_name', 'phone', 'email', 'code', 'search_text'], [], 5,
+                fn (Customer $c) => [$c->full_name, $c->phone, $c->email, $c->code],
+                fn (Customer $c) => $this->result('Khách hàng', 'customer', $c->id, $c->full_name,
+                    collect([$c->phone, $c->code])->filter()->join(' · '),
+                    route('customers.index', ['open_customer' => $c->id], false)),
+            ));
+        }
 
-        if ($user->can('suppliers.view')) $results = $results->concat(Supplier::query()
-            ->where(fn ($query) => $query->where('name', 'like', $like)
-                ->orWhere('phone', 'like', $like)->orWhere('email', 'like', $like)->orWhere('code', 'like', $like))
-            ->limit(5)->get()
-            ->map(fn (Supplier $supplier) => $this->result(
-                'Nhà cung cấp', $supplier->name,
-                collect([$supplier->phone, $supplier->code])->filter()->join(' · '),
-                route('suppliers.index', ['open_supplier' => $supplier->id], false)
-            )));
+        if ($user->can('suppliers.view')) {
+            $results = $results->concat($this->search(
+                Supplier::query(), $tokens, ['name', 'phone', 'email', 'code', 'search_text'], [], 5,
+                fn (Supplier $s) => [$s->name, $s->phone, $s->email, $s->code],
+                fn (Supplier $s) => $this->result('Nhà cung cấp', 'supplier', $s->id, $s->name,
+                    collect([$s->phone, $s->code])->filter()->join(' · '),
+                    route('suppliers.index', ['open_supplier' => $s->id], false)),
+            ));
+        }
 
-        if ($user->can('sales.view')) $results = $results->concat(Sale::query()
-            ->with('customer:id,full_name,phone')
-            ->where(fn ($query) => $query->where('code', 'like', $like)->orWhereHas('customer', fn ($customer) => $customer
-                ->where('full_name', 'like', $like)->orWhere('phone', 'like', $like)))
-            ->latest('id')->limit(5)->get()
-            ->map(fn (Sale $sale) => $this->result(
-                'Hóa đơn', $sale->code,
-                collect([$sale->customer?->full_name, number_format((float) $sale->grand_total, 0, ',', '.') . ' đ'])->filter()->join(' · '),
-                route('sales.index', ['open_sale' => $sale->id], false)
-            )));
+        if ($user->can('sales.view')) {
+            $results = $results->concat($this->search(
+                Sale::query()->with(['customer:id,full_name,phone', 'items.product:id,name,sku']),
+                $tokens, ['code'],
+                ['customer' => ['full_name', 'phone'], 'items.product' => ['name', 'sku', 'search_text']], 6,
+                fn (Sale $s) => [$s->code, $s->customer?->full_name, $s->customer?->phone,
+                    ...$s->items->map(fn ($item) => $item->product?->name)->all()],
+                fn (Sale $s) => $this->result('Hóa đơn', 'sale', $s->id, $s->code,
+                    $this->summary(
+                        $s->customer?->full_name ? 'Khách: ' . $s->customer->full_name : 'Khách lẻ',
+                        number_format((float) $s->grand_total, 0, ',', '.') . ' đ',
+                        $this->matchedItems($s->items->map(fn ($item) => $item->product?->name)->all(), $tokens),
+                    ),
+                    route('sales.index', ['open_sale' => $s->id], false)),
+                true,
+            ));
+        }
 
-        if ($user->can('stock_imports.view')) $results = $results->concat(StockImport::query()
-            ->with('supplier:id,name')
-            ->where(fn ($query) => $query->where('code', 'like', $like)->orWhereHas('supplier', fn ($supplier) => $supplier->where('name', 'like', $like)))
-            ->latest('id')->limit(5)->get()
-            ->map(fn (StockImport $import) => $this->result(
-                'Phiếu nhập', $import->code,
-                collect([$import->supplier?->name, $import->import_date?->format('d/m/Y')])->filter()->join(' · '),
-                route('stock.index', ['open_import' => $import->id], false)
-            )));
+        if ($user->can('stock_imports.view')) {
+            $results = $results->concat($this->search(
+                StockImport::query()->with('supplier:id,name'),
+                $tokens, ['code'], ['supplier' => ['name']], 5,
+                fn (StockImport $i) => [$i->code, $i->supplier?->name],
+                fn (StockImport $i) => $this->result('Phiếu nhập', 'stock-import', $i->id, $i->code,
+                    collect([$i->supplier?->name, $i->import_date?->format('d/m/Y')])->filter()->join(' · '),
+                    route('stock.index', ['open_import' => $i->id], false)),
+                true,
+            ));
+        }
 
-        if ($user->can('repairs.view')) $results = $results->concat(Repair::query()
-            ->where(fn ($query) => $query->where('code', 'like', $like)
-                ->orWhere('contact_phone', 'like', $like)
-                ->orWhere('device_name', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
-            ->latest('id')->limit(5)->get()
-            ->map(fn (Repair $repair) => $this->result(
-                'Phiếu sửa chữa', $repair->code ?: $repair->device_name,
-                collect([$repair->contact_phone, $repair->device_name])->filter()->join(' · '),
-                route('repairs.index', ['open_repair' => $repair->id], false)
-            )));
+        if ($user->can('repairs.view')) {
+            $results = $results->concat($this->search(
+                Repair::query()->with(['customer:id,full_name,phone', 'parts:id,repair_id,product_name']),
+                $tokens,
+                ['code', 'contact_phone', 'device_name', 'imei', 'serial', 'repair_request'],
+                ['customer' => ['full_name', 'phone'], 'parts' => ['product_name', 'sku']], 5,
+                fn (Repair $r) => [$r->code, $r->customer?->full_name, $r->contact_phone, $r->customer?->phone,
+                    $r->device_name, $r->imei, $r->serial, $r->repair_request,
+                    ...$r->parts->pluck('product_name')->all()],
+                fn (Repair $r) => $this->result('Phiếu sửa chữa', 'repair', $r->id, $r->code ?: $r->device_name,
+                    $this->summary(
+                        $r->customer?->full_name ? 'Khách: ' . $r->customer->full_name : null,
+                        $r->contact_phone ?: $r->customer?->phone,
+                        $r->device_name,
+                        $this->matchedItems($r->parts->pluck('product_name')->all(), $tokens, 'Linh kiện'),
+                    ),
+                    route('repairs.index', ['open_repair' => $r->id], false)),
+                true,
+            ));
+        }
 
         if ($user->can('categories.view')) {
-            $results = $results->concat(Category::query()->where('name', 'like', $like)->limit(4)->get()
-                ->map(fn (Category $category) => $this->result('Danh mục', $category->name, 'Danh mục sản phẩm', route('categories.index', ['open_category' => $category->id], false))));
+            $results = $results->concat($this->search(
+                Category::query(), $tokens, ['name'], [], 4,
+                fn (Category $c) => [$c->name],
+                fn (Category $c) => $this->result('Danh mục', 'category', $c->id, $c->name, 'Danh mục sản phẩm',
+                    route('categories.index', ['open_category' => $c->id], false)),
+            ));
         }
 
         if ($user->can('brands.view')) {
-            $results = $results->concat(Brand::query()->with('categories:id,name')->where('name', 'like', $like)->limit(4)->get()
-                ->map(fn (Brand $brand) => $this->result('Thương hiệu', $brand->name, $brand->categories->pluck('name')->join(', ') ?: null, route('brands.index', ['open_brand' => $brand->id], false))));
+            $results = $results->concat($this->search(
+                Brand::query()->with('categories:id,name'), $tokens, ['name'], [], 4,
+                fn (Brand $b) => [$b->name],
+                fn (Brand $b) => $this->result('Thương hiệu', 'brand', $b->id, $b->name,
+                    $b->categories->pluck('name')->join(', ') ?: null,
+                    route('brands.index', ['open_brand' => $b->id], false)),
+            ));
         }
 
-        if ($user->can('settings.view')) $results = $results->concat(Unit::query()->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('short_name', 'like', $like))
-            ->limit(4)->get()->map(fn (Unit $unit) => $this->result('Đơn vị tính', $unit->name, $unit->short_name, route('settings.index', ['open_unit' => $unit->id], false))));
+        if ($user->can('settings.view')) {
+            $results = $results->concat($this->search(
+                Unit::query(), $tokens, ['name', 'short_name'], [], 4,
+                fn (Unit $u) => [$u->name, $u->short_name],
+                fn (Unit $u) => $this->result('Đơn vị tính', 'unit', $u->id, $u->name, $u->short_name,
+                    route('settings.index', ['open_unit' => $u->id], false)),
+            ));
+        }
 
         if ($user->can('users.view')) {
-            $results = $results->concat(User::query()
-                ->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('email', 'like', $like))
-                ->limit(4)->get()
-                ->map(fn (User $foundUser) => $this->result('Nhân viên', $foundUser->name, $foundUser->email, route('users.index', ['open_user' => $foundUser->id], false))));
+            $results = $results->concat($this->search(
+                User::query(), $tokens, ['name', 'email'], [], 4,
+                fn (User $u) => [$u->name, $u->email],
+                fn (User $u) => $this->result('Nhân viên', 'user', $u->id, $u->name, $u->email,
+                    route('users.index', ['open_user' => $u->id], false)),
+            ));
         }
 
         return response()->json(['results' => $results->take(40)->values()]);
     }
 
-    private function result(string $type, ?string $label, ?string $detail, string $url): array
+    /**
+     * Bước 1: mọi từ khóa đều phải xuất hiện (không phân biệt dấu/hoa thường, không cần đúng thứ tự).
+     * Bước 2 (khi chưa đủ kết quả): lấy ứng viên theo mẩu 3 ký tự rồi chấm điểm gần đúng, cho phép gõ sai nhẹ.
+     *
+     * @param  array<int, string>  $columns
+     * @param  array<string, array<int, string>>  $relations  quan hệ => cột
+     */
+    private function search($query, array $tokens, array $columns, array $relations, int $limit,
+        callable $haystack, callable $map, bool $latest = false)
+    {
+        $order = fn ($q) => $latest ? $q->latest('id') : $q;
+        $matchPiece = function ($q, string $piece) use ($columns, $relations) {
+            // "d" cũng phải khớp "đ" vì collation không coi hai chữ này là một
+            $variants = array_unique([$piece, str_replace('d', 'đ', $piece)]);
+            $likes = array_map(fn ($v) => '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $v) . '%', $variants);
+            $q->where(function ($inner) use ($columns, $relations, $likes) {
+                foreach ($likes as $like) {
+                    foreach ($columns as $column) {
+                        $inner->orWhere($column, 'like', $like);
+                    }
+                    foreach ($relations as $relation => $relationColumns) {
+                        $inner->orWhereHas($relation, function ($related) use ($relationColumns, $like) {
+                            $related->where(function ($r) use ($relationColumns, $like) {
+                                foreach ($relationColumns as $column) {
+                                    $r->orWhere($column, 'like', $like);
+                                }
+                            });
+                        });
+                    }
+                }
+            });
+        };
+
+        $exact = $order(clone $query)
+            ->where(function ($q) use ($tokens, $matchPiece) {
+                foreach ($tokens as $token) {
+                    $matchPiece($q, $token);
+                }
+            })
+            ->limit($limit)->get();
+
+        $models = $exact;
+        if ($exact->count() < $limit) {
+            $candidates = $order(clone $query)
+                ->where(function ($q) use ($tokens, $matchPiece) {
+                    foreach (FuzzyMatcher::fragments($tokens) as $fragment) {
+                        $q->orWhere(fn ($piece) => $matchPiece($piece, $fragment));
+                    }
+                })
+                ->whereNotIn('id', $exact->pluck('id'))
+                ->limit(150)->get();
+
+            $fuzzy = $candidates
+                ->map(fn ($model) => [$model, FuzzyMatcher::score($tokens, collect($haystack($model))->filter()->join(' '))])
+                ->filter(fn ($pair) => $pair[1] !== null)
+                ->sortBy(fn ($pair) => $pair[1])
+                ->map(fn ($pair) => $pair[0])
+                ->take($limit - $exact->count());
+
+            $models = $exact->concat($fuzzy);
+        }
+
+        return $models->map($map);
+    }
+
+    /** Tên sản phẩm/linh kiện khớp từ khóa, để hiện trong phần tóm tắt. */
+    private function matchedItems(array $names, array $tokens, string $label = 'Có'): ?string
+    {
+        $hits = collect($names)->filter()->unique()
+            ->filter(fn ($name) => FuzzyMatcher::score($tokens, $name) !== null)
+            ->take(2)->values();
+
+        return $hits->isEmpty() ? null : $label . ': ' . $hits->join(', ');
+    }
+
+    private function summary(?string ...$parts): string
+    {
+        return collect($parts)->filter()->join(' · ');
+    }
+
+    private function result(string $type, string $recordType, int $recordId, ?string $label, ?string $detail, string $url, array $meta = []): array
     {
         return [
             'type' => $type,
+            'record' => ['type' => $recordType, 'id' => $recordId] + $meta,
             'label' => $label ?: $type,
             'detail' => $detail ?: '',
             'url' => $url,

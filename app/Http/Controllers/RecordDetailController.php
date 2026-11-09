@@ -99,9 +99,10 @@ class RecordDetailController extends Controller
 
     private function sale(int $id): array
     {
-        $r = Sale::with(['customer:id,full_name', 'user:id,name'])->findOrFail($id);
+        $r = Sale::with(['customer:id,full_name', 'user:id,name', 'items.product:id,name'])->findOrFail($id);
         return ['Hóa đơn', $r->code, $this->rows([
             'Khách hàng' => $r->customer?->full_name, 'Nhân viên' => $r->user?->name,
+            'Sản phẩm' => $r->items->map(fn ($item) => trim(($item->product?->name ?: 'Sản phẩm') . ' × ' . $item->quantity))->join("\n"),
             'Ngày tạo' => $this->date($r->created_at), 'Tạm tính' => $this->money($r->subtotal),
             'Tổng thanh toán' => $this->money($r->grand_total), 'Đã thanh toán' => $this->money($r->paid_amount),
             'Tiền mặt nhận' => $this->money($r->cash_received_amount), 'Chuyển khoản nhận' => $this->money($r->bank_received_amount),
@@ -121,11 +122,12 @@ class RecordDetailController extends Controller
 
     private function repair(int $id): array
     {
-        $r = Repair::findOrFail($id);
+        $r = Repair::with(['customer:id,full_name', 'parts:id,repair_id,product_name,quantity'])->findOrFail($id);
         return ['Phiếu sửa chữa', $r->code ?: $r->device_name, $this->rows([
-            'Khách hàng' => $r->customer_name, 'Điện thoại' => $r->contact_phone ?: $r->customer_phone,
+            'Khách hàng' => $r->customer?->full_name, 'Điện thoại' => $r->contact_phone ?: $r->customer?->phone,
             'Thiết bị' => $r->device_name, 'IMEI / Serial' => $r->imei ?: $r->serial,
-            'Yêu cầu sửa chữa' => $r->repair_request, 'Ngày nhận' => $this->date($r->received_at),
+            'Yêu cầu sửa chữa' => $r->repair_request,
+            'Linh kiện' => $r->parts->map(fn ($part) => trim($part->product_name . ' × ' . $part->quantity))->join("\n"), 'Ngày nhận' => $this->date($r->received_at),
             'Chi phí' => $this->money($r->final_cost ?: $r->estimated_cost), 'Trạng thái' => $r->status,
         ])];
     }

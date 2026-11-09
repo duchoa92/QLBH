@@ -213,10 +213,10 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- GÓC PHẢI: TÌM KIẾM, NÚT TÁC VỤ & USER -->
-                    <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <div class="flex items-center justify-end gap-2 sm:gap-3 min-w-0 flex-1">
 
-                        <!-- TÌM KIẾM GLOBAL (DESKTOP: Hiện cố định kích thước) -->
-                        <div class="hidden md:block w-44 lg:w-64 shrink-0">
+                        <!-- TÌM KIẾM GLOBAL (DESKTOP: co giãn theo độ rộng màn hình) -->
+                        <div class="hidden md:block min-w-0 flex-1 md:max-w-[15rem] lg:max-w-[24rem] xl:max-w-[32rem] 2xl:max-w-[40rem]">
                             <GlobalSearch />
                         </div>
 
@@ -235,7 +235,7 @@ onBeforeUnmount(() => {
                             v-if="can('repairs.create')"
                             type="button"
                             @click="openRepairReceipt"
-                            class="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all shrink-0"
+                            class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all shrink-0"
                             title="Tiếp nhận sửa chữa"
                         >
                             <Wrench :size="15" />
@@ -247,7 +247,7 @@ onBeforeUnmount(() => {
                             v-if="can('pos.access')"
                             href="/pos"
                             @click="prepareOpenPos"
-                            class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0"
+                            class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0"
                             title="Mở POS bán hàng"
                         >
                             <Store :size="15" />
