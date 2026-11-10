@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\RepairRequest;
 use App\Models\Repair;
 use App\Models\RepairImage;
+use App\Models\WorkShift;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,8 +51,9 @@ class RepairController extends Controller
             )
         );
 
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
+        $validDate = static fn ($value): ?string => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
+        $dateFrom = $validDate($request->input('date_from'));
+        $dateTo = $validDate($request->input('date_to'));
         $sortBy = in_array($request->input('sort_by'), ['code', 'device_name', 'status', 'created_at'], true)
             ? $request->input('sort_by') : 'created_at';
         $sortOrder = $request->input('sort_order') === 'asc' ? 'asc' : 'desc';
@@ -154,13 +156,16 @@ class RepairController extends Controller
 
             ->when($openRepairId > 0, fn ($query) => $query->whereKey($openRepairId))
 
-            ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
-            ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
+            ->when($dateFrom, fn ($query) => $query->where('created_at', '>=', $dateFrom . ' 00:00:00'))
+            ->when($dateTo, fn ($query) => $query->where('created_at', '<=', $dateTo . ' 23:59:59'))
             ->orderBy($sortBy, $sortOrder)
 
             ->paginate($perPage)
 
-            ->through(fn ($repair) => [
+            ->through(function ($repair): array {
+                $latestTimeline = $repair->timelines->first();
+
+                return [
 
                 'id' => $repair->id,
 
@@ -256,10 +261,10 @@ class RepairController extends Controller
                     'created_at' => $timeline->created_at?->format('d/m/Y H:i'),
                     'user' => $timeline->user?->name,
                 ]),
-                'waiting_for_parts' => (bool) ($repair->timelines->first()?->waiting_for_parts ?? false),
-                'waiting_mode' => $repair->timelines->first()?->waiting_mode ?? ($repair->timelines->first()?->waiting_for_parts ? 'parts' : 'repair_now'),
-                'parts_needed' => $repair->timelines->first()?->parts_needed,
-                'expected_days' => $repair->timelines->first()?->expected_days,
+                'waiting_for_parts' => (bool) ($latestTimeline?->waiting_for_parts ?? false),
+                'waiting_mode' => $latestTimeline?->waiting_mode ?? ($latestTimeline?->waiting_for_parts ? 'parts' : 'repair_now'),
+                'parts_needed' => $latestTimeline?->parts_needed,
+                'expected_days' => $latestTimeline?->expected_days,
 
                 'imei' =>
                     $repair->imei,
@@ -275,7 +280,8 @@ class RepairController extends Controller
                     ($repair->received_at ?? $repair->created_at)?->format(
                         'd/m/Y H:i'
                     ),
-            ])
+                ];
+            })
 
             ->withQueryString();
 
@@ -358,8 +364,11 @@ class RepairController extends Controller
         $issues = collect();
         $accessories = collect();
         if ($keyword === '') {
+            // Chỉ lấy các phiếu gần đây để không quét cả bảng mỗi lần mở form.
             $issues = Repair::query()
                 ->whereNotNull('issue')
+                ->latest('id')
+                ->limit(1000)
                 ->pluck('issue')
                 ->flatten()
                 ->filter()
@@ -368,6 +377,8 @@ class RepairController extends Controller
 
             $accessories = Repair::query()
                 ->whereNotNull('accessories')
+                ->latest('id')
+                ->limit(1000)
                 ->pluck('accessories')
                 ->flatten()
                 ->filter()
@@ -491,7 +502,14 @@ class RepairController extends Controller
                 ]);
 
             $productImeis = ProductImei::query()
-                ->with('product:id,name,warranty_days')
+                ->with([
+                    'product:id,name,warranty_days',
+                    // Nạp sẵn lịch sử bán của cả 10 IMEI trong 1 truy vấn thay vì mỗi IMEI một truy vấn.
+                    'saleItems' => fn ($saleItems) => $saleItems
+                        ->with('sale:id,code,customer_id,created_at,status', 'sale.customer:id,full_name,phone,cccd,debt_balance')
+                        ->whereHas('sale', fn ($query) => $query->where('status', '!=', 'cancelled'))
+                        ->latest('id'),
+                ])
                 ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like)->orWhereHas('product', fn ($productQuery) => $productQuery->where('name', 'like', $like)))
                 ->latest('id')
                 ->limit(10)
@@ -500,11 +518,7 @@ class RepairController extends Controller
                     'customer_warranty_expires_at', 'customer_warranty_voided_at', 'customer_warranty_void_reason',
                 ])
                 ->map(function (ProductImei $item): array {
-                    $saleItems = $item->saleItems()
-                        ->with('sale:id,code,customer_id,created_at,status', 'sale.customer:id,full_name,phone,cccd,debt_balance')
-                        ->whereHas('sale', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                        ->latest('id')
-                        ->get();
+                    $saleItems = $item->saleItems;
                     $saleItem = $saleItems->first();
                     $soldAt = $item->sold_at
                         ? Carbon::parse($item->sold_at)
@@ -743,6 +757,13 @@ class RepairController extends Controller
             ->join('sales as latest_imei_sales', 'latest_imei_sales.id', '=', 'latest_imei_items.sale_id')
             ->where('latest_imei_sales.status', '!=', 'cancelled')
             ->whereNotNull('latest_imei_items.product_imei_id')
+            // Chỉ xét các IMEI khách này từng mua, tránh gom nhóm toàn bộ bảng sale_items.
+            ->whereIn('latest_imei_items.product_imei_id', fn ($query) => $query
+                ->select('customer_items.product_imei_id')
+                ->from('sale_items as customer_items')
+                ->join('sales as customer_sales', 'customer_sales.id', '=', 'customer_items.sale_id')
+                ->where('customer_sales.customer_id', $customer->id)
+                ->whereNotNull('customer_items.product_imei_id'))
             ->groupBy('latest_imei_items.product_imei_id')
             ->selectRaw('latest_imei_items.product_imei_id, MAX(latest_imei_items.id) as latest_sale_item_id');
 
@@ -1539,6 +1560,8 @@ class RepairController extends Controller
                 'payment_method' => $data['payment_method'],
                 'payment_note' => $data['note'] ?? null,
                 'returned_at' => now(),
+                // Tiền thu khi trả máy được tính vào ca đang mở của người thu (nếu có).
+                'work_shift_id' => WorkShift::currentFor(auth()->id())?->id,
                 'repair_warranty_started_at' => $repair->repair_warranty_days > 0 ? $returnedAt : null,
                 'repair_warranty_expires_at' => $repairWarrantyExpiresAt,
                 'warranty_status' => $repair->intake_type === 'warranty' ? 'accepted' : $repair->warranty_status,

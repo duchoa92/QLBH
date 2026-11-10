@@ -46,6 +46,7 @@ class SettingController extends Controller
                 'print_shop_subtitle' => setting('print_shop_subtitle', ''),
                 'print_shop_address' => setting('print_shop_address', ''),
                 'print_shop_phone' => setting('print_shop_phone', ''),
+                'label_template' => \App\Support\LabelTemplate::normalize(setting('label_template')),
                 'purchase_contract_title' => setting('purchase_contract_title', DefaultPurchaseContract::TITLE),
                 'purchase_contract_content' => setting('purchase_contract_content', DefaultPurchaseContract::CONTENT),
                 'allow_negative_stock' => filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN),
@@ -142,6 +143,25 @@ class SettingController extends Controller
             'print_shop_subtitle' => ['sometimes', 'nullable', 'string', 'max:150'],
             'print_shop_address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'print_shop_phone' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'label_template' => ['sometimes', 'array'],
+            'label_template.layout' => ['nullable', 'in:sheet,roll'],
+            'label_template.width_mm' => ['nullable', 'numeric', 'min:20', 'max:150'],
+            'label_template.height_mm' => ['nullable', 'numeric', 'min:10', 'max:100'],
+            'label_template.gap_mm' => ['nullable', 'numeric', 'min:0', 'max:15'],
+            'label_template.margin_mm' => ['nullable', 'numeric', 'min:0', 'max:25'],
+            'label_template.border' => ['nullable', 'in:none,dashed,solid'],
+            'label_template.align' => ['nullable', 'in:left,center'],
+            'label_template.show_shop' => ['nullable', 'boolean'],
+            'label_template.show_name' => ['nullable', 'boolean'],
+            'label_template.show_variant' => ['nullable', 'boolean'],
+            'label_template.show_code' => ['nullable', 'boolean'],
+            'label_template.show_price' => ['nullable', 'boolean'],
+            'label_template.show_barcode' => ['nullable', 'boolean'],
+            'label_template.name_size' => ['nullable', 'numeric', 'min:5', 'max:24'],
+            'label_template.code_size' => ['nullable', 'numeric', 'min:5', 'max:20'],
+            'label_template.price_size' => ['nullable', 'numeric', 'min:5', 'max:28'],
+            'label_template.barcode_height_mm' => ['nullable', 'numeric', 'min:3', 'max:40'],
+            'label_template.footer_text' => ['nullable', 'string', 'max:60'],
             'purchase_contract_title' => ['sometimes', 'string', 'max:150'],
             'purchase_contract_content' => ['sometimes', 'string', 'max:5000'],
             'bank_bin' => ['sometimes', 'nullable', 'string', 'max:20'],
@@ -181,7 +201,9 @@ class SettingController extends Controller
         }
 
         foreach ($data as $key => $value) {
-            if ($key !== 'bank_accounts') {
+            if ($key === 'label_template') {
+                Setting::set($key, json_encode(\App\Support\LabelTemplate::normalize($value), JSON_UNESCAPED_UNICODE));
+            } elseif ($key !== 'bank_accounts') {
                 Setting::set($key, $value);
             }
         }

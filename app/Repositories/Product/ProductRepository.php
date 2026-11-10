@@ -116,7 +116,7 @@ class ProductRepository extends BaseRepository
                     }
 
                     $q->orWhere('search_text', 'like', "%$search%");
-                    $q->orWhere('barcode', 'like', "%$search%");
+                    $q->orWhere('model', 'like', "%$search%");
                     $q->orWhereHas('variants', fn ($variantQuery) => $variantQuery
                         ->where('barcode', 'like', "%$search%")
                         ->orWhere('sku', 'like', "%$search%"));

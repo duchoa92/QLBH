@@ -28,7 +28,7 @@ class ProductImportService
     private const MAX_DECIMAL = 9999999999999.99; // decimal(15,2)
     private const MAX_STOCK = 4294967295;         // unsigned int
     private const MAX_NAME = 255;
-    private const MAX_CODE = 100;                 // SKU, barcode (giống form thêm sản phẩm)
+    private const MAX_CODE = 100;                 // SKU, model (giống form thêm sản phẩm)
 
     private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
 
@@ -104,7 +104,7 @@ class ProductImportService
                     'name' => $row['name'],
                     'sku' => $sku,
                     'slug' => $this->uniqueSlug($row['name']),
-                    'barcode' => $row['barcode'] !== '' ? $row['barcode'] : null,
+                    'model' => $row['model'] !== '' ? $row['model'] : null,
                     'category_id' => $category?->id,
                     'brand_id' => $brand?->id,
                     'unit_id' => $unit?->id,
@@ -205,12 +205,10 @@ class ProductImportService
 
         $imageIndex = $this->indexImages($this->normalizeImages($images));
         $existingSku = $this->existingProducts('sku', array_column($records, 'sku'));
-        $existingBarcode = $this->existingProducts('barcode', array_column($records, 'barcode'));
 
         $result = [];
         $imageSources = [];
         $seenSku = [];
-        $seenBarcode = [];
         $announced = ['category' => [], 'brand' => [], 'unit' => []];
 
         foreach ($records as $data) {
@@ -234,22 +232,6 @@ class ProductImportService
                     $errors[] = $existingSku[$key] === 'trashed'
                         ? 'SKU đang nằm trong thùng rác (hãy khôi phục hoặc xóa vĩnh viễn sản phẩm đó trước)'
                         : 'SKU đã tồn tại';
-                }
-            }
-
-            if ($data['barcode'] !== '') {
-                $key = $this->dupKey($data['barcode']);
-
-                if (isset($seenBarcode[$key])) {
-                    $errors[] = 'Barcode trong file bị lặp (trùng dòng ' . $seenBarcode[$key] . ')';
-                } else {
-                    $seenBarcode[$key] = $data['row'];
-                }
-
-                if (isset($existingBarcode[$key])) {
-                    $errors[] = $existingBarcode[$key] === 'trashed'
-                        ? 'Barcode đang nằm trong thùng rác (hãy khôi phục hoặc xóa vĩnh viễn sản phẩm đó trước)'
-                        : 'Barcode đã tồn tại';
                 }
             }
 
@@ -327,7 +309,7 @@ class ProductImportService
             'row' => $rowNumber,
             'name' => $this->cleanText(ProductImportColumns::value($row, $headerMap, 'name')),
             'sku' => ProductImportColumns::value($row, $headerMap, 'sku'),
-            'barcode' => ProductImportColumns::value($row, $headerMap, 'barcode'),
+            'model' => ProductImportColumns::value($row, $headerMap, 'model'),
             'category' => $this->cleanText(ProductImportColumns::value($row, $headerMap, 'category')),
             'brand' => $this->cleanText(ProductImportColumns::value($row, $headerMap, 'brand')),
             'sell_price' => ProductImportColumns::normalizeNumber(ProductImportColumns::raw($row, $headerMap, 'sell_price')),
@@ -361,8 +343,8 @@ class ProductImportService
             $errors[] = 'SKU quá dài (tối đa ' . self::MAX_CODE . ' ký tự)';
         }
 
-        if (mb_strlen($row['barcode']) > self::MAX_CODE) {
-            $errors[] = 'Barcode quá dài (tối đa ' . self::MAX_CODE . ' ký tự)';
+        if (mb_strlen($row['model']) > self::MAX_CODE) {
+            $errors[] = 'Model quá dài (tối đa ' . self::MAX_CODE . ' ký tự)';
         }
 
         if ($row['category'] === '') {
@@ -720,7 +702,7 @@ class ProductImportService
             $sqlState = (string) ($e->errorInfo[0] ?? '');
 
             if ($sqlState === '23000') {
-                return 'Dữ liệu bị trùng (SKU, barcode hoặc đường dẫn) hoặc vi phạm ràng buộc của cơ sở dữ liệu.';
+                return 'Dữ liệu bị trùng (SKU hoặc đường dẫn) hoặc vi phạm ràng buộc của cơ sở dữ liệu.';
             }
 
             if (in_array($sqlState, ['22001', '22003', '22007'], true)) {

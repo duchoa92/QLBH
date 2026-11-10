@@ -3,7 +3,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { closeModal } from '@/Stores/modal'
 import axios from 'axios'
-import { ArrowDownToLine, Check, CheckCheck, CircleFadingArrowUp, Download, FileDown, FileSpreadsheet, Folder, Image, Lightbulb, Sheet, SkipForward, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
+import { ArrowDownToLine, Check, CircleFadingArrowUp, Download, Folder, Image, Lightbulb, Sheet, SkipForward, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import JSZip from 'jszip'
 

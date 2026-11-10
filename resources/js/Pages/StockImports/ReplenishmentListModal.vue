@@ -63,7 +63,7 @@ const stockStatus = product => {
 const filteredProducts = computed(() => {
     const keyword = search.value.trim().toLocaleLowerCase()
     return products.value.filter(product => {
-        const matchesSearch = !keyword || [product.name, product.sku, product.barcode]
+        const matchesSearch = !keyword || [product.name, product.sku, product.model]
             .some(value => String(value || '').toLocaleLowerCase().includes(keyword))
         const matchesCategory = !categoryId.value || String(product.category_id || '') === String(categoryId.value)
         const matchesFilter = stockFilter.value === 'all' || stockStatus(product) === stockFilter.value

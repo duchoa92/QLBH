@@ -9,7 +9,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
  * Dùng cho các export có `extends DefaultValueBinder implements WithCustomValueBinder`.
  *
  * - Chuỗi bắt đầu bằng "=" được ghi là văn bản, không bị Excel hiểu thành công thức.
- * - Cột SKU/Barcode (C, D) của sheet sản phẩm luôn ghi dạng văn bản để không mất số 0
+ * - Cột SKU/Model (C, D) của sheet sản phẩm luôn ghi dạng văn bản để không mất số 0
  *   đầu và không bị hiển thị dạng 8.93E+12.
  */
 trait SafeSpreadsheetValues

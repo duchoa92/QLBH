@@ -1,15 +1,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { router, useForm, usePage } from '@inertiajs/vue3'
-import { HandCoins, Wallet, Users, Truck, X, Eye, ScanLine, History } from 'lucide-vue-next'
+import { router, useForm } from '@inertiajs/vue3'
+import { HandCoins, Wallet, Users, Truck, X, ChevronDown, ScanLine, History } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import SupplierPaymentModal from '@/Pages/Debts/SupplierPaymentModal.vue'
-import CustomerDetailModal from '@/Pages/Customers/CustomerDetailModal.vue'
-import SupplierDetailModal from '@/Pages/Suppliers/SupplierDetailModal.vue'
-import { openModal } from '@/Stores/modal'
+import SaleSearchModal from '@/Components/Search/SaleSearchModal.vue'
+import StockImportDetailModal from '@/Pages/StockImports/StockImportDetailModal.vue'
 import { formatMoney } from '@/utils/format'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
@@ -29,6 +28,10 @@ const props = defineProps({
 })
 
 const isCustomer = computed(() => props.entity === 'customer')
+
+// Xem hóa đơn / phiếu nhập ngay tại trang này, không điều hướng.
+const viewOrderId = ref(null)
+const openOrder = (id) => { if (id) viewOrderId.value = id }
 const title = computed(() => isCustomer.value ? 'Thu công nợ khách hàng' : 'Thanh toán công nợ nhà cung cấp')
 const search = ref(props.filters.search || '')
 const level = ref(props.filters.level || '')
@@ -41,6 +44,7 @@ const levelOptions = [
 ]
 const selected = ref(null)
 const supplierModal = ref(null) // { supplier, orderId }
+const expandedId = ref(null)
 const scanCode = ref('')
 const scanMessage = ref('')
 const error = ref('')
@@ -78,24 +82,6 @@ const pay = (row, order = null) => {
     scanMessage.value = ''
     if (order) form.amount = Number(order.due).toFixed(0)
 }
-// Bấm vào một dòng: mở modal chi tiết (thông tin, đơn còn nợ, lịch sử) ngay ở tab công nợ
-const page = usePage()
-const canPay = computed(() => page.props.auth?.permissions?.includes(isCustomer.value ? 'customer_debts.pay' : 'supplier_debts.pay') ?? false)
-const openDetail = (row) => openModal(isCustomer.value ? CustomerDetailModal : SupplierDetailModal, {
-    props: { recordId: row.id, initialTab: 'debt', canPay: canPay.value, payHandler: order => pay(row, order) },
-})
-const openFromQuery = () => {
-    const url = new URL(window.location.href)
-    const key = isCustomer.value ? 'open_customer' : 'open_supplier'
-    const id = Number(url.searchParams.get(key))
-    if (!id) return
-    url.searchParams.delete(key)
-    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true })
-    const row = rowsData.value.data.find(item => Number(item.id) === id)
-    if (row) openDetail(row)
-    else openModal(isCustomer.value ? CustomerDetailModal : SupplierDetailModal, { props: { recordId: id, initialTab: 'debt' } })
-}
-openFromQuery()
 const partyOrders = computed(() => selected.value ? ordersData.value.filter(order => Number(order.party_id) === Number(selected.value.id)) : [])
 const scanOrder = () => {
     const code = scanCode.value.trim().toLowerCase()
@@ -149,7 +135,8 @@ const submit = () => {
                     <thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500"><th class="px-3.5 py-2.5">{{ isCustomer ? 'Khách Hàng' : 'Nhà Cung Cấp' }}</th><th class="px-3.5 py-2.5">Mã</th><th class="px-3.5 py-2.5">Điện Thoại</th><th class="px-3.5 py-2.5 text-right">Còn Nợ</th><th class="px-2 py-2.5 text-center">Thao Tác</th></tr></thead>
                     <tbody class="divide-y divide-slate-100 text-xs font-medium">
                         <template v-for="row in rowsData.data" :key="row.id">
-                            <tr class="cursor-pointer transition-colors hover:bg-emerald-50/70" @click="openDetail(row)"><td class="px-3.5 py-2.5 font-bold text-slate-900"><HighlightText :text="nameOf(row)" :keyword="search" /></td><td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.code" :text="row.code" :keyword="search" /><template v-else>—</template></td><td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.phone" :text="row.phone" :keyword="search" /><template v-else>—</template></td><td class="px-3.5 py-2.5 text-right text-sm font-black text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-3.5 py-2.5 text-center" @click.stop><div class="inline-flex items-center justify-center gap-1"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="openDetail(row)"><Eye :size="14" />Chi tiết</button><ActionButton @click="pay(row)"><HandCoins :size="15" />{{ isCustomer ? 'Ghi nhận thu' : 'Thanh toán' }}</ActionButton></div></td></tr>
+                            <tr class="transition-colors hover:bg-emerald-50/70"><td class="px-3.5 py-2.5 font-bold text-slate-900"><HighlightText :text="nameOf(row)" :keyword="search" /></td><td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.code" :text="row.code" :keyword="search" /><template v-else>—</template></td><td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.phone" :text="row.phone" :keyword="search" /><template v-else>—</template></td><td class="px-3.5 py-2.5 text-right text-sm font-black text-rose-600">{{ formatMoney(row.debt_balance) }}</td><td class="px-3.5 py-2.5 text-center"><div class="inline-flex items-center justify-center gap-1"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="expandedId = expandedId === row.id ? null : row.id"><ChevronDown :size="14" :class="expandedId === row.id ? 'rotate-180' : ''" />Đơn nợ</button><ActionButton @click="pay(row)"><HandCoins :size="15" />{{ isCustomer ? 'Ghi nhận thu' : 'Thanh toán' }}</ActionButton></div></td></tr>
+                            <tr v-if="expandedId === row.id"><td colspan="5" class="bg-slate-50 px-4 py-3"><div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ isCustomer ? 'hóa đơn' : 'phiếu nhập' }} còn nợ</div><div v-for="order in orders.filter(item => Number(item.party_id) === Number(row.id)).reverse()" :key="order.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div class="min-w-[220px]"><button type="button" class="font-bold text-blue-700 hover:underline" @click="openOrder(order.id)">{{ order.code }}</button><div class="mt-1 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }} · Đã thanh toán {{ formatMoney(order.paid) }}</div></div><div class="flex items-center gap-3"><span class="text-sm font-bold text-rose-600">Còn {{ formatMoney(order.due) }}</span><button type="button" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700" @click="pay(row, order)">Thanh toán đơn này</button></div></div><p v-if="!orders.some(item => Number(item.party_id) === Number(row.id))" class="text-sm text-slate-500">Chưa có hóa đơn/phiếu nhập nợ riêng để đối chiếu. Có thể ghi nhận khoản thanh toán tổng bằng nút phía trên.</p></div></td></tr>
                         </template>
                         <tr v-if="!rowsData.data.length"><td colspan="5" class="px-4 py-12 text-center text-slate-500">{{ search || level ? 'Không tìm thấy kết quả phù hợp.' : 'Hiện không có công nợ.' }}</td></tr>
                     </tbody>
@@ -160,7 +147,7 @@ const submit = () => {
 
         <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="flex items-center gap-2 border-b border-slate-100 p-4"><History :size="18" class="text-blue-600" /><div><h2 class="font-bold text-slate-900">Lịch sử thanh toán gần đây</h2><p class="mt-1 text-xs text-slate-500">Hiển thị tối đa 100 lần thu/chi mới nhất.</p></div></div>
-            <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[760px] border-collapse text-left text-xs"><thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500"><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100 text-xs font-medium"><tr v-for="item in history" :key="item.id" class="transition-colors hover:bg-emerald-50/70"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><a v-if="item.code && item.href" :href="item.href" class="font-semibold text-blue-700 hover:underline">{{ item.code }}</a><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
+            <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[760px] border-collapse text-left text-xs"><thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500"><th class="px-4 py-3">Ngày giờ</th><th class="px-4 py-3">{{ isCustomer ? 'Khách hàng' : 'Nhà cung cấp' }}</th><th class="px-4 py-3">Đơn liên quan</th><th class="px-4 py-3">Hình thức</th><th class="px-4 py-3">Ghi chú</th><th class="px-4 py-3 text-right">Số tiền</th></tr></thead><tbody class="divide-y divide-slate-100 text-xs font-medium"><tr v-for="item in history" :key="item.id" class="transition-colors hover:bg-emerald-50/70"><td class="px-4 py-3 text-slate-600">{{ item.date }}</td><td class="px-4 py-3 font-semibold">{{ item.party || '—' }}</td><td class="px-4 py-3"><button v-if="item.code && item.source_id" type="button" class="font-semibold text-blue-700 hover:underline" @click="openOrder(item.source_id)">{{ item.code }}</button><span v-else class="text-slate-400">{{ item.code || 'Thanh toán tổng' }}</span></td><td class="px-4 py-3 text-slate-600">{{ { cash: 'Tiền mặt', bank: 'Chuyển khoản', card: 'Thẻ' }[item.method] || item.method }}</td><td class="max-w-[220px] truncate px-4 py-3 text-slate-500">{{ item.note || '—' }}</td><td class="px-4 py-3 text-right font-bold text-emerald-700">{{ formatMoney(item.amount) }}</td></tr><tr v-if="!history.length"><td colspan="6" class="px-4 py-8 text-center text-slate-500">Chưa có lịch sử thanh toán.</td></tr></tbody></table></div>
         </div>
 
         <SupplierPaymentModal
@@ -184,5 +171,10 @@ const submit = () => {
                 <div class="flex justify-end gap-2"><button type="button" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold" @click="selected = null">Hủy</button><button type="button" :disabled="form.processing" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="submit">{{ form.processing ? 'Đang lưu…' : 'Xác nhận' }}</button></div>
             </template>
         </BaseModal>
+
+        <template v-if="viewOrderId">
+            <SaleSearchModal v-if="isCustomer" :sale-id="viewOrderId" @close="viewOrderId = null" />
+            <StockImportDetailModal v-else :import-id="viewOrderId" @close="viewOrderId = null" />
+        </template>
     </div>
 </template>

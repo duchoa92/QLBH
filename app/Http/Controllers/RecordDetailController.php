@@ -315,7 +315,7 @@ class RecordDetailController extends Controller
     {
         $r = Product::with(['category:id,name', 'brand:id,name', 'unit:id,name,short_name'])->findOrFail($id);
         return ['Sản phẩm', $r->sku, $this->rows([
-            'Mã sản phẩm' => $r->sku, 'Mã vạch' => $r->barcode, 'Danh mục' => $r->category?->name,
+            'Mã sản phẩm' => $r->sku, 'Model' => $r->model, 'Danh mục' => $r->category?->name,
             'Thương hiệu' => $r->brand?->name, 'Giá nhập' => $this->money($r->cost_price),
             'Giá bán' => $this->money($r->sell_price), 'Tồn kho' => trim(($r->stock ?? 0).' '.($r->unit?->short_name ?: $r->unit?->name)),
             'Trạng thái' => $r->is_active ? 'Đang kinh doanh' : 'Ngừng kinh doanh',

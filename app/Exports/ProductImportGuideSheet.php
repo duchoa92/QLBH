@@ -21,7 +21,7 @@ class ProductImportGuideSheet implements FromArray, WithHeadings, WithTitle, Wit
         return [
             ['Tên sản phẩm', 'Có', 'Tối đa 255 ký tự.'],
             ['SKU', 'Có', 'Mã duy nhất, tối đa 100 ký tự. Không phân biệt hoa/thường và dấu. Không được trùng sản phẩm đang có hoặc sản phẩm trong thùng rác.'],
-            ['Barcode', 'Không', 'Duy nhất nếu có, tối đa 100 ký tự.'],
+            ['Model', 'Không', 'Model/mã hiệu sản phẩm (không cần duy nhất), tối đa 100 ký tự.'],
             ['Danh mục', 'Có', 'Nên chọn đúng tên trong sheet "Danh mục". Tên chưa có sẽ được TẠO MỚI (xem cảnh báo ở bước kiểm tra).'],
             ['Thương hiệu', 'Không', 'Tên chưa có sẽ được tạo mới.'],
             ['Giá bán', 'Có', 'Số từ 0 trở lên. Ví dụ 650000 hoặc 650.000 (dấu chấm là phân cách hàng nghìn).'],

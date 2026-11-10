@@ -1,5 +1,7 @@
 <script setup>
+import { ref } from 'vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import SaleSearchModal from '@/Components/Search/SaleSearchModal.vue'
 import { formatCurrency } from '@/utils/format'
 
 defineProps({
@@ -16,6 +18,9 @@ const emit = defineEmits([
 ])
 
 const formatMoney = formatCurrency
+
+// Xem hóa đơn ngay trong POS, không điều hướng sang trang khác.
+const viewSaleId = ref(null)
 </script>
 
 <template>
@@ -69,14 +74,14 @@ const formatMoney = formatCurrency
                                     {{ debt.note }}
                                 </div>
 
-                                <a
-                                    v-if="debt.source_code"
-                                    :href="`/sales/${debt.sale_id}`"
-                                    target="_blank"
+                                <button
+                                    v-if="debt.source_code && debt.sale_id"
+                                    type="button"
                                     class="text-xs text-blue-600 hover:underline"
+                                    @click="viewSaleId = debt.sale_id"
                                 >
                                     HĐ: {{ debt.source_code }}
-                                </a>
+                                </button>
 
                             </td>
 
@@ -117,5 +122,7 @@ const formatMoney = formatCurrency
             </div>
         </template>
     </BaseModal>
+
+    <SaleSearchModal v-if="viewSaleId" :sale-id="viewSaleId" @close="viewSaleId = null" />
 
 </template>

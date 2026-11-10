@@ -30,7 +30,7 @@ class ProductApiController extends Controller
             ])
 
             ->where(
-                'barcode',
+                'model',
                 $barcode
             )
 
@@ -95,7 +95,7 @@ class ProductApiController extends Controller
 
             'sku' => $product->sku,
 
-            'barcode' => $product->barcode,
+            'model' => $product->model,
 
             'sell_price' => $imei && $imei->sell_price > 0
                 ? $imei->sell_price

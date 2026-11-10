@@ -66,7 +66,7 @@ class DebtPaymentController extends Controller
                     'id' => $sale->id, 'code' => $sale->code, 'party_id' => $sale->customer_id,
                     'party_name' => $sale->customer?->full_name, 'date' => $sale->created_at?->format('d/m/Y H:i'),
                     'total' => (float) $sale->grand_total, 'paid' => (float) $sale->paid_amount,
-                    'due' => max(0, (float) $sale->grand_total - (float) $sale->paid_amount), 'href' => route('sales.show', $sale),
+                    'due' => max(0, (float) $sale->grand_total - (float) $sale->paid_amount), 'href' => route('sales.index', ['open_sale' => $sale->id], false),
                 ])->values()
             : StockImport::query()->with('supplier:id,name,code,phone')->whereIn('supplier_id', $partyIds)
                 ->whereRaw('grand_total > paid_amount')->orderBy('import_date')->get()
@@ -79,9 +79,9 @@ class DebtPaymentController extends Controller
 
         $history = $isCustomer
             ? CustomerDebt::query()->with('customer:id,full_name,code')->where('type', 'decrease')->whereNotNull('payment_method')->latest()->limit(100)->get()
-                ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof Sale ? route('sales.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
+                ->map(fn (CustomerDebt $payment) => ['id' => $payment->id, 'party' => $payment->customer?->full_name, 'code' => $payment->source?->code, 'source_id' => $payment->source instanceof Sale ? $payment->source->id : null, 'href' => $payment->source instanceof Sale ? route('sales.index', ['open_sale' => $payment->source->id], false) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')])
             : SupplierDebt::query()->with('supplier:id,name,code')->where('type', 'decrease')->latest()->limit(100)->get()
-                ->map(fn (SupplierDebt $payment) => ['id' => $payment->id, 'party_id' => $payment->supplier_id, 'party' => $payment->supplier?->name, 'code' => $payment->source?->code, 'href' => $payment->source instanceof StockImport ? route('stock.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')]);
+                ->map(fn (SupplierDebt $payment) => ['id' => $payment->id, 'party_id' => $payment->supplier_id, 'party' => $payment->supplier?->name, 'code' => $payment->source?->code, 'source_id' => $payment->source instanceof StockImport ? $payment->source->id : null, 'href' => $payment->source instanceof StockImport ? route('stock.show', $payment->source) : null, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method, 'note' => $payment->note, 'date' => $payment->created_at?->format('d/m/Y H:i')]);
 
         return Inertia::render('Debts/Index', [
             'entity' => $entity,

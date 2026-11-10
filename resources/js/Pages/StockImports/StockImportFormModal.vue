@@ -33,7 +33,6 @@ import {
     Plus,
     Pencil,
     Trash2,
-    LoaderCircle,
 } from 'lucide-vue-next'
 
 const props = defineProps({

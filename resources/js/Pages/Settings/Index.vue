@@ -11,6 +11,8 @@ import { openModal as openGlobalModal, registerUrlModal } from '@/Stores/modal'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import LabelTemplateEditor from './LabelTemplateEditor.vue'
+import { mergeLabelTemplate } from '@/utils/printLabels'
 import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
@@ -217,6 +219,7 @@ const form = useForm({
     print_shop_subtitle: props.settings.print_shop_subtitle || '',
     print_shop_address: props.settings.print_shop_address || '',
     print_shop_phone: props.settings.print_shop_phone || '',
+    label_template: mergeLabelTemplate(props.settings.label_template),
     purchase_contract_title: props.settings.purchase_contract_title || 'Hợp đồng mua bán điện thoại',
     purchase_contract_content: props.settings.purchase_contract_content || '',
     bank_bin: props.settings.bank_bin || '',
@@ -661,6 +664,15 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                         <FloatingSelect v-model="form.print_paper_size" name="print_paper_size" label="Khổ giấy" :options="printPaperOptions" />
                         <FloatingSelect v-model="form.print_orientation" name="print_orientation" label="Hướng giấy" :options="printOrientationOptions" />
                     </div>
+                </DataPanel>
+                <DataPanel v-if="activeModal === 'printing'">
+                    <template #header>
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Mẫu in tem sản phẩm</h2>
+                            <p class="mt-0.5 text-xs font-medium text-slate-500">Chỉnh khổ tem, nội dung và cỡ chữ; bản xem trước hiển thị đúng kích thước thật.</p>
+                        </div>
+                    </template>
+                    <LabelTemplateEditor v-model="form.label_template" :shop-name="form.shop_name" :errors="form.errors" />
                 </DataPanel>
                 <DataPanel v-if="activeModal === 'printing'">
                     <template #header>

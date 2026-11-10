@@ -1,6 +1,5 @@
 <script setup>
 import { formatCurrency, formatDate as formatConfiguredDate } from '@/utils/format'
-import { imageUrl } from '@/utils/imageUrl'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import StockImportFormModal from './StockImportFormModal.vue'
@@ -35,8 +34,6 @@ import {
     Truck,
     ClipboardList,
     Printer,
-    SlidersHorizontal,
-    RotateCcw,
     XCircle,
     Pencil,
     CheckCircle2,
@@ -46,7 +43,6 @@ import {
     UserRound,
     Wallet,
     X,
-    LoaderCircle,
     ArrowUp,
     ArrowDown,
     ArrowUpDown,
@@ -167,7 +163,6 @@ const partyTypeFilter = ref(props.filters.party_type || '')
 const statusFilter = ref(props.filters.status || '')
 const dateFrom = ref(props.filters.date_from || '')
 const dateTo = ref(props.filters.date_to || '')
-const showFilters = ref(Boolean(props.filters.party_type || props.filters.status || props.filters.date_from || props.filters.date_to))
 
 const loadingImports = ref(false)
 let searchTimer = null
@@ -350,20 +345,6 @@ const variantLabel = (variant) => {
         variant.sku ||
         '-'
 }
-
-const hasExtraInfo = (imei) => {
-    const extraInfo = imei?.extra_info || {}
-
-    return Boolean(
-        extraInfo.note ||
-        extraInfo.account ||
-        extraInfo.password ||
-        extraInfo.image_path
-    )
-}
-
-const extraInfoImageUrl = (imei) =>
-    imageUrl(imei?.extra_info?.image_path)
 
 
 /*

@@ -38,11 +38,11 @@ class GlobalSearchController extends Controller
         if ($user->can('products.view')) {
             $results = $results->concat($this->search(
                 Product::query()->with(['category:id,name', 'brand:id,name']),
-                $tokens, ['name', 'sku', 'barcode', 'search_text'],
+                $tokens, ['name', 'sku', 'model', 'search_text'],
                 ['imeis' => ['imei', 'serial']], 5,
-                fn (Product $p) => [$p->name, $p->sku, $p->barcode, $p->brand?->name, $p->category?->name],
+                fn (Product $p) => [$p->name, $p->sku, $p->model, $p->brand?->name, $p->category?->name],
                 fn (Product $p) => $this->result('Sản phẩm', 'product', $p->id, $p->name,
-                    collect([$p->sku, $p->barcode, $p->brand?->name])->filter()->join(' · '),
+                    collect([$p->sku, $p->model, $p->brand?->name])->filter()->join(' · '),
                     route('products.index', ['open_product' => $p->id], false), ['name' => $p->name]),
             ));
 

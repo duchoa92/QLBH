@@ -791,7 +791,7 @@ onMounted(() => {
                     </div>
                 </section>
 
-                <ListToolbar v-model="inventoryFilters.search" placeholder="Tìm sản phẩm theo tên, SKU hoặc barcode...">
+                <ListToolbar v-model="inventoryFilters.search" placeholder="Tìm sản phẩm theo tên, SKU hoặc model...">
                     <template #search-end><BarcodeCameraButton class="absolute right-8 top-1/2 z-10 -translate-y-1/2" @scanned="(code) => inventoryFilters.search = code" /></template>
                     <template #filters>
                         <ListFilterSelect v-model="inventoryFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />

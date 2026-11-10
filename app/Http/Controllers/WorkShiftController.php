@@ -22,11 +22,7 @@ class WorkShiftController extends Controller
 
     public function current(): JsonResponse
     {
-        $shift = WorkShift::query()
-            ->where('user_id', auth()->id())
-            ->whereNull('closed_at')
-            ->latest('opened_at')
-            ->first();
+        $shift = WorkShift::currentFor(auth()->id());
 
         return response()->json([
             'shift' => $shift ? $this->summary($shift) : null,
@@ -122,10 +118,7 @@ class WorkShiftController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $cashCollected = (float) $shift->sales()
-                ->where('status', '!=', 'cancelled')
-                ->selectRaw('COALESCE(SUM(CASE WHEN cash_received_amount > change_amount THEN cash_received_amount - change_amount ELSE 0 END), 0) as total')
-                ->value('total');
+            $cashCollected = $this->cashCollectedFor($shift);
             $customerDebt = $this->customerDebtFor($shift);
 
             $shift->update([
@@ -155,7 +148,7 @@ class WorkShiftController extends Controller
             $expectedBankBalances[$key] = (float) ($expectedBankBalances[$key] ?? 0) + $amount;
         }
         $cashCollected = $shift->cash_collected === null
-            ? (float) (clone $sales)->selectRaw('COALESCE(SUM(CASE WHEN cash_received_amount > change_amount THEN cash_received_amount - change_amount ELSE 0 END), 0) as total')->value('total')
+            ? $this->cashCollectedFor($shift)
             : (float) $shift->cash_collected;
         $expectedCash = $shift->expected_cash === null
             ? (float) $shift->opening_amount + $cashCollected
@@ -183,6 +176,7 @@ class WorkShiftController extends Controller
             'opened_at' => $shift->opened_at?->format('d/m/Y H:i'),
             'closed_at' => $shift->closed_at?->format('d/m/Y H:i'),
             'sale_count' => (int) (clone $sales)->count(),
+            'repair_count' => (int) $this->returnedRepairs($shift)->count(),
         ];
     }
 
@@ -200,9 +194,14 @@ class WorkShiftController extends Controller
             ->orderBy('created_at')
             ->get(['id', 'code', 'bank_account', 'bank_received_amount', 'created_at']);
 
-        $sales = $bankSales->map(function ($sale) use ($accounts, &$byAccount): array {
-            $account = collect($accounts)->first(fn (array $item): bool => (string) ($item['bank_account'] ?? '') === (string) ($sale->bank_account ?? ''));
-            $key = $account['key'] ?? ($sale->bank_account ?: 'unassigned');
+        $accountKeyFor = function (?string $bankAccount) use ($accounts): array {
+            $account = collect($accounts)->first(fn (array $item): bool => (string) ($item['bank_account'] ?? '') === (string) ($bankAccount ?? ''));
+
+            return [$account, $account['key'] ?? ($bankAccount ?: 'unassigned')];
+        };
+
+        $sales = $bankSales->map(function ($sale) use ($accountKeyFor, &$byAccount): array {
+            [$account, $key] = $accountKeyFor($sale->bank_account);
             $amount = (float) $sale->bank_received_amount;
             $byAccount[$key] = (float) ($byAccount[$key] ?? 0) + $amount;
 
@@ -215,6 +214,31 @@ class WorkShiftController extends Controller
                 'created_at' => $sale->created_at?->format('d/m/Y H:i'),
             ];
         })->values()->all();
+
+        // Phiếu sửa thu bằng chuyển khoản/thẻ. Phiếu chưa chọn tài khoản nhận: nếu cửa hàng chỉ có
+        // một tài khoản thì tính vào tài khoản đó, ngược lại để "chưa xác định".
+        $singleAccountKey = count($accounts) === 1 ? $accounts[0]['key'] : null;
+        $repairPayments = $this->returnedRepairs($shift)
+            ->whereIn('payment_method', ['bank', 'card'])
+            ->whereColumn('paid_amount', '>', 'change_amount')
+            ->orderBy('returned_at')
+            ->get(['id', 'code', 'paid_amount', 'change_amount', 'returned_at'])
+            ->map(function ($repair) use ($singleAccountKey, $accounts, &$byAccount): array {
+                $key = $singleAccountKey ?? 'unassigned';
+                $amount = (float) $repair->paid_amount - (float) $repair->change_amount;
+                $byAccount[$key] = (float) ($byAccount[$key] ?? 0) + $amount;
+                $account = collect($accounts)->first(fn (array $item): bool => $item['key'] === $key);
+
+                return [
+                    'id' => 'repair-' . $repair->id,
+                    'code' => $repair->code,
+                    'bank_account' => $account['bank_account'] ?? null,
+                    'bank_name' => $account['bank_name'] ?? null,
+                    'amount' => $amount,
+                    'created_at' => $repair->returned_at?->format('d/m/Y H:i'),
+                ];
+            })->values()->all();
+        $sales = array_merge($sales, $repairPayments);
 
         return ['by_account' => $byAccount, 'sales' => $sales];
     }
@@ -258,13 +282,40 @@ class WorkShiftController extends Controller
         return $total;
     }
 
+    /** Phiếu sửa đã trả khách và thu tiền trong ca. */
+    private function returnedRepairs(WorkShift $shift)
+    {
+        return $shift->repairs()->where('status', 'returned');
+    }
+
+    /** Tiền mặt thực thu trong ca: đơn bán hàng + phiếu sửa thu tiền mặt (đã trừ tiền thối). */
+    private function cashCollectedFor(WorkShift $shift): float
+    {
+        $sales = (float) $shift->sales()
+            ->where('status', '!=', 'cancelled')
+            ->selectRaw('COALESCE(SUM(CASE WHEN cash_received_amount > change_amount THEN cash_received_amount - change_amount ELSE 0 END), 0) as total')
+            ->value('total');
+        $repairs = (float) $this->returnedRepairs($shift)
+            ->where('payment_method', 'cash')
+            ->selectRaw('COALESCE(SUM(CASE WHEN paid_amount > change_amount THEN paid_amount - change_amount ELSE 0 END), 0) as total')
+            ->value('total');
+
+        return $sales + $repairs;
+    }
+
     private function customerDebtFor(WorkShift $shift): float
     {
-        return (float) $shift->sales()
+        $sales = (float) $shift->sales()
             ->where('status', '!=', 'cancelled')
             ->whereNotNull('customer_id')
             ->selectRaw('COALESCE(SUM(CASE WHEN grand_total > paid_amount THEN grand_total - paid_amount ELSE 0 END), 0) as total')
             ->value('total');
+        $repairs = (float) $this->returnedRepairs($shift)
+            ->whereNotNull('customer_id')
+            ->selectRaw('COALESCE(SUM(CASE WHEN final_cost > paid_amount THEN final_cost - paid_amount ELSE 0 END), 0) as total')
+            ->value('total');
+
+        return $sales + $repairs;
     }
 }
 

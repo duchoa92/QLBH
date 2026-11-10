@@ -24,7 +24,7 @@ class Product extends Model
         'name',
         'slug',
         'sku',
-        'barcode',
+        'model',
         'image',
         'cost_price',
         'sell_price',
@@ -158,7 +158,7 @@ class Product extends Model
         ) {
 
             $sub
-                ->where('barcode', $keyword)
+                ->where('model', $keyword)
 
                 ->orWhere(
                     'sku',

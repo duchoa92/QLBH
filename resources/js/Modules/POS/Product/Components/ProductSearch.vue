@@ -381,7 +381,7 @@ const categoryOptions = computed(() => [
                         v-model="keyword"
                         @keyup.enter="scanImei"
                         type="text"
-                        label="Tìm tên, SKU, barcode hoặc IMEI"
+                        label="Tìm tên, SKU, model hoặc IMEI"
                         input-class="pr-12"
                     />
                     <BarcodeCameraButton class="absolute right-2 top-1/2 z-10 -translate-y-1/2 " @scanned="onCameraScan" />

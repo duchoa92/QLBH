@@ -6,6 +6,8 @@ import { toast } from 'vue-sonner'
 import RepairDetailModal from '@/Pages/Repairs/RepairDetailModal.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import { fetchPageProps } from '@/utils/inertiaFetch'
+import { useRepairAccess, fetchRepairCredentials } from '@/Composables/useRepairAccess'
+import { REPAIR_STATUS_CLASSES, REPAIR_STATUS_LABELS } from '@/utils/repairStatus'
 
 defineOptions({ inheritAttrs: false })
 
@@ -16,42 +18,17 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const page = usePage()
-const permissions = computed(() => page.props.auth?.permissions || [])
-const can = (permission) => permissions.value.includes(permission)
-const isSuperAdmin = computed(() => (page.props.auth?.roles || []).includes('Super Admin'))
-const canViewCredentials = computed(() => can('repairs.create') || can('repairs.edit') || can('repairs.complete'))
-const canProgress = (repair) => {
-    if (repair.status === 'done') return can('repairs.return')
-    if (repair.status === 'repairing') return can('repairs.complete') || can('repairs.edit')
-    return can('repairs.edit')
-}
+const { can, isSuperAdmin, canViewCredentials, progressLabel: progressLabelFor, removeRepair } = useRepairAccess()
 
-const statusClasses = {
-    pending: 'bg-amber-50 text-amber-700 border-amber-200',
-    repairing: 'bg-purple-50 text-purple-700 border-purple-200',
-    done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    returned: 'bg-slate-100 text-slate-600 border-slate-200',
-    cancelled: 'bg-rose-50 text-rose-700 border-rose-200',
-}
-const statusLabels = {
-    pending: 'Tiếp nhận',
-    repairing: 'Đang sửa',
-    done: 'Hoàn tất sửa',
-    returned: 'Đã trả khách',
-    cancelled: 'Hủy',
-}
+const statusClasses = REPAIR_STATUS_CLASSES
+const statusLabels = REPAIR_STATUS_LABELS
 
 const repair = ref(null)
 const credentials = ref(null)
 const loading = ref(true)
 const printPreviewUrl = ref('')
 
-const progressLabel = computed(() => {
-    const r = repair.value
-    if (!r || !['pending', 'repairing', 'done'].includes(r.status) || !canProgress(r)) return ''
-    if (r.status === 'done') return 'Thanh toán / trả máy'
-    return r.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa'
-})
+const progressLabel = computed(() => progressLabelFor(repair.value))
 
 onMounted(async () => {
     try {
@@ -66,17 +43,11 @@ onMounted(async () => {
         loading.value = false
     }
 
-    if (canViewCredentials.value) {
-        try {
-            const { data } = await window.axios.get(route('repairs.credentials', repair.value.id))
-            credentials.value = data
-        } catch {
-            toast.error('Không tải được thông tin bảo mật của phiếu.')
-        }
-    }
+    if (canViewCredentials.value) credentials.value = await fetchRepairCredentials(repair.value.id)
 })
 
-// Các thao tác cần biểu mẫu/luồng riêng của trang Sửa chữa: chuyển sang trang đó đúng phiếu này.
+// Sửa/tiến độ cần form và thanh toán nằm ở trang Sửa chữa (modal global chỉ hiện một cửa sổ một lúc,
+// nên không giữ được luồng thanh toán): chuyển sang trang đó đúng phiếu này.
 const openInRepairPage = () => {
     emit('close')
     router.visit(route('repairs.index', { open_repair: repair.value.id }))
@@ -101,7 +72,7 @@ const openInRepairPage = () => {
         :status-classes="statusClasses"
         @close="emit('close')"
         @print="printPreviewUrl = route('repairs.print', repair.id)"
-        @delete="openInRepairPage"
+        @delete="removeRepair(repair, () => emit('close'))"
         @edit="openInRepairPage"
         @progress="openInRepairPage"
     />

@@ -156,7 +156,7 @@ class EntityLookupService
             ->where('name', 'like', self::likeOf($t))
             ->orWhere('search_text', 'like', self::likeOf(self::normalized($t)))
             ->orWhere('sku', 'like', self::likeOf($t))
-            ->orWhere('barcode', 'like', self::likeOf($t))
+            ->orWhere('model', 'like', self::likeOf($t))
             ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', self::likeOf($t))
                 ->orWhere('barcode', 'like', self::likeOf($t))
                 ->orWhere('attributes', 'like', self::likeOf($t))));
@@ -362,7 +362,7 @@ class EntityLookupService
             ])->values();
 
         return $this->entity('product', 'Sản phẩm', $product->name, $product->sku, [
-            ['label' => 'Mã vạch', 'value' => $product->barcode],
+            ['label' => 'Model', 'value' => $product->model],
             ['label' => 'Danh mục', 'value' => $product->category?->name],
             ['label' => 'Thương hiệu', 'value' => $product->brand?->name],
             ['label' => 'Đơn vị', 'value' => $product->unit?->name],
@@ -519,7 +519,7 @@ class EntityLookupService
             $this->money($p->sell_price),
         ]), 'Sản phẩm', 'indigo', $keyword, [
             'Tên sản phẩm' => [$p->name],
-            'SKU / Mã vạch' => [$p->sku, $p->barcode],
+            'SKU / Model' => [$p->sku, $p->model],
             'Thương hiệu' => [$p->brand?->name],
         ]);
     }

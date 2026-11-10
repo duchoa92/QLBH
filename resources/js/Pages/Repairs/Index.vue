@@ -10,13 +10,14 @@ import ActionButton from '@/Components/UI/ActionButton.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
 import RepairDetailModal from './RepairDetailModal.vue';
-import { useConfirm } from '@/Composables/useConfirm';
+import { useRepairAccess, fetchRepairCredentials } from '@/Composables/useRepairAccess';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
 import api from '@/Services/api';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
 import { FileText, Plus, UserRound, Smartphone, Wrench, RotateCcw, Play } from 'lucide-vue-next';
+import { REPAIR_STATUS_CLASSES, REPAIR_STATUS_LABELS } from '@/utils/repairStatus';
 
 const props = defineProps({
     repairs: Object,
@@ -29,16 +30,7 @@ const perPage = ref(Number(props.filters?.per_page ?? 20));
 const currentPage = ref(Number(props.repairs?.current_page ?? 1));
 const loadingRepairs = ref(false);
 const page = usePage();
-const permissions = computed(() => page.props.auth?.permissions || []);
-const can = (permission) => permissions.value.includes(permission);
-const confirmBox = useConfirm();
-const isSuperAdmin = computed(() => (page.props.auth?.roles || []).includes('Super Admin'));
-const canViewCredentials = computed(() => can('repairs.create') || can('repairs.edit') || can('repairs.complete'));
-const canProgress = (repair) => {
-    if (repair.status === 'done') return can('repairs.return');
-    if (repair.status === 'repairing') return can('repairs.complete') || can('repairs.edit');
-    return can('repairs.edit');
-};
+const { can, canViewCredentials, canProgress, progressLabel, removeRepair: removeRepairWithConfirm } = useRepairAccess();
 
 // Giữ nguyên dữ liệu lọc không bị reset
 const search = ref(props.filters?.search ?? '');
@@ -198,13 +190,9 @@ const loadDetailCredentials = async (repair) => {
     const requestId = ++detailCredentialRequest;
     detailCredentials.value = null;
     if (!canViewCredentials.value || !repair?.id) return;
-    try {
-        const { data } = await axios.get(route('repairs.credentials', repair.id));
-        if (requestId !== detailCredentialRequest || Number(detailRepair.value?.id) !== Number(repair.id)) return;
-        detailCredentials.value = data;
-    } catch {
-        if (requestId === detailCredentialRequest && Number(detailRepair.value?.id) === Number(repair.id)) toast.error('Không tải được thông tin bảo mật của phiếu.');
-    }
+    const isCurrent = () => requestId === detailCredentialRequest && Number(detailRepair.value?.id) === Number(repair.id);
+    const data = await fetchRepairCredentials(repair.id, isCurrent);
+    if (data && isCurrent()) detailCredentials.value = data;
 };
 
 const closeRepairDetail = () => {
@@ -260,36 +248,12 @@ const onProgressPayment = async (repair) => {
     requestRepairs(currentPage.value);
 };
 
-const removeRepair = (repair) => {
-    if (!isSuperAdmin.value || !repair?.id) return;
-    const notes = [];
-    if (repair.parts?.length) notes.push('linh kiện đã dùng sẽ được hoàn lại kho');
-    if (['done', 'returned'].includes(repair.status)) notes.push('công nợ phát sinh từ phiếu (nếu có) sẽ được đảo lại');
-    confirmBox.show({
-        title: 'Xóa phiếu sửa chữa',
-        message: `Xóa phiếu ${repair.code} (${repair.device_name})?` + (notes.length ? ` Khi xóa, ${notes.join(' và ')}.` : '') + ' Thao tác này không thể hoàn tác trên giao diện.',
-        confirmText: 'Xóa phiếu',
-        cancelText: 'Hủy',
-        onConfirm: () => new Promise((resolve, reject) => {
-            router.delete(route('repairs.destroy', repair.id), {
-                preserveScroll: true,
-                onSuccess: () => {
-                    toast.success('Đã xóa phiếu sửa chữa');
-                    closeRepairDetail();
-                    requestRepairs(currentPage.value).then(resolve).catch(reject);
-                },
-                onError: (errors) => reject(new Error(Object.values(errors || {}).flat()[0] || 'Không thể xóa phiếu sửa chữa.')),
-            });
-        }),
-    });
-};
-
-const detailProgressLabel = computed(() => {
-    const repair = detailRepair.value;
-    if (!repair || !['pending', 'repairing', 'done'].includes(repair.status) || !canProgress(repair)) return '';
-    if (repair.status === 'done') return 'Thanh toán / trả máy';
-    return repair.status === 'pending' ? 'Chuyển sang bước sửa' : 'Cập nhật sửa chữa';
+const removeRepair = (repair) => removeRepairWithConfirm(repair, () => {
+    closeRepairDetail();
+    return requestRepairs(currentPage.value);
 });
+
+const detailProgressLabel = computed(() => progressLabel(detailRepair.value));
 
 const toggleSort = (field) => {
     if (sortBy.value === field) {
@@ -341,21 +305,8 @@ const highlightedSearchSegments = (value) => {
     ].filter((segment) => segment.text);
 };
 
-const statusClasses = {
-    pending: 'bg-amber-50 text-amber-700 border-amber-200',
-    repairing: 'bg-purple-50 text-purple-700 border-purple-200',
-    done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    returned: 'bg-slate-100 text-slate-600 border-slate-200',
-    cancelled: 'bg-rose-50 text-rose-700 border-rose-200',
-};
-
-const statusLabels = {
-    pending: 'Tiếp nhận',
-    repairing: 'Đang sửa',
-    done: 'Hoàn tất sửa',
-    returned: 'Đã trả khách',
-    cancelled: 'Hủy',
-};
+const statusClasses = REPAIR_STATUS_CLASSES;
+const statusLabels = REPAIR_STATUS_LABELS;
 const repairStatusLabel = (repair) => {
     if (repair?.status === 'repairing' && repair.waiting_for_parts) {
         return repair.waiting_mode === 'wait_repair' ? 'Tạm chờ sửa' : 'Chờ linh kiện';

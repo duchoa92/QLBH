@@ -7,6 +7,9 @@ import {
 } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { openModal } from '@/Stores/modal'
+import { canPrintLabels } from '@/utils/printLabels'
+import PrintLabelsModal from './PrintLabelsModal.vue'
 
 const props = defineProps({
     productId: { type: [Number, String], required: true },
@@ -196,7 +199,8 @@ const handleCopy = async (text) => {
     setTimeout(() => { if (copiedImei.value === text) copiedImei.value = null }, 2000)
 }
 
-const printBarcode = () => window.open(`/products/print?ids=${props.productId}`, '_blank')
+const canPrint = computed(() => canPrintLabels(product.value))
+const printBarcode = () => openModal(PrintLabelsModal, { props: { products: [product.value] } })
 const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image_url || null))
 </script>
 
@@ -493,8 +497,9 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
             <div class="flex flex-wrap items-center justify-end gap-2.5">
                 <button
                     type="button"
-                    :disabled="!product"
-                    class="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    :disabled="!product || !canPrint"
+                    :title="product && !canPrint ? 'Không có mã để in tem' : ''"
+                    class="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     @click="printBarcode"
                 >
                     <Printer class="h-4 w-4 text-slate-500" /> In mã vạch

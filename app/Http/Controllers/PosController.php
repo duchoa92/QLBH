@@ -83,7 +83,7 @@ class PosController extends Controller
         ]);
 
         $openingCountEnabled = filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN);
-        $shift = WorkShift::query()->where('user_id', $request->user()->id)->whereNull('closed_at')->latest('opened_at')->first();
+        $shift = WorkShift::currentFor($request->user()->id);
         abort_if($openingCountEnabled && ! $shift, 422, 'Vui lòng mở ca làm trước khi nhận thanh toán.');
         $exists = BankPaymentIntent::query()->where('invoice_code', $data['invoice_code'])->exists();
         abort_if($exists || Sale::query()->where('code', $data['invoice_code'])->exists(), 422, 'Mã hóa đơn đã được sử dụng.');
@@ -223,11 +223,7 @@ class PosController extends Controller
     )
     {
         $openingCountEnabled = filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN);
-        $workShift = WorkShift::query()
-            ->where('user_id', auth()->id())
-            ->whereNull('closed_at')
-            ->latest('opened_at')
-            ->first();
+        $workShift = WorkShift::currentFor(auth()->id());
 
         if ($openingCountEnabled && ! $workShift) {
             return response()->json(['success' => false, 'message' => 'Vui lòng mở ca làm trước khi bán hàng.'], 422);

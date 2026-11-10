@@ -106,7 +106,7 @@ class ProductsTemplateSheet extends DefaultValueBinder implements FromArray, Wit
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
 
-                /* ===== 5. SKU / BARCODE LÀ VĂN BẢN (giữ số 0 đầu) ===== */
+                /* ===== 5. SKU / MODEL LÀ VĂN BẢN (giữ số 0 đầu) ===== */
                 $sheet->getStyle('C2:D5000')->getNumberFormat()->setFormatCode('@');
 
                 /* ===== 6. DANH SÁCH CHỌN CHO CỘT LOẠI / CÓ IMEI / TRẠNG THÁI ===== */

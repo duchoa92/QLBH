@@ -14,11 +14,9 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ProductsTemplateExport;
-use App\Exports\ProductsDataExport;
 use App\Services\ProductImportService;
 use Illuminate\Support\Facades\Storage;
 use App\Jobs\ExportProductsJob;
-use Illuminate\Support\Str;
 use App\Exports\ImportErrorExport;
 use App\Models\ProductVariant;
 use App\Models\StockImportItem;
@@ -470,81 +468,6 @@ class ProductController extends Controller
         return back()->with('success', 'Đã chuyển các sản phẩm vào thùng rác');
     }
 
-    // In tem
-    public function printImei(Request $request)
-    {
-        $ids = $request->get('ids', []);
-
-        $products = Product::whereIn('id', $ids)->get();
-
-        return Inertia::render('Products/PrintImei', [
-            'products' => $products
-        ]);
-    }
-
-    public function printData(Request $request)
-    {
-        $ids = $request->get('ids', []);
-
-        $products = Product::with([
-            'category',
-            'brand',
-            'variants',
-            'imeis',
-        ])->whereIn('id', $ids)->get();
-
-        return response()->json($products);
-    }
-
-    // Tạo API Scan
-    public function scan(Request $request)
-    {
-        $code = $request->get('code');
-
-        // 1. tìm theo IMEI
-        $imei = \App\Models\ProductImei::with('variant.product')
-            ->where('imei', $code)
-            ->first();
-
-        if ($imei) {
-            return response()->json([
-                'type' => 'imei',
-                'product' => $imei->variant->product,
-                'variant' => $imei->variant
-            ]);
-        }
-
-        // 2. tìm theo barcode variant
-        $variant = \App\Models\ProductVariant::with('product')
-            ->where('barcode', $code)
-            ->where('is_active', true)
-            ->first();
-
-        if ($variant) {
-            return response()->json([
-                'type' => 'variant',
-                'product' => $variant->product,
-                'variant' => $variant
-            ]);
-        }
-
-        // 3. fallback product
-        $product = \App\Models\Product::where('barcode', $code)->first();
-
-        if ($product) {
-            return response()->json([
-                'type' => 'product',
-                'product' => $product
-            ]);
-        }
-
-        return response()->json([
-            'error' => 'Không tìm thấy'
-        ], 404);
-
-
-    }
-
 /*================ Nhập xuất file excel ================================ */
 
     /** Quy tắc kiểm tra file tải lên của bước kiểm tra và bước nhập. */
@@ -744,24 +667,6 @@ class ProductController extends Controller
     }
 
 
-    public function getProductApi($id)
-    {
-        $product = Product::with([
-            'unit:id,name,short_name',
-            'conversionUnit:id,name,short_name',
-            'variants' => fn ($query) => $query->where('is_active', true),
-        ])->find($id);
-
-        if (!$product) {
-            return response()->json([
-                'message' => 'Không tìm thấy sản phẩm'
-            ], 404);
-        }
-
-        return response()->json($product);
-    }
-
-
     // API lấy product + variant
     public function listForImport(Request $request)
     {
@@ -861,33 +766,5 @@ class ProductController extends Controller
             $products
         );
     }
-
-    // API SEARCH
-    public function search(Request $request)
-    {
-        $keyword = $request->q;
-
-        return Product::with([
-            'variants' => fn ($query) => $query->where('is_active', true),
-        ])
-            ->where('name', 'like', "%$keyword%")
-            ->orWhere('sku', 'like', "%$keyword%")
-            ->limit(10)
-            ->get()
-            ->flatMap(function ($p) {
-                return $p->variants->map(function ($v) use ($p) {
-                    return [
-                        'product_id' => $p->id,
-                        'variant_id' => $v->id,
-                        'name' => $p->name,
-                        'sku' => $v->sku,
-                        'attributes' => $v->attributes,
-                        'price' => $v->cost_price,
-                        'image' => $p->image_url,
-                    ];
-                });
-            });
-    }
-
 
 }

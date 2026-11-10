@@ -10,7 +10,7 @@ class ProductImportColumns
         'STT',
         'Tên sản phẩm*',
         'SKU*',
-        'Barcode',
+        'Model',
         'Danh mục*',
         'Thương hiệu',
         'Giá bán*',
@@ -35,7 +35,7 @@ class ProductImportColumns
     private const ALIASES = [
         'name' => ['ten san pham', 'ten hang hoa', 'name', 'product name'],
         'sku' => ['sku', 'ma sku', 'ma san pham'],
-        'barcode' => ['barcode', 'ma vach'],
+        'model' => ['model', 'ma model', 'barcode', 'ma vach'],
         'category' => ['danh muc', 'category'],
         'brand' => ['thuong hieu', 'brand', 'hang'],
         'sell_price' => ['gia ban', 'sell price', 'price'],

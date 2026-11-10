@@ -19,7 +19,7 @@ export const findProductByScannedCode = async (rawCode) => {
     if (variantMatches.length > 1) return null
 
     const productMatches = products.filter(product =>
-        [product.barcode, product.sku].some(value => normalizeCode(value) === normalizedCode)
+        [product.model, product.sku].some(value => normalizeCode(value) === normalizedCode)
     )
 
     return productMatches.length === 1

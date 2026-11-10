@@ -795,7 +795,7 @@ class ProductImeiController extends Controller
                 ->where('name', 'like', $like)
                 ->orWhere('search_text', 'like', $normLike)
                 ->orWhere('sku', 'like', $like)
-                ->orWhere('barcode', 'like', $like))
+                ->orWhere('model', 'like', $like))
             ->orWhereHas('variant', fn ($variant) => $variant
                 ->where('sku', 'like', $like)
                 ->orWhere('attributes', 'like', $like))

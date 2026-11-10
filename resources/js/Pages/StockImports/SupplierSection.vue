@@ -3,7 +3,6 @@ import { formatCurrency } from '@/utils/format'
 
 import {
     ref,
-    computed,
     nextTick,
     onMounted,
     onBeforeUnmount,
@@ -14,9 +13,7 @@ import {
     Truck,
     X,
     Plus,
-    CalendarDays,
     UserRound,
-    Search,
     UserRoundPlus,
     LoaderCircle,
     Printer,
@@ -219,19 +216,6 @@ const createCustomer = () => {
     })
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| HIỆN NÚT THÊM NCC
-|--------------------------------------------------------------------------
-*/
-
-const showCreateButton = computed(() => {
-    return (
-        keyword.value.trim() &&
-        !suppliers.value.length
-    )
-})
 
 
 /*

@@ -62,7 +62,7 @@ class ProductController extends Controller
                         'id' => $product->id,
                         'name' => $product->name,
                         'sku' => $product->sku,
-                        'barcode' => $product->barcode,
+                        'model' => $product->model,
                         'cost_price' => $nextBatch?->cost_price ?? $product->cost_price,
                         'price' => $nextBatch?->sell_price ?: $product->sell_price,
                         'sell_price' => $nextBatch?->sell_price ?: $product->sell_price,
@@ -137,7 +137,7 @@ class ProductController extends Controller
                 $normalizedKeyword = Product::normalizeSearch($keyword);
 
                 $query->where(function ($sub) use ($keyword, $normalizedKeyword) {
-                    $sub->where('barcode', $keyword)
+                    $sub->where('model', $keyword)
                         ->orWhere('sku', 'like', $keyword . '%')
                         ->orWhere('search_text', 'like', '%' . $normalizedKeyword . '%')
                         ->orWhereHas('variants', function ($variantQuery) use ($keyword) {
@@ -155,7 +155,7 @@ class ProductController extends Controller
             ->orderByRaw(
                 "
                 CASE
-                    WHEN barcode = ? THEN 1
+                    WHEN model = ? THEN 1
                     WHEN sku = ? THEN 2
                     WHEN sku LIKE ? THEN 3
                     ELSE 4
@@ -181,7 +181,7 @@ class ProductController extends Controller
                     'id' => $product->id,
                     'name' => $product->name,
                     'sku' => $product->sku,
-                    'barcode' => $product->barcode,
+                    'model' => $product->model,
                     'cost_price' => $nextBatch?->cost_price ?? $product->cost_price,
                     'price' => $nextBatch?->sell_price ?: $product->sell_price,
                     'sell_price' => $nextBatch?->sell_price ?: $product->sell_price,

@@ -18,11 +18,9 @@ const pageComponents = import.meta.glob([
     './Pages/**/*.vue',
     '!./Pages/Backups/Index.vue',
     '!./Pages/Brands/Form.vue',
-    '!./Pages/Customers/CustomerDetailModal.vue',
     '!./Pages/Customers/CustomerFormModal.vue',
     '!./Pages/Customers/Partials/**/*.vue',
     '!./Pages/ProductImeis/PriceFormModal.vue',
-    '!./Pages/Expenses/ExpenseDetailModal.vue',
     '!./Pages/Products/*Modal.vue',
     '!./Pages/Profile/Partials/**/*.vue',
     '!./Pages/Repairs/Repair*.vue',
@@ -31,10 +29,8 @@ const pageComponents = import.meta.glob([
     '!./Pages/StockImports/StockImportProductModal.vue',
     '!./Pages/StockImports/SupplierSection.vue',
     '!./Pages/Suppliers/Form.vue',
-    '!./Pages/Suppliers/SupplierDetailModal.vue',
     '!./Pages/Suppliers/Partials/**/*.vue',
     '!./Pages/Users/FormModal.vue',
-    '!./Pages/Users/UserDetailModal.vue',
     '!./Pages/Users/RoleManagementDialog.vue',
     '!./Pages/Users/RoleManagementModal.vue',
 ])
@@ -56,8 +52,8 @@ const pageTitleFor = (page) => {
         'Products/Index': 'Sản phẩm', 'Products/Form': 'Thông tin sản phẩm', 'Products/Show': 'Chi tiết sản phẩm',
         'ProductImeis/Index': 'IMEI', 'ProductImeis/Lookup': 'Tra cứu', 'ProductImeis/Show': 'Chi tiết IMEI',
         'Categories/Index': 'Danh mục', 'Categories/Form': 'Thông tin danh mục', 'Brands/Index': 'Thương hiệu',
-        'Customers/Index': 'Khách hàng', 'Customers/Create': 'Thêm khách hàng', 'Customers/Edit': 'Sửa khách hàng',
-        'Sales/Index': 'Hóa đơn bán hàng', 'Sales/Show': 'Chi tiết hóa đơn', 'Sales/Edit': 'Sửa hóa đơn', 'Sales/Receipt': 'Hóa đơn bán hàng',
+        'Customers/Index': 'Khách hàng', 'Customers/Create': 'Thêm khách hàng', 'Customers/Edit': 'Sửa khách hàng', 'Customers/Show': 'Chi tiết khách hàng',
+        'Sales/Index': 'Hóa đơn bán hàng', 'Sales/Edit': 'Sửa hóa đơn', 'Sales/Receipt': 'Hóa đơn bán hàng',
         'StockImports/List': 'Phiếu nhập hàng',
         'Suppliers/Index': 'Nhà cung cấp', 'Suppliers/Create': 'Thêm nhà cung cấp', 'Suppliers/Edit': 'Sửa nhà cung cấp',
         'Repairs/Index': 'Sửa chữa thiết bị', 'Users/Index': 'Nhân viên', 'Users/Create': 'Thêm nhân viên', 'Users/Edit': 'Sửa nhân viên',
@@ -273,7 +269,7 @@ createInertiaApp({
             }
 
             const component = page.component || ''
-            const printComponents = ['Sales/Receipt', 'Sales/Show']
+            const printComponents = ['Sales/Receipt']
             if (!printComponents.some((name) => component.endsWith(name))) {
                 printStyle.textContent = ''
                 return

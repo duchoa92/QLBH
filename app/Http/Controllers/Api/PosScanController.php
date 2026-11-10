@@ -110,7 +110,7 @@ class PosScanController extends Controller
                 'conversionUnit:id,name,short_name',
             ])
 
-            ->where('barcode', $code)
+            ->where('model', $code)
 
             ->where('is_active', true)
 

@@ -99,11 +99,10 @@ class StoreProductRequest extends FormRequest
                 'string',
             ],
 
-            'barcode' => [
+            'model' => [
                 'nullable',
                 'string',
                 'max:100',
-                'unique:products,barcode'
             ],
 
             'manage_stock_by_serial' => 'boolean',

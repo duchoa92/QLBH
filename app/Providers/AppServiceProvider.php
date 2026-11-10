@@ -45,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
                 'print_shop_subtitle' => setting('print_shop_subtitle', ''),
                 'print_shop_address' => setting('print_shop_address', ''),
                 'print_shop_phone' => setting('print_shop_phone', ''),
+                'label_template' => \App\Support\LabelTemplate::normalize(setting('label_template')),
                 'purchase_contract_title' => setting('purchase_contract_title', DefaultPurchaseContract::TITLE),
                 'purchase_contract_content' => setting('purchase_contract_content', DefaultPurchaseContract::CONTENT),
                 'allow_negative_stock' => filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN),

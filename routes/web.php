@@ -119,7 +119,6 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/validate', [ProductController::class, 'previewImport'])->middleware('permission:products.import')->name('validate');
         Route::post('/import-images', [ProductController::class, 'uploadImportImages'])->middleware('permission:products.import')->name('import.images');
         Route::get('/list-import', [ProductController::class, 'listForImport'])->middleware('permission:products.view|stock_imports.view|stock_imports.create')->name('listImport');
-        Route::get('/search', [ProductController::class, 'search'])->middleware('permission:products.view')->name('search');
 
         // Export
         Route::post('/export-start', [ProductController::class, 'startExport'])->middleware('permission:products.export')->name('export.start');
@@ -133,10 +132,6 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/bulk-price', [ProductController::class, 'bulkUpdatePrice'])->middleware('permission:products.edit')->name('bulk-price');
         Route::post('/bulk-restore', [ProductController::class, 'bulkRestore'])->middleware('permission:products.edit')->name('bulkRestore');
         Route::post('/bulk-force-delete', [ProductController::class, 'bulkForceDelete'])->middleware('permission:products.delete')->name('bulkForceDelete');
-
-        // Print
-        Route::post('/print-imei', [ProductController::class, 'printImei'])->middleware('permission:products.view')->name('printImei');
-        Route::post('/print-data', [ProductController::class, 'printData'])->middleware('permission:products.view')->name('printData');
 
         // Preview SKU
         Route::get('/preview-sku', [ProductController::class, 'previewSku'])->middleware('permission:products.create|stock_imports.create')->name('previewSku');
@@ -156,8 +151,6 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/{id}/force', [ProductController::class, 'forceDelete'])->middleware('permission:products.delete')->name('forceDelete');
         Route::patch('/{product}/toggle-status', [ProductController::class, 'toggleStatus'])->middleware('permission:products.edit')->name('toggleStatus');
     });
-
-    Route::post('/scan', [ProductController::class, 'scan'])->middleware('permission:products.view|pos.access')->name('products.scan');
 
     // Attributes & Variants
     Route::prefix('category-attributes')->group(function () {
@@ -218,14 +211,6 @@ Route::middleware(['auth'])->group(function () {
         '/stock-import/{stockImport}',
         [StockImportController::class, 'show']
     )->middleware('permission:stock_imports.view')->name('stock.show');
-
-    Route::get('/api/products-with-variants', function () {
-        return \App\Models\Product::with([
-            'variants:id,product_id,sku,barcode,attributes,cost_price,sell_price,stock',
-        ])
-        ->select('id', 'name', 'sku', 'cost_price', 'sell_price', 'stock', 'product_type', 'manage_stock_by_serial', 'image')
-        ->get();
-    })->middleware('permission:products.view|pos.access');
 
     /*
     |--------------------------------------------------------------------------
@@ -332,9 +317,8 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('/imeis/lookup', '/lookup');
     Route::get('/imeis/{imei}', [ProductImeiController::class, 'show'])->middleware('permission:products.view')->name('product-imeis.show');
 
-    // Chi tiết khách hàng xem bằng modal (records.show), không còn trang /customers/{id}
-    Route::resource('customers', CustomerController::class)->except(['show'])
-        ->middlewareFor('index', 'permission:customers.view')
+    Route::resource('customers', CustomerController::class)
+        ->middlewareFor(['index', 'show'], 'permission:customers.view')
         ->middlewareFor(['create', 'store'], 'permission:customers.create')
         ->middlewareFor(['edit', 'update'], 'permission:customers.edit')
         ->middlewareFor('destroy', 'permission:customers.delete');

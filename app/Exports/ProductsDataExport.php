@@ -71,7 +71,7 @@ class ProductsDataExport extends DefaultValueBinder implements
             $this->rowNumber,
             $p->name,
             $p->sku,
-            $p->barcode,
+            $p->model,
             $p->category?->name,
             $p->brand?->name,
             $p->sell_price,

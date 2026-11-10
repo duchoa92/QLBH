@@ -7,8 +7,10 @@ Claude
 
 Index · VUE
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
+import { canPrintLabels } from '@/utils/printLabels'
+import PrintLabelsModal from './PrintLabelsModal.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -94,8 +96,6 @@ const loadData = () => {
     loadTrashCount()
 }
  
-/* ================= FORM ================= */
-const editingProduct = ref(null)
  
  
  
@@ -289,14 +289,13 @@ const bulkDelete = () => {
 }
  
 /* ================= PRINT ================= */
-const printOne = (id) => {
-    window.open(`/products/print?ids=${id}`, '_blank')
-}
- 
-const printImei = () => {
-    if (!selectedIds.value.length) return
-    window.open(`/products/print?ids=${selectedIds.value.join(',')}`, '_blank')
-}
+const openPrintLabels = (products) => openModal(PrintLabelsModal, { props: { products } })
+
+const printOne = (product) => openPrintLabels([product])
+
+const canPrintSelected = computed(() => selectedProducts.value.some(canPrintLabels))
+
+const printImei = () => openPrintLabels(selectedProducts.value.filter(canPrintLabels))
  
 /* ================= SORT ================= */
  
@@ -412,8 +411,10 @@ const openImeiList = (row) => {
         </span>
  
         <button
+            :disabled="!canPrintSelected"
+            :title="canPrintSelected ? '' : 'Các sản phẩm đã chọn không có mã để in'"
             @click="printImei"
-            class="flex items-center gap-1 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded"
+            class="flex items-center gap-1 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-60 disabled:hover:bg-transparent"
         >
             In IMEI
         </button>
@@ -498,8 +499,8 @@ const openImeiList = (row) => {
             <!-- ACTION -->
             <td class="px-3.5 py-2.5 text-center" @click.stop>
                 <div class="app-row-actions">
-                    <Tooltip text="In tem" position="top">
-                        <button type="button" @click="printOne(row.id)"  class="app-row-action app-row-action--view">
+                    <Tooltip :text="canPrintLabels(row) ? 'In tem' : 'Không có mã để in tem'" position="top">
+                        <button type="button" :disabled="!canPrintLabels(row)" @click="printOne(row)"  class="app-row-action app-row-action--view">
                             <Printer class="h-4 w-4" />
                         </button>
                     </Tooltip>

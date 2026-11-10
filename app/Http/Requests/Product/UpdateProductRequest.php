@@ -66,14 +66,9 @@ class UpdateProductRequest extends FormRequest
                 )->ignore($this->product),
             ],
 
-            'barcode' => [
+            'model' => [
                 'nullable',
                 'max:100',
-
-                Rule::unique(
-                    'products',
-                    'barcode'
-                )->ignore($this->product),
             ],
 
             'imeis' => [

@@ -86,6 +86,7 @@ class Repair extends Model
         'received_at',
         'completed_at',
         'returned_at',
+        'work_shift_id',
     ];
 
     /**

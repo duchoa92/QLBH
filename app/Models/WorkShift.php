@@ -36,4 +36,23 @@ class WorkShift extends Model
     {
         return $this->hasMany(Sale::class);
     }
+
+    public function repairs(): HasMany
+    {
+        return $this->hasMany(Repair::class);
+    }
+
+    /** Ca đang mở của một nhân viên (dùng chung cho POS, thanh toán QR và trả máy sửa). */
+    public static function currentFor(?int $userId): ?self
+    {
+        if (! $userId) {
+            return null;
+        }
+
+        return static::query()
+            ->where('user_id', $userId)
+            ->whereNull('closed_at')
+            ->latest('opened_at')
+            ->first();
+    }
 }

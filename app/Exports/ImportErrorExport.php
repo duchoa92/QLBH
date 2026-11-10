@@ -31,7 +31,7 @@ class ImportErrorExport extends DefaultValueBinder implements FromArray, WithHea
                 $e['row'] ?? '',
                 $e['name'] ?? '',
                 $e['sku'] ?? '',
-                $e['barcode'] ?? '',
+                $e['model'] ?? '',
                 $e['category'] ?? '',
                 $e['brand'] ?? '',
                 $e['sell_price'] ?? '',

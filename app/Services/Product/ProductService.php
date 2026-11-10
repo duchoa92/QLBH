@@ -97,7 +97,7 @@ class ProductService extends BaseService
 
             $data = $this->normalizeProductData($data);
             $data['slug'] = $this->generateUniqueSlug($data['name']);
-            $data['barcode'] = $data['barcode'] ?? null;
+            $data['model'] = $data['model'] ?? null;
 
             if (! $skuIsManual || empty($data['sku'])) {
                 $data['sku'] = $this->nextProductSku(

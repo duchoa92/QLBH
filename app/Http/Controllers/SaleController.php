@@ -14,6 +14,7 @@ use App\Models\StockImportItem;
 use App\Services\Stock\ImeiStockSynchronizer;
 use App\Services\Stock\StockBatchAllocator;
 use App\Support\PosVatCalculator;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -704,21 +705,10 @@ class SaleController extends Controller
     }
 
     // Hiển thị chi tiết đơn hàng
-    public function show(Sale $sale): Response
+    /** Không còn trang chi tiết riêng: mở modal chi tiết ngay trên danh sách hóa đơn. */
+    public function show(Sale $sale): RedirectResponse
     {
-        $sale->load([
-            'customer',
-            'user',
-            'items.product.conversionUnit',
-            'items.variant',
-            'items.productImei',
-            'items.gifts.product',
-        ]);
-        $sale->withOldDebtPaid();
-
-        return Inertia::render('Sales/Show', [
-            'sale' => $sale,
-        ]);
+        return redirect()->route('sales.index', ['open_sale' => $sale->id]);
     }
 
     /**
