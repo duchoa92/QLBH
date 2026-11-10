@@ -1,186 +1,128 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { X, SquarePen, Phone, Mail, MapPin, Building, DollarSign, CreditCard, ExternalLink } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Building2, Check, Copy, FileText, Landmark, Mail, MapPin, Package, Phone, StickyNote, Truck, UserRound, Wallet } from 'lucide-vue-next'
 import { formatMoney } from '@/utils/format'
-import axios from 'axios'
+import { useRecordDetail } from '@/Composables/useRecordDetail'
+import SearchHighlight from '@/Components/UI/SearchHighlight.vue'
+import DetailShell from '@/Components/Detail/DetailShell.vue'
+import DetailAvatar from '@/Components/Detail/DetailAvatar.vue'
+import DetailTabs from '@/Components/Detail/DetailTabs.vue'
+import StatCard from '@/Components/Detail/StatCard.vue'
+import InfoItem from '@/Components/Detail/InfoItem.vue'
+import TransactionList from '@/Components/Detail/TransactionList.vue'
+import DebtLedger from '@/Components/Detail/DebtLedger.vue'
 
 const props = defineProps({
-    recordId: {
-        type: [Number, String],
-        required: true
-    },
-    supplier: Object, 
+    recordId: { type: [Number, String], required: true },
+    keyword: { type: String, default: '' },
+    initialTab: { type: String, default: 'overview' },
+    canPay: { type: Boolean, default: false },
+    payHandler: { type: Function, default: null },
+    modalId: { type: [Number, String], default: null },
 })
+const emit = defineEmits(['close'])
 
-const emit = defineEmits(['close', 'edit'])
+const { data, loading, error } = useRecordDetail('supplier', props.recordId)
+const tab = ref(props.initialTab)
+const copied = ref('')
 
-const loading = ref(false)
-const supplierData = ref(props.supplier || null)
+const tabs = computed(() => {
+    if (!data.value) return []
+    const list = [{ key: 'overview', label: 'Tổng quan' }]
+    if (data.value.imports) list.push({ key: 'imports', label: 'Phiếu nhập', count: data.value.imports.length })
+    if (data.value.debt) list.push({ key: 'debt', label: 'Công nợ', count: data.value.debt.orders.length, tone: 'danger' })
+    return list
+})
+const activeTab = computed(() => tabs.value.some(item => item.key === tab.value) ? tab.value : 'overview')
+const owing = computed(() => (data.value?.stats.debt_balance || 0) > 0)
 
-const fetchSupplierDetail = async () => {
-    if (supplierData.value && (supplierData.value.bank_accounts || supplierData.value.address)) return
-    loading.value = true
+const copyNumber = async (number) => {
     try {
-        const response = await axios.get(route('suppliers.show', props.recordId))
-        supplierData.value = response.data.supplier || response.data
-    } catch (error) {
-        console.error('Không thể tải thông tin nhà cung cấp', error)
-    } finally {
-        loading.value = false
-    }
+        await navigator.clipboard.writeText(number)
+        copied.value = number
+        setTimeout(() => { if (copied.value === number) copied.value = '' }, 1500)
+    } catch { /* trình duyệt chặn clipboard: bỏ qua */ }
 }
 
-onMounted(() => {
-    fetchSupplierDetail()
-})
-
-// Hàm mở mã QR thanh toán VietQR tự động điền thông tin
-const openVietQrModal = (acc) => {
-    const amount = supplierData.value.debt_balance > 0 ? supplierData.value.debt_balance : ''
-    const addInfo = encodeURIComponent(`Thanh toan NCC ${supplierData.value.name}`)
-    const url = `https://img.vietqr.io/image/${acc.bank_bin}-${acc.bank_account}-compact2.jpg?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(acc.bank_account_name || '')}`
-    window.open(url, '_blank')
+const pay = (order) => {
+    emit('close')
+    props.payHandler?.(order)
 }
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-        <div class="relative w-full max-w-3xl rounded-xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
-            <!-- Modal Header -->
-            <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50">
-                <div>
-                    <h3 class="text-lg font-bold text-slate-900">
-                        {{ supplierData?.name || 'Đang tải...' }}
-                    </h3>
-                    
-                    <p class="text-base text-slate-500">{{ supplierData.code || '—' }}</p>
-                
-                </div>
-                <div class="flex items-center gap-2">
-                    <button 
-                        v-if="supplierData"
-                        @click="$emit('edit', supplierData); $emit('close')" 
-                        class="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-100 transition"
-                    >
-                        <SquarePen class="h-4 w-4" /> Sửa
-                    </button>
-                    <button 
-                        @click="$emit('close')" 
-                        class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
-                    >
-                        <X class="h-5 w-5" />
-                    </button>
+    <DetailShell size="xl" :loading="loading" :error="error" @close="emit('close')">
+        <template #header>
+            <div class="flex items-center gap-4">
+                <DetailAvatar :name="data?.name || ''" :icon="Truck" />
+                <div class="min-w-0">
+                    <h2 class="truncate text-lg font-black text-slate-900"><SearchHighlight :text="data?.name || 'Nhà cung cấp'" :keyword="keyword" /></h2>
+                    <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                        <span v-if="data?.code" class="rounded-md bg-slate-100 px-2 py-0.5 font-bold text-slate-600"><SearchHighlight :text="data.code" :keyword="keyword" /></span>
+                        <span v-if="data?.tax_code" class="rounded-md bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">MST {{ data.tax_code }}</span>
+                        <span v-if="data && !data.active" class="rounded-md bg-slate-200 px-2 py-0.5 font-bold text-slate-600">Ngừng hợp tác</span>
+                        <span v-else-if="owing" class="rounded-md bg-amber-100 px-2 py-0.5 font-bold text-amber-700">Đang còn nợ</span>
+                    </div>
                 </div>
             </div>
+        </template>
 
-            <!-- Modal Body -->
-            <div class="p-6 overflow-y-auto space-y-6 flex-1">
-                <!-- Loading State -->
-                <div v-if="loading" class="flex justify-center items-center py-12">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <template v-if="data" #stats>
+            <StatCard label="Công nợ phải trả" :value="formatMoney(data.stats.debt_balance)" :tone="owing ? 'danger' : 'success'" :icon="Wallet" :hint="owing ? 'Cần thanh toán' : 'Không còn nợ'" />
+            <StatCard v-if="data.stats.total_import_value !== null" label="Tổng giá trị nhập" :value="formatMoney(data.stats.total_import_value)" tone="success" :icon="Package" />
+            <StatCard v-if="data.stats.import_count !== null" label="Số phiếu nhập" :value="data.stats.import_count" tone="info" :icon="FileText" :hint="data.stats.last_import_at ? 'Gần nhất ' + data.stats.last_import_at : 'Chưa nhập lần nào'" />
+        </template>
+
+        <template v-if="data" #tabs><DetailTabs v-model="tab" :tabs="tabs" /></template>
+
+        <template v-if="data">
+            <!-- TỔNG QUAN -->
+            <template v-if="activeTab === 'overview'">
+                <div class="grid gap-2.5 sm:grid-cols-2">
+                    <InfoItem :icon="UserRound" label="Người liên hệ" :value="data.contact_person" />
+                    <InfoItem :icon="Phone" label="Điện thoại" :value="data.phone" :href="data.phone ? `tel:${data.phone}` : ''" />
+                    <InfoItem :icon="Mail" label="Email" :value="data.email" :href="data.email ? `mailto:${data.email}` : ''" />
+                    <InfoItem :icon="Building2" label="Mã số thuế" :value="data.tax_code" />
+                    <InfoItem class="sm:col-span-2" :icon="MapPin" label="Địa chỉ" :value="data.address" />
                 </div>
 
-                <template v-else-if="supplierData">
-                    <!-- Thẻ tổng quan (Mã & Công nợ) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     
-
-                        <div class="rounded-xl border border-slate-200 p-4 bg-slate-50/50 flex items-center gap-4">
-                            <div class="rounded-lg p-3" :class="supplierData.debt_balance > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'">
-                                <DollarSign class="h-6 w-6" />
+                <section class="space-y-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500">Tài khoản ngân hàng</h3>
+                    <div v-if="data.bank_accounts.length" class="grid gap-2.5 sm:grid-cols-2">
+                        <div v-for="account in data.bank_accounts" :key="account.number" class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><Landmark :size="18" /></span>
+                            <div class="min-w-0 flex-1">
+                                <div class="truncate text-sm font-bold text-slate-800">{{ account.bank || 'Ngân hàng' }}</div>
+                                <div class="font-mono text-sm text-slate-700">{{ account.number }}</div>
+                                <div v-if="account.holder" class="truncate text-xs text-slate-500">{{ account.holder }}</div>
                             </div>
-                            <div>
-                                <p class="text-xs text-slate-500 font-medium">Tổng công nợ hiện tại</p>
-                                <p class="text-base font-bold" :class="supplierData.debt_balance > 0 ? 'text-rose-600' : 'text-slate-900'">
-                                    {{ formatMoney(supplierData.debt_balance) }}
-                                </p>
-                            </div>
+                            <button type="button" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" title="Sao chép số tài khoản" @click="copyNumber(account.number)">
+                                <Check v-if="copied === account.number" :size="16" class="text-emerald-600" /><Copy v-else :size="16" />
+                            </button>
                         </div>
                     </div>
+                    <div v-else class="rounded-xl border border-dashed border-slate-200 py-5 text-center text-sm text-slate-500">Chưa lưu tài khoản ngân hàng.</div>
+                </section>
 
-                    <!-- Thông tin liên hệ -->
-                    <div class="space-y-3">
-                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Thông tin liên hệ</h4>
-                        <div class="rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm">
-                            <div class="flex items-center px-4 py-3 gap-3">
-                                <Phone class="h-4 w-4 text-slate-400 shrink-0" />
-                                <span class="text-slate-500 w-32 shrink-0">Số điện thoại:</span>
-                                <span class="font-medium text-slate-900">{{ supplierData.phone || '—' }}</span>
-                            </div>
-                            <div class="flex items-center px-4 py-3 gap-3">
-                                <Mail class="h-4 w-4 text-slate-400 shrink-0" />
-                                <span class="text-slate-500 w-32 shrink-0">Email:</span>
-                                <span class="font-medium text-slate-900">{{ supplierData.email || '—' }}</span>
-                            </div>
-                            <div class="flex items-center px-4 py-3 gap-3">
-                                <MapPin class="h-4 w-4 text-slate-400 shrink-0" />
-                                <span class="text-slate-500 w-32 shrink-0">Địa chỉ:</span>
-                                <span class="font-medium text-slate-900">{{ supplierData.address || '—' }}</span>
-                            </div>
-                        </div>
-                    </div>
+                <div v-if="data.note" class="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <StickyNote :size="18" class="mt-0.5 shrink-0" /><p class="whitespace-pre-line break-words">{{ data.note }}</p>
+                </div>
+                <p class="text-xs text-slate-400">Tạo ngày {{ data.created_at || '—' }}</p>
+            </template>
 
-                    <!-- Thông tin tài khoản ngân hàng & Thanh toán nhanh -->
-                    <div class="space-y-3">
-                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Tài khoản ngân hàng & Thanh toán</h4>
-                        
-                        <div v-if="(supplierData.bank_accounts && supplierData.bank_accounts.length) || supplierData.bank_account">
-                            <div class="grid grid-cols-1 gap-3">
-                                <div 
-                                    v-for="(acc, index) in (supplierData.bank_accounts?.length ? supplierData.bank_accounts : [{ bank_name: supplierData.bank_name, bank_bin: supplierData.bank_bin, bank_account: supplierData.bank_account, bank_account_name: supplierData.bank_account_name, is_default: true }])" 
-                                    :key="index"
-                                    class="rounded-xl border border-slate-200 p-4 bg-slate-50/40 text-sm space-y-3 relative"
-                                >
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex items-center gap-2 font-semibold text-slate-900">
-                                            <CreditCard class="h-4 w-4 text-blue-600" />
-                                            {{ acc.bank_name || 'Ngân hàng' }} 
-                                            <span v-if="acc.is_default" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Mặc định</span>
-                                        </div>
+            <!-- PHIẾU NHẬP -->
+            <TransactionList v-else-if="activeTab === 'imports'" kind="import" :rows="data.imports" empty-text="Chưa có phiếu nhập nào từ nhà cung cấp này." />
 
-                                        <!-- Nút bấm tạo VietQR thanh toán nhanh -->
-                                        <button 
-                                            v-if="acc.bank_bin && acc.bank_account"
-                                            @click="openVietQrModal(acc)"
-                                            class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition shadow-sm"
-                                        >
-                                            <ExternalLink class="h-3.5 w-3.5" /> Tạo QR Chuyển khoản
-                                        </button>
-                                    </div>
-
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-100">
-                                        <div>Số tài khoản: <b class="text-slate-900 font-mono">{{ acc.bank_account }}</b></div>
-                                        <div>Chủ tài khoản: <b class="text-slate-900 uppercase">{{ acc.bank_account_name || '—' }}</b></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div v-else class="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-400 bg-slate-50">
-                            Chưa có thông tin tài khoản ngân hàng
-                        </div>
-                    </div>
-
-                    <!-- Ghi chú thêm nếu có -->
-                    <div v-if="supplierData.notes" class="space-y-2">
-                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Ghi chú</h4>
-                        <div class="rounded-xl border border-slate-200 p-4 bg-slate-50 text-sm text-slate-700 whitespace-pre-line">
-                            {{ supplierData.notes }}
-                        </div>
-                    </div>
-                </template>
-            </div>
-
-            <!-- Modal Footer -->
-            <div class="border-t border-slate-100 px-6 py-3 bg-slate-50 flex justify-end">
-                <button 
-                    @click="$emit('close')" 
-                    class="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition"
-                >
-                    Đóng
-                </button>
-            </div>
-
-        </div>
-    </div>
+            <!-- CÔNG NỢ -->
+            <DebtLedger
+                v-else-if="activeTab === 'debt'"
+                entity="supplier"
+                :balance="data.stats.debt_balance"
+                :orders="data.debt.orders"
+                :history="data.debt.history"
+                :can-pay="canPay"
+                @pay="pay"
+            />
+        </template>
+    </DetailShell>
 </template>

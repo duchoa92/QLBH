@@ -1,23 +1,32 @@
 <script setup>
-import { formatCurrency, formatDateTime } from '@/utils/format'
+import { formatCurrency, formatDate as formatDateOnly, formatDateTime } from '@/utils/format'
 import { imageUrl } from '@/utils/imageUrl'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     AlertTriangle,
     ArrowDownLeft,
+    ArrowLeft,
     ArrowUpRight,
-    CheckCircle2,
+    Building2,
+    Check,
+    ChevronRight,
     Clock,
-    ExternalLink,
+    Copy,
     History,
+    Image as ImageIcon,
+    Info,
     Package,
+    PackageCheck,
+    ReceiptText,
     Search,
     ShieldCheck,
     ShieldX,
-    UserRound,
-    Wrench,
     SlidersHorizontal,
-    Check,
+    Smartphone,
+    StickyNote,
+    UserRound,
+    Users,
+    Wrench,
     X,
 } from 'lucide-vue-next'
 
@@ -117,14 +126,32 @@ const variantText = computed(() => {
 
 const metaFor = (status) => {
     if (status === 'active') {
-        return { icon: ShieldCheck, class: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+        return {
+            icon: ShieldCheck,
+            tile: 'bg-emerald-100 text-emerald-700',
+            badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+            bar: 'bg-emerald-500',
+            remain: 'text-emerald-700',
+        }
     }
 
     if (status === 'expired' || status === 'voided') {
-        return { icon: ShieldX, class: 'border-rose-200 bg-rose-50 text-rose-700' }
+        return {
+            icon: ShieldX,
+            tile: 'bg-rose-100 text-rose-700',
+            badge: 'bg-rose-50 text-rose-700 ring-rose-200',
+            bar: 'bg-rose-500',
+            remain: 'text-rose-600',
+        }
     }
 
-    return { icon: Clock, class: 'border-slate-200 bg-slate-50 text-slate-600' }
+    return {
+        icon: Clock,
+        tile: 'bg-slate-100 text-slate-500',
+        badge: 'bg-slate-50 text-slate-600 ring-slate-200',
+        bar: 'bg-slate-400',
+        remain: 'text-slate-500',
+    }
 }
 
 const warrantyMeta = computed(() => metaFor(result.value?.warranty?.status))
@@ -142,6 +169,106 @@ const remainingText = (info) => {
         ? `Còn ${info.remaining_days} ngày`
         : `Quá hạn ${Math.abs(info.remaining_days)} ngày`
 }
+
+const dateOnly = (value) => (value ? formatDateOnly(value) || '-' : '-')
+
+// Trạng thái hiện tại của thiết bị (hiển thị bằng tiếng Việt thay vì mã thô như in_stock / sold).
+const deviceStatusMeta = computed(() => {
+    const data = result.value
+
+    if (!data?.imei) {
+        return {
+            label: data?.repair_only ? 'Chỉ có phiếu sửa' : 'Chưa có trong hệ thống',
+            class: 'bg-amber-50 text-amber-700 ring-amber-200',
+        }
+    }
+
+    if (data.imei.status === 'in_stock') return { label: 'Còn trong kho', class: 'bg-emerald-50 text-emerald-700 ring-emerald-200' }
+    if (data.imei.status === 'sold') return { label: 'Đã bán', class: 'bg-blue-50 text-blue-700 ring-blue-200' }
+
+    return { label: data.imei.status || 'Không rõ', class: 'bg-slate-50 text-slate-600 ring-slate-200' }
+})
+
+const deviceNotice = computed(() => {
+    const data = result.value
+
+    if (!data) return ''
+    if (data.repair_only) return 'Chỉ có phiếu sửa chữa liên quan; thiết bị này không nhập/bán tại cửa hàng.'
+
+    return data.message || ''
+})
+
+// Sao chép nhanh IMEI / Serial.
+const copiedKey = ref('')
+let copyTimer = null
+const copyText = async (key, text) => {
+    if (!text) return
+
+    try {
+        await navigator.clipboard.writeText(String(text))
+    } catch {
+        const field = document.createElement('textarea')
+
+        field.value = String(text)
+        document.body.appendChild(field)
+        field.select()
+        try { document.execCommand('copy') } catch { /* bỏ qua */ }
+        field.remove()
+    }
+
+    copiedKey.value = key
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => { copiedKey.value = '' }, 1500)
+}
+
+// Phần trăm thời gian bảo hành đã trôi qua (chỉ tính khi biết cả ngày bắt đầu lẫn ngày hết hạn).
+const progressFor = (info) => {
+    if (!info?.start_at || !info?.expired_at) return null
+
+    const start = new Date(info.start_at).getTime()
+    const end = new Date(info.expired_at).getTime()
+
+    if (!(end > start)) return null
+
+    return Math.round(Math.min(1, Math.max(0, (Date.now() - start) / (end - start))) * 100)
+}
+
+// Gom 3 loại bảo hành vào một bảng duy nhất để so sánh cùng lúc.
+const warrantyRows = computed(() => {
+    const data = result.value
+
+    if (!data) return []
+
+    const build = (key, title, hint, info, meta, extra = {}) => {
+        const period = info?.start_at && info?.expired_at
+            ? `${dateOnly(info.start_at)} → ${dateOnly(info.expired_at)}`
+            : (info?.expired_at ? `Hết hạn ${dateOnly(info.expired_at)}` : '')
+
+        return {
+            key,
+            title,
+            hint,
+            meta,
+            label: info?.label || '-',
+            period,
+            days: info?.days ? `${info.days} ngày` : '',
+            remaining: remainingText(info),
+            reason: info?.reason ? `Lý do hủy: ${info.reason}` : '',
+            progress: progressFor(info),
+            ...extra,
+        }
+    }
+
+    return [
+        build('supplier', 'Bảo hành nhà cung cấp', 'Tính từ ngày nhập kho', data.warranty, warrantyMeta.value),
+        build('customer', 'Bảo hành cửa hàng', 'Tính từ ngày bán cho khách', data.customer_warranty, customerWarrantyMeta.value),
+        build('repair', 'Bảo hành sau sửa chữa', 'Theo phiếu sửa gần nhất', data.repair_warranty, repairWarrantyMeta.value, {
+            reference: data.repair_warranty?.code ? `Phiếu ${data.repair_warranty.code}` : '',
+        }),
+    ]
+})
+
+const customerSourceLabel = computed(() => (result.value?.customer?.source === 'sale' ? 'Mua tại hóa đơn' : 'Gửi sửa tại phiếu'))
 
 const hasExtraInfo = computed(() => {
     const extraInfo = result.value?.imei?.extra_info || {}
@@ -342,6 +469,7 @@ const closeOnOutside = (event) => {
 onMounted(() => window.addEventListener('pointerdown', closeOnOutside))
 onBeforeUnmount(() => {
     clearTimeout(suggestTimer)
+    clearTimeout(copyTimer)
     window.removeEventListener('pointerdown', closeOnOutside)
 })
 
@@ -357,7 +485,7 @@ const timeline = computed(() => {
         ...item,
         type: 'import',
         title: item.code || 'Phiếu nhập',
-        subtitle: `Giá nhập ${money(item.cost_price)}`,
+        subtitle: '',
         happenedAt: item.happened_at || item.created_at,
         icon: ArrowDownLeft,
         color: 'emerald',
@@ -366,7 +494,7 @@ const timeline = computed(() => {
         ...item,
         type: 'sale',
         title: item.code || 'Hóa đơn bán hàng',
-        subtitle: item.customer_name ? `Khách: ${item.customer_name}` : 'Khách lẻ',
+        subtitle: '',
         happenedAt: item.sold_at,
         icon: ArrowUpRight,
         color: 'blue',
@@ -375,7 +503,7 @@ const timeline = computed(() => {
         ...item,
         type: 'repair',
         title: item.code || 'Phiếu sửa chữa',
-        subtitle: item.repair_request || item.note || 'Tiếp nhận sửa chữa',
+        subtitle: item.repair_request || item.note || '',
         happenedAt: item.received_at,
         icon: Wrench,
         color: 'purple',
@@ -411,8 +539,109 @@ const eventDotClasses = type => ({
 const eventPartner = item => {
     if (item.type === 'sale') return item.customer_name || 'Khách lẻ'
     if (item.type === 'repair') return item.customer_name || item.customer_phone || item.contact_phone || 'Khách gửi sửa chữa'
-    return item.supplier_id ? `Nhà cung cấp #${item.supplier_id}` : '-'
+    return item.supplier_name || (item.supplier_id ? `Nhà cung cấp #${item.supplier_id}` : '-')
 }
+
+const eventTileClass = type => ({
+    import: 'bg-emerald-100 text-emerald-700',
+    sale: 'bg-blue-100 text-blue-700',
+    repair: 'bg-purple-100 text-purple-700',
+}[type] || 'bg-slate-100 text-slate-600')
+
+const eventPartnerLabel = item => ({ import: 'Nhà cung cấp', sale: 'Khách mua', repair: 'Khách gửi sửa' }[item.type] || 'Đối tác')
+const eventValueLabel = item => ({ import: 'Giá nhập', sale: 'Thành tiền', repair: 'Chi phí sửa' }[item.type] || 'Giá trị')
+
+const eventStatusClass = (item) => {
+    const status = String(item.status || '').toLowerCase()
+
+    if (item.type === 'import') return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+    if (['cancelled', 'canceled'].includes(status)) return 'bg-rose-50 text-rose-700 ring-rose-200'
+    if (['completed', 'paid', 'done', 'returned'].includes(status)) return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+    if (['pending', 'repairing', 'warranty'].includes(status)) return 'bg-amber-50 text-amber-700 ring-amber-200'
+
+    return 'bg-slate-50 text-slate-600 ring-slate-200'
+}
+
+const paymentLabel = (method) => ({
+    cash: 'Tiền mặt', transfer: 'Chuyển khoản', bank: 'Chuyển khoản', bank_transfer: 'Chuyển khoản',
+    card: 'Quẹt thẻ', debt: 'Ghi nợ', mixed: 'Nhiều hình thức', split: 'Nhiều hình thức',
+}[String(method || '').toLowerCase()] || method || '-')
+
+// Dữ liệu của cửa sổ xem chi tiết một lần nhập / bán / sửa: gom thành danh sách nhãn - giá trị, tách riêng số tiền chính.
+const eventDetail = computed(() => {
+    const item = selectedEvent.value
+
+    if (!item) return null
+
+    const rows = []
+    const add = (label, value, show = true) => {
+        if (show) rows.push({ label, value: value === null || value === undefined || value === '' ? '-' : value })
+    }
+
+    if (item.type === 'import') {
+        add('Mã phiếu nhập', item.code)
+        add('Nhà cung cấp', eventPartner(item))
+        add('Giá bán thiết lập', money(item.sell_price))
+
+        return { amountLabel: 'Giá nhập', amount: money(item.cost_price), rows }
+    }
+
+    if (item.type === 'sale') {
+        add('Mã hóa đơn', item.code)
+        add('Khách hàng', item.customer_name || 'Khách lẻ')
+        add('Số điện thoại', item.customer_phone)
+        add('Đơn giá', money(item.unit_price))
+        add('Giảm giá', money(item.discount_value))
+        add('Hình thức thanh toán', paymentLabel(item.payment_method))
+
+        return { amountLabel: 'Thành tiền', amount: money(item.subtotal), rows }
+    }
+
+    add('Mã phiếu sửa', item.code)
+    add('Thiết bị', item.device_name)
+    add('Khách gửi sửa', eventPartner(item))
+    add('Yêu cầu sửa', item.repair_request)
+    add('Kỹ thuật viên', item.technician_name)
+    add('Chi phí dự kiến', money(item.estimated_cost))
+    add('Hoàn tất', formatDate(item.completed_at), Boolean(item.completed_at))
+    add('Đã trả máy', formatDate(item.returned_at), Boolean(item.returned_at))
+    add('Bảo hành sau sửa', item.repair_warranty_days ? `${item.repair_warranty_days} ngày` : '', Boolean(item.repair_warranty_days))
+    add('Hạn bảo hành', dateOnly(item.repair_warranty_expires_at), Boolean(item.repair_warranty_expires_at))
+    add('Ghi chú', item.note, Boolean(item.note))
+
+    return { amountLabel: 'Chi phí cuối', amount: money(item.final_cost ?? item.estimated_cost), rows }
+})
+
+// ---- Hồ sơ đối tượng (khách hàng, NCC, hóa đơn...): chia các danh sách liên quan thành tab.
+const entityIcons = { customer: UserRound, user: Users, supplier: Building2, sale: ReceiptText, import: PackageCheck, product: Package }
+const entityTiles = {
+    customer: 'bg-blue-50 text-blue-600',
+    user: 'bg-slate-100 text-slate-600',
+    supplier: 'bg-amber-50 text-amber-600',
+    sale: 'bg-emerald-50 text-emerald-600',
+    import: 'bg-purple-50 text-purple-600',
+    product: 'bg-indigo-50 text-indigo-600',
+}
+const entityIcon = computed(() => entityIcons[result.value?.entity_type] || Package)
+const entityTile = computed(() => entityTiles[result.value?.entity_type] || 'bg-slate-100 text-slate-600')
+const activeSection = ref(0)
+const currentSection = computed(() => result.value?.sections?.[activeSection.value] || null)
+const fieldClass = (field) => {
+    const value = String(field.value ?? '')
+    const isMoney = value.endsWith('đ')
+    const isDebt = /công nợ/i.test(field.label) && value.replace(/\D/g, '').replace(/^0+/, '') !== ''
+
+    return [isMoney ? 'tabular-nums' : '', isDebt ? 'text-rose-600' : 'text-slate-900']
+}
+
+watch(result, (data) => {
+    const sections = data?.kind === 'entity' ? (data.sections || []) : []
+    const firstFilled = sections.findIndex(section => section.items?.length)
+
+    activeSection.value = firstFilled >= 0 ? firstFilled : 0
+})
+
+
 
 const eventValue = item => {
     if (item.type === 'sale') return item.subtotal ?? item.unit_price
@@ -627,356 +856,325 @@ const historyCount = type => type === 'all'
                 </div>
             </div>
 
-            <!-- Hồ sơ khách hàng / người dùng / nhà cung cấp / hóa đơn / phiếu nhập -->
-            <div v-else-if="result?.kind === 'entity'" class="space-y-5 p-4">
+            <!-- Hồ sơ đối tượng: khách hàng / người dùng / nhà cung cấp / hóa đơn / phiếu nhập / sản phẩm -->
+            <div v-else-if="result?.kind === 'entity'" class="space-y-4 p-4">
                 <button v-if="backStack.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50" @click="goBack">
-                    ← Quay lại
+                    <ArrowLeft class="h-3.5 w-3.5" />
+                    Quay lại
                 </button>
 
-                <div class="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-                    <div class="text-xs font-bold uppercase text-indigo-500">{{ result.entity_label }}</div>
-                    <div class="mt-1 text-xl font-black text-slate-900">{{ result.title }}</div>
-                    <div v-if="result.subtitle" class="mt-0.5 text-sm font-medium text-slate-600">{{ result.subtitle }}</div>
-                </div>
-
-                <div v-if="result.fields?.length" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div v-for="field in result.fields" :key="field.label" class="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div class="text-xs font-bold uppercase text-slate-400">{{ field.label }}</div>
-                        <div class="mt-1.5 break-words font-bold text-slate-900">{{ field.value }}</div>
+                <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div class="flex items-center gap-4 p-5">
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" :class="entityTile">
+                            <component :is="entityIcon" class="h-6 w-6" />
+                        </div>
+                        <div class="min-w-0">
+                            <span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide" :class="entityTile">{{ result.entity_label }}</span>
+                            <h2 class="mt-1 break-words text-xl font-black text-slate-900">{{ result.title }}</h2>
+                            <p v-if="result.subtitle" class="text-sm font-medium text-slate-500">{{ result.subtitle }}</p>
+                        </div>
                     </div>
-                </div>
 
-                <div v-for="section in result.sections" :key="section.title" class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                        <span class="text-sm font-bold text-slate-800">{{ section.title }}</span>
-                        <span class="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-500">{{ section.items.length }}</span>
+                    <dl v-if="result.fields?.length" class="grid border-t border-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+                        <div v-for="field in result.fields" :key="field.label" class="min-w-0 border-b border-slate-100 px-5 py-3">
+                            <dt class="text-xs font-semibold text-slate-400">{{ field.label }}</dt>
+                            <dd class="mt-0.5 break-words text-sm font-bold" :class="fieldClass(field)">{{ field.value }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section v-if="result.sections?.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div class="flex gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 p-2">
+                        <button
+                            v-for="(section, index) in result.sections"
+                            :key="section.title"
+                            type="button"
+                            class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition"
+                            :class="activeSection === index ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800'"
+                            @click="activeSection = index"
+                        >
+                            {{ section.title }}
+                            <span
+                                class="rounded-full px-1.5 py-0.5 text-[11px] font-bold"
+                                :class="activeSection === index ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'"
+                            >{{ section.items.length }}</span>
+                        </button>
                     </div>
-                    <div v-if="section.items.length" class="divide-y divide-slate-100">
+
+                    <div v-if="currentSection?.items.length" class="divide-y divide-slate-100">
                         <LookupSuggestionItem
-                            v-for="(item, index) in section.items"
-                            :key="`${section.title}-${item.type}-${item.id || item.repair_id || index}`"
+                            v-for="(item, index) in currentSection.items"
+                            :key="`${currentSection.title}-${item.type}-${item.id || item.repair_id || index}`"
                             :item="item"
                             @select="selectSuggestion"
                         />
                     </div>
-                    <div v-else class="px-4 py-6 text-center text-sm text-slate-400">Chưa có dữ liệu</div>
-                </div>
+                    <div v-else class="px-4 py-10 text-center text-sm text-slate-400">Chưa có dữ liệu</div>
+                </section>
             </div>
 
-            <div
-                v-else-if="result"
-                class="space-y-5 p-4"
-            >
+            <!-- Chi tiết thiết bị (IMEI / Serial) -->
+            <div v-else-if="result" class="space-y-4 p-4">
                 <button v-if="backStack.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50" @click="goBack">
-                    ← Quay lại
+                    <ArrowLeft class="h-3.5 w-3.5" />
+                    Quay lại
                 </button>
 
-                <div
-                    class="rounded-2xl border p-4"
-                    :class="result.exists ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'"
-                >
-                    <div class="flex items-start gap-3">
-                        <CheckCircle2
-                            v-if="result.exists"
-                            class="mt-0.5 h-5 w-5 shrink-0"
-                        />
-                        <AlertTriangle
-                            v-else
-                            class="mt-0.5 h-5 w-5 shrink-0"
-                        />
-                        <div>
-                            <div class="font-bold">
-                                {{ result.message }}
+                <!-- 1. Nhận diện thiết bị: tên, trạng thái, mã định danh, giá -->
+                <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div class="flex flex-col gap-5 p-5 lg:flex-row lg:items-start lg:justify-between">
+                        <div class="flex min-w-0 gap-4">
+                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                                <Smartphone class="h-6 w-6" />
                             </div>
-                            <div class="mt-1 text-sm">
-                                {{ result.exists ? 'Đã tìm thấy dữ liệu IMEI trong hệ thống.' : (result.repair_only ? 'Chỉ có phiếu sửa chữa liên quan; thiết bị này không nhập/bán tại cửa hàng.' : 'Chưa có dữ liệu IMEI trong hệ thống.') }}
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h2 class="break-words text-xl font-black text-slate-900">{{ deviceTitle }}</h2>
+                                    <span class="rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset" :class="deviceStatusMeta.class">{{ deviceStatusMeta.label }}</span>
+                                </div>
+                                <div class="mt-1 text-sm text-slate-500">
+                                    <span v-if="result.imei?.product?.sku">SKU {{ result.imei.product.sku }}</span>
+                                    <span v-if="result.imei?.product?.sku && variantText !== '-'"> · </span>
+                                    <span v-if="variantText !== '-'">{{ variantText }}</span>
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        class="group inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs transition hover:border-indigo-300 hover:bg-indigo-50"
+                                        title="Bấm để sao chép"
+                                        @click="copyText('imei', result.imei?.imei || keyword)"
+                                    >
+                                        <span class="font-semibold text-slate-400">IMEI</span>
+                                        <span class="font-mono text-sm font-bold text-slate-900">{{ result.imei?.imei || keyword }}</span>
+                                        <Check v-if="copiedKey === 'imei'" class="h-3.5 w-3.5 text-emerald-600" />
+                                        <Copy v-else class="h-3.5 w-3.5 text-slate-400 group-hover:text-indigo-600" />
+                                    </button>
+                                    <button
+                                        v-if="result.imei?.serial"
+                                        type="button"
+                                        class="group inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs transition hover:border-indigo-300 hover:bg-indigo-50"
+                                        title="Bấm để sao chép"
+                                        @click="copyText('serial', result.imei.serial)"
+                                    >
+                                        <span class="font-semibold text-slate-400">Serial</span>
+                                        <span class="font-mono text-sm font-bold text-slate-900">{{ result.imei.serial }}</span>
+                                        <Check v-if="copiedKey === 'serial'" class="h-3.5 w-3.5 text-emerald-600" />
+                                        <Copy v-else class="h-3.5 w-3.5 text-slate-400 group-hover:text-indigo-600" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <div class="grid gap-4 lg:grid-cols-4">
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
-                            <Package class="h-4 w-4" />
-                            Sản phẩm
-                        </div>
-                        <div class="mt-2 font-bold text-slate-900">
-                            {{ deviceTitle }}
-                        </div>
-                        <div class="mt-1 text-xs text-slate-500">
-                            SKU: {{ result.imei?.product?.sku || '-' }}
-                        </div>
-                    </div>
-
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div class="text-xs font-bold uppercase text-slate-400">
-                            IMEI / Serial
-                        </div>
-                        <div class="mt-2 font-mono text-sm font-bold text-slate-900">
-                            {{ result.imei?.imei || keyword }}
-                        </div>
-                        <div class="mt-1 text-xs text-slate-500">
-                            {{ result.imei?.serial || '-' }}
-                        </div>
-                    </div>
-
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div class="text-xs font-bold uppercase text-slate-400">
-                            Biến thể
-                        </div>
-                        <div class="mt-2 font-semibold text-slate-900">
-                            {{ variantText }}
-                        </div>
-                        <div class="mt-1 text-xs text-slate-500">
-                            Trạng thái: {{ result.imei?.status || '-' }}
+                        <div v-if="result.imei" class="grid shrink-0 grid-cols-2 gap-3 lg:w-80">
+                            <div class="rounded-xl bg-slate-50 px-4 py-3">
+                                <div class="text-xs font-semibold text-slate-400">Giá nhập</div>
+                                <div class="mt-0.5 text-base font-black tabular-nums text-slate-900">{{ money(result.imei.cost_price) }}</div>
+                            </div>
+                            <div class="rounded-xl bg-indigo-50 px-4 py-3">
+                                <div class="text-xs font-semibold text-indigo-400">Giá bán</div>
+                                <div class="mt-0.5 text-base font-black tabular-nums text-indigo-700">{{ money(result.imei.sell_price) }}</div>
+                            </div>
                         </div>
                     </div>
 
                     <div
-                        class="rounded-2xl border p-4"
-                        :class="warrantyMeta.class"
+                        v-if="deviceNotice"
+                        class="flex items-start gap-2 border-t px-5 py-2.5 text-sm"
+                        :class="result.exists ? 'border-slate-100 bg-slate-50 text-slate-600' : 'border-amber-100 bg-amber-50 text-amber-800'"
                     >
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase">
-                            <component :is="warrantyMeta.icon" class="h-4 w-4" />
-                            BH NCC
-                        </div>
-                        <div class="mt-2 font-black">
-                            {{ result.warranty?.label || '-' }}
-                        </div>
-                        <div
-                            v-if="result.warranty?.remaining_days !== null"
-                            class="mt-1 text-xs font-semibold"
-                        >
-                            {{ result.warranty.remaining_days >= 0 ? `Còn ${result.warranty.remaining_days} ngày` : `Quá hạn ${Math.abs(result.warranty.remaining_days)} ngày` }}
-                        </div>
+                        <Info class="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{{ deviceNotice }}</span>
                     </div>
-                </div>
+                </section>
 
                 <div class="grid gap-4 lg:grid-cols-3">
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
-                            <UserRound class="h-4 w-4" />
-                            Khách hàng
-                        </div>
-                        <template v-if="result.customer">
-                            <div class="mt-2 font-bold text-slate-900">{{ result.customer.name || 'Khách lẻ' }}</div>
-                            <div class="mt-1 text-xs font-semibold text-slate-600">{{ result.customer.phone || 'Chưa có số điện thoại' }}</div>
-                            <div class="mt-1 text-xs text-slate-500">
-                                {{ result.customer.source === 'sale' ? 'Mua tại hóa đơn' : 'Gửi sửa tại phiếu' }}
-                                {{ result.customer.reference_code }} · {{ formatDate(result.customer.happened_at) }}
-                            </div>
-                        </template>
-                        <div v-else class="mt-2 text-sm font-semibold text-slate-500">Chưa bán / chưa có thông tin khách</div>
-                    </div>
-
-                    <div class="rounded-2xl border p-4" :class="customerWarrantyMeta.class">
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase">
-                            <component :is="customerWarrantyMeta.icon" class="h-4 w-4" />
-                            Bảo hành cửa hàng (khách)
-                        </div>
-                        <div class="mt-2 font-black">{{ result.customer_warranty?.label || '-' }}</div>
-                        <div v-if="result.customer_warranty?.expired_at" class="mt-1 text-xs font-semibold">
-                            Hạn: {{ formatDate(result.customer_warranty.expired_at) }}
-                            <span v-if="remainingText(result.customer_warranty)"> · {{ remainingText(result.customer_warranty) }}</span>
-                        </div>
-                        <div v-if="result.customer_warranty?.start_at" class="mt-0.5 text-xs opacity-80">
-                            Tính từ ngày bán: {{ formatDate(result.customer_warranty.start_at) }}
-                        </div>
-                        <div v-if="result.customer_warranty?.reason" class="mt-0.5 text-xs">Lý do hủy: {{ result.customer_warranty.reason }}</div>
-                    </div>
-
-                    <div class="rounded-2xl border p-4" :class="repairWarrantyMeta.class">
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase">
-                            <component :is="repairWarrantyMeta.icon" class="h-4 w-4" />
-                            Bảo hành sửa chữa
-                        </div>
-                        <div class="mt-2 font-black">{{ result.repair_warranty?.label || '-' }}</div>
-                        <div v-if="result.repair_warranty?.code" class="mt-1 text-xs font-semibold">Phiếu {{ result.repair_warranty.code }}</div>
-                        <div v-if="result.repair_warranty?.expired_at" class="mt-0.5 text-xs font-semibold">
-                            Hạn: {{ formatDate(result.repair_warranty.expired_at) }}
-                            <span v-if="remainingText(result.repair_warranty)"> · {{ remainingText(result.repair_warranty) }}</span>
-                        </div>
-                        <div v-if="result.repair_warranty?.reason" class="mt-0.5 text-xs">Lý do hủy: {{ result.repair_warranty.reason }}</div>
-                    </div>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-3">
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div class="mb-3 flex items-center gap-2 font-bold text-slate-900">
+                    <!-- 2. Bảo hành: gộp 3 loại vào một bảng -->
+                    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white lg:col-span-2">
+                        <header class="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
                             <ShieldCheck class="h-5 w-5 text-indigo-600" />
-                            Thông tin BH nhà cung cấp
-                        </div>
-                        <div class="space-y-2 text-sm text-slate-600">
-                            <div class="flex justify-between gap-4">
-                                <span>Ngày bắt đầu</span>
-                                <span class="font-semibold text-slate-900">{{ formatDate(result.warranty?.start_at) }}</span>
-                            </div>
-                            <div class="flex justify-between gap-4">
-                                <span>Hạn BH NCC</span>
-                                <span class="font-semibold text-slate-900">{{ formatDate(result.warranty?.expired_at) }}</span>
-                            </div>
-                            <div class="flex justify-between gap-4">
-                                <span>Giá nhập hiện tại</span>
-                                <span class="font-semibold text-slate-900">{{ money(result.imei?.cost_price) }}</span>
-                            </div>
-                            <div class="flex justify-between gap-4">
-                                <span>Giá bán hiện tại</span>
-                                <span class="font-semibold text-slate-900">{{ money(result.imei?.sell_price) }}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4 lg:col-span-2">
-                        <div class="mb-3 flex items-center gap-2 font-bold text-slate-900">
-                            <History class="h-5 w-5 text-indigo-600" />
-                            Tổng quan nghiệp vụ
-                        </div>
-                        <div class="grid gap-3 sm:grid-cols-3">
-                            <div class="rounded-xl bg-slate-50 p-3">
-                                <div class="text-xs font-bold uppercase text-slate-400">Số lần nhập</div>
-                                <div class="mt-1 text-2xl font-black text-slate-900">{{ result.summary?.import_count || 0 }}</div>
-                            </div>
-                            <div class="rounded-xl bg-slate-50 p-3">
-                                <div class="text-xs font-bold uppercase text-slate-400">Số lần bán</div>
-                                <div class="mt-1 text-2xl font-black text-slate-900">{{ result.summary?.sale_count || 0 }}</div>
-                            </div>
-                            <div class="rounded-xl bg-slate-50 p-3">
-                                <div class="text-xs font-bold uppercase text-slate-400">Số lần sửa</div>
-                                <div class="mt-1 text-2xl font-black text-slate-900">{{ result.summary?.repair_count || 0 }}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div
-                    v-if="hasExtraInfo"
-                    class="rounded-2xl border border-slate-200 bg-white p-4"
-                >
-                    <div class="mb-3 font-bold text-slate-900">
-                        Thông tin thiết bị lưu kèm
-                    </div>
-                    <div class="grid gap-3 text-sm lg:grid-cols-[1fr_auto]">
-                        <div v-if="result.imei.extra_info?.note">
-                            <div class="text-xs font-bold uppercase text-slate-400">Thông tin</div>
-                            <div class="mt-1 whitespace-pre-line font-semibold text-slate-900">{{ result.imei.extra_info.note }}</div>
-                        </div>
-                        <a
-                            v-if="extraInfoImageUrl"
-                            :href="extraInfoImageUrl"
-                            target="_blank"
-                            class="inline-flex items-center justify-center rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
-                        >
-                            Xem ảnh thiết bị
-                        </a>
-                    </div>
-                </div>
-
-                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                    <div class="flex flex-col gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <div class="flex items-center gap-2 text-lg font-bold text-slate-900">
-                                <Clock class="h-5 w-5 text-blue-600" />
-                                Lịch sử vòng đời sản phẩm
-                            </div>
-                            <div class="mt-0.5 text-xs text-slate-500">Hiển thị toàn bộ tiến trình nhập kho, bán hàng và bảo hành sửa chữa theo thứ tự thời gian.</div>
-                        </div>
-                        <div class="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-                            <button
-                                v-for="type in historyTypes"
-                                :key="type.value"
-                                type="button"
-                                class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all"
-                                :class="historyFilter === type.value
-                                    ? type.value === 'import' ? 'bg-emerald-600 text-white shadow-sm'
-                                        : type.value === 'sale' ? 'bg-blue-600 text-white shadow-sm'
-                                            : type.value === 'repair' ? 'bg-purple-600 text-white shadow-sm'
-                                                : 'bg-white text-slate-900 shadow-sm'
-                                    : 'text-slate-600 hover:text-slate-900'"
-                                @click="historyFilter = type.value"
-                            >
-                                <span v-if="type.value !== 'all'" class="h-2 w-2 rounded-full" :class="eventDotClasses(type.value)"></span>
-                                {{ type.label }}<span v-if="type.value === 'all'">({{ historyCount(type.value) }})</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div v-if="filteredTimeline.length" class="relative px-2 pt-6 sm:px-6">
-                        <div class="absolute bottom-6 left-[29px] top-10 w-0.5 bg-slate-200 sm:left-[45px]"></div>
-                        <div class="space-y-6">
-                        <div v-for="item in filteredTimeline" :key="`${item.type}-${item.id}`" class="group relative flex items-start gap-4 sm:gap-6">
-                            <button type="button" class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 bg-white shadow-sm transition-transform duration-200 group-hover:scale-110 sm:h-11 sm:w-11" :class="eventColorClasses(item)" @click="selectedEvent = item">
-                                <component :is="item.icon" class="h-4 w-4" />
-                            </button>
-                            <button type="button" class="min-w-0 flex-1 rounded-xl border border-slate-200/80 bg-slate-50 p-4 text-left transition-all hover:border-slate-300 hover:bg-white hover:shadow-md sm:p-5" @click="selectedEvent = item">
-                                <div class="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="rounded-md px-2.5 py-0.5 text-xs font-bold" :class="eventBadgeClasses(item)">{{ eventTypeLabel(item) }}</span>
-                                        <span class="font-bold text-slate-900 transition-colors group-hover:text-blue-600">{{ item.title }}</span>
+                            <h3 class="font-bold text-slate-900">Bảo hành</h3>
+                        </header>
+                        <ul class="divide-y divide-slate-100">
+                            <li v-for="row in warrantyRows" :key="row.key" class="px-5 py-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" :class="row.meta.tile">
+                                        <component :is="row.meta.icon" class="h-5 w-5" />
                                     </div>
-                                    <div class="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                                        <Clock class="h-3.5 w-3.5 text-slate-400" />
-                                        {{ formatDate(item.happenedAt) }}
-                                    </div>
-                                </div>
-                                <div class="mt-3 grid grid-cols-1 gap-3 border-t border-slate-200/60 pt-3 text-sm sm:grid-cols-3">
-                                    <div>
-                                        <span class="block text-xs text-slate-400">Đối tác / Khách hàng</span>
-                                        <span class="font-medium text-slate-700">{{ eventPartner(item) }}</span>
-                                    </div>
-                                    <div>
-                                        <span class="block text-xs text-slate-400">{{ item.type === 'repair' ? 'Chi phí sửa chữa' : 'Giá trị giao dịch' }}</span>
-                                        <span class="font-bold text-slate-900">{{ money(eventValue(item)) }}</span>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-2 sm:justify-start">
-                                        <div>
-                                            <span class="block text-xs text-slate-400">Trạng thái</span>
-                                            <span class="mt-0.5 inline-block rounded bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600">{{ eventStatus(item) }}</span>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                            <div>
+                                                <div class="text-sm font-bold text-slate-900">{{ row.title }}</div>
+                                                <div class="text-xs text-slate-400">{{ row.hint }}</div>
+                                            </div>
+                                            <span class="rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset" :class="row.meta.badge">{{ row.label }}</span>
                                         </div>
-                                        <span class="ml-auto flex items-center gap-1 text-xs font-semibold text-blue-600 group-hover:underline">
-                                            Chi tiết <ExternalLink class="h-3 w-3" />
-                                        </span>
+
+                                        <div v-if="row.progress !== null" class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                            <div class="h-full rounded-full transition-all" :class="row.meta.bar" :style="{ width: `${row.progress}%` }"></div>
+                                        </div>
+
+                                        <div v-if="row.period || row.remaining || row.days || row.reference || row.reason" class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                                            <span v-if="row.period" class="tabular-nums">{{ row.period }}</span>
+                                            <span v-if="row.days">Thời hạn {{ row.days }}</span>
+                                            <span v-if="row.reference">{{ row.reference }}</span>
+                                            <span v-if="row.remaining" class="font-bold" :class="row.meta.remain">{{ row.remaining }}</span>
+                                            <span v-if="row.reason" class="font-medium text-rose-600">{{ row.reason }}</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </button>
-                        </div>
-                        </div>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <!-- 3. Cột phụ: khách hàng, tóm tắt, ghi chú -->
+                    <div class="space-y-4 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+                        <section class="rounded-2xl border border-slate-200 bg-white p-5">
+                            <h3 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
+                                <UserRound class="h-5 w-5 text-indigo-600" />
+                                Khách hàng gần nhất
+                            </h3>
+                            <template v-if="result.customer">
+                                <div class="font-bold text-slate-900">{{ result.customer.name || 'Khách lẻ' }}</div>
+                                <div class="mt-0.5 text-sm text-slate-600">{{ result.customer.phone || 'Chưa có số điện thoại' }}</div>
+                                <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                                    {{ customerSourceLabel }}
+                                    <span class="font-bold text-slate-700">{{ result.customer.reference_code }}</span>
+                                    <div class="mt-0.5">{{ formatDate(result.customer.happened_at) }}</div>
+                                </div>
+                            </template>
+                            <div v-else class="text-sm text-slate-400">Chưa bán / chưa có thông tin khách</div>
+                        </section>
+
+                        <section class="rounded-2xl border border-slate-200 bg-white p-5">
+                            <h3 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
+                                <History class="h-5 w-5 text-indigo-600" />
+                                Tóm tắt vòng đời
+                            </h3>
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div class="rounded-xl bg-emerald-50 py-2.5">
+                                    <div class="text-xl font-black tabular-nums text-emerald-700">{{ result.summary?.import_count || 0 }}</div>
+                                    <div class="text-[11px] font-semibold text-emerald-600">Lần nhập</div>
+                                </div>
+                                <div class="rounded-xl bg-blue-50 py-2.5">
+                                    <div class="text-xl font-black tabular-nums text-blue-700">{{ result.summary?.sale_count || 0 }}</div>
+                                    <div class="text-[11px] font-semibold text-blue-600">Lần bán</div>
+                                </div>
+                                <div class="rounded-xl bg-purple-50 py-2.5">
+                                    <div class="text-xl font-black tabular-nums text-purple-700">{{ result.summary?.repair_count || 0 }}</div>
+                                    <div class="text-[11px] font-semibold text-purple-600">Lần sửa</div>
+                                </div>
+                            </div>
+                            <dl v-if="result.imei" class="mt-3 space-y-1.5 text-sm">
+                                <div class="flex justify-between gap-3">
+                                    <dt class="text-slate-500">Nhập kho</dt>
+                                    <dd class="font-semibold tabular-nums text-slate-900">{{ dateOnly(result.imei.imported_at) }}</dd>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <dt class="text-slate-500">Bán gần nhất</dt>
+                                    <dd class="font-semibold tabular-nums text-slate-900">{{ dateOnly(result.imei.sold_at) }}</dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <section v-if="hasExtraInfo" class="rounded-2xl border border-slate-200 bg-white p-5">
+                            <h3 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
+                                <StickyNote class="h-5 w-5 text-indigo-600" />
+                                Ghi chú thiết bị
+                            </h3>
+                            <p v-if="result.imei.extra_info?.note" class="whitespace-pre-line text-sm text-slate-700">{{ result.imei.extra_info.note }}</p>
+                            <a
+                                v-if="extraInfoImageUrl"
+                                :href="extraInfoImageUrl"
+                                target="_blank"
+                                class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+                            >
+                                <ImageIcon class="h-3.5 w-3.5" />
+                                Xem ảnh thiết bị
+                            </a>
+                        </section>
                     </div>
-                    <div v-else class="py-12 text-center text-sm font-medium text-slate-400">Không có dữ liệu tiến trình thuộc bộ lọc này.</div>
+
+                    <!-- 4. Lịch sử vòng đời -->
+                    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white lg:col-span-2 lg:col-start-1">
+                        <header class="flex flex-col gap-3 border-b border-slate-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center gap-2">
+                                <Clock class="h-5 w-5 text-indigo-600" />
+                                <h3 class="font-bold text-slate-900">Lịch sử vòng đời</h3>
+                                <span class="text-xs text-slate-400">mới nhất ở trên</span>
+                            </div>
+                            <div class="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                                <button
+                                    v-for="type in historyTypes"
+                                    :key="type.value"
+                                    type="button"
+                                    class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                                    :class="historyFilter === type.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+                                    @click="historyFilter = type.value"
+                                >
+                                    <span v-if="type.value !== 'all'" class="h-2 w-2 rounded-full" :class="eventDotClasses(type.value)"></span>
+                                    {{ type.label }}
+                                    <span class="text-slate-400">{{ historyCount(type.value) }}</span>
+                                </button>
+                            </div>
+                        </header>
+
+                        <ol v-if="filteredTimeline.length" class="relative space-y-3 p-5 before:absolute before:bottom-8 before:left-[38px] before:top-8 before:w-px before:bg-slate-200">
+                            <li v-for="item in filteredTimeline" :key="`${item.type}-${item.id}`" class="relative flex items-start gap-3">
+                                <span class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-4 ring-white" :class="eventTileClass(item.type)">
+                                    <component :is="item.icon" class="h-4 w-4" />
+                                </span>
+                                <button
+                                    type="button"
+                                    class="group min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:bg-slate-50"
+                                    @click="selectedEvent = item"
+                                >
+                                    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                        <div class="flex min-w-0 items-center gap-2">
+                                            <span class="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold" :class="eventBadgeClasses(item)">{{ eventTypeLabel(item) }}</span>
+                                            <span class="truncate text-sm font-bold text-slate-900">{{ item.title }}</span>
+                                        </div>
+                                        <time class="text-xs tabular-nums text-slate-500">{{ formatDate(item.happenedAt) }}</time>
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap items-end justify-between gap-x-4 gap-y-1.5">
+                                        <div class="min-w-0 text-sm">
+                                            <span class="text-slate-400">{{ eventPartnerLabel(item) }}: </span>
+                                            <span class="font-medium text-slate-700">{{ eventPartner(item) }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm font-black tabular-nums text-slate-900">{{ money(eventValue(item)) }}</span>
+                                            <span class="rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset" :class="eventStatusClass(item)">{{ eventStatus(item) }}</span>
+                                            <ChevronRight class="h-4 w-4 text-slate-300 transition group-hover:text-indigo-500" />
+                                        </div>
+                                    </div>
+                                    <p v-if="item.subtitle" class="mt-1.5 truncate text-xs text-slate-500">{{ item.subtitle }}</p>
+                                </button>
+                            </li>
+                        </ol>
+                        <div v-else class="py-12 text-center text-sm font-medium text-slate-400">Không có dữ liệu thuộc bộ lọc này.</div>
+                    </section>
                 </div>
             </div>
         </DataPanel>
 
-        <BaseModal v-if="selectedEvent" :title="`${eventTypeLabel(selectedEvent)} · ${selectedEvent.title}`" size="md" @close="selectedEvent = null">
+        <BaseModal v-if="selectedEvent && eventDetail" :title="`${eventTypeLabel(selectedEvent)} · ${selectedEvent.title}`" size="md" @close="selectedEvent = null">
             <div class="space-y-4 p-4 text-sm">
-                <div class="rounded-xl border p-3" :class="eventColorClasses(selectedEvent)">
-                    <div class="text-xs font-bold uppercase opacity-70">Thời gian phát sinh</div>
-                    <div class="mt-1 font-bold">{{ formatDate(selectedEvent.happenedAt) }}</div>
+                <div class="flex items-center justify-between gap-3 rounded-xl border p-4" :class="eventColorClasses(selectedEvent)">
+                    <div>
+                        <div class="text-xs font-semibold opacity-70">{{ eventDetail.amountLabel }}</div>
+                        <div class="mt-0.5 text-2xl font-black tabular-nums">{{ eventDetail.amount }}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs font-semibold opacity-70">Thời gian</div>
+                        <div class="mt-0.5 font-bold tabular-nums">{{ formatDate(selectedEvent.happenedAt) }}</div>
+                        <span class="mt-1.5 inline-block rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold">{{ eventStatus(selectedEvent) }}</span>
+                    </div>
                 </div>
-                <dl v-if="selectedEvent.type === 'import'" class="grid grid-cols-2 gap-x-4 gap-y-3">
-                    <dt class="text-slate-500">Mã phiếu nhập</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.code || '-' }}</dd>
-                    <dt class="text-slate-500">Giá nhập</dt><dd class="text-right font-semibold text-slate-900">{{ money(selectedEvent.cost_price) }}</dd>
-                    <dt class="text-slate-500">Giá bán thiết lập</dt><dd class="text-right font-semibold text-slate-900">{{ money(selectedEvent.sell_price) }}</dd>
-                </dl>
-                <dl v-else-if="selectedEvent.type === 'sale'" class="grid grid-cols-2 gap-x-4 gap-y-3">
-                    <dt class="text-slate-500">Khách hàng</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.customer_name || 'Khách lẻ' }}</dd>
-                    <dt class="text-slate-500">Số điện thoại</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.customer_phone || '-' }}</dd>
-                    <dt class="text-slate-500">Đơn giá</dt><dd class="text-right font-semibold text-slate-900">{{ money(selectedEvent.unit_price) }}</dd>
-                    <dt class="text-slate-500">Giảm giá</dt><dd class="text-right font-semibold text-slate-900">{{ money(selectedEvent.discount_value) }}</dd>
-                    <dt class="text-slate-500">Thành tiền</dt><dd class="text-right font-bold text-blue-700">{{ money(selectedEvent.subtotal) }}</dd>
-                    <dt class="text-slate-500">Thanh toán</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.payment_method || '-' }}</dd>
-                    <dt class="text-slate-500">Trạng thái</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.status || '-' }}</dd>
-                </dl>
-                <dl v-else class="grid grid-cols-2 gap-x-4 gap-y-3">
-                    <dt class="text-slate-500">Thiết bị</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.device_name || '-' }}</dd>
-                    <dt class="text-slate-500">Yêu cầu sửa</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.repair_request || '-' }}</dd>
-                    <dt class="text-slate-500">Kỹ thuật viên</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.technician_name || '-' }}</dd>
-                    <dt class="text-slate-500">Chi phí dự kiến</dt><dd class="text-right font-semibold text-slate-900">{{ money(selectedEvent.estimated_cost) }}</dd>
-                    <dt class="text-slate-500">Chi phí cuối</dt><dd class="text-right font-bold text-amber-700">{{ money(selectedEvent.final_cost) }}</dd>
-                    <dt class="text-slate-500">Trạng thái</dt><dd class="text-right font-semibold text-slate-900">{{ selectedEvent.status || '-' }}</dd>
-                    <dt v-if="selectedEvent.completed_at" class="text-slate-500">Hoàn tất</dt><dd v-if="selectedEvent.completed_at" class="text-right font-semibold text-slate-900">{{ formatDate(selectedEvent.completed_at) }}</dd>
-                    <dt v-if="selectedEvent.returned_at" class="text-slate-500">Đã trả máy</dt><dd v-if="selectedEvent.returned_at" class="text-right font-semibold text-slate-900">{{ formatDate(selectedEvent.returned_at) }}</dd>
-                    <dt v-if="selectedEvent.note" class="text-slate-500">Ghi chú</dt><dd v-if="selectedEvent.note" class="text-right font-semibold text-slate-900">{{ selectedEvent.note }}</dd>
+
+                <dl class="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                    <div v-for="row in eventDetail.rows" :key="row.label" class="flex items-start justify-between gap-6 px-4 py-2.5">
+                        <dt class="shrink-0 text-slate-500">{{ row.label }}</dt>
+                        <dd class="min-w-0 break-words text-right font-semibold text-slate-900">{{ row.value }}</dd>
+                    </div>
                 </dl>
             </div>
         </BaseModal>

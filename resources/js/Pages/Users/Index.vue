@@ -15,7 +15,7 @@ import { useLiveList } from '@/Composables/useLiveList'
 import UserFormModal from './FormModal.vue'
 import RoleManagementDialog from './RoleManagementDialog.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
-import RecordDetailModal from '@/Components/RecordDetailModal.vue'
+import UserDetailModal from './UserDetailModal.vue'
 
 const props = defineProps({
     users: Object,
@@ -96,11 +96,11 @@ const openEdit = (user) => {
     })
 }
 
-const openDetail = (user) => openModal(RecordDetailModal, {
-    props: { type: 'user', recordId: user.id },
+const openDetail = (user) => openModal(UserDetailModal, {
+    props: { recordId: user.id },
     deepLink: { type: 'user', id: user.id },
 })
-registerUrlModal('user', RecordDetailModal, id => ({ type: 'user', recordId: id }))
+registerUrlModal('user', UserDetailModal, id => ({ recordId: id }))
 
 const openDetailFromGlobalSearch = () => {
     const url = new URL(window.location.href)

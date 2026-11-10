@@ -40,6 +40,8 @@ const { categories, brands, units } = useReferenceData({
 
 
 const showVariants = ref(!!props.product?.variants?.length)
+// Sản phẩm đã có tồn kho thì không đổi loại thường <-> IMEI (server cũng chặn lại để đảm bảo).
+const typeLocked = computed(() => !!props.product?.id && Number(props.product?.stock || 0) !== 0)
 const priceUnitBasis = ref('base')
 
 // Đặt autoSku ở đây, TRƯỚC TẤT CẢ watcher có sử dụng nó
@@ -1200,7 +1202,7 @@ const submit = () => {
                             <input
                                 v-model="form.manage_stock_by_serial"
                                 type="checkbox"
-                                :disabled="form.has_unit_conversion"
+                                :disabled="form.has_unit_conversion || typeLocked"
                                 class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                             />
                             <span class="text-xs font-semibold">Có Serial / IMEI</span>
@@ -1285,6 +1287,16 @@ const submit = () => {
                         1 {{ selectedImportUnitName }} = {{ form.conversion_factor || 0 }} {{ selectedUnitName }}
                     </div>
                 </div>
+
+                <p v-if="typeLocked" class="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px] text-slate-600">
+                    Sản phẩm đang còn tồn kho nên không đổi được giữa loại thường và loại IMEI/Serial. Đưa tồn về 0 trước khi đổi loại.
+                </p>
+                <p v-if="form.errors.manage_stock_by_serial" class="rounded-lg border border-red-200 bg-red-50 p-2.5 text-[11px] font-medium text-red-700">
+                    {{ form.errors.manage_stock_by_serial }}
+                </p>
+                <p v-if="form.errors.variants" class="rounded-lg border border-red-200 bg-red-50 p-2.5 text-[11px] font-medium text-red-700">
+                    {{ form.errors.variants }}
+                </p>
 
                 <p v-if="form.manage_stock_by_serial" class="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-700">
                     Lưu ý: Sản phẩm IMEI sẽ yêu cầu quét mã IMEI riêng khi nhập kho và tạo hóa đơn bán lẻ.

@@ -15,7 +15,7 @@ import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import SupplierForm from './Form.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
-import RecordDetailModal from '@/Components/RecordDetailModal.vue'
+import SupplierDetailModal from './SupplierDetailModal.vue'
 
 const props = defineProps({
     suppliers: Object,
@@ -77,11 +77,11 @@ const openEdit = (supplier) => {
     })
 }
 
-const openDetail = (supplier) => openModal(RecordDetailModal, {
-    props: { type: 'supplier', recordId: supplier.id },
+const openDetail = (supplier) => openModal(SupplierDetailModal, {
+    props: { recordId: supplier.id },
     deepLink: { type: 'supplier', id: supplier.id },
 })
-registerUrlModal('supplier', RecordDetailModal, id => ({ type: 'supplier', recordId: id }))
+registerUrlModal('supplier', SupplierDetailModal, id => ({ recordId: id }))
 
 const openDetailFromGlobalSearch = () => {
     const url = new URL(window.location.href)

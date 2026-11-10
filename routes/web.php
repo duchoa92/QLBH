@@ -332,8 +332,9 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('/imeis/lookup', '/lookup');
     Route::get('/imeis/{imei}', [ProductImeiController::class, 'show'])->middleware('permission:products.view')->name('product-imeis.show');
 
-    Route::resource('customers', CustomerController::class)
-        ->middlewareFor(['index', 'show'], 'permission:customers.view')
+    // Chi tiết khách hàng xem bằng modal (records.show), không còn trang /customers/{id}
+    Route::resource('customers', CustomerController::class)->except(['show'])
+        ->middlewareFor('index', 'permission:customers.view')
         ->middlewareFor(['create', 'store'], 'permission:customers.create')
         ->middlewareFor(['edit', 'update'], 'permission:customers.edit')
         ->middlewareFor('destroy', 'permission:customers.delete');

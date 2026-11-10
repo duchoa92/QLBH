@@ -7,6 +7,7 @@ use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
 use App\Models\Repair;
 use App\Models\SaleItem;
+use App\Models\Supplier;
 use App\Services\Lookup\EntityLookupService;
 use App\Services\Stock\ImeiStockSynchronizer;
 use Illuminate\Http\RedirectResponse;
@@ -213,6 +214,11 @@ class ProductImeiController extends Controller
             ->latest('id')
             ->get();
 
+        // Tên nhà cung cấp của từng lần nhập (trước đây chỉ hiển thị "Nhà cung cấp #id").
+        $supplierNames = Supplier::query()
+            ->whereIn('id', $importHistories->map(fn (ProductImeiHistory $history) => $history->meta['supplier_id'] ?? null)->filter()->unique()->values())
+            ->pluck('name', 'id');
+
         $latestSale = $saleItems->first()?->sale;
         $latestRepair = $repairs->first();
         $customer = $latestSale?->customer
@@ -269,6 +275,7 @@ class ProductImeiController extends Controller
                 'cost_price' => $history->cost_price,
                 'sell_price' => $history->sell_price,
                 'supplier_id' => $history->meta['supplier_id'] ?? null,
+                'supplier_name' => $supplierNames[$history->meta['supplier_id'] ?? 0] ?? null,
                 'happened_at' => $history->happened_at,
                 'created_at' => $history->created_at,
             ])->values(),

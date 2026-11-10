@@ -298,22 +298,6 @@ class CustomerController extends Controller
     }
 
 
-    // Hiển thị chi tiết khách hàng
-    public function show(Customer $customer): Response
-    {
-        $customer->load([
-            'images',
-            'devices',
-            'points' => fn ($query) => $query->latest(),
-            'debts',
-        ]);
-
-        return Inertia::render('Customers/Show', [
-            'customer' => $customer,
-        ]);
-    }
-
-
     // Tìm kiếm khách hàng (API)
     public function search(Request $request)
     {

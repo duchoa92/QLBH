@@ -7,6 +7,7 @@ use App\Services\Stock\OpeningStockBatchService;
 use App\Models\CategoryAttributeValue;
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Models\ProductStockBatch;
 use App\Models\ProductVariant;
 use App\Repositories\Product\ProductRepository;
 use App\Services\Base\BaseService;
@@ -16,6 +17,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ProductService extends BaseService
 {
@@ -134,6 +136,10 @@ class ProductService extends BaseService
             unset($data['variants'], $data['imeis']);
 
             $data = $this->normalizeProductData($data);
+
+            // Chặn đổi loại sản phẩm (thường <-> IMEI, có / không biến thể) khi còn tồn kho, tránh lệch tồn.
+            $this->guardProductTypeChange($model, $data, $hasVariants, $variants);
+
             $data['slug'] = $this->generateUniqueSlug($data['name'], $model->id);
 
             if (isset($data['image'])) {
@@ -293,6 +299,67 @@ class ProductService extends BaseService
         }
     }
 
+    /**
+     * Đổi loại sản phẩm làm tồn kho lệch giữa các nơi lưu (product.stock, lô tồn, variant.stock, bảng IMEI),
+     * vì mỗi loại quản lý tồn theo một cách khác nhau. Chỉ cho đổi khi chưa có tồn ở "nơi cũ".
+     */
+    private function guardProductTypeChange(Product $product, array $data, bool $hasVariants, array $variants): void
+    {
+        $errors = [];
+        $wasSerial = (bool) $product->manage_stock_by_serial;
+        $willSerial = (bool) ($data['manage_stock_by_serial'] ?? false);
+
+        if ($wasSerial !== $willSerial) {
+            if ($wasSerial && $this->inStockImeiQuery($product)->exists()) {
+                $errors['manage_stock_by_serial'] = 'Không thể bỏ quản lý IMEI/Serial khi sản phẩm còn thiết bị đang tồn kho. '
+                    . 'Hãy bán hết hoặc xử lý các IMEI còn tồn trước; nếu cần loại khác, hãy tạo sản phẩm mới.';
+            }
+
+            if (! $wasSerial && $this->holdsAnyStock($product)) {
+                $errors['manage_stock_by_serial'] = 'Không thể chuyển sang sản phẩm quản lý IMEI/Serial khi sản phẩm còn tồn kho hoặc còn lô hàng. '
+                    . 'Hãy đưa tồn kho về 0 (bán hết / kiểm kho) trước; nếu cần loại khác, hãy tạo sản phẩm mới.';
+            }
+        }
+
+        // Thêm biến thể vào sản phẩm đang không có biến thể: tồn chung sẽ bị "kẹt" ở cấp sản phẩm, biến thể bán không được.
+        if ($hasVariants && ! empty($variants) && ! $product->variants()->where('is_active', true)->exists()) {
+            $hasProductLevelStock = (int) $product->stock !== 0
+                || ProductStockBatch::query()->where('product_id', $product->id)->whereNull('variant_id')->where('remaining_quantity', '>', 0)->exists()
+                || $this->inStockImeiQuery($product)->whereNull('variant_id')->exists();
+
+            if ($hasProductLevelStock) {
+                $errors['variants'] = 'Không thể thêm biến thể khi sản phẩm còn tồn kho chung (chưa thuộc biến thể nào). '
+                    . 'Hãy đưa tồn về 0 trước, hoặc tạo sản phẩm mới có biến thể.';
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function inStockImeiQuery(Product $product)
+    {
+        return ProductImei::query()
+            ->where('product_id', $product->id)
+            ->where('status', ProductImei::STATUS_IN_STOCK);
+    }
+
+    private function holdsAnyStock(Product $product): bool
+    {
+        return (int) $product->stock !== 0
+            || $product->variants()->where('stock', '!=', 0)->exists()
+            || ProductStockBatch::query()->where('product_id', $product->id)->where('remaining_quantity', '>', 0)->exists()
+            || $this->inStockImeiQuery($product)->exists();
+    }
+
+    private function variantHoldsStock(ProductVariant $variant): bool
+    {
+        return (int) $variant->stock !== 0
+            || ProductStockBatch::query()->where('variant_id', $variant->id)->where('remaining_quantity', '>', 0)->exists()
+            || ProductImei::query()->where('variant_id', $variant->id)->where('status', ProductImei::STATUS_IN_STOCK)->exists();
+    }
+
     private function pruneMissingVariants(Product $product, $desiredKeys): void
     {
         $product->variants()
@@ -302,6 +369,18 @@ class ProductService extends BaseService
 
                 if ($desiredKeys->contains($key)) {
                     return;
+                }
+
+                // Biến thể đang hoạt động mà còn tồn thì không được bỏ: tồn sẽ biến mất khỏi bán hàng nhưng vẫn nằm trong tổng kho.
+                if ($variant->is_active && $this->variantHoldsStock($variant)) {
+                    $label = collect($variant->attributes ?? [])
+                        ->map(fn ($attribute) => is_array($attribute) ? ($attribute['value'] ?? '') : $attribute)
+                        ->filter()
+                        ->implode(' / ') ?: ($variant->sku ?: 'đã chọn');
+
+                    throw ValidationException::withMessages([
+                        'variants' => "Biến thể “{$label}” còn tồn kho nên không thể bỏ khỏi danh sách. Hãy bán hết hoặc đưa tồn về 0 trước.",
+                    ]);
                 }
 
                 if ($this->variantHasTransactions($variant)) {

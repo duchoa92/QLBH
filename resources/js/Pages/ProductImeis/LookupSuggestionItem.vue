@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Building2, Package, PackageCheck, ReceiptText, Smartphone, UserRound, Users, Wrench } from 'lucide-vue-next'
+import { Building2, ChevronRight, Package, PackageCheck, ReceiptText, Smartphone, UserRound, Users, Wrench } from 'lucide-vue-next'
 
 // Một dòng gợi ý / kết quả trong trang Tra cứu: thiết bị (imei), phiếu sửa (repair),
 // khách hàng, người dùng, nhà cung cấp, hóa đơn, phiếu nhập, hoặc dòng thông tin (line, không bấm được).
@@ -56,13 +56,26 @@ const detailLine = computed(() => {
     return (props.item.lines || []).join(' · ')
 })
 
+// Tách dòng thông tin thành từng mảnh để dễ quét mắt; số tiền (kết thúc bằng "đ") được làm đậm.
+const parts = computed(() => (isDevice.value || isRepair.value ? [] : (props.item.lines || []))
+    .filter(Boolean)
+    .map(text => ({ text: String(text), money: /đ$/.test(String(text)) })))
+
 const customerLine = computed(() => (isDevice.value || isRepair.value)
     ? [props.item.customer_name, props.item.customer_phone, props.item.sale_code ? `HĐ ${props.item.sale_code}` : ''].filter(Boolean).join(' · ')
     : '')
 
 const statusBadge = computed(() => {
     if (isLine.value) return null
-    if (isRepair.value) return { label: 'Phiếu sửa', class: toneClass.purple }
+    if (isRepair.value) {
+        const labels = {
+            pending: 'Chờ sửa', repairing: 'Đang sửa', done: 'Đã sửa xong', completed: 'Hoàn tất',
+            returned: 'Đã trả khách', warranty: 'Bảo hành', cancelled: 'Đã hủy',
+        }
+        const key = String(props.item.status || '').toLowerCase()
+
+        return { label: labels[key] || 'Phiếu sửa', class: toneClass.purple }
+    }
     if (isDevice.value) {
         if (props.item.status === 'in_stock') return { label: 'Trong kho', class: toneClass.emerald }
         if (props.item.status === 'sold') return { label: 'Đã bán', class: toneClass.blue }
@@ -96,12 +109,19 @@ const statusBadge = computed(() => {
                 <span class="truncate text-sm font-bold text-slate-900">{{ title }}</span>
                 <span v-if="item.variant" class="text-xs font-medium text-slate-500">{{ item.variant }}</span>
             </span>
-            <span v-if="detailLine" class="mt-0.5 block truncate text-xs text-slate-600" :class="isDevice || isRepair ? 'font-mono' : ''">{{ detailLine }}</span>
+            <span v-if="parts.length" class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+                <template v-for="(part, index) in parts" :key="index">
+                    <span v-if="index" class="text-slate-300">·</span>
+                    <span :class="part.money ? 'font-semibold tabular-nums text-slate-800' : ''">{{ part.text }}</span>
+                </template>
+            </span>
+            <span v-else-if="detailLine" class="mt-0.5 block truncate font-mono text-xs text-slate-600">{{ detailLine }}</span>
             <span v-if="customerLine" class="mt-0.5 block truncate text-xs text-slate-500">{{ customerLine }}</span>
         </span>
         <span class="flex shrink-0 flex-col items-end gap-1">
             <span v-if="item.match" class="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">{{ item.match }}</span>
             <span v-if="statusBadge" class="rounded-md px-2 py-0.5 text-[10px] font-bold" :class="statusBadge.class">{{ statusBadge.label }}</span>
         </span>
+        <ChevronRight class="mt-2 h-4 w-4 shrink-0 text-slate-300" />
     </button>
 </template>

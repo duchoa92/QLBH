@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import ExpenseDetailModal from './ExpenseDetailModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FormattedNumberInput from '@/Components/UI/FormattedNumberInput.vue'
 import { formatMoney } from '@/utils/format'
@@ -24,6 +25,7 @@ const month = ref(props.filters.month)
 const search = ref(props.filters.search || '')
 const category = ref(props.filters.category || '')
 const modal = ref(false)
+const detail = ref(null)
 const editing = ref(null)
 const scheduleModal = ref(false)
 const editingSchedule = ref(null)
@@ -100,7 +102,7 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
                 <template #filters><input v-model="month" type="month" class="app-filter-control w-full sm:w-[170px]" /><ListFilterSelect v-model="category" label="Loại chi" :show-placeholder="false" :options="categoryOptions" /></template>
                 <template #actions><ActionButton v-if="canManage" @click="openCreate"><Plus :size="16" />Thêm chi phí</ActionButton></template>
             </ListToolbar>
-            <BaseTable :data="expensesData" :columns="columns" :filters="filtersData" :row-clickable="canManage" @sort="applySort" @row-click="openEdit($event)">
+            <BaseTable :data="expensesData" :columns="columns" :filters="filtersData" row-clickable @sort="applySort" @row-click="detail = $event">
                 <template #row="{ row }">
                     <td class="px-3.5 py-2.5 text-slate-700">{{ row.expense_date }}</td>
                     <td class="px-3.5 py-2.5"><span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ categoryLabels[row.category] || row.category }}</span></td>
@@ -125,6 +127,16 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
             </div>
             <div v-else class="p-8 text-center text-sm text-slate-500">Chưa có lịch chi phí định kỳ.</div>
         </section>
+        <ExpenseDetailModal
+            v-if="detail"
+            :expense="detail"
+            :can-manage="canManage"
+            :category-labels="categoryLabels"
+            :payment-labels="paymentLabels"
+            @close="detail = null"
+            @edit="openEdit(detail); detail = null"
+            @delete="remove(detail); detail = null"
+        />
         <BaseModal v-if="modal" :title="editing ? 'Cập nhật khoản chi' : 'Thêm khoản chi'" size="md" @close="modal = false">
             <form class="space-y-3" @submit.prevent="submit">
                 <div class="grid gap-3 sm:grid-cols-2"><label class="text-xs font-semibold text-slate-600">Loại chi<select v-model="form.category" class="mt-1 w-full rounded-xl border-slate-200 text-sm"><option v-for="item in categories" :key="item" :value="item">{{ categoryLabels[item] || item }}</option></select><small class="text-rose-600">{{ form.errors.category }}</small></label><label class="text-xs font-semibold text-slate-600">Ngày chi<input v-model="form.expense_date" type="date" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /><small class="text-rose-600">{{ form.errors.expense_date }}</small></label></div>

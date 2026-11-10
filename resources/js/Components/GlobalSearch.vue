@@ -5,6 +5,9 @@ import api from '@/Services/api'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import SearchHighlight from '@/Components/UI/SearchHighlight.vue'
 import RecordDetailModal from '@/Components/RecordDetailModal.vue'
+import CustomerDetailModal from '@/Pages/Customers/CustomerDetailModal.vue'
+import SupplierDetailModal from '@/Pages/Suppliers/SupplierDetailModal.vue'
+import UserDetailModal from '@/Pages/Users/UserDetailModal.vue'
 import SaleSearchModal from '@/Components/Search/SaleSearchModal.vue'
 import RepairSearchModal from '@/Components/Search/RepairSearchModal.vue'
 import StockImportDetailModal from '@/Pages/StockImports/StockImportDetailModal.vue'
@@ -81,7 +84,10 @@ const modalFor = (record, keyword) => {
         case 'stock-import': return [StockImportDetailModal, { importId: record.id }]
         case 'product': return [ProductDetailModal, { productId: record.id, productName: record.name || '' }]
         case 'imei': return [ProductImeisModal, { productId: record.product_id, productName: record.name || '' }]
-        // Khách hàng, nhà cung cấp, nhân viên, danh mục, thương hiệu, đơn vị tính: các trang này cũng dùng RecordDetailModal
+        case 'customer': return [CustomerDetailModal, { recordId: record.id, keyword }]
+        case 'supplier': return [SupplierDetailModal, { recordId: record.id, keyword }]
+        case 'user': return [UserDetailModal, { recordId: record.id, keyword }]
+        // Danh mục, thương hiệu, đơn vị tính: dùng RecordDetailModal dạng bảng thông tin đơn giản
         default: return [RecordDetailModal, { type: record.type, recordId: record.id, keyword }]
     }
 }

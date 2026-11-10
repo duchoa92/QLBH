@@ -14,7 +14,7 @@ import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import CustomerFormModal from './CustomerFormModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
-import RecordDetailModal from '@/Components/RecordDetailModal.vue'
+import CustomerDetailModal from './CustomerDetailModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { toast } from 'vue-sonner'
 
@@ -140,15 +140,15 @@ const toggleBlock = (customer) => {
     })
 }
 
-const openDetail = (customer) => openModal(RecordDetailModal, {
-    props: { type: 'customer', recordId: customer.id },
+const openDetail = (customer) => openModal(CustomerDetailModal, {
+    props: { recordId: customer.id },
     deepLink: { type: 'customer', id: customer.id },
 })
 const openDebtDetails = customer => {
     if (!canViewCustomerDebts.value || Number(customer.debt_balance) <= 0) return
     router.visit(route('debts.customers', { open_customer: customer.id }))
 }
-registerUrlModal('customer', RecordDetailModal, id => ({ type: 'customer', recordId: id }))
+registerUrlModal('customer', CustomerDetailModal, id => ({ recordId: id }))
 
 const openDetailFromGlobalSearch = () => {
     const url = new URL(window.location.href)
