@@ -7,6 +7,7 @@ defineProps({
     kind: { type: String, default: 'sale' }, // sale | import
     emptyText: { type: String, default: 'Chưa có giao dịch.' },
 })
+const emit = defineEmits(['view'])
 
 const statusMap = {
     sale: { completed: ['Hoàn tất', 'bg-emerald-50 text-emerald-700'], unpaid: ['Chưa thanh toán', 'bg-amber-50 text-amber-700'], cancelled: ['Đã hủy', 'bg-slate-100 text-slate-500'] },
@@ -21,7 +22,7 @@ const percentPaid = row => row.total > 0 ? Math.min(100, Math.round((row.paid / 
         <li v-for="row in rows" :key="row.id" class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                    <a :href="row.href" class="text-sm font-bold text-blue-700 hover:underline">{{ row.code }}</a>
+                    <button type="button" class="text-sm font-bold text-blue-700 hover:underline" @click="emit('view', row)">{{ row.code }}</button>
                     <span class="rounded-full px-2 py-0.5 text-[10px] font-bold" :class="statusOf(kind, row.status)[1]">{{ statusOf(kind, row.status)[0] }}</span>
                 </div>
                 <div class="mt-0.5 text-xs text-slate-500">{{ row.date }}<template v-if="row.customer"> · {{ row.customer }}</template></div>

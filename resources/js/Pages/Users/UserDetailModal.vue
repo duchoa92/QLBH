@@ -10,6 +10,7 @@ import DetailTabs from '@/Components/Detail/DetailTabs.vue'
 import StatCard from '@/Components/Detail/StatCard.vue'
 import InfoItem from '@/Components/Detail/InfoItem.vue'
 import TransactionList from '@/Components/Detail/TransactionList.vue'
+import SaleSearchModal from '@/Components/Search/SaleSearchModal.vue'
 
 const props = defineProps({
     recordId: { type: [Number, String], required: true },
@@ -17,6 +18,7 @@ const props = defineProps({
     modalId: { type: [Number, String], default: null },
 })
 const emit = defineEmits(['close'])
+const viewSaleId = ref(null)
 
 const { data, loading, error } = useRecordDetail('user', props.recordId)
 const tab = ref('overview')
@@ -81,7 +83,7 @@ const activeTab = computed(() => tabs.value.some(item => item.key === tab.value)
             <template v-else-if="activeTab === 'activity'">
                 <section v-if="data.sales" class="space-y-2">
                     <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500">Hóa đơn bán gần đây</h3>
-                    <TransactionList kind="sale" :rows="data.sales" empty-text="Nhân viên này chưa bán hóa đơn nào." />
+                    <TransactionList kind="sale" :rows="data.sales" empty-text="Nhân viên này chưa bán hóa đơn nào." @view="viewSaleId = $event.id" />
                 </section>
 
                 <section v-if="data.shifts" class="space-y-2">
@@ -116,4 +118,6 @@ const activeTab = computed(() => tabs.value.some(item => item.key === tab.value)
             </template>
         </template>
     </DetailShell>
+
+    <SaleSearchModal v-if="viewSaleId" :sale-id="viewSaleId" @close="viewSaleId = null" />
 </template>

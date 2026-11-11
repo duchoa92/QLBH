@@ -90,7 +90,7 @@ class RecordDetailController extends Controller
         if ($viewer->can('customer_debts.view')) {
             $debt = [
                 'orders' => Sale::query()->where('customer_id', $id)->where('status', 'completed')
-                    ->whereRaw('grand_total > paid_amount')->orderBy('created_at')->get($saleColumns)
+                    ->whereRaw('grand_total > paid_amount')->orderByDesc('created_at')->orderByDesc('id')->get($saleColumns)
                     ->map(fn (Sale $sale) => $this->saleRow($sale))->values()->all(),
                 'history' => CustomerDebt::query()->with('source')->where('customer_id', $id)
                     ->latest()->limit(20)->get()
@@ -169,7 +169,7 @@ class RecordDetailController extends Controller
         if ($viewer->can('supplier_debts.view')) {
             $debt = [
                 'orders' => StockImport::query()->where('supplier_id', $id)->where('status', 'completed')
-                    ->whereRaw('grand_total > paid_amount')->orderBy('import_date')->get($importColumns)
+                    ->whereRaw('grand_total > paid_amount')->orderByDesc('import_date')->orderByDesc('id')->get($importColumns)
                     ->map(fn (StockImport $import) => $this->importRow($import))->values()->all(),
                 'history' => SupplierDebt::query()->with(['source', 'user:id,name'])->where('supplier_id', $id)
                     ->latest()->limit(20)->get()

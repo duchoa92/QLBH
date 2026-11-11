@@ -74,6 +74,7 @@ const handleCancelSale = () => {
         :invoice="sale"
         :can-cancel="canCancelSales && sale.status !== 'cancelled'"
         can-print
+        layer-class="z-[1100]"
         @close="emit('close')"
         @cancel="confirmCancel"
         @print="openPrintWindow($event.id)"

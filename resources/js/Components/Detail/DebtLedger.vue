@@ -10,7 +10,7 @@ const props = defineProps({
     history: { type: Array, default: () => [] },
     canPay: { type: Boolean, default: false },
 })
-defineEmits(['pay'])
+const emit = defineEmits(['pay', 'view'])
 
 const isCustomer = props.entity === 'customer'
 const orderWord = isCustomer ? 'hóa đơn' : 'phiếu nhập'
@@ -26,7 +26,7 @@ const percentPaid = order => order.total > 0 ? Math.min(100, Math.round((order.p
                 <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ isCustomer ? 'Khách đang nợ' : 'Cần trả nhà cung cấp' }}</div>
                 <div class="mt-0.5 text-2xl font-black" :class="balance > 0 ? 'text-rose-700' : 'text-emerald-700'">{{ balance > 0 ? formatMoney(balance) : 'Không còn nợ' }}</div>
             </div>
-            <button v-if="canPay && balance > 0" type="button" class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700" @click="$emit('pay', null)">
+            <button v-if="canPay && balance > 0" type="button" class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700" @click="emit('pay', null)">
                 <HandCoins :size="16" /> {{ payLabel }}
             </button>
         </div>
@@ -35,14 +35,14 @@ const percentPaid = order => order.total > 0 ? Math.min(100, Math.round((order.p
             <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500">Các {{ orderWord }} còn nợ ({{ orders.length }})</h3>
             <div v-for="order in orders" :key="order.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
                 <div class="min-w-[180px] flex-1">
-                    <a :href="order.href" class="text-sm font-bold text-blue-700 hover:underline">{{ order.code }}</a>
+                    <button type="button" class="text-sm font-bold text-blue-700 hover:underline" @click="emit('view', order)">{{ order.code }}</button>
                     <div class="mt-0.5 text-xs text-slate-500">{{ order.date }} · Tổng {{ formatMoney(order.total) }}</div>
                     <div class="mt-1.5 h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-emerald-500" :style="{ width: percentPaid(order) + '%' }"></div></div>
                     <div class="mt-0.5 text-[11px] text-slate-500">Đã {{ isCustomer ? 'thu' : 'trả' }} {{ formatMoney(order.paid) }}</div>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-sm font-black text-rose-600">Còn {{ formatMoney(order.due) }}</span>
-                    <button v-if="canPay" type="button" class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100" @click="$emit('pay', order)">{{ payLabel }} đơn này</button>
+                    <button v-if="canPay" type="button" class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100" @click="emit('pay', order)">{{ payLabel }} đơn này</button>
                 </div>
             </div>
         </section>

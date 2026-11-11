@@ -36,6 +36,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    layerClass: {
+        type: String,
+        default: 'z-50',
+    },
 })
 
 const emit = defineEmits(['close', 'cancel', 'print'])
@@ -211,7 +215,7 @@ const cancelReason = computed(() =>
     <Teleport to="body">
     <div
         v-if="show"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-2 sm:p-3 backdrop-blur-xs transition-opacity"
+        :class="layerClass" class="fixed inset-0 flex items-center justify-center bg-slate-950/60 p-2 sm:p-3 backdrop-blur-xs transition-opacity"
         @click.self="emit('close')"
     >
         <!-- NỀN MODAL DÙNG BG-SLATE-50 ĐỒNG BỘ VỚI HEADER VÀ DÙNG RING BẢO VỆ MÉP -->

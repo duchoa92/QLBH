@@ -674,71 +674,9 @@ const historyCount = type => type === 'all'
 
         <DataPanel allow-overflow>
             <div class="border-b border-slate-200 p-4">
-                <!-- Tìm kiếm nâng cao: gom mọi điều kiện, chọn được nhiều -->
-                <div ref="advancedRef" class="relative mb-3 flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold shadow-sm transition"
-                        :class="isAdvanced || advancedOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'"
-                        @click="advancedOpen = !advancedOpen"
-                    >
-                        <SlidersHorizontal class="h-4 w-4" />
-                        Tìm kiếm nâng cao
-                        <span v-if="isAdvanced" class="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white">{{ scopes.length }}</span>
-                    </button>
-
-                    <template v-if="isAdvanced">
-                        <span
-                            v-for="option in selectedScopeOptions"
-                            :key="option.value"
-                            class="inline-flex items-center gap-1 rounded-full bg-indigo-100 py-1 pl-3 pr-1.5 text-xs font-semibold text-indigo-800"
-                        >
-                            {{ option.label }}
-                            <button type="button" class="rounded-full p-0.5 transition hover:bg-indigo-200" :aria-label="`Bỏ ${option.label}`" @click="toggleScope(option.value)">
-                                <X class="h-3 w-3" />
-                            </button>
-                        </span>
-                    </template>
-                    <span v-else class="text-xs font-medium text-slate-400">Đang tìm trong toàn bộ dữ liệu</span>
-
-                    <div
-                        v-if="advancedOpen"
-                        class="absolute left-0 top-full z-40 mt-2 w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
-                    >
-                        <div class="max-h-[420px] space-y-4 overflow-y-auto p-4">
-                            <div v-for="group in scopeGroups" :key="group.title">
-                                <div class="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{{ group.title }}</div>
-                                <div class="grid gap-1.5 sm:grid-cols-2">
-                                    <button
-                                        v-for="option in group.options"
-                                        :key="option.value"
-                                        type="button"
-                                        class="flex items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition"
-                                        :class="scopes.includes(option.value) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'"
-                                        @click="toggleScope(option.value)"
-                                    >
-                                        <span
-                                            class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-                                            :class="scopes.includes(option.value) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'"
-                                        >
-                                            <Check v-if="scopes.includes(option.value)" class="h-3 w-3" />
-                                        </span>
-                                        <span class="min-w-0">
-                                            <span class="block text-sm font-bold text-slate-800">{{ option.label }}</span>
-                                            <span class="block text-xs text-slate-500">{{ option.hint }}</span>
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5">
-                            <button type="button" class="text-xs font-semibold text-slate-500 transition hover:text-rose-600" @click="resetScopes">Đặt lại (toàn bộ)</button>
-                            <button type="button" class="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700" @click="advancedOpen = false">Xong</button>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="flex flex-col gap-3 md:flex-row">
+
+                    
                     <div ref="searchBoxRef" class="relative min-w-0 flex-1">
                         <Search class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                         <input
@@ -785,6 +723,55 @@ const historyCount = type => type === 'all'
                         </div>
                     </div>
 
+                    <!-- Tìm kiếm nâng cao: gom mọi điều kiện, chọn được nhiều -->
+                    <div ref="advancedRef" class="relative shrink-0">
+                        <button
+                            type="button"
+                            class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap md:w-auto rounded-xl border px-3.5 py-3 text-sm font-semibold shadow-sm transition"
+                            :class="isAdvanced || advancedOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'"
+                            @click="advancedOpen = !advancedOpen"
+                        >
+                            <SlidersHorizontal class="h-4 w-4" />
+                            Tìm kiếm nâng cao
+                            <span v-if="isAdvanced" class="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white">{{ scopes.length }}</span>
+                        </button>
+                        <div
+                            v-if="advancedOpen"
+                            class="absolute left-0 top-full z-40 mt-2 w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+                        >
+                            <div class="max-h-[420px] space-y-4 overflow-y-auto p-4">
+                                <div v-for="group in scopeGroups" :key="group.title">
+                                    <div class="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{{ group.title }}</div>
+                                    <div class="grid gap-1.5 sm:grid-cols-2">
+                                        <button
+                                            v-for="option in group.options"
+                                            :key="option.value"
+                                            type="button"
+                                            class="flex items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition"
+                                            :class="scopes.includes(option.value) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'"
+                                            @click="toggleScope(option.value)"
+                                        >
+                                            <span
+                                                class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                                                :class="scopes.includes(option.value) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'"
+                                            >
+                                                <Check v-if="scopes.includes(option.value)" class="h-3 w-3" />
+                                            </span>
+                                            <span class="min-w-0">
+                                                <span class="block text-sm font-bold text-slate-800">{{ option.label }}</span>
+                                                <span class="block text-xs text-slate-500">{{ option.hint }}</span>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5">
+                                <button type="button" class="text-xs font-semibold text-slate-500 transition hover:text-rose-600" @click="resetScopes">Đặt lại (toàn bộ)</button>
+                                <button type="button" class="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700" @click="advancedOpen = false">Xong</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <button
                         type="button"
                         class="flex min-w-[130px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -794,6 +781,23 @@ const historyCount = type => type === 'all'
                         <span v-if="loading" class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
                         {{ loading ? 'Đang tra cứu...' : 'Tra cứu' }}
                     </button>
+                </div>
+
+                <!-- Thẻ điều kiện đang chọn -->
+                <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                    <template v-if="isAdvanced">
+                        <span
+                            v-for="option in selectedScopeOptions"
+                            :key="option.value"
+                            class="inline-flex items-center gap-1 rounded-full bg-indigo-100 py-1 pl-3 pr-1.5 text-xs font-semibold text-indigo-800"
+                        >
+                            {{ option.label }}
+                            <button type="button" class="rounded-full p-0.5 transition hover:bg-indigo-200" :aria-label="`Bỏ ${option.label}`" @click="toggleScope(option.value)">
+                                <X class="h-3 w-3" />
+                            </button>
+                        </span>
+                    </template>
+                    <span v-else class="text-xs font-medium text-slate-400">Đang tìm trong toàn bộ dữ liệu</span>
                 </div>
 
                 <p
@@ -857,28 +861,30 @@ const historyCount = type => type === 'all'
             </div>
 
             <!-- Hồ sơ đối tượng: khách hàng / người dùng / nhà cung cấp / hóa đơn / phiếu nhập / sản phẩm -->
-            <div v-else-if="result?.kind === 'entity'" class="space-y-4 p-4">
+            <div v-else-if="result?.kind === 'entity'" class="space-y-3 p-3 sm:p-4">
                 <button v-if="backStack.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50" @click="goBack">
                     <ArrowLeft class="h-3.5 w-3.5" />
                     Quay lại
                 </button>
 
                 <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div class="flex items-center gap-4 p-5">
-                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" :class="entityTile">
-                            <component :is="entityIcon" class="h-6 w-6" />
+                    <div class="flex items-center gap-3 px-4 py-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" :class="entityTile">
+                            <component :is="entityIcon" class="h-5 w-5" />
                         </div>
-                        <div class="min-w-0">
-                            <span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide" :class="entityTile">{{ result.entity_label }}</span>
-                            <h2 class="mt-1 break-words text-xl font-black text-slate-900">{{ result.title }}</h2>
-                            <p v-if="result.subtitle" class="text-sm font-medium text-slate-500">{{ result.subtitle }}</p>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span class="inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide" :class="entityTile">{{ result.entity_label }}</span>
+                                <span v-if="result.subtitle" class="truncate text-xs font-semibold text-slate-500">{{ result.subtitle }}</span>
+                            </div>
+                            <h2 class="mt-0.5 break-words text-base font-black leading-snug text-slate-900 sm:text-lg">{{ result.title }}</h2>
                         </div>
                     </div>
 
-                    <dl v-if="result.fields?.length" class="grid border-t border-slate-100 sm:grid-cols-2 lg:grid-cols-3">
-                        <div v-for="field in result.fields" :key="field.label" class="min-w-0 border-b border-slate-100 px-5 py-3">
-                            <dt class="text-xs font-semibold text-slate-400">{{ field.label }}</dt>
-                            <dd class="mt-0.5 break-words text-sm font-bold" :class="fieldClass(field)">{{ field.value }}</dd>
+                    <dl v-if="result.fields?.length" class="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-slate-100 bg-slate-50/60 px-4 py-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        <div v-for="field in result.fields" :key="field.label" class="min-w-0" :class="String(field.value ?? '').length > 26 ? 'col-span-2' : ''">
+                            <dt class="truncate text-[11px] font-semibold text-slate-400">{{ field.label }}</dt>
+                            <dd class="break-words text-[13px] font-bold leading-snug" :class="fieldClass(field)">{{ field.value }}</dd>
                         </div>
                     </dl>
                 </section>

@@ -11,6 +11,7 @@ import StatCard from '@/Components/Detail/StatCard.vue'
 import InfoItem from '@/Components/Detail/InfoItem.vue'
 import TransactionList from '@/Components/Detail/TransactionList.vue'
 import DebtLedger from '@/Components/Detail/DebtLedger.vue'
+import SaleSearchModal from '@/Components/Search/SaleSearchModal.vue'
 
 const props = defineProps({
     recordId: { type: [Number, String], required: true },
@@ -24,6 +25,7 @@ const emit = defineEmits(['close'])
 
 const { data, loading, error } = useRecordDetail('customer', props.recordId)
 const tab = ref(props.initialTab)
+const viewSaleId = ref(null) // hóa đơn đang xem ngay trong modal, không chuyển trang
 
 const typeLabels = { retail: 'Khách lẻ', wholesale: 'Khách sỉ', vip: 'Khách VIP' }
 const genderLabels = { male: 'Nam', female: 'Nữ', other: 'Khác' }
@@ -92,7 +94,7 @@ const pay = (order) => {
             </template>
 
             <!-- GIAO DỊCH -->
-            <TransactionList v-else-if="activeTab === 'sales'" kind="sale" :rows="data.sales" empty-text="Khách này chưa có hóa đơn nào." />
+            <TransactionList v-else-if="activeTab === 'sales'" kind="sale" :rows="data.sales" empty-text="Khách này chưa có hóa đơn nào." @view="viewSaleId = $event.id" />
 
             <!-- CÔNG NỢ -->
             <DebtLedger
@@ -103,6 +105,7 @@ const pay = (order) => {
                 :history="data.debt.history"
                 :can-pay="canPay"
                 @pay="pay"
+                @view="viewSaleId = $event.id"
             />
 
             <!-- ĐIỂM -->
@@ -134,4 +137,6 @@ const pay = (order) => {
             </template>
         </template>
     </DetailShell>
+
+    <SaleSearchModal v-if="viewSaleId" :sale-id="viewSaleId" @close="viewSaleId = null" />
 </template>

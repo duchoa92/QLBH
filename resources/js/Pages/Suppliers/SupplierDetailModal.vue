@@ -11,6 +11,7 @@ import StatCard from '@/Components/Detail/StatCard.vue'
 import InfoItem from '@/Components/Detail/InfoItem.vue'
 import TransactionList from '@/Components/Detail/TransactionList.vue'
 import DebtLedger from '@/Components/Detail/DebtLedger.vue'
+import StockImportDetailModal from '@/Pages/StockImports/StockImportDetailModal.vue'
 
 const props = defineProps({
     recordId: { type: [Number, String], required: true },
@@ -25,6 +26,7 @@ const emit = defineEmits(['close'])
 const { data, loading, error } = useRecordDetail('supplier', props.recordId)
 const tab = ref(props.initialTab)
 const copied = ref('')
+const viewImportId = ref(null) // phiếu nhập đang xem ngay trong modal, không chuyển trang
 
 const tabs = computed(() => {
     if (!data.value) return []
@@ -111,7 +113,7 @@ const pay = (order) => {
             </template>
 
             <!-- PHIẾU NHẬP -->
-            <TransactionList v-else-if="activeTab === 'imports'" kind="import" :rows="data.imports" empty-text="Chưa có phiếu nhập nào từ nhà cung cấp này." />
+            <TransactionList v-else-if="activeTab === 'imports'" kind="import" :rows="data.imports" empty-text="Chưa có phiếu nhập nào từ nhà cung cấp này." @view="viewImportId = $event.id" />
 
             <!-- CÔNG NỢ -->
             <DebtLedger
@@ -122,7 +124,10 @@ const pay = (order) => {
                 :history="data.debt.history"
                 :can-pay="canPay"
                 @pay="pay"
+                @view="viewImportId = $event.id"
             />
         </template>
     </DetailShell>
+
+    <StockImportDetailModal v-if="viewImportId" :import-id="viewImportId" @close="viewImportId = null" />
 </template>
