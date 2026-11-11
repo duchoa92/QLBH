@@ -8,10 +8,10 @@ defineProps({
 
 <template>
 
-    <div class="space-y-4">
+    <div class="space-y-3">
 
         <div
-            class="mb-3 flex items-center justify-between"
+            class="flex items-center justify-between"
         >
 
             <Link
@@ -24,7 +24,7 @@ defineProps({
         </div>
 
         <div
-            class="mb-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
         >
 
             <div class="grid grid-cols-2 gap-4">

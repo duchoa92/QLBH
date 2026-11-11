@@ -378,7 +378,7 @@ class RecordDetailController extends Controller
         $r = Repair::with(['customer:id,full_name', 'parts:id,repair_id,product_name,quantity'])->findOrFail($id);
         return ['Phiếu sửa chữa', $r->code ?: $r->device_name, $this->rows([
             'Khách hàng' => $r->customer?->full_name, 'Điện thoại' => $r->contact_phone ?: $r->customer?->phone,
-            'Thiết bị' => $r->device_name, 'IMEI / Serial' => $r->imei ?: $r->serial,
+            'Thiết bị' => $r->device_name, 'Model' => $r->model, 'IMEI / Serial' => $r->imei ?: $r->serial,
             'Yêu cầu sửa chữa' => $r->repair_request,
             'Linh kiện' => $r->parts->map(fn ($part) => trim($part->product_name . ' × ' . $part->quantity))->join("\n"), 'Ngày nhận' => $this->date($r->received_at),
             'Chi phí' => $this->money($r->final_cost ?: $r->estimated_cost), 'Trạng thái' => $r->status,

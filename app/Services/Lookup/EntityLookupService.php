@@ -12,6 +12,7 @@ use App\Models\SaleItem;
 use App\Models\StockImport;
 use App\Models\Supplier;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -563,11 +564,10 @@ class EntityLookupService
             $s->customer?->full_name ?: 'Khách lẻ',
             $s->customer?->phone,
             $this->money($s->grand_total),
-            $s->created_at?->format('d/m/Y H:i'),
         ]), 'Hóa đơn', 'emerald', $keyword, [
             'Mã hóa đơn' => [$s->code],
             'Khách hàng' => [$s->customer?->full_name, $s->customer?->phone],
-        ]);
+        ], ['date' => $s->created_at?->format('d/m/Y H:i'), 'date_label' => 'Ngày bán']);
     }
 
     private function importItem(StockImport $i, string $keyword = ''): array
@@ -578,16 +578,15 @@ class EntityLookupService
             $party,
             $i->supplier?->phone ?: $i->party_phone,
             $this->money($i->grand_total),
-            $i->import_date ? (string) $i->import_date : null,
         ]), 'Phiếu nhập', 'purple', $keyword, [
             'Mã phiếu nhập' => [$i->code],
             'Nhà cung cấp / khách' => [$i->supplier?->name, $i->party_name, $i->supplier?->phone, $i->party_phone],
-        ]);
+        ], ['date' => $i->import_date ? Carbon::parse($i->import_date)->format('d/m/Y') : null, 'date_label' => 'Ngày nhập']);
     }
 
-    private function generic(string $type, int $id, ?string $title, array $lines, string $badge, string $tone, string $keyword, array $groups): array
+    private function generic(string $type, int $id, ?string $title, array $lines, string $badge, string $tone, string $keyword, array $groups, array $extra = []): array
     {
-        return [
+        return $extra + [
             'type' => $type,
             'id' => $id,
             'title' => $title,

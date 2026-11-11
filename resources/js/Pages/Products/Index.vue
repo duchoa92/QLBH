@@ -376,7 +376,7 @@ const openImeiList = (row) => {
  
     <PageHeader title="Sản phẩm" />
 
-   <ListToolbar v-model="search" search-id="product-search" placeholder="Tìm tên, SKU hoặc barcode..." :loading="loading" @focus="isEditingSearch = true" @blur="isEditingSearch = false">
+   <ListToolbar v-model="search" search-id="product-search" placeholder="Tìm tên, SKU hoặc model..." :loading="loading" @focus="isEditingSearch = true" @blur="isEditingSearch = false">
         <template #filters><ListFilterSelect
             v-model="category_id"
             label="Danh mục"

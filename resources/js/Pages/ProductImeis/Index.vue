@@ -61,9 +61,9 @@ const openPriceEditor = (imei) => {
 </script>
 
 <template>
-    <div>
+    <div class="space-y-3">
 
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
 
             <div>
 
@@ -84,7 +84,7 @@ const openPriceEditor = (imei) => {
 
         <form
             @submit.prevent="submit"
-            class="flex gap-3 mb-6"
+            class="flex gap-3"
         >
 
             <input
@@ -106,7 +106,7 @@ const openPriceEditor = (imei) => {
 
         <div
             v-if="form.errors.imei"
-            class="text-red-500 mb-4"
+            class="text-red-500"
         >
             {{ form.errors.imei }}
         </div>

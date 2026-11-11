@@ -47,6 +47,12 @@ class RepairRequest extends FormRequest
                 'max:255',
             ],
 
+            'model' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
             'imei' => [
                 'nullable',
                 'string',

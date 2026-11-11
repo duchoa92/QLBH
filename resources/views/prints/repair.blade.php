@@ -348,7 +348,7 @@
                 </div>
 
                 <div class="value">
-                    {{ $repair->device_name }}
+                    {{ $repair->device_name }}@if (filled($repair->model)) <span style="font-weight:normal;"> · Model: {{ $repair->model }}</span>@endif
                 </div>
 
             </div>

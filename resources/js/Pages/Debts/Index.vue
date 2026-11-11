@@ -106,7 +106,7 @@ const submit = () => {
 </script>
 
 <template>
-    <div class="space-y-5 p-4 sm:p-6">
+    <div class="space-y-3">
         <PageHeader :title="title" :description="isCustomer ? 'Theo dõi số dư và ghi nhận các lần khách trả nợ.' : 'Theo dõi số dư phải trả và ghi nhận các lần thanh toán nhà cung cấp.'" />
 
         <div class="grid gap-3 sm:grid-cols-2">

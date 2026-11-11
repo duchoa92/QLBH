@@ -136,7 +136,7 @@ const form = useForm({
     conversion_unit_id: props.product?.conversion_unit_id ?? null,
     conversion_factor: props.product?.conversion_factor ?? 1,
     sku: props.product?.sku ?? '',
-    barcode: props.product?.barcode ?? '',
+    model: props.product?.model ?? '',
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
     warranty_days: existingWarrantyDays,
@@ -301,7 +301,7 @@ watch(() => props.product, (p) => {
     form.conversion_unit_id = p.conversion_unit_id ?? null
     form.conversion_factor = p.conversion_factor ?? 1
     form.sku = p.sku ?? ''
-    form.barcode = p.barcode ?? ''
+    form.model = p.model ?? ''
     form.cost_price = p.cost_price ?? ''
     form.sell_price = p.sell_price ?? ''
     priceUnitBasis.value = 'base'
@@ -1145,12 +1145,12 @@ const submit = () => {
 
                     <div class="relative">
                         <FloatingInput
-                            v-model="form.barcode"
-                            label="Mã vạch (nếu có)"
+                            v-model="form.model"
+                            label="Model (nếu có)"
                             input-class="!rounded-xl !pr-12"
-                            :error="form.errors.barcode"
+                            :error="form.errors.model"
                         />
-                        <BarcodeCameraButton class="absolute right-1 top-5 z-10 -translate-y-1/2" @scanned="(code) => { form.barcode = code }" />
+                        <BarcodeCameraButton class="absolute right-1 top-5 z-10 -translate-y-1/2" @scanned="(code) => { form.model = code }" />
                     </div>
                 </div>
 

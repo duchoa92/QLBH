@@ -422,6 +422,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                                         <td class="px-3 py-2.5">
                                             <div class="text-sm font-bold text-slate-900">{{ item.product?.name || '-' }}</div>
                                             <div class="text-xs text-slate-400">SKU: {{ item.product?.sku || '-' }}</div>
+                                            <div v-if="item.product?.model" class="text-xs text-slate-400">Model: {{ item.product.model }}</div>
                                             <button v-if="hasItemDetail(item)" type="button" class="mt-1 inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" @click="openImportItemDetail(item)">
                                                 {{ itemImportImeis(item).length ? `${itemImportImeis(item).length} IMEI / biến thể` : (item._variantRows?.length > 1 ? `${item._variantRows.length} biến thể` : 'Xem biến thể') }} <ChevronRight class="h-3 w-3" />
                                             </button>

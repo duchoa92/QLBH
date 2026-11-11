@@ -121,6 +121,7 @@ const statusBadge = computed(() => {
         <span class="flex shrink-0 flex-col items-end gap-1">
             <span v-if="item.match" class="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">{{ item.match }}</span>
             <span v-if="statusBadge" class="rounded-md px-2 py-0.5 text-[10px] font-bold" :class="statusBadge.class">{{ statusBadge.label }}</span>
+            <span v-if="item.date" class="whitespace-nowrap text-[11px] font-medium tabular-nums text-slate-500" :title="item.date_label">{{ item.date_label ? `${item.date_label}: ` : '' }}{{ item.date }}</span>
         </span>
         <ChevronRight class="mt-2 h-4 w-4 shrink-0 text-slate-300" />
     </button>

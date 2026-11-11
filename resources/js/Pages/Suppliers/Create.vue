@@ -1,5 +1,4 @@
 <script setup>
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import SupplierFormFields from '@/Pages/Suppliers/Partials/SupplierFormFields.vue'
 
@@ -19,9 +18,9 @@ const submit = () => {
 <template>
     <Head title="Thêm nhà cung cấp" />
 
-    <AuthenticatedLayout>
+    <div>
 
-        <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <section class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
 
             <div class="flex items-center justify-between">
                 <div>
@@ -43,7 +42,7 @@ const submit = () => {
             </div>
 
             <form
-                class="mt-6 space-y-6"
+                class="mt-4 space-y-4"
                 @submit.prevent="submit"
             >
 
@@ -70,5 +69,5 @@ const submit = () => {
 
         </section>
 
-    </AuthenticatedLayout>
+    </div>
 </template>

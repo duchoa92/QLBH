@@ -8,7 +8,7 @@ const props = defineProps({
 
 <template>
 
-    <div class="p-4">
+    <div>
 
         <CustomerForm
             :customer="customer"

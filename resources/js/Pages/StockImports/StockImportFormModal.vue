@@ -1340,7 +1340,7 @@ const confirm = (payment = {}) => {
                         <FloatingInput
                             v-model="keyword"
                             type="text"
-                            label="Tìm tên sản phẩm, SKU hoặc barcode"
+                            label="Tìm tên sản phẩm, SKU hoặc model"
                             input-class="pr-20"
                             @focus="openProductSearch"
                             @keydown.enter.prevent="scanProduct"
@@ -1380,6 +1380,7 @@ const confirm = (payment = {}) => {
                                     <div class="truncate text-sm font-semibold text-slate-900">{{ product.name }}</div>
                                     <div class="mt-0.5 flex gap-3 text-xs text-slate-500">
                                         <span>SKU: {{ product.sku || '—' }}</span>
+                                        <span v-if="product.model">Model: {{ product.model }}</span>
                                         <span>Tồn: {{ product.stock ?? 0 }}</span>
                                     </div>
                                 </div>
@@ -1443,6 +1444,7 @@ const confirm = (payment = {}) => {
                             <Package class="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
                             <div class="min-w-0 flex-1">
                                 <div class="break-words text-sm font-semibold leading-5 text-slate-900">{{ item.name }}</div>
+                                <div v-if="item.model" class="text-xs text-slate-500">Model: {{ item.model }}</div>
                                 <div class="mt-1 flex flex-wrap gap-1.5">
                                     <span v-if="item.type === 'variant' || item.type === 'imei_variant'" class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{{ variantCount(item) }} biến thể</span>
                                     <span v-if="item.type === 'imei' || item.type === 'imei_variant'" class="rounded-md bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">{{ (item.imeis || []).length }} IMEI</span>
@@ -1556,6 +1558,12 @@ const confirm = (payment = {}) => {
                                                 {{
                                                     item.name
                                                 }}
+                                            </div>
+                                            <div
+                                                v-if="item.model"
+                                                class="truncate text-xs text-slate-500"
+                                            >
+                                                Model: {{ item.model }}
                                             </div>
 
                                             <div

@@ -190,6 +190,8 @@ class RepairController extends Controller
                 'device_name' =>
                     $repair->device_name,
 
+                'model' => $repair->model,
+
                 'intake_type' => $repair->intake_type ?: 'repair',
                 'warranty_source_type' => $repair->warranty_source_type,
                 'warranty_source_id' => $repair->warranty_source_id,
@@ -403,12 +405,13 @@ class RepairController extends Controller
                 ->get(['id', 'code', 'full_name', 'phone', 'cccd', 'debt_balance']);
 
             $devices = Repair::query()
-                ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('imei', 'like', $like))
+                ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('model', 'like', $like)->orWhere('imei', 'like', $like))
                 ->latest('id')
                 ->limit(10)
-                ->get(['device_name', 'imei'])
+                ->get(['device_name', 'model', 'imei'])
                 ->map(fn (Repair $repair): array => [
                     'name' => $repair->device_name,
+                    'model' => $repair->model,
                     'imei' => $repair->imei,
                     'source' => 'Đã từng sửa',
                 ]);
@@ -425,14 +428,23 @@ class RepairController extends Controller
                 ]);
 
             $soldProducts = Product::query()
-                ->where('name', 'like', $like)
-                ->where(fn ($query) => $query->whereHas('imeis')->orWhereExists(
-                    fn ($sales) => $sales->selectRaw('1')->from('sale_items')->whereColumn('sale_items.product_id', 'products.id')
-                ))
+                ->where(fn ($query) => $query
+                    ->where(fn ($byName) => $byName
+                        ->where('name', 'like', $like)
+                        ->where(fn ($sold) => $sold->whereHas('imeis')->orWhereExists(
+                            fn ($sales) => $sales->selectRaw('1')->from('sale_items')->whereColumn('sale_items.product_id', 'products.id')
+                        )))
+                    // Gõ Model: lấy luôn tên sản phẩm có Model đó (không cần đã từng bán)
+                    ->orWhere('model', 'like', $like))
                 ->orderBy('name')
                 ->limit(10)
-                ->get(['name'])
-                ->map(fn (Product $product): array => ['name' => $product->name, 'imei' => null, 'source' => 'Đã mua bán']);
+                ->get(['name', 'model'])
+                ->map(fn (Product $product): array => [
+                    'name' => $product->name,
+                    'model' => $product->model,
+                    'imei' => null,
+                    'source' => filled($product->model) && mb_stripos((string) $product->model, $keyword) !== false ? 'Sản phẩm · Model' : 'Đã mua bán',
+                ]);
 
             $devices = $devices->concat($customerDevices)->concat($soldProducts)
                 ->filter(fn (array $item) => filled($item['name']))
@@ -442,11 +454,11 @@ class RepairController extends Controller
 
             $repairImeis = Repair::query()
                 ->with('customer:id,full_name,phone,cccd,debt_balance')
-                ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
+                ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('model', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
                 ->latest('id')
                 ->limit(10)
                 ->get([
-                    'id', 'customer_id', 'device_name', 'imei', 'serial', 'issue', 'repair_request', 'accessories',
+                    'id', 'customer_id', 'device_name', 'model', 'imei', 'serial', 'issue', 'repair_request', 'accessories',
                     'estimated_cost', 'note', 'created_at', 'repair_warranty_expires_at',
                     'repair_warranty_voided_at', 'repair_warranty_void_reason',
                 ])
@@ -454,6 +466,7 @@ class RepairController extends Controller
                     'repair_id' => $repair->id,
                     'imei' => $repair->imei ?: $repair->serial,
                     'name' => $repair->device_name,
+                    'model' => $repair->model,
                     'source' => 'Đã sửa · ' . $repair->created_at?->format('d/m/Y'),
                     'source_date' => $repair->created_at?->toAtomString(),
                     'customer' => $repair->customer ? [
@@ -503,14 +516,14 @@ class RepairController extends Controller
 
             $productImeis = ProductImei::query()
                 ->with([
-                    'product:id,name,warranty_days',
+                    'product:id,name,model,warranty_days',
                     // Nạp sẵn lịch sử bán của cả 10 IMEI trong 1 truy vấn thay vì mỗi IMEI một truy vấn.
                     'saleItems' => fn ($saleItems) => $saleItems
                         ->with('sale:id,code,customer_id,created_at,status', 'sale.customer:id,full_name,phone,cccd,debt_balance')
                         ->whereHas('sale', fn ($query) => $query->where('status', '!=', 'cancelled'))
                         ->latest('id'),
                 ])
-                ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like)->orWhereHas('product', fn ($productQuery) => $productQuery->where('name', 'like', $like)))
+                ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like)->orWhereHas('product', fn ($productQuery) => $productQuery->where(fn ($match) => $match->where('name', 'like', $like)->orWhere('model', 'like', $like))))
                 ->latest('id')
                 ->limit(10)
                 ->get([
@@ -572,6 +585,7 @@ class RepairController extends Controller
                     return [
                         'imei' => $item->imei ?: $item->serial,
                         'name' => $item->product?->name,
+                        'model' => $item->product?->model,
                         'source' => $item->status === ProductImei::STATUS_IN_STOCK ? 'Còn trong kho' : 'Đã mua bán',
                         'inventory_status' => $item->status,
                         'in_stock' => $item->status === ProductImei::STATUS_IN_STOCK,
@@ -701,7 +715,7 @@ class RepairController extends Controller
             ->latest('id')
             ->limit(30)
             ->get([
-                'id', 'device_name', 'imei', 'serial', 'issue', 'repair_request',
+                'id', 'device_name', 'model', 'imei', 'serial', 'issue', 'repair_request',
                 'accessories', 'estimated_cost', 'note', 'repair_warranty_started_at',
                 'repair_warranty_expires_at', 'repair_warranty_voided_at', 'repair_warranty_void_reason',
             ])
@@ -709,6 +723,7 @@ class RepairController extends Controller
                 'key' => 'repair-' . $repair->id,
                 'repair_id' => $repair->id,
                 'device_name' => $repair->device_name,
+                'model' => $repair->model,
                 'imei' => $repair->imei,
                 'serial' => $repair->serial,
                 'issue' => $repair->issue ?? [],
@@ -778,7 +793,7 @@ class RepairController extends Controller
             ->limit(30)
             ->get([
                 'sale_items.id', 'sale_items.product_imei_id', 'sales.id as sale_id', 'sales.code as invoice_code',
-                'sales.created_at as purchased_at', 'products.name as device_name', 'products.warranty_days',
+                'sales.created_at as purchased_at', 'products.name as device_name', 'products.model as model', 'products.warranty_days',
                 'latest_imei_sale.latest_sale_item_id',
                 'product_imeis.imei', 'product_imeis.serial', 'product_imeis.customer_warranty_expires_at',
                 'product_imeis.customer_warranty_days',
@@ -804,6 +819,7 @@ class RepairController extends Controller
                 return [
                 'key' => 'purchase-' . $item->id,
                 'device_name' => $item->device_name,
+                'model' => $item->model,
                 'imei' => $item->imei,
                 'serial' => $item->serial,
                 'screen_password' => null,
@@ -1031,6 +1047,9 @@ class RepairController extends Controller
 
                     'device_name' =>
                         $request->device_name,
+
+                    'model' =>
+                        $request->input('model'),
 
                     'imei' =>
                         $request->imei,
@@ -1852,6 +1871,12 @@ class RepairController extends Controller
                 'max:255',
             ],
 
+            'model' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
             'imei' => [
                 'nullable',
                 'string',
@@ -1924,6 +1949,8 @@ class RepairController extends Controller
 
                 'device_name' =>
                     $validated['device_name'],
+
+                'model' => $validated['model'] ?? null,
 
                 'imei' =>
                     $validated['imei'] ?? null,

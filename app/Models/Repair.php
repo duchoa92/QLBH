@@ -36,6 +36,7 @@ class Repair extends Model
         'contact_phone',
 
         'device_name',
+        'model',
         'imei',
         'serial',
 

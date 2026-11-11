@@ -610,8 +610,11 @@ class ProductImeiController extends Controller
         $result = collect();
 
         if ($canProducts || $canRepairs) {
-            [$imeis, $repairOnly] = $this->searchCandidates($keyword, $canProducts ? $limit : 0, $canRepairs ? $each : 0);
-            $result = $this->buildSuggestions($canProducts ? $imeis : collect(), $canRepairs ? $repairOnly : collect(), $keyword);
+            // Thiết bị trong kho và phiếu sửa là hai loại dữ liệu riêng: phiếu sửa luôn được liệt kê đầy đủ,
+            // kể cả khi IMEI của máy đã có trong kho (trước đây bị ẩn vì chỉ hiện "phiếu sửa máy ngoài").
+            [$imeis] = $this->searchCandidates($keyword, $canProducts ? $limit : 0, 0);
+            $repairs = $canRepairs ? $this->searchRepairs($keyword, $each) : collect();
+            $result = $this->buildSuggestions($canProducts ? $imeis : collect(), $repairs, $keyword);
         }
 
         foreach (EntityLookupService::TYPES as $type) {
@@ -633,7 +636,7 @@ class ProductImeiController extends Controller
             ->get();
     }
 
-    /** Phiếu sửa khớp từ khóa: mọi từ đều phải xuất hiện ở mã phiếu, tên máy, IMEI, khách hoặc SĐT. */
+    /** Phiếu sửa khớp từ khóa: mọi từ đều phải xuất hiện ở mã phiếu, tên máy, model, IMEI, khách hoặc SĐT. */
     private function repairMatcher(string $keyword): \Closure
     {
         $tokens = EntityLookupService::tokens($keyword);
@@ -648,6 +651,7 @@ class ProductImeiController extends Controller
                 $query->where(function ($w) use ($like, $phoneLike, $token): void {
                     $w->where('code', 'like', $like)
                         ->orWhere('device_name', 'like', $like)
+                        ->orWhere('model', 'like', $like)
                         ->orWhere('imei', 'like', $like)
                         ->orWhere('serial', 'like', $like)
                         ->orWhere('contact_phone', 'like', $phoneLike)
@@ -829,6 +833,10 @@ class ProductImeiController extends Controller
                     'customer_name' => $customer?->full_name,
                     'customer_phone' => $customer?->phone,
                     'sale_code' => $sale?->code,
+                    'date' => $imei->status === ProductImei::STATUS_SOLD
+                        ? $this->formatDate($imei->sold_at ?: $sale?->created_at, true)
+                        : $this->formatDate($imei->imported_at ?: $imei->created_at, false),
+                    'date_label' => $imei->status === ProductImei::STATUS_SOLD ? 'Ngày bán' : 'Nhập kho',
                     'match' => $this->matchLabel($keyword, [
                         'IMEI / Serial' => [$imei->imei, $imei->serial],
                         'Khách hàng' => [$customer?->full_name, $customer?->phone],
@@ -848,14 +856,30 @@ class ProductImeiController extends Controller
                 'status' => $repair->status,
                 'customer_name' => $repair->customer?->full_name,
                 'customer_phone' => $repair->customer?->phone ?: $repair->contact_phone,
+                'date' => $this->formatDate($repair->received_at ?: $repair->created_at, true),
+                'date_label' => 'Nhận máy',
                 'match' => $this->matchLabel($keyword, [
                     'Phiếu sửa chữa' => [$repair->code],
                     'Khách hàng' => [$repair->customer?->full_name, $repair->customer?->phone, $repair->contact_phone],
-                    'Thông tin máy' => [$repair->device_name],
+                    'Thông tin máy' => [$repair->device_name, $repair->model],
                     'IMEI / Serial' => [$repair->imei, $repair->serial],
                 ]),
             ]))
             ->values();
+    }
+
+    /** Định dạng ngày hiển thị trong kết quả tìm; nhận Carbon, chuỗi ngày hoặc null. */
+    private function formatDate(mixed $value, bool $withTime): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($value)->format($withTime ? 'd/m/Y H:i' : 'd/m/Y');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** Nhãn cho biết gợi ý khớp vì thông tin nào (không phân biệt hoa thường và dấu tiếng Việt). */

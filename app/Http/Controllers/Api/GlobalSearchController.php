@@ -110,10 +110,10 @@ class GlobalSearchController extends Controller
             $results = $results->concat($this->search(
                 Repair::query()->with(['customer:id,full_name,phone', 'parts:id,repair_id,product_name']),
                 $tokens,
-                ['code', 'contact_phone', 'device_name', 'imei', 'serial', 'repair_request'],
+                ['code', 'contact_phone', 'device_name', 'model', 'imei', 'serial', 'repair_request'],
                 ['customer' => ['full_name', 'phone'], 'parts' => ['product_name', 'sku']], 5,
                 fn (Repair $r) => [$r->code, $r->customer?->full_name, $r->contact_phone, $r->customer?->phone,
-                    $r->device_name, $r->imei, $r->serial, $r->repair_request,
+                    $r->device_name, $r->model, $r->imei, $r->serial, $r->repair_request,
                     ...$r->parts->pluck('product_name')->all()],
                 fn (Repair $r) => $this->result('Phiếu sửa chữa', 'repair', $r->id, $r->code ?: $r->device_name,
                     $this->summary(

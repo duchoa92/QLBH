@@ -1,4 +1,6 @@
 <script setup>
+import { useSlots } from 'vue'
+
 defineProps({
     title: {
         type: String,
@@ -9,10 +11,16 @@ defineProps({
         default: '',
     },
 })
+
+// Không có mô tả/nút hành động thì không render gì (tránh thẻ rỗng làm phát sinh khoảng cách space-y thừa).
+const slots = useSlots()
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center justify-between gap-2">
+    <div
+        v-if="description || slots.actions"
+        class="flex flex-wrap items-center justify-between gap-2"
+    >
         <div class="min-w-0">
             <p
                 v-if="description"

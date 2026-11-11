@@ -43,10 +43,10 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
 
 <template>
 
-    <div class="p-4">
+    <div class="space-y-3">
 
         <!-- HEADER -->
-        <div class="bg-white rounded shadow p-4 mb-4">
+        <div class="bg-white rounded shadow p-4">
 
             <div class="flex justify-between items-start">
 

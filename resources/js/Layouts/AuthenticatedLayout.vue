@@ -10,7 +10,7 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 
         <div
             v-if="$slots.header"
-            class="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
         >
             <slot name="header" />
         </div>

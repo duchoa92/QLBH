@@ -48,7 +48,7 @@ const result = ref(null)
 const errorMessage = ref('')
 const historyFilter = ref('all')
 const selectedEvent = ref(null)
-// Tìm kiếm nâng cao: chọn một hoặc nhiều loại dữ liệu để tìm.
+// Lọc: chọn một hoặc nhiều loại dữ liệu để tìm.
 const scopeOptions = [
     { value: 'all', label: 'Toàn bộ', hint: 'Tất cả dữ liệu trong hệ thống', group: 'Tất cả' },
     { value: 'product', label: 'Sản phẩm', hint: 'Danh mục hàng hóa, linh kiện, màn hình... (kể cả không có IMEI)', group: 'Hàng hóa & thiết bị' },
@@ -723,7 +723,7 @@ const historyCount = type => type === 'all'
                         </div>
                     </div>
 
-                    <!-- Tìm kiếm nâng cao: gom mọi điều kiện, chọn được nhiều -->
+                    <!-- Lọc: gom mọi điều kiện, chọn được nhiều -->
                     <div ref="advancedRef" class="relative shrink-0">
                         <button
                             type="button"
@@ -732,42 +732,40 @@ const historyCount = type => type === 'all'
                             @click="advancedOpen = !advancedOpen"
                         >
                             <SlidersHorizontal class="h-4 w-4" />
-                            Tìm kiếm nâng cao
+                            Lọc
                             <span v-if="isAdvanced" class="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white">{{ scopes.length }}</span>
                         </button>
                         <div
                             v-if="advancedOpen"
-                            class="absolute left-0 top-full z-40 mt-2 w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+                            class="absolute right-0 top-full z-40 mt-1.5 w-[min(26rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
                         >
-                            <div class="max-h-[420px] space-y-4 overflow-y-auto p-4">
+                            <div class="max-h-[min(55vh,320px)] space-y-2.5 overflow-y-auto p-3">
                                 <div v-for="group in scopeGroups" :key="group.title">
-                                    <div class="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{{ group.title }}</div>
-                                    <div class="grid gap-1.5 sm:grid-cols-2">
+                                    <div class="mb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{{ group.title }}</div>
+                                    <div class="flex flex-wrap gap-1.5">
                                         <button
                                             v-for="option in group.options"
                                             :key="option.value"
                                             type="button"
-                                            class="flex items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition"
-                                            :class="scopes.includes(option.value) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'"
+                                            :title="option.hint"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-left text-xs font-semibold transition"
+                                            :class="scopes.includes(option.value) ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-slate-200 text-slate-700 hover:border-indigo-200 hover:bg-slate-50'"
                                             @click="toggleScope(option.value)"
                                         >
                                             <span
-                                                class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                                                class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border"
                                                 :class="scopes.includes(option.value) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'"
                                             >
-                                                <Check v-if="scopes.includes(option.value)" class="h-3 w-3" />
+                                                <Check v-if="scopes.includes(option.value)" class="h-2.5 w-2.5" />
                                             </span>
-                                            <span class="min-w-0">
-                                                <span class="block text-sm font-bold text-slate-800">{{ option.label }}</span>
-                                                <span class="block text-xs text-slate-500">{{ option.hint }}</span>
-                                            </span>
+                                            {{ option.label }}
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5">
-                                <button type="button" class="text-xs font-semibold text-slate-500 transition hover:text-rose-600" @click="resetScopes">Đặt lại (toàn bộ)</button>
-                                <button type="button" class="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700" @click="advancedOpen = false">Xong</button>
+                            <div class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2">
+                                <button type="button" class="text-xs font-semibold text-slate-500 transition hover:text-rose-600" @click="resetScopes">Đặt lại</button>
+                                <button type="button" class="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-bold text-white transition hover:bg-indigo-700" @click="advancedOpen = false">Xong</button>
                             </div>
                         </div>
                     </div>
@@ -819,7 +817,7 @@ const historyCount = type => type === 'all'
                     Nhập thông tin để bắt đầu tra cứu
                 </div>
                 <div class="mt-1 max-w-lg text-sm text-slate-500">
-                    Dùng “Tìm kiếm nâng cao” để chọn một hoặc nhiều loại dữ liệu (sản phẩm, đã bán, trong kho, sửa chữa, khách hàng, người dùng...), gõ từ khóa đúng hoặc gần đúng rồi chọn một gợi ý để xem chi tiết.
+                    Dùng “Lọc” để chọn một hoặc nhiều loại dữ liệu (sản phẩm, đã bán, trong kho, sửa chữa, khách hàng, người dùng...), gõ từ khóa đúng hoặc gần đúng rồi chọn một gợi ý để xem chi tiết.
                 </div>
             </div>
 
@@ -833,7 +831,7 @@ const historyCount = type => type === 'all'
                 </div>
                 <div class="mt-4 text-base font-bold text-slate-900">Không có kết quả phù hợp</div>
                 <div class="mt-1 max-w-lg text-sm text-slate-500">
-                    Không có dữ liệu nào trong “{{ scopeLabel }}” khớp với “{{ keyword }}”. Hãy kiểm tra lại từ khóa hoặc mở “Tìm kiếm nâng cao” để đổi điều kiện.
+                    Không có dữ liệu nào trong “{{ scopeLabel }}” khớp với “{{ keyword }}”. Hãy kiểm tra lại từ khóa hoặc mở “Lọc” để đổi điều kiện.
                 </div>
             </div>
 

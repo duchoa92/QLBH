@@ -35,7 +35,7 @@ class SaleController extends Controller
             ->where(function ($query) use ($term): void {
                 $query->where('name', 'like', "%{$term}%")
                     ->orWhere('sku', 'like', "%{$term}%")
-                    ->orWhere('barcode', 'like', "%{$term}%")
+                    ->orWhere('model', 'like', "%{$term}%")
                     ->orWhereHas('variants', fn ($variantQuery) => $variantQuery
                         ->where('barcode', $term)
                         ->orWhere('sku', 'like', "%{$term}%"));

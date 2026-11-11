@@ -91,7 +91,7 @@ const bankAccountSelectOptions = computed(() => [
 
 <template>
     <Head title="Khai thuế" />
-    <div class="space-y-4">
+    <div class="space-y-3">
         <PageHeader title="Khai thuế">
             <template #actions>
                 <div class="flex flex-wrap items-center gap-2">

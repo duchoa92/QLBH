@@ -205,6 +205,14 @@ const closeRepairDetail = () => {
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 };
 
+// Chuyển từ màn chi tiết sang quy trình sửa: phải đóng chi tiết đúng cách (xóa cả ?open_repair trên URL),
+// nếu không khi danh sách tải lại màn chi tiết sẽ tự mở lại và che quy trình đang làm.
+const openWorkflowFromDetail = (startAt) => {
+    const repair = detailRepair.value;
+    closeRepairDetail();
+    if (repair) openRepairWorkflow(repair, startAt);
+};
+
 const openRepairDetail = (repair) => {
     if (!repair?.id) return;
     const url = new URL(window.location.href);
@@ -403,8 +411,8 @@ const confirmPayment = async (payment) => {
             @close="closeRepairDetail"
             @delete="removeRepair(detailRepair)"
             @print="printPreviewUrl = route('repairs.print', detailRepair.id)"
-            @edit="openRepairWorkflow(detailRepair, 'intake'); detailRepair = null"
-            @progress="openRepairWorkflow(detailRepair); detailRepair = null"
+            @edit="openWorkflowFromDetail('intake')"
+            @progress="openWorkflowFromDetail('repair')"
         />
         <CheckoutModal
             v-if="paymentRepair"

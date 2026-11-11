@@ -4,7 +4,7 @@ import CustomerForm from './Partials/CustomerForm.vue'
 
 <template>
 
-    <div class="p-4">
+    <div>
 
         <CustomerForm
             :submit-url="route('customers.store')"

@@ -691,13 +691,16 @@ class ProductController extends Controller
                     $normalizedKeyword
                 ) {
 
-                    $q->where('barcode', $keyword)
+                    $q->where('model', 'like', '%' . $keyword . '%')
                         ->orWhere('sku', 'like', $keyword . '%')
                         ->orWhere(
                             'search_text',
                             'like',
                             '%' . $normalizedKeyword . '%'
-                        );
+                        )
+                        ->orWhereHas('variants', fn ($variantQuery) => $variantQuery
+                            ->where('barcode', $keyword)
+                            ->orWhere('sku', 'like', $keyword . '%'));
                 });
             })
 
@@ -714,7 +717,7 @@ class ProductController extends Controller
                 'category_id',
                 'name',
                 'sku',
-                'barcode',
+                'model',
                 'cost_price',
                 'sell_price',
                 'stock',

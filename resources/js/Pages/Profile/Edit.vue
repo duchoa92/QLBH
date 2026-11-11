@@ -25,7 +25,7 @@ const avatarUrl = computed(() => user.value.avatar ? imageUrl(user.value.avatar)
 <template>
     <Head title="Thiết lập cá nhân" />
 
-    <main class="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div class="space-y-3">
         <PageHeader 
             title="Thiết lập cá nhân" 
             description="Quản lý thông tin hồ sơ hiển thị, email liên hệ và cài đặt bảo mật tài khoản." 
@@ -74,7 +74,7 @@ const avatarUrl = computed(() => user.value.avatar ? imageUrl(user.value.avatar)
         </section>
 
         <!-- Main Form Content -->
-        <div class="grid items-start gap-6 lg:grid-cols-2">
+        <div class="grid items-start gap-3 lg:grid-cols-2">
             <DataPanel class="rounded-2xl border border-slate-200/80 shadow-sm">
                 <UpdateProfileInformationForm :must-verify-email="props.mustVerifyEmail" :status="props.status" />
             </DataPanel>
@@ -91,5 +91,5 @@ const avatarUrl = computed(() => user.value.avatar ? imageUrl(user.value.avatar)
                 <span class="font-semibold text-amber-950">Lưu ý về tên đăng nhập:</span> Tên đăng nhập được dùng cố định để đăng nhập vào hệ thống. Trong mọi trường hợp, tài khoản Super Admin duy nhất luôn giữ nguyên tên đăng nhập mặc định là <strong>admin</strong>.
             </div>
         </div>
-    </main>
+    </div>
 </template>

@@ -180,7 +180,7 @@ const doughnutChartOptions = {
 
 <template>
     <AdminLayout>
-        <div class="space-y-6">
+        <div class="space-y-3">
 
             <section v-if="expenseReminders.length" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
                 <div class="mb-3 flex items-center justify-between gap-2">
@@ -196,7 +196,7 @@ const doughnutChartOptions = {
             </section>
 
             <!-- 1. HÀNG THỐNG KÊ KPI TÀI CHÍNH -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
                 <!-- Card 1: Doanh thu -->
                 <div class="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
@@ -280,7 +280,7 @@ const doughnutChartOptions = {
             </div>
 
             <!-- 2. KHỐI GIỮA: BIỂU ĐỒ DOANH THU & TOP KHÁCH NỢ -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
                 <!-- Biểu đồ Doanh thu & Lợi nhuận (Chiếm 2 cột) -->
                 <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
@@ -378,7 +378,7 @@ const doughnutChartOptions = {
             </div>
 
             <!-- 3. KHỐI DƯỚI: ĐƠN HÀNG VỪA GIAO DỊCH & CƠ CẤU DOANH THU -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
                 <!-- Đơn hàng / Dịch vụ vừa phát sinh (2 cột) -->
                 <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">

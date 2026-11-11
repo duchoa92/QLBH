@@ -332,7 +332,7 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                 <div v-if="activeTab === 'overview'" class="space-y-5 p-5">
                     <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div><dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Mã sản phẩm / SKU</dt><dd class="mt-0.5 font-mono text-sm font-semibold text-slate-800">{{ product.sku || '—' }}</dd></div>
-                        <div><dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Mã vạch</dt><dd class="mt-0.5 font-mono text-sm font-semibold text-slate-800">{{ product.barcode || '—' }}</dd></div>
+                        <div><dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Model</dt><dd class="mt-0.5 font-mono text-sm font-semibold text-slate-800">{{ product.model || '—' }}</dd></div>
                         <div><dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Danh mục</dt><dd class="mt-0.5 text-sm font-semibold text-slate-800">{{ product.category?.name || '—' }}</dd></div>
                         <div><dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Thương hiệu</dt><dd class="mt-0.5 text-sm font-semibold text-slate-800">{{ product.brand?.name || '—' }}</dd></div>
                         <div><dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Đơn vị tính</dt><dd class="mt-0.5 text-sm font-semibold text-slate-800">{{ unitName }}</dd></div>

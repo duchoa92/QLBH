@@ -551,7 +551,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
             </template>
         </PageHeader>
 
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <button v-if="can_edit_settings" type="button" class="group grid min-h-[174px] grid-cols-3 grid-rows-[auto_1fr] items-start gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md" @click="openModal('system')">
                 <span class="col-span-3 flex min-w-0 items-center gap-3"><span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><Store :size="23" /></span><span class="min-w-0 flex-1 font-bold leading-6 text-slate-900">Thiết lập hệ thống</span><ChevronRight class="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-600" :size="19" /></span>
                 <span class="col-span-3 text-sm leading-5 text-slate-500">Tên cửa hàng, ngôn ngữ, tiền tệ, ngày giờ.</span>

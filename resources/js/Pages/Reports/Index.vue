@@ -459,7 +459,7 @@ onMounted(() => {
 
     <AuthenticatedLayout>
 
-        <div class="space-y-6">
+        <div class="space-y-3">
 
             <!-- TABS -->
             <section class="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">

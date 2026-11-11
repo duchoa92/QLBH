@@ -214,26 +214,41 @@ const submit = (targetStatus = 'repairing', { advanceToCompletion = false } = {}
         forceFormData: true,
         preserveScroll: true,
         onSuccess: (page) => {
-            toast.success(targetStatus === 'cancelled' ? 'Đã hủy phiếu sửa chữa' : 'Đã cập nhật tiến trình sửa chữa')
-            const refreshedRepair = page.props.repairs?.data?.find((item) => Number(item.id) === Number(props.repair.id))
-            emit('updated', refreshedRepair || {
-                ...props.repair,
-                status: targetStatus,
-                waiting_for_parts: targetStatus !== 'cancelled' && isWaiting.value,
-                waiting_mode: targetStatus === 'cancelled' ? 'repair_now' : waitingMode.value,
-                parts_needed: waitingMode.value === 'parts' ? form.parts_needed : null,
-                expected_days: waitingMode.value === 'parts' ? form.expected_days : null,
-            })
-            if (advanceToCompletion) {
-                hasRepairProgress.value = true
-                completionStep.value = true
-                activeTab.value = 'log'
-                emit('stage-change', 'complete')
+            // Luôn trả kết quả cho saveProgress() dù bước sau có lỗi, tránh treo nút "Đang xử lý...".
+            try {
+                toast.success(targetStatus === 'cancelled' ? 'Đã hủy phiếu sửa chữa' : 'Đã cập nhật tiến trình sửa chữa')
+                const refreshedRepair = page.props.repairs?.data?.find((item) => Number(item.id) === Number(props.repair.id))
+                const savedWaitingMode = targetStatus === 'cancelled' ? 'repair_now' : waitingMode.value
+                const savedWaiting = targetStatus !== 'cancelled' && isWaiting.value
+                const savedPartsNeeded = waitingMode.value === 'parts' ? form.parts_needed : null
+                const savedExpectedDays = waitingMode.value === 'parts' ? form.expected_days : null
+
+                // Đã lưu xong: xóa ghi chú/ảnh/lỗi phát sinh để lần lưu sau không gửi lại và nhân đôi tiến trình.
+                form.reset('description', 'issue', 'images')
+                form.clearErrors()
+                issueText.value = ''
+                clearProgressImagePreviews()
+
+                emit('updated', refreshedRepair || {
+                    ...props.repair,
+                    status: targetStatus,
+                    waiting_for_parts: savedWaiting,
+                    waiting_mode: savedWaitingMode,
+                    parts_needed: savedPartsNeeded,
+                    expected_days: savedExpectedDays,
+                })
+                if (advanceToCompletion) {
+                    hasRepairProgress.value = true
+                    completionStep.value = true
+                    activeTab.value = 'log'
+                    emit('stage-change', 'complete')
+                }
+                // Waiting tickets are saved for later work, so return to the list immediately.
+                // The repair-now path stays open to move directly to completion.
+                if (!props.embedded || targetStatus === 'cancelled' || savedWaiting) emit('close')
+            } finally {
+                resolve(true)
             }
-            // Waiting tickets are saved for later work, so return to the list immediately.
-            // The repair-now path stays open to move directly to completion.
-            if (!embedded || targetStatus === 'cancelled' || isWaiting.value) emit('close')
-            resolve(true)
         },
         onError: (errors) => {
             toast.error(Object.values(errors || {}).flat()[0] || 'Không thể cập nhật tiến trình sửa chữa')
@@ -263,6 +278,13 @@ const startPayment = () => {
 }
 
 const footerBusy = computed(() => form.processing || decliningWarranty.value || Boolean(completionModalRef.value?.saving))
+// Nhãn nút chính theo đúng bước kế tiếp của phiếu (không dùng chung "Lưu & tiếp tục").
+const repairNowLabel = computed(() => {
+    if (declineWarranty.value && continueAsService.value) return 'Sửa dịch vụ & sang bước hoàn tất'
+    if (props.repair.status === 'pending') return 'Nhận sửa & sang bước hoàn tất'
+    if (props.repair.waiting_for_parts) return 'Tiếp tục sửa & sang bước hoàn tất'
+    return 'Lưu tiến trình & sang bước hoàn tất'
+})
 const footerActionLabel = computed(() => footerBusy.value
     ? 'Đang xử lý...'
     : (completionStep.value
@@ -271,7 +293,7 @@ const footerActionLabel = computed(() => footerBusy.value
             ? 'Từ chối BH & kết thúc'
             : (isWaiting.value
             ? (waitingMode.value === 'parts' ? 'Lưu chờ linh kiện' : 'Lưu tạm chờ sửa')
-            : 'Lưu tiến trình & tiếp tục'))))
+            : repairNowLabel.value))))
 const footerShowCancel = computed(() => !completionStep.value && ['pending', 'repairing'].includes(props.repair.status))
 const footerShowSave = computed(() => activeTab.value !== 'history' && ['pending', 'repairing'].includes(props.repair.status))
 const saveProgress = async () => {
@@ -383,7 +405,7 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
 
                     <div v-if="waitingMode === 'parts'" class="grid grid-cols-1 gap-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3 sm:grid-cols-2">
                         <FloatingInput v-model="form.parts_needed" label="Tên linh kiện cần chờ *" id="repair_progress_parts" :error="form.errors.parts_needed" required />
-                        <FloatingInput v-model="form.expected_days" type="number" min="0" max="365" step="1" label="Dự kiến chờ (ngày) *" id="repair_progress_days" />
+                        <FloatingInput v-model="form.expected_days" type="number" min="0" max="365" step="1" label="Dự kiến chờ (ngày) *" id="repair_progress_days" :error="form.errors.expected_days" />
                     </div>
 
                     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
