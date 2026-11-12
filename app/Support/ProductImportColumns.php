@@ -51,8 +51,10 @@ class ProductImportColumns
 
     public static function headingsWithError(): array
     {
+        // Cột đầu của file lỗi là số dòng trong file gốc (để người dùng tìm lại), không phải STT.
         return [
-            ...self::HEADINGS,
+            'Dòng trong file gốc',
+            ...array_slice(self::HEADINGS, 1),
             'Lỗi',
         ];
     }

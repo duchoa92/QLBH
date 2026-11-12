@@ -284,7 +284,10 @@ const getDisplayStock = (product) => {
     // số còn lại theo từng lô để trạng thái hết hàng và giá hiển thị cùng
     // phản ánh một nguồn dữ liệu.
     const trackedBatches = availableBatches(product)
-    if (Array.isArray(product.stock_batches) && product.stock_batches.length > 0) {
+    const batchScopes = (product.batch_scopes || []).map(Number)
+    const isBatchTracked = (Array.isArray(product.stock_batches) && product.stock_batches.length > 0)
+        || (variantId ? batchScopes.includes(variantId) : batchScopes.length > 0)
+    if (isBatchTracked) {
         if (variantId) {
             return trackedBatches
                 .filter(batch => Number(batch.variant_id || 0) === variantId)

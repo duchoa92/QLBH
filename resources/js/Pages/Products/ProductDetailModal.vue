@@ -313,7 +313,7 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
 
             <!-- ========== NỘI DUNG THEO TAB ========== -->
             <section class="min-w-0 bg-white">
-                <div class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-2">
+                <div class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <button
                         v-for="tab in tabs"
                         :key="tab.key"
@@ -430,9 +430,9 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                         </span>
                     </div>
 
-                    <div class="max-h-[26rem] overflow-auto">
+                    <div class="overflow-x-auto">
                         <table class="w-full min-w-[600px] border-collapse text-left text-xs">
-                            <thead class="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 font-semibold uppercase tracking-wider text-slate-600">
+                            <thead class="border-b border-slate-200 bg-slate-100 font-semibold uppercase tracking-wider text-slate-600">
                                 <tr>
                                     <th class="w-12 px-4 py-2.5 text-center">STT</th>
                                     <th class="px-4 py-2.5">IMEI / Serial</th>

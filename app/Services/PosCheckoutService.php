@@ -62,6 +62,23 @@ class PosCheckoutService
             |--------------------------------------------------------------------------
             */
 
+            // Sản phẩm cũ không chịu VAT: không tin cờ apply_vat từ client với IMEI đã nhập là hàng cũ.
+            $usedImeiIds = ProductImei::query()
+                ->whereIn('id', collect($items)->pluck('imei_id')->filter()->unique())
+                ->where('is_used', true)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            if ($usedImeiIds !== []) {
+                $items = array_map(function ($item) use ($usedImeiIds) {
+                    if (! empty($item['imei_id']) && in_array((int) $item['imei_id'], $usedImeiIds, true)) {
+                        $item['apply_vat'] = false;
+                    }
+
+                    return $item;
+                }, $items);
+            }
+
             [
                 'subtotal' => $subtotal,
                 'discount' => $discount,
@@ -287,8 +304,8 @@ class PosCheckoutService
                     'discount_amount' =>
                         $lineDiscount,
 
-                    'has_vat' => in_array((int) $product->id, $vatProductIds, true),
-                    'vat_applied' => filter_var($item['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'has_vat' => ! ($imei?->is_used) && in_array((int) $product->id, $vatProductIds, true),
+                    'vat_applied' => ! ($imei?->is_used) && filter_var($item['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN),
 
                     'subtotal' =>
                         $lineTotal - $lineDiscount,
@@ -421,11 +438,15 @@ class PosCheckoutService
 
                 } elseif ($isBatchBacked) {
 
-                    // StockBatchAllocator đã trừ đúng từng lô ở trên. Đồng bộ
-                    // lại cột tồn tổng để các luồng cũ, báo cáo và lần bán sau
-                    // không còn dùng số tồn cũ (như IC nguồn còn 13 lô nhưng
-                    // product.stock = 0).
-                    $this->syncBatchBackedStock($product, $variant);
+                    // StockBatchAllocator đã trừ đúng từng lô ở trên. Cột tồn cũng
+                    // chỉ trừ đúng lượng đã bán (không ghi đè bằng tổng lô), cùng
+                    // quy ước với sửa/hủy hóa đơn, nhập kho và sửa chữa. Ghi đè
+                    // sẽ xóa mất tồn âm và làm "sống lại" hàng đã xuất ở luồng khác.
+                    if ($variant) {
+                        $this->decrementBatchBackedStock($variant, $baseQuantity);
+                    }
+
+                    $this->decrementBatchBackedStock($product, $baseQuantity);
 
                 } elseif ($variant) {
 
@@ -696,18 +717,20 @@ class PosCheckoutService
             ->sum('remaining_quantity');
     }
 
-    private function syncBatchBackedStock(Product $product, ?ProductVariant $variant): void
+    /**
+     * Trừ cột tồn cho hàng đã được trừ theo lô. Lô đã được kiểm tra đủ hàng nên không
+     * chặn theo cột tồn; nếu không cho tồn âm thì chỉ chặn không cho cột tồn xuống dưới 0.
+     */
+    private function decrementBatchBackedStock(Product|ProductVariant $model, int $quantity): void
     {
-        if ($variant) {
-            $variant->update([
-                'stock' => $this->availableBatchQuantity($product->id, $variant->id),
-            ]);
+        if (filter_var(setting('allow_negative_stock', false), FILTER_VALIDATE_BOOLEAN)) {
+            $model->decrement('stock', $quantity);
+            return;
         }
 
-        $product->update([
-            'stock' => (int) ProductStockBatch::query()
-                ->where('product_id', $product->id)
-                ->sum('remaining_quantity'),
-        ]);
+        $quantity = max(0, $quantity);
+        $model->newQuery()
+            ->whereKey($model->getKey())
+            ->update(['stock' => DB::raw("CASE WHEN stock >= {$quantity} THEN stock - {$quantity} ELSE 0 END")]);
     }
 }

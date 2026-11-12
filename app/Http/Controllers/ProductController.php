@@ -525,7 +525,7 @@ class ProductController extends Controller
         try {
             $rows = $this->readSpreadsheetRows($request);
             $images = $this->importImages($request, $imageStore);
-            $result = $service->handle($rows, $request->boolean('force'), $images);
+            $result = $service->handle($rows, $images);
         } catch (ProductImportException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }

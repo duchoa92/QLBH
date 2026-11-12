@@ -225,15 +225,17 @@ class StockImportService
                 0,
                 $totalAmount - $discount + $extraFee
             );
+            // Mua lại từ khách lẻ không có công nợ: phiếu luôn được chi trả đủ (khớp cách giao diện hiển thị).
+            $isCustomerBuyback = empty($data['supplier_id']) && ($data['party_type'] ?? 'supplier') === 'customer';
             $paidAmount = ! empty($data['supplier_id'])
                 ? min($grandTotal, max(0, (float) ($data['paid_amount'] ?? 0)))
-                : 0;
+                : ($isCustomerBuyback ? $grandTotal : 0);
             $oldDebtPaid = ! empty($data['supplier_id'])
                 ? max(0, (float) ($data['old_debt_paid'] ?? 0))
                 : 0;
             $tenderedAmount = ! empty($data['supplier_id'])
                 ? max(0, (float) ($data['tendered_amount'] ?? ($paidAmount + $oldDebtPaid)))
-                : 0;
+                : ($isCustomerBuyback ? $grandTotal : 0);
             $supplier = ! empty($data['supplier_id'])
                 ? Supplier::query()->lockForUpdate()->findOrFail($data['supplier_id'])
                 : null;
@@ -861,7 +863,7 @@ class StockImportService
 
         $normalized = collect([
             'note' => $extraInfo['note'] ?? null,
-            'is_used' => $extraInfo['is_used'] ?? null,
+            'is_used' => filter_var($extraInfo['is_used'] ?? false, FILTER_VALIDATE_BOOLEAN) ? '1' : null,
             'account' => $extraInfo['account'] ?? null,
             'password' => $extraInfo['password'] ?? null,
             'customer_warranty_duration_value' => $extraInfo['customer_warranty_duration_value'] ?? null,

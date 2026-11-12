@@ -32,6 +32,10 @@ class RunScheduledBackup extends Command
         };
         if ($slot === null || setting('backup_last_slot') === $frequency.':'.$slot) return self::SUCCESS;
 
+        // Lịch chạy mỗi phút: sau khi sao lưu lỗi, đợi 30 phút mới thử lại thay vì tạo lại liên tục.
+        $lastFailedAt = setting('backup_last_failed_at');
+        if ($lastFailedAt && Carbon::parse($lastFailedAt)->gt($now->copy()->subMinutes(30))) return self::SUCCESS;
+
         try {
             $path = $service->create();
             foreach (BackupCloudConnection::where('enabled', true)->whereIn('provider', BackupCloudConnection::SUPPORTED_PROVIDERS)->get() as $connection) {
@@ -40,10 +44,12 @@ class RunScheduledBackup extends Command
             Setting::set('backup_last_slot', $frequency.':'.$slot);
             Setting::set('backup_last_run', Carbon::now($timezone)->toDateTimeString().' '.$timezone);
             Setting::set('backup_last_error', null);
+            Setting::forget('backup_last_failed_at');
             $this->info('Scheduled backup created.');
             return self::SUCCESS;
         } catch (Throwable $exception) {
             Setting::set('backup_last_error', $exception->getMessage());
+            Setting::set('backup_last_failed_at', $now->toDateTimeString());
             report($exception);
             $this->error($exception->getMessage());
             return self::FAILURE;

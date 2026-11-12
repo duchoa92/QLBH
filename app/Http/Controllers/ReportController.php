@@ -13,6 +13,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -231,18 +232,22 @@ class ReportController extends Controller
             ->select('id', 'category_id', 'brand_id', 'name', 'sku', 'image', 'stock', 'alert_stock', 'cost_price', 'sell_price')
             ->orderBy('stock')
             ->paginate(20)
-            ->withQueryString()
-            ->through(function ($product) {
-                $product->stock_value = (float) $product->stock * (float) $product->cost_price;
-                return $product;
-            });
+            ->withQueryString();
+
+        // Giá trị tồn theo giá vốn thực: lô FIFO cho hàng thường, giá vốn từng máy cho IMEI.
+        // products.cost_price chỉ là giá nhập gần nhất nên chỉ dùng cho phần tồn chưa thuộc lô nào.
+        $stockValues = $this->stockValuesFor($products->getCollection()->pluck('id')->all());
+        $products->through(function ($product) use ($stockValues) {
+            $product->stock_value = (float) ($stockValues[$product->id] ?? 0);
+            return $product;
+        });
 
         $activeProducts = Product::where('is_active', true);
 
         $summary = [
             'total_products' => (clone $activeProducts)->count(),
             'total_stock_qty' => (int) (clone $activeProducts)->sum('stock'),
-            'total_stock_value' => (float) (clone $activeProducts)->selectRaw('COALESCE(SUM(stock * cost_price), 0) as v')->value('v'),
+            'total_stock_value' => $this->totalStockValue(),
             'low_stock_count' => $alertsEnabled ? (clone $activeProducts)->where($lowStock)->count() : 0,
         ];
 
@@ -347,7 +352,7 @@ class ReportController extends Controller
         $summaryRow = (clone $base)
             ->selectRaw('
                 COALESCE(SUM(sale_items.subtotal), 0) as revenue,
-                COALESCE(SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price), 0) as cost,
+                COALESCE(SUM((CASE WHEN sale_items.unit_cost IS NOT NULL THEN sale_items.unit_cost * sale_items.quantity ELSE COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price END)), 0) as cost,
                 COALESCE(SUM(sale_items.quantity), 0) as qty
             ')
             ->first();
@@ -360,7 +365,7 @@ class ReportController extends Controller
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
             ->tap(fn ($query) => $this->applyProfitFilters($query))
-            ->selectRaw('COALESCE(SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price), 0) as cost')
+            ->selectRaw('COALESCE(SUM((CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END)), 0) as cost')
             ->value('cost');
         $cost = (float) $summaryRow->cost + (float) $giftCost;
         $profit = $revenue - $cost;
@@ -372,7 +377,7 @@ class ReportController extends Controller
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
             ->tap(fn ($query) => $this->applyProfitFilters($query))
-            ->selectRaw('DATE(sales.created_at) as date, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
+            ->selectRaw('DATE(sales.created_at) as date, SUM((CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END)) as cost')
             ->groupBy('date')
             ->get()
             ->keyBy('date');
@@ -381,7 +386,7 @@ class ReportController extends Controller
             ->selectRaw('
                 DATE(sales.created_at) as date,
                 SUM(sale_items.subtotal) as revenue,
-                SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price) as cost
+                SUM((CASE WHEN sale_items.unit_cost IS NOT NULL THEN sale_items.unit_cost * sale_items.quantity ELSE COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price END)) as cost
             ')
             ->groupBy('date')
             ->orderBy('date')
@@ -399,7 +404,7 @@ class ReportController extends Controller
                 products.name,
                 SUM(sale_items.quantity) as qty_sold,
                 SUM(sale_items.subtotal) as revenue,
-                SUM(COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price) as cost
+                SUM((CASE WHEN sale_items.unit_cost IS NOT NULL THEN sale_items.unit_cost * sale_items.quantity ELSE COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price END)) as cost
             ')
             ->groupBy('products.id', 'products.name')
             ->orderByDesc('revenue')
@@ -414,7 +419,7 @@ class ReportController extends Controller
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
             ->tap(fn ($query) => $this->applyProfitFilters($query))
-            ->selectRaw('products.id, products.name, SUM(sale_item_gifts.quantity) as qty_sold, SUM(COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price) as cost')
+            ->selectRaw('products.id, products.name, SUM(sale_item_gifts.quantity) as qty_sold, SUM((CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END)) as cost')
             ->groupBy('products.id', 'products.name')
             ->get();
 
@@ -456,5 +461,75 @@ class ReportController extends Controller
             'daily' => $daily,
             'by_product' => $byProduct,
         ]);
+    }
+    /** @param  array<int, int>  $productIds  @return array<int, float> */
+    private function stockValuesFor(array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+
+        $batches = DB::table('product_stock_batches')
+            ->whereIn('product_id', $productIds)
+            ->selectRaw('product_id, SUM(remaining_quantity) as qty, SUM(remaining_quantity * cost_price) as value')
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
+
+        $imeis = DB::table('product_imeis')
+            ->whereNull('deleted_at')
+            ->whereIn('product_id', $productIds)
+            ->where('status', 'in_stock')
+            ->selectRaw('product_id, SUM(COALESCE(cost_price, 0)) as value')
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
+
+        $values = [];
+        foreach (DB::table('products')->whereIn('id', $productIds)->get(['id', 'stock', 'cost_price', 'manage_stock_by_serial', 'product_type']) as $product) {
+            if ($product->manage_stock_by_serial || $product->product_type === 'imei') {
+                $values[$product->id] = (float) ($imeis[$product->id]->value ?? 0);
+                continue;
+            }
+
+            $batchQty = (int) ($batches[$product->id]->qty ?? 0);
+            $values[$product->id] = (float) ($batches[$product->id]->value ?? 0)
+                + max(0, (int) $product->stock - $batchQty) * (float) $product->cost_price;
+        }
+
+        return $values;
+    }
+
+    private function totalStockValue(): float
+    {
+        $batchValue = (float) DB::table('product_stock_batches as b')
+            ->join('products as p', 'p.id', '=', 'b.product_id')
+            ->where('p.is_active', true)
+            ->whereNull('p.deleted_at')
+            ->sum(DB::raw('b.remaining_quantity * b.cost_price'));
+
+        $imeiValue = (float) DB::table('product_imeis as i')
+            ->join('products as p', 'p.id', '=', 'i.product_id')
+            ->where('p.is_active', true)
+            ->whereNull('p.deleted_at')
+            ->whereNull('i.deleted_at')
+            ->where('i.status', 'in_stock')
+            ->sum(DB::raw('COALESCE(i.cost_price, 0)'));
+
+        $uncoveredValue = (float) DB::table('products as p')
+            ->leftJoinSub(
+                DB::table('product_stock_batches')->selectRaw('product_id, SUM(remaining_quantity) as qty')->groupBy('product_id'),
+                'b',
+                'b.product_id',
+                '=',
+                'p.id'
+            )
+            ->where('p.is_active', true)
+            ->whereNull('p.deleted_at')
+            ->where('p.manage_stock_by_serial', false)
+            ->where('p.product_type', '!=', 'imei')
+            ->sum(DB::raw('CASE WHEN p.stock > COALESCE(b.qty, 0) THEN (p.stock - COALESCE(b.qty, 0)) * p.cost_price ELSE 0 END'));
+
+        return $batchValue + $imeiValue + $uncoveredValue;
     }
 }

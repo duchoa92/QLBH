@@ -84,6 +84,7 @@ export function useCart() {
     const page = usePage()
     const allowsNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
     const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled)
+        && !product.is_used
         && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
 
     const normalizedStockLimit = value => {
@@ -136,8 +137,11 @@ export function useCart() {
         return null
     }
 
+    // Lô đã hết hàng không còn nằm trong stock_batches, nhưng backend vẫn kiểm tồn theo lô
+    // (batch_scopes liệt kê mọi phạm vi từng có lô) nên giỏ hàng không được quay về dùng cột tồn.
     const hasTrackedBatches = (product, variantId = null) => (product.stock_batches || [])
         .some(batch => Number(batch.variant_id || 0) === Number(variantId || 0))
+        || (product.batch_scopes || []).some(scope => Number(scope) === Number(variantId || 0))
 
     const applyBatchToItem = (item, product, batch) => {
         item.stock_batches = product.stock_batches || item.stock_batches || []

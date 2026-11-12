@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RepairPart extends Model
 {
@@ -33,5 +34,11 @@ class RepairPart extends Model
     public function variant(): BelongsTo
     {
         return $this->belongsTo(ProductVariant::class, 'variant_id');
+    }
+
+    /** Các lô FIFO mà linh kiện này đã lấy hàng (dùng để hoàn lô khi xóa phiếu). */
+    public function stockBatchAllocations(): HasMany
+    {
+        return $this->hasMany(SaleItemStockBatch::class, 'repair_part_id');
     }
 }

@@ -17,6 +17,7 @@ import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRig
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
+import { appBaseUrl } from '@/utils/appPaths'
 
 defineOptions({ layout: AdminLayout })
 
@@ -177,6 +178,62 @@ const closeModal = () => {
     router.get('settings', {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section'] })
 }
 
+// Mỗi mục chỉ gửi và lưu đúng các trường của mình, tránh ghi đè cài đặt khác bằng dữ liệu cũ của trang.
+const SECTION_KEYS = {
+    system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
+    printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
+    inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent'],
+    payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
+}
+
+// Đóng mà không lưu: bỏ các chỉnh sửa dở để lần mở sau không hiện số liệu chưa lưu.
+const cancelModal = () => {
+    const section = activeModal.value
+    if (section && SECTION_KEYS[section]) {
+        form.reset(...SECTION_KEYS[section])
+        form.clearErrors()
+        if (section === 'payments') {
+            selectedBankAccountId.value = String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || '')
+        }
+    }
+    closeModal()
+}
+
+const mapBankAccounts = () => (props.settings.bank_accounts?.length
+        ? props.settings.bank_accounts
+        : (props.settings.bank_bin || props.settings.bank_account
+            ? [{
+                id: 'legacy-default',
+                bank_bin: props.settings.bank_bin || '',
+                bank_account: props.settings.bank_account || '',
+                bank_account_name: props.settings.bank_account_name || '',
+                is_default: true,
+            }]
+            : [])).map((account, index) => ({
+        id: account.id || `bank-${index + 1}`,
+        bank_bin: account.bank_bin || '',
+        bank_name: account.bank_name || props.banks.find(bank => String(bank.bin) === String(account.bank_bin))?.shortName || '',
+        bank_account: account.bank_account || '',
+        bank_account_name: account.bank_account_name || '',
+        transfer_content_mode: account.transfer_content_mode === 'invoice' ? 'invoice' : 'default',
+        vat_preferred: Boolean(account.vat_preferred),
+        payment_provider: account.payment_provider || '',
+        payment_provider_account_id: account.payment_provider_account_id || '',
+        payment_api_key: '',
+        payment_api_access_key: '',
+        payment_api_secret_key: '',
+        payment_webhook_secret: '',
+        payment_api_key_configured: Boolean(account.payment_api_key_configured),
+        payment_api_access_key_configured: Boolean(account.payment_api_access_key_configured),
+        payment_api_secret_key_configured: Boolean(account.payment_api_secret_key_configured),
+        payment_webhook_secret_configured: Boolean(account.payment_webhook_secret_configured),
+        payment_auto_enabled: Boolean(account.payment_auto_enabled),
+        is_default: props.settings.bank_accounts?.some(saved => saved.is_default)
+            ? Boolean(account.is_default)
+            : index === 0,
+    }))
+
 const form = useForm({
     shop_name: props.settings.shop_name || '',
     currency_symbol: props.settings.currency_symbol || '₫',
@@ -231,39 +288,7 @@ const form = useForm({
     payment_voice_enabled: props.settings.payment_voice_enabled !== false
         && props.settings.payment_voice_enabled !== 0
         && props.settings.payment_voice_enabled !== '0',
-    bank_accounts: (props.settings.bank_accounts?.length
-        ? props.settings.bank_accounts
-        : (props.settings.bank_bin || props.settings.bank_account
-            ? [{
-                id: 'legacy-default',
-                bank_bin: props.settings.bank_bin || '',
-                bank_account: props.settings.bank_account || '',
-                bank_account_name: props.settings.bank_account_name || '',
-                is_default: true,
-            }]
-            : [])).map((account, index) => ({
-        id: account.id || `bank-${index + 1}`,
-        bank_bin: account.bank_bin || '',
-        bank_name: account.bank_name || props.banks.find(bank => String(bank.bin) === String(account.bank_bin))?.shortName || '',
-        bank_account: account.bank_account || '',
-        bank_account_name: account.bank_account_name || '',
-        transfer_content_mode: account.transfer_content_mode === 'invoice' ? 'invoice' : 'default',
-        vat_preferred: Boolean(account.vat_preferred),
-        payment_provider: account.payment_provider || '',
-        payment_provider_account_id: account.payment_provider_account_id || '',
-        payment_api_key: '',
-        payment_api_access_key: '',
-        payment_api_secret_key: '',
-        payment_webhook_secret: '',
-        payment_api_key_configured: Boolean(account.payment_api_key_configured),
-        payment_api_access_key_configured: Boolean(account.payment_api_access_key_configured),
-        payment_api_secret_key_configured: Boolean(account.payment_api_secret_key_configured),
-        payment_webhook_secret_configured: Boolean(account.payment_webhook_secret_configured),
-        payment_auto_enabled: Boolean(account.payment_auto_enabled),
-        is_default: props.settings.bank_accounts?.some(saved => saved.is_default)
-            ? Boolean(account.is_default)
-            : index === 0,
-    })),
+    bank_accounts: mapBankAccounts(),
 })
 
 watch(
@@ -310,7 +335,7 @@ onBeforeUnmount(() => {
     clearInterval(clearDataProgressTimer)
 })
 
-const bankWebhookEndpoint = computed(() => `${window.location.origin}/api/webhooks/bank-transactions`)
+const bankWebhookEndpoint = computed(() => `${appBaseUrl}api/webhooks/bank-transactions`)
 
 const bankOptions = computed(() => {
     const options = props.banks.map(bank => ({
@@ -453,6 +478,18 @@ const unitForm = useForm({
 })
 
 const save = () => {
+    if (activeModal.value !== 'payments') {
+        const keys = SECTION_KEYS[activeModal.value] || []
+        form.transform(data => Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)))).post(route('settings.update'), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.defaults()
+                closeModal()
+            },
+        })
+        return
+    }
+
     const accountsToSave = form.bank_accounts.filter(account =>
         [account.bank_bin, account.bank_account, account.bank_account_name].some(value => String(value || '').trim() !== '')
     )
@@ -468,11 +505,18 @@ const save = () => {
     })
     form.bank_accounts = accountsToSave
 
-    form.post(route('settings.update'), {
+    const section = activeModal.value
+    const keys = SECTION_KEYS[section] || []
+    form.transform(data => Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)))).post(route('settings.update'), {
         preserveScroll: true,
         onSuccess: () => {
-            selectedBankAccountId.value = defaultAccountId
-            localStorage.setItem('pos-payment-settings-updated', String(Date.now()))
+            if (section === 'payments') {
+                // Nạp lại từ máy chủ: khóa bí mật vừa nhập đã được mã hóa, trạng thái "đang bật/chưa đủ cấu hình" cũng được cập nhật.
+                form.bank_accounts = mapBankAccounts()
+                selectedBankAccountId.value = String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || defaultAccountId)
+                localStorage.setItem('pos-payment-settings-updated', String(Date.now()))
+            }
+            form.defaults()
             closeModal()
         },
     })
@@ -515,13 +559,15 @@ const toggleUnitStatus = (unit) => {
     })
 }
 
-const deleteUnit = (unit) => {
-    if (!window.confirm(`Xóa đơn vị "${unit.name}"?`)) {
-        return
-    }
+const unitDeleteError = computed(() => page.props.errors?.unit || '')
 
-    router.delete(route('units.destroy', unit.id), {
-        preserveScroll: true,
+const deleteUnit = (unit) => {
+    confirmBox.show({
+        title: 'Xóa đơn vị tính',
+        message: `Xóa đơn vị "${unit.name}"? Đơn vị đã dùng trong sản phẩm, phiếu nhập hoặc hóa đơn sẽ không xóa được, khi đó hãy chuyển sang "Tạm tắt".`,
+        confirmText: 'Xóa đơn vị',
+        cancelText: 'Giữ lại',
+        onConfirm: () => router.delete(route('units.destroy', unit.id), { preserveScroll: true }),
     })
 }
 
@@ -587,10 +633,13 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
             :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : activeModal === 'loyalty' ? 'Điểm khách hàng' : 'Bán hàng và kho hàng'"
             size="lg"
             :body-class="activeModal === 'payments' ? 'max-h-[70vh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70vh] overflow-y-auto p-3 sm:p-4'"
-            @close="closeModal"
+            @close="cancelModal"
         >
        
         <div class="grid gap-5">
+            <div v-if="Object.keys(form.errors).length" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700" role="alert">
+                <div v-for="(message, key) in form.errors" :key="key">{{ message }}</div>
+            </div>
             <div class="space-y-5">
                 <DataPanel v-if="activeModal === 'loyalty'">
                     <template #header>
@@ -731,6 +780,10 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
 
                         <FloatingSelect v-model="form.app_timezone" name="app_timezone" label="Múi giờ hệ thống" :options="timezoneOptions" />
                         <FloatingSelect v-model="form.date_format" name="date_format" label="Định dạng ngày" :options="dateFormatOptions" />
+                        <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600 md:col-span-2">
+                            <strong>Ngôn ngữ</strong> chỉ đổi thuộc tính ngôn ngữ của phiếu in và thông báo hệ thống; giao diện quản trị hiện chỉ có tiếng Việt.
+                            <strong>Múi giờ</strong> chỉ thay cách hiển thị giờ, không chuyển đổi dữ liệu đã lưu, nên chỉ đổi khi thật sự cần.
+                        </p>
                     </div>
                 </DataPanel>
 
@@ -744,7 +797,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                                     Cho phép tồn kho âm
                                 </span>
                                 <span class="mt-0.5 block text-xs font-medium text-slate-500">
-                                    Dùng khi muốn cho phép bán trước rồi nhập bù sau.
+                                    Dùng khi muốn cho phép bán trước rồi nhập bù sau. Phần bán vượt tồn chưa có lô nhập nên chưa tính được giá vốn theo lô.
                                 </span>
                             </span>
 
@@ -775,6 +828,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             name="stock_import_vat_rate"
                             label="Thuế suất VAT (%)"
                             class="mt-3"
+                            :error="form.errors.stock_import_vat_rate"
                         />
                     </div>
                 </DataPanel>
@@ -788,7 +842,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             </span>
                             <input v-model="form.pos_vat_default_enabled" type="checkbox" class="h-5 w-5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                         </label>
-                        <FloatingInput v-model.number="form.pos_vat_rate" type="number" min="0" max="100" step="0.1" name="pos_vat_rate" label="Thuế suất VAT bán hàng (%)" class="mt-3" />
+                        <FloatingInput v-model.number="form.pos_vat_rate" type="number" min="0" max="100" step="0.1" name="pos_vat_rate" label="Thuế suất VAT bán hàng (%)" class="mt-3" :error="form.errors.pos_vat_rate" />
                         <div v-if="form.pos_vat_default_enabled" class="mt-3 space-y-2 border-t border-blue-100 pt-3">
                             <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
                                 <input v-model="form.pos_vat_default_scope" type="radio" value="all" class="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500">
@@ -881,6 +935,14 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                     </template>
 
                     <div class="space-y-4 p-4">
+                        <div
+                            v-if="unitDeleteError"
+                            class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
+                            role="alert"
+                        >
+                            {{ unitDeleteError }}
+                        </div>
+
                         <div
                             v-if="unitForm.hasErrors"
                             class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
@@ -1021,7 +1083,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                         </div>
 
                         <div class="rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
-                            Ví dụ: Cái, Chiếc, Bộ, Hộp. Hệ thống chỉ dùng đơn vị để hiển thị, số lượng nhập bán được tính trực tiếp.
+                            Ví dụ: Cái, Chiếc, Bộ, Hộp. Đơn vị dùng để hiển thị và quy đổi (ví dụ Thùng → Cái) khi cấu hình sản phẩm và nhập hàng; tồn kho luôn tính theo đơn vị gốc.
                         </div>
                     </div>
                 </DataPanel>
@@ -1149,31 +1211,6 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                                 <p v-if="account.payment_provider === 'apipay'" class="mt-1">Trong ApiPay, đăng ký URL này tại Cài đặt → Webhooks (URL phải HTTPS và truy cập được từ Internet), rồi nhập secret trả về. QLBH gửi mã hóa đơn hiện tại làm nội dung khi tạo payment request; QR ApiPay trả về sẽ được hiển thị và webhook dùng chính nội dung đó để ghép giao dịch với hóa đơn.</p>
                                 <p v-else class="mt-1">Dán URL này vào cấu hình webhook của dịch vụ. URL cần truy cập được từ Internet; POS gửi mã hóa đơn trong nội dung thanh toán để tự đối soát.</p>
                             </div>
-                            <section class="rounded-lg border border-slate-200 bg-white/80 p-3">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div>
-                                        <p class="text-sm font-semibold text-slate-700">Âm báo bằng giọng nói</p>
-                                        <p class="mt-0.5 text-xs text-slate-500">Đọc thông báo khi đối soát nhận được tiền.</p>
-                                    </div>
-                                    <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                                        <input v-model="form.payment_voice_enabled" type="checkbox" :disabled="!can_update_bank_settings" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                                        {{ form.payment_voice_enabled ? 'Bật' : 'Tắt' }}
-                                    </label>
-                                </div>
-                                <div v-if="form.payment_voice_enabled" class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-                                    <FloatingSelect
-                                        v-model="form.payment_voice_language"
-                                        name="payment_voice_language"
-                                        label="Ngôn ngữ đọc"
-                                        :options="paymentVoiceOptions"
-                                        :disabled="!can_update_bank_settings"
-                                        :show-placeholder="false"
-                                    />
-                                    <button type="button" :disabled="!paymentVoiceAvailable" :aria-label="paymentVoiceAvailable ? 'Nghe thử giọng đọc' : 'Không có giọng đọc phù hợp'" :title="paymentVoiceAvailable ? 'Nghe thử giọng đọc' : 'Không có giọng đọc phù hợp'" class="mb-px inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice"><Volume2 :size="18" /></button>
-                                    <p v-if="paymentVoiceTestMessage" class="col-span-2 text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
-                                    <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="col-span-2 text-xs text-amber-700">Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.</p>
-                                </div>
-                            </section>
                             </div>
                         </div>
                         </div>
@@ -1209,6 +1246,31 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                         </div>
                         <p v-if="form.errors.bank_qr_theme" class="mt-1 text-xs text-rose-600">{{ form.errors.bank_qr_theme }}</p>
                     </section>
+                    <section class="rounded-lg bg-slate-50 p-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-semibold text-slate-700">Âm báo bằng giọng nói</p>
+                                <p class="mt-0.5 text-xs text-slate-500">Đọc thông báo khi đối soát nhận được tiền.</p>
+                            </div>
+                            <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                                <input v-model="form.payment_voice_enabled" type="checkbox" :disabled="!can_update_bank_settings" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                {{ form.payment_voice_enabled ? 'Bật' : 'Tắt' }}
+                            </label>
+                        </div>
+                        <div v-if="form.payment_voice_enabled" class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+                            <FloatingSelect
+                                v-model="form.payment_voice_language"
+                                name="payment_voice_language"
+                                label="Ngôn ngữ đọc"
+                                :options="paymentVoiceOptions"
+                                :disabled="!can_update_bank_settings"
+                                :show-placeholder="false"
+                            />
+                            <button type="button" :disabled="!paymentVoiceAvailable" :aria-label="paymentVoiceAvailable ? 'Nghe thử giọng đọc' : 'Không có giọng đọc phù hợp'" :title="paymentVoiceAvailable ? 'Nghe thử giọng đọc' : 'Không có giọng đọc phù hợp'" class="mb-px inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" @click="testSelectedPaymentVoice"><Volume2 :size="18" /></button>
+                            <p v-if="paymentVoiceTestMessage" class="col-span-2 text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
+                            <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="col-span-2 text-xs text-amber-700">Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.</p>
+                        </div>
+                    </section>
                     </div>
 
                 </div>
@@ -1216,7 +1278,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <ActionButton variant="secondary" @click="closeModal">Đóng</ActionButton>
+                <ActionButton variant="secondary" @click="cancelModal">Đóng</ActionButton>
                 <ActionButton :disabled="form.processing" @click="save">
                     <Save :size="16" />
                     {{ form.processing ? 'Đang lưu...' : 'Lưu cài đặt' }}

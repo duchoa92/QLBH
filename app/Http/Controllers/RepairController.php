@@ -23,6 +23,7 @@ use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductVariant;
 use App\Models\RepairPart;
+use App\Services\Stock\StockBatchAllocator;
 use Illuminate\Validation\ValidationException;
 use App\Models\User;
 use App\Notifications\SystemNotification;
@@ -1250,6 +1251,10 @@ class RepairController extends Controller
 
             // Hoàn kho linh kiện đã xuất khi hoàn tất sửa.
             foreach ($repair->parts()->get() as $part) {
+                // Linh kiện xuất theo lô FIFO thì hoàn lại đúng các lô đã lấy; linh kiện xuất
+                // trước khi có phân bổ lô chỉ cần cộng lại cột tồn kho bên dưới.
+                app(StockBatchAllocator::class)->restore($part);
+
                 if ($part->variant_id) {
                     ProductVariant::query()->lockForUpdate()->find($part->variant_id)?->increment('stock', (int) $part->quantity);
                 }
@@ -1467,10 +1472,16 @@ class RepairController extends Controller
                 $variantId = $line['variant_id'] ?? null;
                 $hasVariants = $product->variants()->where('is_active', true)->exists();
                 $variant = null;
+                $batchAllocator = app(StockBatchAllocator::class);
                 if ($variantId) {
                     $variant = ProductVariant::query()->where('product_id', $product->id)->where('is_active', true)->lockForUpdate()->findOrFail($variantId);
                     if (! $allowNegativeStock && ($variant->stock < $line['quantity'] || $product->stock < $line['quantity'])) {
                         throw ValidationException::withMessages(['parts' => "Tồn kho của {$product->name} không đủ."]);
+                    }
+                    if (! $allowNegativeStock
+                        && $batchAllocator->hasAnyBatch($product->id, $variant->id)
+                        && $batchAllocator->availableQuantity($product->id, $variant->id) < $line['quantity']) {
+                        throw ValidationException::withMessages(['parts' => "Tồn kho theo lô của {$product->name} không đủ."]);
                     }
                     $variant->decrement('stock', $line['quantity']);
                     $product->decrement('stock', $line['quantity']);
@@ -1481,13 +1492,18 @@ class RepairController extends Controller
                     if (! $allowNegativeStock && $product->stock < $line['quantity']) {
                         throw ValidationException::withMessages(['parts' => "Tồn kho của {$product->name} không đủ."]);
                     }
+                    if (! $allowNegativeStock
+                        && $batchAllocator->hasAnyBatch($product->id, null)
+                        && $batchAllocator->availableQuantity($product->id, null) < $line['quantity']) {
+                        throw ValidationException::withMessages(['parts' => "Tồn kho theo lô của {$product->name} không đủ."]);
+                    }
                     $product->decrement('stock', $line['quantity']);
                 }
 
                 $unitPrice = (float) $line['unit_price'];
                 $subtotal = $unitPrice * (int) $line['quantity'];
                 $partsTotal += $subtotal;
-                RepairPart::query()->create([
+                $repairPart = RepairPart::query()->create([
                     'repair_id' => $repair->id,
                     'product_id' => $product->id,
                     'variant_id' => $variant?->id,
@@ -1497,6 +1513,10 @@ class RepairController extends Controller
                     'unit_price' => $unitPrice,
                     'subtotal' => $subtotal,
                 ]);
+
+                // Trừ lô FIFO cùng lúc với cột tồn, để tồn theo lô không lệch với tồn tổng.
+                // Hàng chưa có lô nào thì allocate() không làm gì và vẫn chỉ trừ cột tồn.
+                $batchAllocator->allocate($repairPart, (int) $product->id, $variant?->id, (int) $line['quantity']);
             }
 
             $labor = (float) $data['labor_cost'];

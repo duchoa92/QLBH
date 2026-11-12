@@ -58,15 +58,15 @@ class ProductImportService
      */
     public function preview(array $rows, array $images = []): array
     {
-        return $this->readRows($rows, $images, false)['rows'];
+        return $this->readRows($rows, $images)['rows'];
     }
 
     /**
      * @param array<int, mixed> $images UploadedFile hoặc ['name' => ..., 'path' => ...]
      */
-    public function handle(array $rows, bool $allowDuplicate = false, array $images = []): array
+    public function handle(array $rows, array $images = []): array
     {
-        $parsed = $this->readRows($rows, $images, $allowDuplicate);
+        $parsed = $this->readRows($rows, $images);
         $errors = [];
         $success = 0;
         $storedImages = [];
@@ -91,12 +91,12 @@ class ProductImportService
                 $cost = $row['cost_price'] !== '' ? (float) $row['cost_price'] : 0.0;
                 $sell = (float) $row['sell_price'];
 
-                $skuExists = $this->skuTaken($row['sku']);
-                $sku = $skuExists ? $this->uniqueSku($row['sku']) : $row['sku'];
+                // SKU đã được kiểm tra trùng ở bước đọc file; nếu vẫn trùng (người khác vừa tạo) thì DB báo lỗi và hoàn tác.
+                $sku = $row['sku'];
 
                 $imagePath = $this->storeImage($parsed['image_sources'][$row['row']] ?? null, $sku);
 
-                if ($imagePath !== null && ($parsed['image_sources'][$row['row']]['type'] ?? null) === 'upload') {
+                if ($imagePath !== null) {
                     $storedImages[] = $imagePath;
                 }
 
@@ -166,7 +166,7 @@ class ProductImportService
      | Đọc & kiểm tra dữ liệu
      * ------------------------------------------------------------------ */
 
-    private function readRows(array $rows, array $images, bool $allowDuplicate): array
+    private function readRows(array $rows, array $images): array
     {
         $header = ProductImportColumns::detectHeader($rows);
 
@@ -228,7 +228,7 @@ class ProductImportService
                     $seenSku[$key] = $data['row'];
                 }
 
-                if (! $allowDuplicate && isset($existingSku[$key])) {
+                if (isset($existingSku[$key])) {
                     $errors[] = $existingSku[$key] === 'trashed'
                         ? 'SKU đang nằm trong thùng rác (hãy khôi phục hoặc xóa vĩnh viễn sản phẩm đó trước)'
                         : 'SKU đã tồn tại';
@@ -467,11 +467,6 @@ class ProductImportService
         return $found;
     }
 
-    private function skuTaken(string $sku): bool
-    {
-        return Product::withTrashed()->where('sku', $sku)->exists();
-    }
-
     private function loadReferenceData(): void
     {
         $this->categories = [];
@@ -645,11 +640,16 @@ class ProductImportService
             return null;
         }
 
+        $extension = $source['extension'] ?? strtolower(pathinfo($source['path'], PATHINFO_EXTENSION));
+        $filename = (Str::slug($sku) ?: 'sp') . '_' . Str::lower(Str::random(10)) . '.' . $extension;
+
+        // Ảnh đã có trên máy chủ: sao chép thành file riêng để xóa/đổi ảnh của sản phẩm này không làm mất ảnh sản phẩm khác.
         if ($source['type'] === 'stored') {
-            return $source['path'];
+            $target = 'products/' . $filename;
+
+            return Storage::disk('public')->copy($source['path'], $target) ? $target : null;
         }
 
-        $filename = (Str::slug($sku) ?: 'sp') . '_' . Str::lower(Str::random(10)) . '.' . $source['extension'];
         $stored = Storage::disk('public')->putFileAs('products', new File($source['path']), $filename);
 
         return $stored ?: null;
@@ -665,18 +665,6 @@ class ProductImportService
     /* ------------------------------------------------------------------
      | Tiện ích
      * ------------------------------------------------------------------ */
-
-    private function uniqueSku(string $sku): string
-    {
-        $base = $sku;
-        $index = 1;
-
-        do {
-            $sku = $base . '-' . now()->format('His') . '-' . $index++;
-        } while ($this->skuTaken($sku));
-
-        return $sku;
-    }
 
     private function uniqueSlug(string $name, string $modelClass = Product::class): string
     {

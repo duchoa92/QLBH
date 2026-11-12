@@ -99,6 +99,11 @@ class ProductService extends BaseService
             $data['slug'] = $this->generateUniqueSlug($data['name']);
             $data['model'] = $data['model'] ?? null;
 
+            // Sản phẩm IMEI hoặc có biến thể: tồn do IMEI/biến thể quyết định, không nhận số tồn gửi thẳng ở cấp sản phẩm.
+            if ($data['manage_stock_by_serial'] || ! empty($variants)) {
+                $data['stock'] = 0;
+            }
+
             if (! $skuIsManual || empty($data['sku'])) {
                 $data['sku'] = $this->nextProductSku(
                     isset($data['category_id']) ? (int) $data['category_id'] : null,
@@ -136,6 +141,9 @@ class ProductService extends BaseService
             unset($data['variants'], $data['imeis']);
 
             $data = $this->normalizeProductData($data);
+
+            // Sửa sản phẩm không được ghi đè tồn kho (sẽ lệch với lô tồn); tồn chỉ đổi qua nhập hàng/bán hàng/kiểm kho.
+            unset($data['stock']);
 
             // Chặn đổi loại sản phẩm (thường <-> IMEI, có / không biến thể) khi còn tồn kho, tránh lệch tồn.
             $this->guardProductTypeChange($model, $data, $hasVariants, $variants);

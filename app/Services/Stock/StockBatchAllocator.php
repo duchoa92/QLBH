@@ -2,7 +2,10 @@
 
 namespace App\Services\Stock;
 
+use App\Models\Product;
 use App\Models\ProductStockBatch;
+use App\Models\ProductVariant;
+use App\Models\RepairPart;
 use App\Models\SaleItem;
 use App\Models\SaleItemGift;
 use Illuminate\Validation\ValidationException;
@@ -10,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 class StockBatchAllocator
 {
     /** @return array{total_cost: float, allocated_quantity: int} */
-    public function allocate(SaleItem|SaleItemGift $line, int $productId, ?int $variantId, int $quantity): array
+    public function allocate(SaleItem|SaleItemGift|RepairPart $line, int $productId, ?int $variantId, int $quantity): array
     {
         $remaining = max(0, $quantity);
         $totalCost = 0.0;
@@ -50,7 +53,8 @@ class StockBatchAllocator
         return ['total_cost' => $totalCost, 'allocated_quantity' => $quantity - $remaining];
     }
 
-    private function hasAnyBatch(int $productId, ?int $variantId): bool
+    /** Đã từng có lô cho sản phẩm/biến thể này (kể cả lô đã hết hàng) — nghĩa là phải kiểm tồn theo lô. */
+    public function hasAnyBatch(int $productId, ?int $variantId): bool
     {
         return ProductStockBatch::query()
             ->where('product_id', $productId)
@@ -58,12 +62,71 @@ class StockBatchAllocator
             ->exists();
     }
 
-    public function restore(SaleItem|SaleItemGift $line): void
+    /** Tổng tồn còn lại trong các lô của sản phẩm/biến thể. */
+    public function availableQuantity(int $productId, ?int $variantId): int
+    {
+        return (int) ProductStockBatch::query()
+            ->where('product_id', $productId)
+            ->when($variantId, fn ($query) => $query->where('variant_id', $variantId), fn ($query) => $query->whereNull('variant_id'))
+            ->sum('remaining_quantity');
+    }
+
+    /**
+     * Tạo lô đầu kỳ cho phần tồn (cột stock) chưa thuộc lô nào, để tồn theo lô và tồn tổng
+     * không lệch nhau trước khi hoàn/cộng thêm hàng vào lô.
+     */
+    public function ensureCoverage(int $productId, ?int $variantId): void
+    {
+        $product = Product::query()->lockForUpdate()->find($productId);
+        if (! $product || $product->manage_stock_by_serial || $product->product_type === 'imei') {
+            return;
+        }
+
+        // Sản phẩm có biến thể: tồn nằm ở từng biến thể, không có lô cấp sản phẩm.
+        if ($variantId === null && $product->variants()->where('is_active', true)->exists()) {
+            return;
+        }
+
+        $holder = $variantId
+            ? ProductVariant::query()->lockForUpdate()->where('product_id', $productId)->find($variantId)
+            : $product;
+        if (! $holder) {
+            return;
+        }
+
+        $gap = (int) $holder->stock - $this->availableQuantity($productId, $variantId);
+        if ($gap <= 0) {
+            return;
+        }
+
+        ProductStockBatch::create([
+            'product_id' => $productId,
+            'variant_id' => $variantId,
+            'initial_quantity' => $gap,
+            'remaining_quantity' => $gap,
+            'cost_price' => round((float) ($holder->cost_price ?? 0), 2),
+            'sell_price' => (float) ($holder->sell_price ?? 0),
+            'imported_at' => ($product->created_at ?? now())->toDateString(),
+            'is_opening_balance' => true,
+        ]);
+    }
+
+    public function restore(SaleItem|SaleItemGift|RepairPart $line): void
     {
         $line->loadMissing('stockBatchAllocations');
         if ($line->stockBatchAllocations->isEmpty()) {
+            // Linh kiện sửa chữa xuất trước khi có phân bổ lô chỉ trừ cột tồn kho, nên khi hoàn
+            // chỉ cần cộng lại cột tồn kho (luồng gọi tự làm), không được tạo thêm lô.
+            if ($line instanceof RepairPart) {
+                return;
+            }
+
             // Hóa đơn tạo trước khi bật quản lý theo lô không có lịch sử phân bổ.
             // Khi hủy/sửa, tạo lô phục hồi để số tồn tổng và tồn theo lô không lệch.
+            // Phần tồn hiện có chưa thuộc lô nào phải được phủ bằng lô đầu kỳ trước, nếu không
+            // sản phẩm sẽ chỉ còn một lô nhỏ và phần tồn cũ không bán được theo lô.
+            $this->ensureCoverage((int) $line->product_id, $line->variant_id ? (int) $line->variant_id : null);
+
             $baseQuantity = max(1, (int) ($line->base_quantity ?: $line->quantity));
             $factor = max(1, (int) ($line->conversion_factor ?: 1));
             ProductStockBatch::create([

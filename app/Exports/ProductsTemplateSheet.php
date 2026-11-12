@@ -2,7 +2,9 @@
 
 namespace App\Exports;
 
+use App\Services\ProductImportService;
 use App\Support\ProductImportColumns;
+use App\Support\ProductSheetStyle;
 use App\Support\SafeSpreadsheetValues;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
@@ -17,43 +19,20 @@ class ProductsTemplateSheet extends DefaultValueBinder implements FromArray, Wit
 {
     use SafeSpreadsheetValues;
 
+    /** Số dòng có sẵn danh sách chọn / định dạng văn bản: bằng giới hạn nhập mỗi lần (+ dòng tiêu đề). */
+    private const LAST_ROW = ProductImportService::MAX_ROWS + 1;
+
+    /**
+     * Dòng ví dụ (mỗi dòng minh họa một trường hợp). Thứ tự cột theo ProductImportColumns::HEADINGS:
+     * STT, Tên, SKU, Model, Danh mục, Thương hiệu, Giá bán, Giá nhập, Tồn kho, Đơn vị, Loại, Có IMEI, Trạng thái, Ảnh, Mô tả.
+     */
     public function array(): array
     {
         return [
-            [
-                1,
-                'Camera Ezviz H8C',
-                'CAM-EZVIZ-H8C',
-                '',
-                'Camera',
-                'Ezviz',
-                650000,
-                520000,
-                0,
-                'Cái',
-                'imei',
-                1,
-                1,
-                '',
-                'Có QR, service code hoặc thông tin thiết bị thì nhập khi nhập hàng theo IMEI.',
-            ],
-            [
-                2,
-                'Dây mạng Cat6',
-                'DAY-CAT6',
-                '',
-                'Phụ kiện',
-                '',
-                5000,
-                3000,
-                100,
-                'Mét',
-                'normal',
-                0,
-                1,
-                '',
-                '',
-            ],
+            [1, 'Camera Ezviz H8C 2K', 'CAM-EZVIZ-H8C', 'H8C', 'Camera', 'Ezviz', 650000, 520000, 0, 'Cái', 'imei', 1, 1, '', 'Sản phẩm quản lý IMEI: để tồn kho = 0, nhập hàng qua phiếu nhập.'],
+            [2, 'Dây mạng Cat6 UTP', 'DAY-CAT6', '', 'Phụ kiện', '', 5000, 3000, 100, 'Mét', 'normal', 0, 1, '', 'Hàng thường có tồn đầu kỳ 100 mét (tự tạo lô tồn đầu kỳ).'],
+            [3, 'Công lắp đặt camera', 'DV-LAP-CAM', '', 'Dịch vụ', '', 200000, 0, 0, 'Lần', 'service', 0, 1, '', 'Dịch vụ: không có tồn kho.'],
+            [4, 'Củ sạc 20W (ngừng bán)', 'SAC-20W', '20W-PD', 'Phụ kiện', 'Anker', 250000, 150000, 0, 'Cái', 'normal', 0, 0, '', 'Trạng thái 0 = ngừng kinh doanh.'],
         ];
     }
 
@@ -74,40 +53,10 @@ class ProductsTemplateSheet extends DefaultValueBinder implements FromArray, Wit
 
                 $sheet = $event->sheet;
 
-                /* ===== 1. STYLE HEADER ===== */
-                $sheet->getStyle('A1:O1')->applyFromArray([
-                    'font' => [
-                        'bold' => true,
-                        'size' => 12
-                    ],
-                    'alignment' => [
-                        'horizontal' => 'center',
-                        'vertical' => 'center'
-                    ],
-                    'borders' => [
-                        'allBorders' => [
-                            'borderStyle' => 'thin'
-                        ]
-                    ]
-                ]);
-
-                /* ===== 2. TÔ ĐỎ CỘT BẮT BUỘC ===== */
-                // B, C, E, G = Tên, SKU, Danh mục, Giá bán
-                $sheet->getStyle('B1')->getFont()->getColor()->setARGB('FFFF0000');
-                $sheet->getStyle('C1')->getFont()->getColor()->setARGB('FFFF0000');
-                $sheet->getStyle('E1')->getFont()->getColor()->setARGB('FFFF0000');
-                $sheet->getStyle('G1')->getFont()->getColor()->setARGB('FFFF0000');
-
-                /* ===== 3. FREEZE HEADER ===== */
-                $sheet->freezePane('A2');
-
-                /* ===== 4. AUTO WIDTH ===== */
-                foreach (range('A', 'O') as $col) {
-                    $sheet->getColumnDimension($col)->setAutoSize(true);
-                }
+                ProductSheetStyle::apply($event, count(ProductImportColumns::HEADINGS));
 
                 /* ===== 5. SKU / MODEL LÀ VĂN BẢN (giữ số 0 đầu) ===== */
-                $sheet->getStyle('C2:D5000')->getNumberFormat()->setFormatCode('@');
+                $sheet->getStyle('C2:D' . self::LAST_ROW)->getNumberFormat()->setFormatCode('@');
 
                 /* ===== 6. DANH SÁCH CHỌN CHO CỘT LOẠI / CÓ IMEI / TRẠNG THÁI ===== */
                 $lists = [
@@ -127,7 +76,7 @@ class ProductsTemplateSheet extends DefaultValueBinder implements FromArray, Wit
                     $validation->setError('Vui lòng chọn một giá trị trong danh sách.');
                     $validation->setFormula1($formula);
 
-                    $sheet->getDelegate()->setDataValidation("{$column}2:{$column}2000", $validation);
+                    $sheet->getDelegate()->setDataValidation("{$column}2:{$column}" . self::LAST_ROW, $validation);
                 }
 
             }

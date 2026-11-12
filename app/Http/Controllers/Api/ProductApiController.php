@@ -89,7 +89,10 @@ class ProductApiController extends Controller
 
             'warranty_days' => (int) $product->warranty_days,
 
-            'has_vat' => StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->where('is_used', false)->exists(),
+            // Máy cũ (IMEI nhập là hàng cũ) không chịu VAT dù sản phẩm có lô nhập mới có VAT.
+            'has_vat' => ! ($imei?->is_used) && StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->where('is_used', false)->exists(),
+
+            'is_used' => (bool) ($imei?->is_used),
 
             'tax_percent' => (float) ($product->tax_percent ?? 0),
 

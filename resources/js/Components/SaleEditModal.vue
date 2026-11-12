@@ -15,7 +15,7 @@ import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue'
 const props = defineProps({ sale: { type: Object, required: true }, blockedReason: { type: String, default: '' } })
 const page = usePage()
 const allowNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
-const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled)
+const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled) && !product.is_used
     && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
 const emit = defineEmits(['close', 'saved'])
 const attributeLabel = (value) => {
@@ -101,8 +101,9 @@ const form = useForm({
         note: item.note || '',
         is_imei: Boolean(item.product_imei_id || item.product?.product_type === 'imei' || item.product?.manage_stock_by_serial),
         has_vat: Boolean(item.has_vat),
-        apply_vat: Boolean(item.vat_applied),
-        imei_options: item.product_imei_id ? [{ id: item.product_imei_id, imei: item.product_imei?.imei || 'IMEI đã gán', serial: item.product_imei?.serial }] : [],
+        is_used: Boolean(item.product_imei?.is_used),
+        apply_vat: Boolean(item.vat_applied) && !item.product_imei?.is_used,
+        imei_options: item.product_imei_id ? [{ id: item.product_imei_id, imei: item.product_imei?.imei || 'IMEI đã gán', serial: item.product_imei?.serial, is_used: Boolean(item.product_imei?.is_used) }] : [],
         gifts: (item.gifts || []).map(gift => ({ key: `gift-${gift.id}`, id: gift.product_id, product_id: gift.product_id, variant_id: gift.variant_id ?? null, imei_id: gift.product_imei_id ?? null, name: gift.product?.name || 'Quà tặng', sku: gift.product?.sku || '', variant_name: variantName(gift.variant), imei: gift.product_imei?.imei || '', unit_price: Number(gift.product?.sell_price || gift.product?.price || gift.product?.retail_price || 0), is_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), requires_imei: Boolean(gift.product_imei_id || gift.product?.product_type === 'imei' || gift.product?.manage_stock_by_serial), quantity: Number(gift.quantity || 1), conversion_factor: Math.max(1, Number(gift.conversion_factor || 1)), imei_options: gift.product_imei_id ? [{ id: gift.product_imei_id, imei: gift.product_imei?.imei || 'IMEI đã gán', display_code: gift.product_imei?.imei || 'IMEI đã gán' }] : [], variant_options: [] })),
     })),
 })
@@ -172,6 +173,9 @@ const previouslyPaid = computed(() => previouslyPaidAmount)
 const oldOutstandingBalance = computed(() => Math.max(0, oldInvoiceTotal - previouslyPaid.value))
 const settlementDifference = computed(() => newGrandTotal.value - previouslyPaid.value)
 const remainingBalance = computed(() => Math.max(0, settlementDifference.value))
+// Chỉ cần mở bước thanh toán khi tổng mới lệch với số đã thanh toán (thu thêm hoặc hoàn lại).
+// Không lệch thì chỉ lưu thay đổi, giữ nguyên các khoản đã thanh toán.
+const needsSettlement = computed(() => Math.abs(settlementDifference.value) >= 0.01)
 const discountInputValue = computed(() => form.invoice_discount_type === 'percent'
     ? (Number(form.invoice_discount || 0) || '')
     : Number(form.invoice_discount || 0))
@@ -301,7 +305,7 @@ const addProduct = async (product, variant = null, selectedImei = null) => {
         const selected = selectedImei || null
         const selectedVariant = selected?.variant || variant
         const price = effectiveImeiPrice(selected, selectedVariant, product)
-        form.items.push({ product_id: product.id, variant_id: selectedVariant?.id || selected?.variant_id || '', name: product.name, variant_name: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', variant_label: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: price, price, discount_type: 'amount', discount_value: '', is_imei: true, imei_id: selected?.id || '', imei: selected?.imei || selected?.serial || '', has_vat: Boolean(product.has_vat), apply_vat: defaultVatSelection(product), warranty_days: Number(product.warranty_days || 0), imei_options: imeis, gifts: [] })
+        form.items.push({ product_id: product.id, variant_id: selectedVariant?.id || selected?.variant_id || '', name: product.name, variant_name: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', variant_label: selectedVariant ? variantName(selectedVariant) || selectedVariant.name : selected?.variant_name || '', unit_id: product.unit_id || null, unit_name: product.unit_name || 'Cái', conversion_factor: 1, image_url: product.image_url || '', quantity: 1, unit_price: price, price, discount_type: 'amount', discount_value: '', is_imei: true, imei_id: selected?.id || '', imei: selected?.imei || selected?.serial || '', has_vat: Boolean(product.has_vat) && !selected?.is_used, is_used: Boolean(selected?.is_used), apply_vat: defaultVatSelection({ ...product, is_used: Boolean(selected?.is_used) }), warranty_days: Number(product.warranty_days || 0), imei_options: imeis, gifts: [] })
     } else {
         const existing = form.items.find(row => !row.is_imei && Number(row.product_id) === Number(product.id) && Number(row.variant_id || 0) === Number(variant?.id || 0))
         if (existing) {
@@ -401,7 +405,14 @@ const persistSaleEdit = () => form.transform(data => ({
     preserveScroll: true,
     onSuccess: () => emit('saved'),
 })
-const submit = () => { showCheckoutModal.value = true }
+const submit = () => {
+    if (needsSettlement.value) {
+        showCheckoutModal.value = true
+        return
+    }
+    // form.paid_amount và các khoản tiền mặt/chuyển khoản đang giữ đúng số đã thanh toán trước đó.
+    persistSaleEdit()
+}
 const confirmCheckoutPayment = (payment) => {
     form.payment_method = payment.payment_method
     form.paid_amount = Number(payment.paid_amount || 0)
@@ -550,6 +561,8 @@ const confirmItemOptions = ({ variant, imei }) => {
         }
         item.imei_id = imei.id
         item.imei = imei.imei || imei.serial || ''
+        item.is_used = Boolean(imei.is_used)
+        if (item.is_used) item.apply_vat = false
         if (variant) {
             item.variant_id = variant.id
             item.variant_name = variantName(variant)
@@ -618,7 +631,7 @@ const confirmItemOptions = ({ variant, imei }) => {
                                     <div v-if="item.note" class="mt-1 pl-[60px] text-xs italic text-slate-400">Ghi chú: {{ item.note }}</div>
                                 </td>
                                 <td class="p-1.5"><FloatingInput v-if="!item.is_imei" v-model.number="item.quantity" label="Số lượng" :floating-label="false" type="number" min="1" input-class="!h-9 !rounded-md !px-1 !py-1 !text-center !text-xs" /><span v-else class="block text-center text-xs text-slate-600">1</span></td>
-                                <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /><button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" class="mt-1 inline-flex h-5 items-center gap-0.5 rounded px-1 text-[9px] font-bold leading-none transition" :class="item.apply_vat ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'" :title="item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này'" @click="item.apply_vat = !item.apply_vat"><Receipt class="h-3 w-3" />VAT</button></td>
+                                <td class="p-1.5"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /><button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" :disabled="Boolean(item.is_used)" class="mt-1 inline-flex h-5 items-center gap-0.5 rounded px-1 text-[9px] font-bold leading-none transition disabled:cursor-not-allowed disabled:opacity-40" :class="item.apply_vat ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'" :title="item.is_used ? 'Sản phẩm cũ không áp dụng VAT' : (item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này')" @click="!item.is_used && (item.apply_vat = !item.apply_vat)"><Receipt class="h-3 w-3" />VAT</button></td>
                                 <td class="p-2 text-right"><div class="font-bold">{{ formatMoney(lineTotal(item)) }}</div><div v-if="Number(item.discount_value || 0)" class="mt-0.5 text-[10px] font-semibold text-amber-700">Giảm {{ item.discount_type === 'percent' ? `${item.discount_value}%` : formatMoney(item.discount_value) }}</div></td>
                                 <td class="p-1"><button type="button" @click="removeItem(index)" class="rounded p-1.5 text-rose-600 hover:bg-rose-50" title="Xóa mặt hàng" aria-label="Xóa mặt hàng"><Trash2 :size="15" /></button></td>
                             </tr>
@@ -668,7 +681,7 @@ const confirmItemOptions = ({ variant, imei }) => {
             </div>
         </template>
         <template #footer>
-            <div class="flex justify-end gap-2"><button type="button" @click="emit('close')" class="rounded-lg border px-3 py-2 text-sm text-slate-600">Đóng</button><button v-if="!blockedReason" type="button" :disabled="form.processing || !form.items.length" @click="submit" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save :size="15"/>{{ form.processing ? 'Đang xử lý…' : 'Thanh toán' }}</button></div>
+            <div class="flex justify-end gap-2"><button type="button" @click="emit('close')" class="rounded-lg border px-3 py-2 text-sm text-slate-600">Đóng</button><button v-if="!blockedReason" type="button" :disabled="form.processing || !form.items.length" @click="submit" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save :size="15"/>{{ form.processing ? 'Đang xử lý…' : (needsSettlement ? 'Lưu và thanh toán' : 'Lưu') }}</button></div>
         </template>
     </BaseModal>
     <SelectProductModal

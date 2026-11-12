@@ -69,7 +69,9 @@ const remainingVariantStock = variant => {
     // Với hàng theo lô, tồn trong modal phải khớp đúng với từng lô chưa bị
     // giữ ở giỏ. Nhờ vậy lô giá thấp dùng hết thì biến thể không còn chọn
     // nhầm theo tổng tồn cũ.
-    if (allVariantBatches.length) {
+    const batchTracked = allVariantBatches.length > 0
+        || (props.product?.batch_scopes || []).some(scope => Number(scope) === Number(variant?.id || 0))
+    if (batchTracked) {
         return availableVariantBatches(variant)
             .reduce((total, batch) => total + Number(batch.remaining_quantity || 0), 0)
     }

@@ -45,6 +45,16 @@ class Setting extends Model
             : $default;
     }
 
+    // Xóa setting để quay về giá trị mặc định của nơi gọi
+    public static function forget($key): void
+    {
+        self::query()->where('key', $key)->delete();
+
+        static::$settingsCache = null;
+        Cache::forget(self::CACHE_KEY);
+        Cache::forget("setting_$key");
+    }
+
     // Set setting
     public static function set($key, $value)
     {

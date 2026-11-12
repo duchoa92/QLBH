@@ -24,6 +24,7 @@ import { imageUrl } from '@/utils/imageUrl'
 
 import SupplierSection from './SupplierSection.vue'
 import SupplierPaymentModal from './SupplierPaymentModal.vue'
+import CustomerBuybackPaymentModal from './CustomerBuybackPaymentModal.vue'
 import StockImportProductModal from './StockImportProductModal.vue'
 import ProductForm from '@/Pages/Products/Form.vue'
 
@@ -1131,7 +1132,16 @@ const handlePaymentAction = () => {
         return
     }
 
-    confirm({ payment_method: 'cash', paid_amount: 0 })
+    // Mua lại từ khách lẻ cũng qua bước thanh toán như nhà cung cấp, nhưng không có công nợ.
+    openModal(CustomerBuybackPaymentModal, {
+        props: {
+            customer: { full_name: customerDraft.value.full_name?.trim(), phone: customerDraft.value.phone },
+            total: Number(total.value || 0),
+            editMode: isEditingImport.value,
+            initialPayment: isEditingImport.value ? { payment_method: form.payment_method } : {},
+        },
+        onUpdated: payment => confirm(payment),
+    })
 }
 
 const confirm = (payment = {}) => {
@@ -1143,12 +1153,13 @@ const confirm = (payment = {}) => {
     form.party_phone = partyType.value === 'customer' ? customerDraft.value.phone : (selectedSupplier.value.phone || '')
     form.party_address = partyType.value === 'customer' ? customerDraft.value.address : (selectedSupplier.value.address || '')
     form.party_cccd = partyType.value === 'customer' ? customerDraft.value.cccd : ''
+    // Khách lẻ không có công nợ nên phiếu mua lại luôn được chi trả đủ.
     form.paid_amount = partyType.value === 'supplier'
         ? Math.min(Math.max(0, Number(payment.paid_amount || 0)), Number(total.value || 0))
-        : 0
+        : Math.max(0, Number(total.value || 0))
     form.tendered_amount = partyType.value === 'supplier'
         ? Math.max(0, Number(payment.tendered_amount || 0))
-        : 0
+        : Math.max(0, Number(total.value || 0))
     form.change_amount = partyType.value === 'supplier'
         ? Math.max(0, Number(payment.change_amount || 0))
         : 0

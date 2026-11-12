@@ -23,7 +23,7 @@ class UpdateProductRequest extends FormRequest
             ],
 
             'brand_id' => [
-                'required',
+                'nullable',
                 'exists:brands,id',
             ],
 

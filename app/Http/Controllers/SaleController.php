@@ -160,7 +160,7 @@ class SaleController extends Controller
         return $query->with('variant:id,attributes,sell_price')
             ->orderBy('imei')
             ->limit(100)
-            ->get(['id', 'product_id', 'variant_id', 'imei', 'serial', 'status', 'sell_price'])
+            ->get(['id', 'product_id', 'variant_id', 'imei', 'serial', 'status', 'sell_price', 'is_used'])
             ->map(function (ProductImei $imei) use ($product): array {
                 $variantName = collect($imei->variant?->attributes ?? [])
                     ->map(function ($attribute): string {
@@ -180,6 +180,7 @@ class SaleController extends Controller
                     'variant_id' => $imei->variant_id,
                     'variant_name' => $variantName,
                     'status' => $imei->status,
+                    'is_used' => (bool) $imei->is_used,
                     'effective_sell_price' => $this->effectiveImeiSellPrice($imei, $product),
                 ];
             });
@@ -366,7 +367,8 @@ class SaleController extends Controller
                 $unitId = $row['unit_id'] ?? $product->unit_id;
                 $unitName = filled($row['unit_name'] ?? null) ? trim($row['unit_name']) : ($product->unit?->short_name ?: $product->unit?->name);
                 $unitCost = (float) ($imei?->cost_price ?? $variant?->cost_price ?? $product->cost_price ?? 0);
-                $vatApplied = filter_var($row['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                // Sản phẩm cũ (IMEI nhập là hàng cũ) không chịu VAT.
+                $vatApplied = ! ($imei?->is_used) && filter_var($row['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'unitCost', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note', 'vatApplied');
             }
 
@@ -450,7 +452,7 @@ class SaleController extends Controller
                     'warranty_note' => $item['warranty_note'],
                     'note' => $item['note'],
                     'discount_amount' => $item['lineDiscount'],
-                    'has_vat' => in_array((int) $item['product']->id, $vatProductIds, true),
+                    'has_vat' => ! ($item['imei']?->is_used) && in_array((int) $item['product']->id, $vatProductIds, true),
                     'vat_applied' => $item['vatApplied'],
                     'subtotal' => $item['lineTotal'] - $item['lineDiscount'],
                 ]);
@@ -890,6 +892,12 @@ class SaleController extends Controller
                 }
             } else {
                 app(StockBatchAllocator::class)->restore($gift);
+                // POS trừ cả tồn biến thể lẫn tồn sản phẩm của quà tặng, nên hoàn cũng phải cộng cả hai.
+                if ($gift->variant_id) {
+                    ProductVariant::query()
+                        ->whereKey($gift->variant_id)
+                        ->increment('stock', $giftBaseQuantity);
+                }
                 Product::query()
                     ->whereKey($gift->product->id)
                     ->increment('stock', $giftBaseQuantity);

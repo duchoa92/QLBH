@@ -417,6 +417,12 @@ const handleConfirmSelect = ({ variant, imei }) => {
         warranty_days: selectedProduct.value?.warranty_days ?? 0,
         price_source: imei?.price_source ?? null,
 
+        // Cờ hàng cũ thuộc về từng IMEI, không phải cả sản phẩm.
+        is_used: Boolean(imei?.is_used),
+        has_vat: imei
+            ? !imei.is_used && Boolean(imei.has_vat ?? selectedProduct.value?.has_vat)
+            : Boolean(selectedProduct.value?.has_vat),
+
         sell_price: price,
     })
 
