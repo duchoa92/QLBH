@@ -390,7 +390,7 @@ const confirm = () => {
                 <!-- BƯỚC 1: CHỌN BIẾN THỂ -->
                 <div v-if="needsVariant">
                     <div class="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Chọn phiên bản
+                        Chọn biến thể
                     </div>
 
                     <div class="grid grid-cols-2 gap-2.5">
@@ -439,7 +439,7 @@ const confirm = () => {
                                 </span>
                             </div>
                         </button>
-                        <p v-if="!product.variants?.length" class="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Các phiên bản của sản phẩm hiện đã hết hàng.</p>
+                        <p v-if="!product.variants?.length" class="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Các biến thể của sản phẩm hiện đã hết hàng.</p>
                     </div>
                 </div>
 
@@ -487,6 +487,7 @@ const confirm = () => {
                                     <span class="font-mono text-xs font-bold text-slate-900 tracking-wide">
                                         {{ imeiDisplayCode(item) }}
                                     </span>
+                                    <span v-if="item.is_used" class="ml-1.5 inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span>
                                 </div>
 
                                 <div v-if="item.variant" class="mt-1 text-xs font-bold text-blue-600">

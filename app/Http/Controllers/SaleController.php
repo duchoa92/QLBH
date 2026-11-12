@@ -302,7 +302,7 @@ class SaleController extends Controller
             $discount = 0.0;
             $vatProductIds = StockImportItem::query()
                 ->whereIn('product_id', collect($data['items'])->pluck('product_id')->unique())
-                ->where('has_vat', true)
+                ->where('has_vat', true)->where('is_used', false)
                 ->distinct()
                 ->pluck('product_id')
                 ->map(fn ($id) => (int) $id)

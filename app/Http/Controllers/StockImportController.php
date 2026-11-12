@@ -342,6 +342,11 @@ class StockImportController extends Controller
                 'boolean',
             ],
 
+            'items.*.is_used' => [
+                'nullable',
+                'boolean',
+            ],
+
             'items.*.supplier_warranty_value' => [
                 'nullable',
                 'integer',

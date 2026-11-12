@@ -69,7 +69,7 @@ onMounted(async () => {
                     </thead>
                     <tbody>
                         <tr v-for="(imei, index) in product.imeis" :key="imei.id" class="border-t border-slate-200 transition-colors hover:bg-sky-50/60" :class="index % 2 ? 'bg-slate-50/50' : 'bg-white'">
-                            <td class="px-4 py-3.5 font-mono font-medium tracking-wide text-slate-800">{{ imei.imei || imei.serial || '—' }}</td>
+                            <td class="px-4 py-3.5 font-mono font-medium tracking-wide text-slate-800">{{ imei.imei || imei.serial || '—' }}<span v-if="imei.is_used" class="ml-1.5 inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span></td>
                             <td class="border-l border-slate-200 px-4 py-3.5"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="statusClass(imei.status)">{{ statusLabel(imei.status) }}</span></td>
                             <td class="border-l border-slate-200 px-4 py-3.5 text-right font-semibold tabular-nums text-slate-800">{{ formatCurrency(imei.sell_price) }}</td>
                         </tr>

@@ -539,6 +539,7 @@ const eventDotClasses = type => ({
 const eventPartner = item => {
     if (item.type === 'sale') return item.customer_name || 'Khách lẻ'
     if (item.type === 'repair') return item.customer_name || item.customer_phone || item.contact_phone || 'Khách gửi sửa chữa'
+    if (item.party_type === 'customer') return item.customer_name || 'Khách lẻ'
     return item.supplier_name || (item.supplier_id ? `Nhà cung cấp #${item.supplier_id}` : '-')
 }
 
@@ -548,7 +549,7 @@ const eventTileClass = type => ({
     repair: 'bg-purple-100 text-purple-700',
 }[type] || 'bg-slate-100 text-slate-600')
 
-const eventPartnerLabel = item => ({ import: 'Nhà cung cấp', sale: 'Khách mua', repair: 'Khách gửi sửa' }[item.type] || 'Đối tác')
+const eventPartnerLabel = item => (item.type === 'import' && item.party_type === 'customer' ? 'Khách bán' : null) || ({ import: 'Nhà cung cấp', sale: 'Khách mua', repair: 'Khách gửi sửa' }[item.type] || 'Đối tác')
 const eventValueLabel = item => ({ import: 'Giá nhập', sale: 'Thành tiền', repair: 'Chi phí sửa' }[item.type] || 'Giá trị')
 
 const eventStatusClass = (item) => {
@@ -580,7 +581,8 @@ const eventDetail = computed(() => {
 
     if (item.type === 'import') {
         add('Mã phiếu nhập', item.code)
-        add('Nhà cung cấp', eventPartner(item))
+        add(eventPartnerLabel(item), eventPartner(item))
+        add('Số điện thoại', item.customer_phone, Boolean(item.customer_phone))
         add('Giá bán thiết lập', money(item.sell_price))
 
         return { amountLabel: 'Giá nhập', amount: money(item.cost_price), rows }
@@ -950,6 +952,7 @@ const historyCount = type => type === 'all'
                                     >
                                         <span class="font-semibold text-slate-400">IMEI</span>
                                         <span class="font-mono text-sm font-bold text-slate-900">{{ result.imei?.imei || keyword }}</span>
+                                        <span v-if="result.imei?.is_used" class="rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">SẢN PHẨM CŨ</span>
                                         <Check v-if="copiedKey === 'imei'" class="h-3.5 w-3.5 text-emerald-600" />
                                         <Copy v-else class="h-3.5 w-3.5 text-slate-400 group-hover:text-indigo-600" />
                                     </button>
@@ -1052,7 +1055,7 @@ const historyCount = type => type === 'all'
                         <section class="rounded-2xl border border-slate-200 bg-white p-5">
                             <h3 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
                                 <History class="h-5 w-5 text-indigo-600" />
-                                Tóm tắt vòng đời
+                                Tóm tắt
                             </h3>
                             <div class="grid grid-cols-3 gap-2 text-center">
                                 <div class="rounded-xl bg-emerald-50 py-2.5">
@@ -1098,13 +1101,12 @@ const historyCount = type => type === 'all'
                         </section>
                     </div>
 
-                    <!-- 4. Lịch sử vòng đời -->
+                    <!-- 4. Lịch sử -->
                     <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white lg:col-span-2 lg:col-start-1">
                         <header class="flex flex-col gap-3 border-b border-slate-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-2">
                                 <Clock class="h-5 w-5 text-indigo-600" />
-                                <h3 class="font-bold text-slate-900">Lịch sử vòng đời</h3>
-                                <span class="text-xs text-slate-400">mới nhất ở trên</span>
+                                <h3 class="font-bold text-slate-900">Lịch sử</h3>
                             </div>
                             <div class="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
                                 <button
@@ -1136,6 +1138,7 @@ const historyCount = type => type === 'all'
                                         <div class="flex min-w-0 items-center gap-2">
                                             <span class="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold" :class="eventBadgeClasses(item)">{{ eventTypeLabel(item) }}</span>
                                             <span class="truncate text-sm font-bold text-slate-900">{{ item.title }}</span>
+                                            <span v-if="item.is_used" class="shrink-0 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">CŨ</span>
                                         </div>
                                         <time class="text-xs tabular-nums text-slate-500">{{ formatDate(item.happenedAt) }}</time>
                                     </div>

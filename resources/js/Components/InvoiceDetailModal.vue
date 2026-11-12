@@ -352,6 +352,7 @@ const cancelReason = computed(() =>
                                                 <span class="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-mono font-bold text-blue-600 border border-blue-100">
                                                     <Tag :size="11" /> IMEI: {{ item.product_imei?.imei || item.imei }}
                                                 </span>
+                                                <span v-if="item.product_imei?.is_used" class="ml-1.5 inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span>
                                             </div>
 
                                             <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-1 inline-flex items-center gap-1.5">

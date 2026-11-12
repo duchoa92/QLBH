@@ -72,7 +72,7 @@ class PosCheckoutService
             ] = PosTotals::calculate($items, $invoiceDiscount, $invoiceDiscountType, $extraFee, $vatRate);
             $vatProductIds = StockImportItem::query()
                 ->whereIn('product_id', collect($items)->pluck('id')->unique())
-                ->where('has_vat', true)
+                ->where('has_vat', true)->where('is_used', false)
                 ->distinct()
                 ->pluck('product_id')
                 ->map(fn ($id) => (int) $id)
@@ -186,7 +186,7 @@ class PosCheckoutService
 
                     if ($imei->variant_id) {
                         if ($variant && (int) $variant->id !== (int) $imei->variant_id) {
-                            throw new \Exception("IMEI {$imei->imei} không thuộc phiên bản đã chọn");
+                            throw new \Exception("IMEI {$imei->imei} không thuộc biến thể đã chọn");
                         }
 
                         if (! $variant) {
@@ -216,7 +216,7 @@ class PosCheckoutService
                     if (! $isBatchBacked && $variant) {
 
                         if (! $allowNegativeStock && $variant->stock < $baseQuantity) {
-                            throw new \Exception("Phiên bản {$product->name} không đủ tồn kho");
+                            throw new \Exception("Biến thể của sản phẩm {$product->name} không đủ tồn kho");
                         }
 
                     } elseif (! $isBatchBacked && ! $allowNegativeStock && $product->stock < $baseQuantity) {

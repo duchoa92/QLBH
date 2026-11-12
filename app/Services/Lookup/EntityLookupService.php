@@ -488,6 +488,7 @@ class EntityLookupService
             'sku' => $imei->product?->sku,
             'variant' => $this->variantLabel($imei->variant),
             'status' => $imei->status,
+            'is_used' => (bool) $imei->is_used,
             'customer_name' => null,
             'customer_phone' => null,
             'sale_code' => null,

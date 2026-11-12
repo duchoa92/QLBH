@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
 use App\Models\ProductStockBatch;
+use App\Models\Repair;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -459,6 +460,9 @@ class StockImportService
                  * ------------------------------------------------------
                  */
 
+                // Sản phẩm cũ: không áp dụng VAT.
+                $isUsed = filter_var($item['is_used'] ?? ($item['extra_info']['is_used'] ?? false), FILTER_VALIDATE_BOOLEAN);
+
                 $importItem = StockImportItem::create([
                     'stock_import_id' => $import->id,
 
@@ -482,7 +486,9 @@ class StockImportService
 
                     'cost_price' => $costPrice,
 
-                    'has_vat' => (bool) ($item['has_vat'] ?? false),
+                    'has_vat' => ! $isUsed && (bool) ($item['has_vat'] ?? false),
+
+                    'is_used' => $isUsed,
 
                     'supplier_warranty_value' => $item['supplier_warranty_value'] ?? null,
 
@@ -571,6 +577,7 @@ class StockImportService
                         'cost_price' => $imeiData['cost_price'] ?? $costPrice,
                         'sell_price' => $imeiData['sell_price'] ?? $sellPrice ?? 0,
                         'extra_info' => $imeiData['extra_info'] ?? null,
+                        'is_used' => $isUsed,
                         'warranty_expired_at' => $imeiData['warranty_expired_at'] ?? null,
                         'status' => ProductImei::STATUS_IN_STOCK,
                         'sold_at' => null,
@@ -589,6 +596,11 @@ class StockImportService
                         $imei = ProductImei::create($imeiPayload);
                     }
 
+                    // Mua lại máy từ khách: mọi luồng bảo hành cũ của thiết bị hết hiệu lực.
+                    if (($data['party_type'] ?? 'supplier') === 'customer') {
+                        $this->voidWarrantiesOnBuyback($imei, $import);
+                    }
+
                     ProductImeiHistory::create([
                         'product_imei_id' => $imei->id,
                         'imei' => $imei->imei,
@@ -601,7 +613,8 @@ class StockImportService
                             'stock_import_item_id' => $importItem->id,
                             'product_id' => $productId,
                             'variant_id' => $imeiPayload['variant_id'],
-                            'has_vat' => (bool) ($item['has_vat'] ?? false),
+                            'has_vat' => ! $isUsed && (bool) ($item['has_vat'] ?? false),
+                            'is_used' => $isUsed,
                             'supplier_id' => $data['supplier_id'] ?? null,
                             'import_code' => $import->code,
                             'extra_info' => $imeiPayload['extra_info'],
@@ -618,6 +631,41 @@ class StockImportService
 
             return $import;
         });
+    }
+
+    /**
+     * Cửa hàng mua lại thiết bị từ khách: vô hiệu hóa bảo hành mua bán (trên IMEI)
+     * và bảo hành sửa chữa của các phiếu sửa từng có cho thiết bị này.
+     */
+    private function voidWarrantiesOnBuyback(ProductImei $imei, StockImport $import): void
+    {
+        $reason = 'Cửa hàng đã mua lại thiết bị (phiếu nhập ' . $import->code . ')';
+        $now = now();
+
+        if (! $imei->customer_warranty_voided_at) {
+            $imei->update([
+                'customer_warranty_voided_at' => $now,
+                'customer_warranty_void_reason' => $reason,
+                'customer_warranty_voided_by' => auth()->id(),
+            ]);
+        }
+
+        $code = mb_strtolower(trim((string) $imei->imei));
+        if ($code === '') {
+            return;
+        }
+
+        Repair::query()
+            ->whereNull('repair_warranty_voided_at')
+            ->whereNotNull('repair_warranty_expires_at')
+            ->where(fn ($query) => $query
+                ->whereRaw('LOWER(TRIM(imei)) = ?', [$code])
+                ->orWhereRaw('LOWER(TRIM(serial)) = ?', [$code]))
+            ->update([
+                'repair_warranty_voided_at' => $now,
+                'repair_warranty_void_reason' => $reason,
+                'repair_warranty_voided_by' => auth()->id(),
+            ]);
     }
 
     private function generateCode(): string

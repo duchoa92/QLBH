@@ -207,6 +207,7 @@ class RepairController extends Controller
                 'contact_phone' => $repair->contact_phone,
 
                 'serial' => $repair->serial,
+                'device_is_used' => $this->isUsedDevice($repair->imei ?: $repair->serial),
                 'screen_lock_type' => $repair->screen_lock_type,
                 'has_device_password' => filled($repair->getRawOriginal('screen_password'))
                     || filled($repair->getRawOriginal('screen_pattern'))
@@ -406,25 +407,29 @@ class RepairController extends Controller
 
             $devices = Repair::query()
                 ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('model', 'like', $like)->orWhere('imei', 'like', $like))
-                ->latest('id')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
                 ->limit(10)
-                ->get(['device_name', 'model', 'imei'])
+                ->get(['device_name', 'model', 'imei', 'created_at', 'updated_at'])
                 ->map(fn (Repair $repair): array => [
                     'name' => $repair->device_name,
                     'model' => $repair->model,
                     'imei' => $repair->imei,
                     'source' => 'Đã từng sửa',
+                    'activity_at' => ($repair->updated_at ?? $repair->created_at)?->toAtomString(),
                 ]);
 
             $customerDevices = CustomerDevice::query()
                 ->where(fn ($query) => $query->where('model', 'like', $like)->orWhere('brand', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
-                ->latest('id')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
                 ->limit(10)
-                ->get(['brand', 'model', 'imei', 'serial'])
+                ->get(['brand', 'model', 'imei', 'serial', 'created_at', 'updated_at'])
                 ->map(fn (CustomerDevice $device): array => [
                     'name' => trim(implode(' ', array_filter([$device->brand, $device->model]))) ?: 'Thiết bị khách hàng',
                     'imei' => $device->imei ?: $device->serial,
                     'source' => 'Thiết bị khách hàng',
+                    'activity_at' => ($device->updated_at ?? $device->created_at)?->toAtomString(),
                 ]);
 
             $soldProducts = Product::query()
@@ -436,18 +441,24 @@ class RepairController extends Controller
                         )))
                     // Gõ Model: lấy luôn tên sản phẩm có Model đó (không cần đã từng bán)
                     ->orWhere('model', 'like', $like))
+                ->orderByDesc('updated_at')
                 ->orderBy('name')
                 ->limit(10)
-                ->get(['name', 'model'])
+                ->get(['name', 'model', 'created_at', 'updated_at'])
                 ->map(fn (Product $product): array => [
                     'name' => $product->name,
                     'model' => $product->model,
                     'imei' => null,
+                    'activity_at' => ($product->updated_at ?? $product->created_at)?->toAtomString(),
                     'source' => filled($product->model) && mb_stripos((string) $product->model, $keyword) !== false ? 'Sản phẩm · Model' : 'Đã mua bán',
                 ]);
 
+            $activityTimestamp = fn (array $item): int => strtotime((string) ($item['activity_at'] ?? '')) ?: 0;
+
             $devices = $devices->concat($customerDevices)->concat($soldProducts)
                 ->filter(fn (array $item) => filled($item['name']))
+                // Thiết bị có tác động mới nhất lên đầu (trước khi loại trùng để giữ bản mới nhất).
+                ->sortByDesc($activityTimestamp)
                 ->unique(fn (array $item) => mb_strtolower($item['name']))
                 ->take(10)
                 ->values();
@@ -455,11 +466,12 @@ class RepairController extends Controller
             $repairImeis = Repair::query()
                 ->with('customer:id,full_name,phone,cccd,debt_balance')
                 ->where(fn ($query) => $query->where('device_name', 'like', $like)->orWhere('model', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
-                ->latest('id')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
                 ->limit(10)
                 ->get([
                     'id', 'customer_id', 'device_name', 'model', 'imei', 'serial', 'issue', 'repair_request', 'accessories',
-                    'estimated_cost', 'note', 'created_at', 'repair_warranty_expires_at',
+                    'estimated_cost', 'note', 'created_at', 'updated_at', 'repair_warranty_expires_at',
                     'repair_warranty_voided_at', 'repair_warranty_void_reason',
                 ])
                 ->map(fn (Repair $repair): array => [
@@ -469,6 +481,7 @@ class RepairController extends Controller
                     'model' => $repair->model,
                     'source' => 'Đã sửa · ' . $repair->created_at?->format('d/m/Y'),
                     'source_date' => $repair->created_at?->toAtomString(),
+                    'activity_at' => ($repair->updated_at ?? $repair->created_at)?->toAtomString(),
                     'customer' => $repair->customer ? [
                         'id' => $repair->customer->id,
                         'full_name' => $repair->customer->full_name,
@@ -497,14 +510,16 @@ class RepairController extends Controller
             $customerImeis = CustomerDevice::query()
                 ->with('customer:id,full_name,phone,cccd,debt_balance')
                 ->where(fn ($query) => $query->where('brand', 'like', $like)->orWhere('model', 'like', $like)->orWhere('imei', 'like', $like)->orWhere('serial', 'like', $like))
-                ->latest('id')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
                 ->limit(10)
-                ->get(['id', 'customer_id', 'model', 'brand', 'imei', 'serial', 'created_at'])
+                ->get(['id', 'customer_id', 'model', 'brand', 'imei', 'serial', 'created_at', 'updated_at'])
                 ->map(fn (CustomerDevice $device): array => [
                     'imei' => $device->imei ?: $device->serial,
                     'name' => trim(implode(' ', array_filter([$device->brand, $device->model]))) ?: null,
                     'source' => 'Thiết bị khách hàng',
                     'source_date' => $device->created_at?->toAtomString(),
+                    'activity_at' => ($device->updated_at ?? $device->created_at)?->toAtomString(),
                     'customer' => $device->customer ? [
                         'id' => $device->customer->id,
                         'full_name' => $device->customer->full_name,
@@ -524,10 +539,11 @@ class RepairController extends Controller
                         ->latest('id'),
                 ])
                 ->where(fn ($query) => $query->where('imei', 'like', $like)->orWhere('serial', 'like', $like)->orWhereHas('product', fn ($productQuery) => $productQuery->where(fn ($match) => $match->where('name', 'like', $like)->orWhere('model', 'like', $like))))
-                ->latest('id')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
                 ->limit(10)
                 ->get([
-                    'id', 'imei', 'serial', 'product_id', 'status', 'sold_at', 'customer_warranty_days',
+                    'id', 'imei', 'serial', 'product_id', 'status', 'is_used', 'sold_at', 'updated_at', 'customer_warranty_days',
                     'customer_warranty_expires_at', 'customer_warranty_voided_at', 'customer_warranty_void_reason',
                 ])
                 ->map(function (ProductImei $item): array {
@@ -584,12 +600,18 @@ class RepairController extends Controller
 
                     return [
                         'imei' => $item->imei ?: $item->serial,
+                        'is_used' => (bool) $item->is_used,
                         'name' => $item->product?->name,
                         'model' => $item->product?->model,
                         'source' => $item->status === ProductImei::STATUS_IN_STOCK ? 'Còn trong kho' : 'Đã mua bán',
                         'inventory_status' => $item->status,
                         'in_stock' => $item->status === ProductImei::STATUS_IN_STOCK,
                         'source_date' => $soldAt?->toAtomString(),
+                        'activity_at' => collect([$item->updated_at, $soldAt])
+                            ->filter()
+                            ->map(fn ($time) => Carbon::parse($time))
+                            ->sortDesc()
+                            ->first()?->toAtomString(),
                         'purchase_info' => $saleItem?->sale
                             ? 'Hóa đơn ' . $saleItem->sale->code . ' · ' . Carbon::parse($saleItem->sale->created_at)->format('d/m/Y')
                             : null,
@@ -652,6 +674,12 @@ class RepairController extends Controller
                         if ($item['in_stock']) $item['source'] = 'Còn trong kho';
                     }
                     $item['purchasers'] = $purchasers;
+                    $item['is_used'] = $matches->contains(fn ($match) => ! empty($match['is_used']));
+                    $item['activity_at'] = $matches
+                        ->pluck('activity_at')
+                        ->filter()
+                        ->sortByDesc(fn ($time) => strtotime((string) $time) ?: 0)
+                        ->first();
                     $uniquePurchaserCustomers = $purchasers->unique('id')->values();
                     if ($uniquePurchaserCustomers->count() === 1) {
                         $item['customer'] = $uniquePurchaserCustomers->first();
@@ -661,6 +689,8 @@ class RepairController extends Controller
                     }
                     return $item;
                 })
+                // Thiết bị có tác động mới nhất lên đầu.
+                ->sortByDesc($activityTimestamp)
                 ->take(10)
                 ->values();
 
@@ -1446,7 +1476,7 @@ class RepairController extends Controller
                     $product->decrement('stock', $line['quantity']);
                 } else {
                     if ($hasVariants) {
-                        throw ValidationException::withMessages(['parts' => "Vui lòng chọn phân loại cho {$product->name}."]);
+                        throw ValidationException::withMessages(['parts' => "Vui lòng chọn biến thể cho {$product->name}."]);
                     }
                     if (! $allowNegativeStock && $product->stock < $line['quantity']) {
                         throw ValidationException::withMessages(['parts' => "Tồn kho của {$product->name} không đủ."]);
@@ -1659,6 +1689,19 @@ class RepairController extends Controller
     }
 
     /** Lưu lý do từ chối và vô hiệu hóa hạn bảo hành trên giao dịch gốc. */
+    /** Thiết bị trùng IMEI/serial với máy đã nhập vào kho dưới dạng sản phẩm cũ. */
+    private function isUsedDevice(?string $code): bool
+    {
+        $code = trim((string) $code);
+        if ($code === '') {
+            return false;
+        }
+
+        return (bool) ProductImei::query()
+            ->where(fn ($query) => $query->where('imei', $code)->orWhere('serial', $code))
+            ->value('is_used');
+    }
+
     private function ensureImeiHasNoOpenRepair(?string $imei, ?int $exceptRepairId = null): void
     {
         $identifier = mb_strtolower(trim((string) $imei));

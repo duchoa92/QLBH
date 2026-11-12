@@ -122,6 +122,7 @@ defineProps({
 
                         <td class="border p-2">
                             {{ imei.imei }}
+                            <span v-if="imei.is_used" class="ml-1.5 inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span>
                         </td>
 
                         <td class="border p-2">

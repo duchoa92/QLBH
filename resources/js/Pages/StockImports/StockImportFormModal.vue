@@ -101,6 +101,14 @@ const setPartyType = (value) => {
     if (!['supplier', 'customer'].includes(value)) return
     partyType.value = value
     form.party_type = value
+
+    // Nhập từ khách lẻ: mặc định là sản phẩm cũ (không VAT).
+    if (value === 'customer') {
+        selectedItems.value.forEach(item => {
+            item.is_used = true
+            item.has_vat = false
+        })
+    }
 }
 
 const selectCustomer = (customer) => {
@@ -462,7 +470,7 @@ const hydrateInitialImport = (stockImport) => {
                 quantity: 0,
                 cost_price: storedPrice(source.cost_price),
                 sell_price: savedSellPrice(source),
-                has_vat: Boolean(source.has_vat), extra_info: source.extra_info || {},
+                has_vat: Boolean(source.has_vat), is_used: Boolean(source.is_used ?? source.extra_info?.is_used), extra_info: source.extra_info || {},
                 supplier_warranty_value: source.supplier_warranty_value || null,
                 supplier_warranty_unit: source.supplier_warranty_unit || 'months',
                 imeis: [], rows: [], available_variants: source.product?.variants || [], variants: source.product?.variants || [],
@@ -675,8 +683,8 @@ const selectProduct = (product, { configure = true } = {}) => {
             sell_price_input:
                 sellPrice,
 
-            is_used: false,
-            has_vat: Boolean(page.props.settings?.stock_import_vat_default),
+            is_used: partyType.value === 'customer',
+            has_vat: partyType.value !== 'customer' && Boolean(page.props.settings?.stock_import_vat_default),
             extra_info: item.last_customer_warranty?.value > 0
                 ? {
                     customer_warranty_duration_value: item.last_customer_warranty.value,
@@ -1074,8 +1082,11 @@ const itemExtraInfo = (item) => {
     const source = item?.extra_info && typeof item.extra_info === 'object' ? item.extra_info : {}
     const warrantyValue = Number(source.customer_warranty_duration_value || 0)
     const extraInfo = {
-        ...(partyType.value === 'customer' && item.is_used
-            ? { is_used: true, account: source.account || null, password: source.password || null }
+        ...(item.is_used
+            ? {
+                is_used: true,
+                ...(partyType.value === 'customer' ? { account: source.account || null, password: source.password || null } : {}),
+            }
             : {}),
         customer_warranty_duration_value: warrantyValue > 0 ? warrantyValue : null,
         customer_warranty_duration_unit: warrantyValue > 0 ? (source.customer_warranty_duration_unit || 'months') : null,
@@ -1161,7 +1172,8 @@ const confirm = (payment = {}) => {
                 quantity: Math.max(0, Math.round(Number(item.quantity || 0))),
                 cost_price: importPrice(item, item.cost_price),
                 sell_price: importPrice(item, item.sell_price),
-                has_vat: Boolean(item.has_vat),
+                has_vat: item.is_used ? false : Boolean(item.has_vat),
+                is_used: Boolean(item.is_used),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                 extra_info: itemExtraInfo(item),
@@ -1181,7 +1193,8 @@ const confirm = (payment = {}) => {
                     quantity: Math.max(0, Math.round(Number(row.quantity || 0))),
                     cost_price: importPrice(item, row.cost_price),
                     sell_price: importPrice(item, row.sell_price),
-                    has_vat: Boolean(item.has_vat),
+                    has_vat: item.is_used ? false : Boolean(item.has_vat),
+                    is_used: Boolean(item.is_used),
                     supplier_warranty_value: item.supplier_warranty_value || null,
                     supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                     extra_info: itemExtraInfo(item),
@@ -1207,7 +1220,8 @@ const confirm = (payment = {}) => {
                 quantity: group.imeis.length,
                 cost_price: group.costPrice,
                 sell_price: group.sellPrice,
-                has_vat: Boolean(item.has_vat),
+                has_vat: item.is_used ? false : Boolean(item.has_vat),
+                is_used: Boolean(item.is_used),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                 extra_info: itemExtraInfo(item),
@@ -1234,7 +1248,8 @@ const confirm = (payment = {}) => {
                 quantity: group.imeis.length,
                 cost_price: group.costPrice,
                 sell_price: group.sellPrice,
-                has_vat: Boolean(item.has_vat),
+                has_vat: item.is_used ? false : Boolean(item.has_vat),
+                is_used: Boolean(item.is_used),
                 supplier_warranty_value: item.supplier_warranty_value || null,
                 supplier_warranty_unit: item.supplier_warranty_unit || 'months',
                 extra_info: itemExtraInfo(item),
@@ -1449,10 +1464,8 @@ const confirm = (payment = {}) => {
                                     <span v-if="item.type === 'variant' || item.type === 'imei_variant'" class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{{ variantCount(item) }} biến thể</span>
                                     <span v-if="item.type === 'imei' || item.type === 'imei_variant'" class="rounded-md bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">{{ (item.imeis || []).length }} IMEI</span>
                                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ itemUnit(item) }}</span>
-                                    <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">
-                                        <input v-model="item.has_vat" type="checkbox" class="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
-                                        VAT<span v-if="item.has_vat"> (Thuế dự kiến: {{ formatPrice(itemVatSuggestion(item)) }} {{ $currency() }})</span>
-                                    </label>
+                                    <span v-if="item.is_used" class="inline-flex min-h-6 items-center rounded-md border border-amber-300 bg-amber-100 px-2 text-[11px] font-bold text-amber-800">Sản phẩm cũ</span>
+                                    <span v-if="item.has_vat" class="inline-flex min-h-6 items-center rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">VAT</span>
                                 </div>
                             </div>
                             <div class="flex shrink-0 items-center gap-1">
@@ -1569,10 +1582,8 @@ const confirm = (payment = {}) => {
                                             <div
                                                 class="mt-1 flex flex-wrap items-center gap-1.5"
                                             >
-                                                <label class="inline-flex min-h-6 items-center gap-1.5 rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800" @click.stop>
-                                                    <input v-model="item.has_vat" type="checkbox" class="h-3.5 w-3.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
-                                                    VAT<span v-if="item.has_vat"> (Thuế dự kiến: {{ formatPrice(itemVatSuggestion(item)) }} {{ $currency() }})</span>
-                                                </label>
+                                                <span v-if="item.is_used" class="inline-flex min-h-6 items-center rounded-md border border-amber-300 bg-amber-100 px-2 text-[11px] font-bold text-amber-800">Sản phẩm cũ</span>
+                                    <span v-if="item.has_vat" class="inline-flex min-h-6 items-center rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">VAT</span>
                                                 <span
                                                     v-if="
                                                         item.type ===

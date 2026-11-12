@@ -113,7 +113,7 @@ const warrantyLabel = (item) => {
 
 
 const itemKindLabel = (item) => {
-    if (item.extra_info?.is_used) return 'Đã qua sử dụng'
+    if (item.is_used || item.extra_info?.is_used) return 'Sản phẩm cũ'
     if (item.product?.manage_stock_by_serial) return 'Quản lý IMEI/Serial'
     return 'Sản phẩm thường'
 }
@@ -140,6 +140,7 @@ const variantRowOf = (item) => ({
     sellPrice: itemSellPrice(item),
     variant: item.variant || null,
     hasVat: Boolean(item.has_vat),
+    isUsed: Boolean(item.is_used || item.extra_info?.is_used),
 })
 
 
@@ -161,6 +162,7 @@ const importItemDetailRows = computed(() => {
             sellPrice: firstAvailablePrice(history.product_imei?.sell_price, history.sell_price, item.variant?.sell_price, item.product?.sell_price),
             warranty: history.product_imei?.warranty_expired_at || history.meta?.warranty_expired_at,
             hasVat: Boolean(history.meta?.has_vat ?? item.has_vat),
+            isUsed: Boolean(history.product_imei?.is_used ?? history.meta?.is_used ?? item.is_used ?? item.extra_info?.is_used),
         }))
     }
 
@@ -176,6 +178,7 @@ const importItemDetailRows = computed(() => {
         sellPrice: row.sellPrice,
         warranty: null,
         hasVat: row.hasVat,
+        isUsed: row.isUsed,
     }))
 })
 
@@ -243,7 +246,7 @@ const displayImportItems = computed(() => {
             // (giá nhập, giá bán riêng) xem trong modal. Hàng đã qua sử dụng giữ riêng.
             const key = item.extra_info?.is_used
                 ? `line-${item.id}`
-                : [item.product_id, 'std', item.unit_id || 'none', item.has_vat ? 1 : 0, item.supplier_warranty_value || 0, item.supplier_warranty_unit || ''].join('-')
+                : [item.product_id, 'std', item.unit_id || 'none', item.has_vat ? 1 : 0, item.is_used ? 1 : 0, item.supplier_warranty_value || 0, item.supplier_warranty_unit || ''].join('-')
             const existing = grouped.get(key)
             if (!existing) {
                 grouped.set(key, {
@@ -426,7 +429,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                                             <button v-if="hasItemDetail(item)" type="button" class="mt-1 inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" @click="openImportItemDetail(item)">
                                                 {{ itemImportImeis(item).length ? `${itemImportImeis(item).length} IMEI / biến thể` : (item._variantRows?.length > 1 ? `${item._variantRows.length} biến thể` : 'Xem biến thể') }} <ChevronRight class="h-3 w-3" />
                                             </button>
-                                            <div v-if="item.has_vat || warrantyLabel(item)" class="mt-1 flex flex-wrap items-center gap-2">
+                                            <div v-if="item.has_vat || item.is_used || item.extra_info?.is_used || warrantyLabel(item)" class="mt-1 flex flex-wrap items-center gap-2">
+                                                <span v-if="item.is_used || item.extra_info?.is_used" class="inline-flex items-center rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">CŨ · không VAT</span>
                                                 <span v-if="item.has_vat" class="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">Có VAT</span>
                                                 <span v-if="warrantyLabel(item)" class="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">BH NCC: {{ warrantyLabel(item) }}</span>
                                             </div>
@@ -558,7 +562,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                                 </template>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
-                            <td class="px-3 py-2.5"><div class="flex flex-wrap items-center gap-1"><span class="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">{{ variantLabel(row.variant) }}</span><span v-if="row.hasVat" class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">VAT</span></div></td>
+                            <td class="px-3 py-2.5"><div class="flex flex-wrap items-center gap-1"><span class="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">{{ variantLabel(row.variant) }}</span><span v-if="row.hasVat" class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">VAT</span><span v-if="row.isUsed" class="inline-flex rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">CŨ</span></div></td>
                             <td v-if="!itemImportImeis(importItemDetail).length" class="px-3 py-2.5 text-center font-bold text-slate-800">{{ row.quantity }}</td>
                             <td class="px-3 py-2.5 text-right font-semibold text-slate-800">{{ money(row.costPrice) }}</td>
                             <td class="px-3 py-2.5 text-right font-semibold text-emerald-700">{{ money(row.sellPrice) }}</td>

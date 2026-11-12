@@ -139,7 +139,7 @@ const tableLabels = {
     user: 'Người dùng', users: 'Người dùng', product: 'Sản phẩm', products: 'Sản phẩm',
     customer: 'Khách hàng', supplier: 'Nhà cung cấp', sale: 'Đơn bán hàng', category: 'Danh mục sản phẩm',
     users: 'Người dùng', password_reset_tokens: 'Mã đặt lại mật khẩu', sessions: 'Phiên đăng nhập',
-    products: 'Sản phẩm', product_variants: 'Phiên bản sản phẩm', product_imeis: 'Mã IMEI sản phẩm',
+    products: 'Sản phẩm', product_variants: 'Biến thể sản phẩm', product_imeis: 'Mã IMEI sản phẩm',
     product_imei_histories: 'Lịch sử IMEI sản phẩm', categories: 'Danh mục sản phẩm', brands: 'Thương hiệu', units: 'Đơn vị tính',
     sales: 'Đơn bán hàng', sale_items: 'Chi tiết đơn hàng', sale_item_gifts: 'Quà tặng trong đơn hàng',
     customers: 'Khách hàng', customer_images: 'Ảnh khách hàng', customer_logs: 'Lịch sử khách hàng',

@@ -143,7 +143,7 @@ const customerPaymentRows = () => {
                     </div>
 
                     <div v-if="item.product_imei?.imei" class="item-imei">
-                        IMEI: {{ item.product_imei.imei }}
+                        IMEI: {{ item.product_imei.imei }}<span v-if="item.product_imei.is_used"> (Cũ)</span>
                     </div>
 
                     <div class="item-calc">

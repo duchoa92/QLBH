@@ -198,7 +198,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                                         Model: <span class="font-bold text-slate-700">{{ repair.model }}</span>
                                     </div>
                                     <div class="font-mono text-[11px] text-slate-500">
-                                        IMEI: <span class="font-bold text-slate-700">{{ repair.imei || '-' }}</span>
+                                        IMEI: <span class="font-bold text-slate-700">{{ repair.imei || '-' }}</span><span v-if="repair.device_is_used" class="ml-1 inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-100 px-1 py-0.5 font-sans text-[9px] font-bold leading-none text-amber-800">CŨ</span>
                                     </div>
                                 </div>
                             </div>

@@ -40,7 +40,7 @@ const icon = computed(() => ({
 
 const title = computed(() => {
     if (isRepair.value) return props.item.device_name || 'Thiết bị sửa chữa'
-    if (isDevice.value) return props.item.product_name || 'Thiết bị'
+    if (isDevice.value) return `${props.item.product_name || 'Thiết bị'}${props.item.is_used ? ' · CŨ' : ''}`
     return props.item.title || '-'
 })
 

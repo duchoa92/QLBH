@@ -621,6 +621,8 @@ export function useCart() {
                     product.name,
 
                 has_vat: Boolean(product.has_vat),
+
+                is_used: Boolean(product.is_used),
                 apply_vat: defaultVatSelection(product),
                 tax_percent: Number(product.tax_percent || 0),
 
@@ -724,6 +726,8 @@ export function useCart() {
                     product.name,
 
                 has_vat: Boolean(product.has_vat),
+
+                is_used: Boolean(product.is_used),
                 apply_vat: defaultVatSelection(product),
                 tax_percent: Number(product.tax_percent || 0),
 
@@ -813,6 +817,8 @@ export function useCart() {
                 product.name,
 
             has_vat: Boolean(product.has_vat),
+
+            is_used: Boolean(product.is_used),
             apply_vat: defaultVatSelection(product),
             tax_percent: Number(product.tax_percent || 0),
 

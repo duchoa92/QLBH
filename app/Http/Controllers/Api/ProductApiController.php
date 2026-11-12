@@ -89,7 +89,7 @@ class ProductApiController extends Controller
 
             'warranty_days' => (int) $product->warranty_days,
 
-            'has_vat' => StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->exists(),
+            'has_vat' => StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->where('is_used', false)->exists(),
 
             'tax_percent' => (float) ($product->tax_percent ?? 0),
 

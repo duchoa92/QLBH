@@ -204,6 +204,10 @@ const vatEstimate = computed(() => {
         (sum, row) => sum + Number(typeof row === 'string' ? item.sell_price : row.sell_price || item.sell_price || 0),
         0
     )
+    if (entryModal.value.mode === 'normal') {
+        return Math.round(Math.max(0, Number(entryModal.value.quantity_input || 0)) * Number(entryModal.value.sell_price_input || 0) * vatRate.value / 100)
+    }
+
     const currentEntryTotal = editingEntryIndex.value === null && entryModal.value.mode === 'variant'
         ? Math.max(0, Number(entryModal.value.quantity_input || 0)) * Number(entryModal.value.sell_price_input || 0)
         : (editingEntryIndex.value === null && entryModal.value.mode === 'imei' ? Number(entryModal.value.sell_price_input || 0) : 0)
@@ -975,15 +979,22 @@ onBeforeUnmount(() => {
 
                 <p v-if="scanError" class="mt-2 text-xs font-medium text-rose-600">{{ scanError }}</p>
 
-                <div v-if="entryModal.item && entryModal.mode !== 'normal'" class="mt-2.5 flex flex-wrap items-center justify-between gap-2">
-                    <label class="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800">
-                        <input v-model="entryModal.item.has_vat" type="checkbox" class="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
+                <div v-if="entryModal.item" class="mt-2.5 flex flex-wrap items-center gap-2">
+                    <label class="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800">
+                        <input v-model="entryModal.item.is_used" type="checkbox" class="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500" @change="entryModal.item.is_used && (entryModal.item.has_vat = false)" />
+                        Sản phẩm cũ
+                    </label>
+                    <label class="inline-flex min-h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800" :class="entryModal.item.is_used ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'" :title="entryModal.item.is_used ? 'Sản phẩm cũ không áp dụng VAT' : ''">
+                        <input v-model="entryModal.item.has_vat" :disabled="entryModal.item.is_used" type="checkbox" class="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
                         VAT
                     </label>
-                    <div v-if="entryModal.item.has_vat" class="mr-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                    <div v-if="entryModal.item.has_vat" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
                         <span class="font-bold text-amber-800">Thuế dự kiến: {{ formatPrice(vatEstimate) }} {{ $currency() }}</span>
                         <span class="ml-1 text-amber-700">(giá bán chưa bao gồm thuế)</span>
                     </div>
+                </div>
+
+                <div v-if="entryModal.item && entryModal.mode !== 'normal'" class="mt-2.5 flex flex-wrap items-center justify-end gap-2">
                     <button
                         type="button"
                         class="inline-flex h-8 min-w-[126px] items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"

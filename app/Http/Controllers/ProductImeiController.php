@@ -7,6 +7,7 @@ use App\Models\ProductImei;
 use App\Models\ProductImeiHistory;
 use App\Models\Repair;
 use App\Models\SaleItem;
+use App\Models\StockImport;
 use App\Models\Supplier;
 use App\Services\Lookup\EntityLookupService;
 use App\Services\Stock\ImeiStockSynchronizer;
@@ -219,6 +220,13 @@ class ProductImeiController extends Controller
             ->whereIn('id', $importHistories->map(fn (ProductImeiHistory $history) => $history->meta['supplier_id'] ?? null)->filter()->unique()->values())
             ->pluck('name', 'id');
 
+        // Phiếu nhập gốc: để biết nhập từ khách lẻ (hiện tên khách thay vì nhà cung cấp).
+        $importDocs = StockImport::query()
+            ->with('customer:id,full_name')
+            ->whereIn('id', $importHistories->pluck('reference_id')->filter()->unique()->values())
+            ->get(['id', 'party_type', 'customer_id', 'party_name', 'party_phone', 'import_date', 'created_at'])
+            ->keyBy('id');
+
         $latestSale = $saleItems->first()?->sale;
         $latestRepair = $repairs->first();
         $customer = $latestSale?->customer
@@ -250,6 +258,7 @@ class ProductImeiController extends Controller
                 'imei' => $imei->imei,
                 'serial' => $imei->serial,
                 'status' => $imei->status,
+                'is_used' => (bool) $imei->is_used,
                 'cost_price' => $imei->cost_price,
                 'sell_price' => $imei->sell_price,
                 'sold_at' => $imei->sold_at,
@@ -268,7 +277,17 @@ class ProductImeiController extends Controller
                 'sale_count' => $saleItems->count(),
                 'repair_count' => $repairs->count(),
             ],
-            'imports' => $importHistories->map(fn (ProductImeiHistory $history) => [
+            'imports' => $importHistories->map(function (ProductImeiHistory $history) use ($supplierNames, $importDocs): array {
+                $doc = $importDocs->get($history->reference_id);
+                $isCustomer = $doc?->party_type === 'customer';
+                $happenedAt = $history->happened_at ? Carbon::parse($history->happened_at) : null;
+                $createdAt = $doc?->created_at ?? $history->created_at;
+                // Ngày nhập chỉ lưu ngày (00:00): ghép giờ thực tế lúc tạo phiếu để hiển thị cụ thể.
+                if ($happenedAt && $createdAt && $happenedAt->format('H:i:s') === '00:00:00') {
+                    $happenedAt = $happenedAt->copy()->setTimeFrom(Carbon::parse($createdAt));
+                }
+
+                return [
                 'id' => $history->id,
                 'reference_id' => $history->reference_id,
                 'code' => $history->meta['import_code'] ?? null,
@@ -276,9 +295,14 @@ class ProductImeiController extends Controller
                 'sell_price' => $history->sell_price,
                 'supplier_id' => $history->meta['supplier_id'] ?? null,
                 'supplier_name' => $supplierNames[$history->meta['supplier_id'] ?? 0] ?? null,
-                'happened_at' => $history->happened_at,
+                'party_type' => $doc?->party_type ?? 'supplier',
+                'is_used' => (bool) ($history->meta['is_used'] ?? false),
+                'customer_name' => $isCustomer ? ($doc->party_name ?: $doc->customer?->full_name) : null,
+                'customer_phone' => $isCustomer ? $doc->party_phone : null,
+                'happened_at' => $happenedAt?->toAtomString() ?? $history->happened_at,
                 'created_at' => $history->created_at,
-            ])->values(),
+                ];
+            })->values(),
             'sales' => $saleItems->map(fn (SaleItem $item) => [
                 'id' => $item->id,
                 'sale_id' => $item->sale?->id,

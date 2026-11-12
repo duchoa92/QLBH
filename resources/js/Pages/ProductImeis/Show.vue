@@ -51,6 +51,7 @@ const saleCustomerName = (saleItem) =>
                     <strong>IMEI:</strong>
 
                     {{ imei.imei }}
+                    <span v-if="imei.is_used" class="ml-1.5 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">SẢN PHẨM CŨ</span>
 
                 </p>
 

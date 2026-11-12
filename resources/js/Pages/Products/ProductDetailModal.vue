@@ -58,9 +58,9 @@ const productType = computed(() => {
 
 const typeMeta = computed(() => ({
     standard: { label: 'Sản phẩm thường', icon: Package },
-    variants: { label: 'Có thuộc tính (biến thể)', icon: Layers },
+    variants: { label: 'Có biến thể', icon: Layers },
     imei: { label: 'Quản lý IMEI / Serial', icon: Barcode },
-    combo: { label: 'Có thuộc tính & quản lý IMEI', icon: Smartphone },
+    combo: { label: 'Có biến thể & quản lý IMEI', icon: Smartphone },
 }[productType.value]))
 
 /* ================= TABS ================= */
@@ -137,7 +137,7 @@ const margin = computed(() => {
 const variantName = (variant) => {
     const attrs = Array.isArray(variant.attributes) ? variant.attributes : []
     const text = attrs.map(a => a?.value).filter(Boolean).join(' · ')
-    return text || variant.sku || `Phiên bản #${variant.id}`
+    return text || variant.sku || `Biến thể #${variant.id}`
 }
 
 const attributeGroups = computed(() => {
@@ -366,7 +366,7 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                     <table class="w-full min-w-[520px] border-collapse text-left text-xs">
                         <thead>
                             <tr class="border-b border-slate-200 bg-slate-50 font-semibold uppercase tracking-wider text-slate-500">
-                                <th class="px-4 py-3">Phiên bản</th>
+                                <th class="px-4 py-3">Biến thể</th>
                                 <th class="px-4 py-3">SKU</th>
                                 <th v-if="showCostPrice" class="px-4 py-3 text-right">Giá vốn</th>
                                 <th class="px-4 py-3 text-right">Giá bán</th>
@@ -420,7 +420,7 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                             v-if="filterVariant"
                             type="button"
                             class="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                            title="Bỏ lọc phiên bản"
+                            title="Bỏ lọc biến thể"
                             @click="variantFilterId = null"
                         >
                             {{ variantName(filterVariant) }} <X class="h-3 w-3" />
@@ -448,7 +448,7 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                                     <tr v-for="(item, index) in filteredImeiList" :key="item.id ?? index" class="text-slate-700 transition hover:bg-slate-50">
                                         <td class="px-4 py-2.5 text-center font-mono text-slate-400">{{ index + 1 }}</td>
                                         <td class="px-4 py-2.5">
-                                            <div class="font-mono font-bold tracking-wide text-slate-900">{{ item.imei || item.serial || '—' }}</div>
+                                            <div class="font-mono font-bold tracking-wide text-slate-900">{{ item.imei || item.serial || '—' }}<span v-if="item.is_used" class="ml-1.5 inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span></div>
                                             <div v-if="item.imei && item.serial" class="font-mono text-[11px] text-slate-400">SN: {{ item.serial }}</div>
                                             <div v-if="item.color || item.storage" class="text-[11px] text-slate-400">{{ [item.color, item.storage].filter(Boolean).join(' · ') }}</div>
                                         </td>

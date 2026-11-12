@@ -39,6 +39,7 @@ class ProductImei extends Model
         'storage',
 
         'extra_info',
+        'is_used',
 
         'cost_price',
 
@@ -64,6 +65,7 @@ class ProductImei extends Model
 
     protected $casts = [
         'extra_info' => 'array',
+        'is_used' => 'boolean',
         'warranty_expired_at' => 'datetime',
         'customer_warranty_expires_at' => 'datetime',
         'customer_warranty_days' => 'integer',

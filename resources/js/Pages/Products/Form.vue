@@ -1276,7 +1276,7 @@ const submit = () => {
                         <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">3. Giá chung</h3>
                     </div>
                     <span v-if="form.variants.length" class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                        Phiên bản mới tự lấy giá chung, chỉnh giá riêng ở bảng mục 4 bên dưới
+                        Biến thể mới tự lấy giá chung, chỉnh giá riêng ở bảng mục 4 bên dưới
                     </span>
                 </div>
 
@@ -1325,14 +1325,14 @@ const submit = () => {
 
                     <!-- Toggle (vẫn là checkbox v-model="showVariants") -->
                     <label class="relative flex cursor-pointer items-center gap-3">
-                        <span class="text-xs font-semibold text-slate-700">Có thuộc tính (nhiều biến thể)</span>
+                        <span class="text-xs font-semibold text-slate-700">Có biến thể</span>
                         <input v-model="showVariants" type="checkbox" class="peer sr-only" />
                         <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors duration-200 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform after:duration-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500/40"></span>
                     </label>
                 </div>
 
                 <p v-if="!form.variants.length" class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
-                    Bật công tắc "Có thuộc tính" để cấu hình thuộc tính (màu sắc, dung lượng...) và tạo danh sách biến thể.
+                    Bật công tắc "Có biến thể" để cấu hình thuộc tính (màu sắc, dung lượng...) và tạo danh sách biến thể.
                 </p>
 
                 <!-- DANH SÁCH THUỘC TÍNH -->
@@ -1381,7 +1381,7 @@ const submit = () => {
                     <div class="space-y-2 pt-1">
                         <div class="flex items-center justify-between gap-3">
                             <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Danh sách phiên bản biến thể</span>
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Danh sách biến thể</span>
                                 <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">{{ variantPreviewRows.length }} mẫu</span>
                             </div>
                         </div>
@@ -1410,7 +1410,7 @@ const submit = () => {
                                 </table>
                             </div>
                         </div>
-                        <p v-else class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">Thêm ít nhất một giá trị cho mỗi nhóm thuộc tính để tạo phiên bản.</p>
+                        <p v-else class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">Thêm ít nhất một giá trị cho mỗi nhóm thuộc tính để tạo biến thể.</p>
                     </div>
                 </div>
             </section>

@@ -47,7 +47,7 @@ const emit = defineEmits([
     <div class="flex min-w-0 items-start gap-2">
         <div class="min-w-0 flex-1">
             <div class="flex min-w-0 items-center gap-1.5">
-                <div class="truncate text-xs font-semibold leading-tight text-slate-900" :title="item.name">{{ item.name }}</div>
+                <div class="flex min-w-0 items-center gap-1"><span class="truncate text-xs font-semibold leading-tight text-slate-900" :title="item.name">{{ item.name }}</span><span v-if="item.is_used" class="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-100 px-1 py-0.5 text-[9px] font-bold leading-none text-amber-800">CŨ</span></div>
                 <span v-if="item.has_vat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Mặt hàng được đánh dấu có VAT khi nhập hàng"><Receipt class="h-3 w-3" />Có VAT</span>
             </div>
             <div v-if="showUnit" class="mt-0.5 text-[11px] leading-tight text-slate-500">{{ item.unit_name ?? 'Cái' }}</div>
