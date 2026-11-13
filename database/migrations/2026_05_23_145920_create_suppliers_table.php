@@ -63,6 +63,17 @@ return new class extends Migration
 
             $table->string('address')
                 ->nullable();
+            /*
+            |--------------------------------------------------------------------------
+            | BANK
+            |--------------------------------------------------------------------------
+            */
+            $table->string('bank_name', 150)->nullable();
+            $table->string('bank_bin', 6)->nullable();
+            $table->string('bank_account', 50)->nullable();
+            $table->string('bank_account_name', 150)->nullable();
+            $table->string('bank_payment_url', 2048)->nullable();
+            $table->json('bank_accounts')->nullable();
 
             /*
             |--------------------------------------------------------------------------

@@ -22,12 +22,13 @@ return new class extends Migration
 
             $table->enum('gender', ['male', 'female', 'other'])->nullable();
 
-            $table->string('cccd')->nullable()->index();
+            $table->string('cccd')->nullable()->unique();
 
             $table->string('province')->nullable();
             $table->string('district')->nullable();
             $table->string('ward')->nullable();
             $table->string('address')->nullable();
+            $table->text('note')->nullable();
 
             // thống kê nhanh (CACHE)
             $table->decimal('point_balance', 15, 2)->default(0);

@@ -8,9 +8,6 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('stock_imports', function (Blueprint $table): void {
-            $table->decimal('paid_amount', 18, 2)->default(0)->after('grand_total');
-        });
         Schema::create('supplier_debts', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('supplier_id')->constrained()->cascadeOnDelete();
@@ -29,8 +26,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('supplier_debts');
-        Schema::table('stock_imports', function (Blueprint $table): void {
-            $table->dropColumn('paid_amount');
-        });
     }
 };

@@ -5,7 +5,7 @@ import {
     MessageSquareText,
     Gift,
     BadgePercent,
-    BadgeCheck,
+    ShieldCheck,
     Cpu,
     Layers,
     Receipt,
@@ -86,7 +86,7 @@ const emit = defineEmits([
                 <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
             </button>
             <button type="button" @click="emit('edit-warranty')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-emerald-600" :class="warrantyCount ? 'text-emerald-600' : ''" title="Bảo hành" aria-label="Bảo hành">
-                <BadgeCheck class="h-4 w-4" />
+                <ShieldCheck class="h-4 w-4" />
                 <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
             </button>
             <button v-if="showRemove" type="button" @click="emit('remove')" class="flex h-7 w-7 items-center justify-center rounded-md bg-rose-50 text-rose-500 transition hover:bg-rose-100 hover:text-rose-700" title="Xóa sản phẩm" aria-label="Xóa sản phẩm khỏi giỏ hàng">

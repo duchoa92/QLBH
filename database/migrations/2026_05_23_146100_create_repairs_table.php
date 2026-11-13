@@ -27,6 +27,10 @@ return new class extends Migration
 
             $table->string('code')
                 ->unique();
+            $table->foreignId('customer_id')
+                ->nullable()
+                ->constrained()
+                ->nullOnDelete();
 
             /*
             |--------------------------------------------------------------------------
@@ -44,6 +48,7 @@ return new class extends Migration
             */
 
             $table->string('device_name');
+            $table->string('model', 100)->nullable();
 
             $table->string('imei')
                 ->nullable()
@@ -58,11 +63,11 @@ return new class extends Migration
             |--------------------------------------------------------------------------
             */
 
-            $table->string('screen_password')
-                ->nullable();
+            $table->text('screen_password')->nullable();
 
             $table->text('screen_pattern')
                 ->nullable();
+            $table->string('screen_lock_type', 20)->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -76,8 +81,7 @@ return new class extends Migration
             $table->string('account_email')
                 ->nullable();
 
-            $table->string('account_password')
-                ->nullable();
+            $table->text('account_password')->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -102,9 +106,16 @@ return new class extends Migration
 
             $table->decimal('estimated_cost', 15, 2)
                 ->nullable();
+            $table->decimal('parts_total', 15, 2)->default(0);
+            $table->decimal('labor_cost', 15, 2)->default(0);
+            $table->decimal('surcharge', 15, 2)->default(0);
 
             $table->decimal('final_cost', 15, 2)
                 ->nullable();
+            $table->decimal('paid_amount', 15, 2)->default(0);
+            $table->decimal('change_amount', 15, 2)->default(0);
+            $table->string('payment_method')->nullable();
+            $table->text('payment_note')->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -115,6 +126,14 @@ return new class extends Migration
             $table->string('status')
                 ->default('pending')
                 ->index();
+            $table->string('intake_type')->default('repair');
+            $table->string('warranty_source_type')->nullable();
+            $table->unsignedBigInteger('warranty_source_id')->nullable();
+            $table->timestamp('warranty_expires_at')->nullable();
+            $table->string('warranty_status')->nullable();
+            $table->timestamp('warranty_declined_at')->nullable();
+            $table->text('warranty_decline_reason')->nullable();
+            $table->decimal('warranty_covered_amount', 15, 2)->default(0);
 
             /*
             |--------------------------------------------------------------------------
@@ -150,8 +169,18 @@ return new class extends Migration
 
             $table->timestamp('returned_at')
                 ->nullable();
+            $table->unsignedInteger('repair_warranty_days')->default(0);
+            $table->timestamp('repair_warranty_started_at')->nullable();
+            $table->timestamp('repair_warranty_expires_at')->nullable();
+            $table->timestamp('repair_warranty_voided_at')->nullable();
+            $table->text('repair_warranty_void_reason')->nullable();
+            $table->foreignId('repair_warranty_voided_by')
+                ->nullable()
+                ->constrained('users')
+                ->nullOnDelete();
 
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

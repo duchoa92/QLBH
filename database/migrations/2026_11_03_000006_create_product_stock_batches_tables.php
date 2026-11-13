@@ -29,6 +29,10 @@ return new class extends Migration
             $table->id();
             $table->foreignId('sale_item_id')->nullable()->constrained()->cascadeOnDelete();
             $table->foreignId('sale_item_gift_id')->nullable()->constrained()->cascadeOnDelete();
+            $table->foreignId('repair_part_id')
+                ->nullable()
+                ->constrained('repair_parts')
+                ->cascadeOnDelete();
             $table->foreignId('product_stock_batch_id')->constrained()->restrictOnDelete();
             $table->unsignedInteger('quantity');
             $table->decimal('unit_cost', 15, 2)->default(0);

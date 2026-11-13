@@ -20,6 +20,7 @@ const previewData = ref([])
 const step = ref('upload') // upload | preview
 const checking = ref(false)
 const exporting = ref(false)
+const exportWithImages = ref(false) // xuất kèm ảnh sản phẩm: tải về file .zip (Excel + thư mục images)
 const isSkipping = ref(false)
 const importing = ref(false)
 const progress = ref(0)
@@ -372,7 +373,7 @@ const exportFile = async () => {
         exporting.value = true
         progress.value = 0
 
-        const res = await axios.post(route('products.export.start'))
+        const res = await axios.post(route('products.export.start'), { with_images: exportWithImages.value })
         const id = res.data.id
         const startedAt = Date.now()
 
@@ -647,7 +648,20 @@ const downloadTemplate = () => {
                         <ArrowDownToLine /> Tải file mẫu
                     </button>
 
-                    <div class="flex gap-2">
+                    <div class="flex items-center gap-3">
+
+                        <label
+                            class="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600"
+                            title="Tải về file .zip gồm file Excel và thư mục images chứa ảnh sản phẩm. Dùng lại file zip này ở ô chọn ảnh khi nhập."
+                        >
+                            <input
+                                v-model="exportWithImages"
+                                type="checkbox"
+                                :disabled="exporting"
+                                class="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                            >
+                            <Image :size="16" /> Kèm hình ảnh
+                        </label>
 
                         <button
                             @click="exportFile"
@@ -690,7 +704,7 @@ const downloadTemplate = () => {
                                     Đang xuất {{ progress }}%
                                 </template>
                                 <template v-else>
-                                    <Sheet /> Xuất Excel
+                                    <Sheet /> {{ exportWithImages ? 'Xuất Excel + ảnh (.zip)' : 'Xuất Excel' }}
                                 </template>
                             </span>
 

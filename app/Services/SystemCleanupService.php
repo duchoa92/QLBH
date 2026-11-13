@@ -62,7 +62,8 @@ class SystemCleanupService
         return ['deleted' => $deleted, 'bytes' => $bytes];
     }
 
-    private function referencedPaths(): array
+    /** Đường dẫn (chữ thường, dấu /) của mọi ảnh/tệp mà dữ liệu đang tham chiếu trên disk public. */
+    public function referencedPaths(): array
     {
         $paths = [];
         Product::withTrashed()->whereNotNull('image')->pluck('image')->each(function ($path) use (&$paths) { $this->addPath($paths, $path); });

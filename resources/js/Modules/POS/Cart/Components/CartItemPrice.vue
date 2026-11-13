@@ -1,6 +1,7 @@
 <script setup>
 
 import { computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
 import { Receipt } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -11,6 +12,10 @@ const props = defineProps({
     },
 })
 
+
+// Hàng cũ chỉ được chọn VAT khi cửa hàng bật tính VAT cho hàng cũ.
+const page = usePage()
+const vatLocked = computed(() => Boolean(props.item.is_used) && !page.props.settings?.pos_vat_used_enabled)
 
 const lineTotal = computed(() => {
 
@@ -71,7 +76,7 @@ const hasDiscount = computed(() =>
 
     <div class="flex min-w-0 shrink-0 flex-col items-end gap-0.5 text-right">
         <div class="flex items-center justify-end gap-1.5">
-            <button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" :disabled="Boolean(item.is_used)" class="inline-flex h-5 items-center gap-0.5 rounded px-1 text-[9px] font-bold leading-none transition disabled:cursor-not-allowed disabled:opacity-40" :class="item.apply_vat ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'" :title="item.is_used ? 'Sản phẩm cũ không áp dụng VAT' : (item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này')" @click="!item.is_used && (item.apply_vat = !item.apply_vat)"><Receipt class="h-3 w-3" />VAT</button>
+            <button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" :disabled="vatLocked" class="inline-flex h-5 items-center gap-0.5 rounded px-1 text-[9px] font-bold leading-none transition disabled:cursor-not-allowed disabled:opacity-40" :class="item.apply_vat ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'" :title="vatLocked ? 'Sản phẩm cũ không áp dụng VAT' : (item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này')" @click="!vatLocked && (item.apply_vat = !item.apply_vat)"><Receipt class="h-3 w-3" />VAT</button>
             <strong class="text-base font-extrabold leading-tight text-green-700">{{ $money(lineTotal) }}</strong>
         </div>
 

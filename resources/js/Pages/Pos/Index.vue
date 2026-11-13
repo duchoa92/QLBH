@@ -647,7 +647,7 @@ useBarcodeScanner(
 
 <template>
 
-    <PosLayout ref="posLayout" :cart-count="cartItemCount" :grand-total="grandTotal" :shift="shift" :opening-count-enabled="openingCountEnabled" @close="closePos" @manage-shift="manageShift" @show-shift-history="showShiftHistory">
+    <PosLayout ref="posLayout" :cart-count="cartItemCount" :grand-total="grandTotal" :checkout-loading="loading" :shift="shift" :opening-count-enabled="openingCountEnabled" @checkout="openCheckoutModal" @close="closePos" @manage-shift="manageShift" @show-shift-history="showShiftHistory">
         <template #main>
             <PosMainPanel
                 :cart="cart"

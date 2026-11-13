@@ -525,7 +525,7 @@ class ProductService extends BaseService
      * Mã ngắn từ tên: nhiều từ thì lấy chữ cái đầu mỗi từ, một từ thì lấy các chữ cái đầu của từ đó
      * (tối đa $maxLength ký tự, bỏ dấu). Vd. "Điện thoại" => DT, "Máy tính bảng" => MTB, "Samsung" => SAM.
      */
-    private function makeCodeFromWords(?string $text, int $maxLength = 3): string
+    private static function makeCodeFromWords(?string $text, int $maxLength = 3): string
     {
         $words = array_values(array_filter(explode('-', Str::slug((string) $text))));
 
@@ -546,12 +546,35 @@ class ProductService extends BaseService
         $category = $categoryId ? \App\Models\Category::query()->whereKey($categoryId)->value('name') : null;
         $brand = $brandId ? \App\Models\Brand::query()->whereKey($brandId)->value('name') : null;
 
+        return self::skuPrefixForNames($category, $brand);
+    }
+
+    /** Tiền tố SKU từ tên danh mục/thương hiệu (dùng cả khi nhập file, lúc danh mục/thương hiệu chưa có id). */
+    public static function skuPrefixForNames(?string $category, ?string $brand): string
+    {
         $parts = array_filter([
-            $this->makeCodeFromWords($category),
-            $this->makeCodeFromWords($brand),
+            self::makeCodeFromWords($category),
+            self::makeCodeFromWords($brand),
         ]);
 
         return $parts === [] ? 'SP' : implode('-', $parts);
+    }
+
+    /** Số thứ tự lớn nhất đang dùng cho tiền tố (tính cả sản phẩm đã xóa mềm); 0 nếu chưa có. */
+    public function maxSkuNumber(string $prefix): int
+    {
+        $pattern = '/^' . preg_quote($prefix, '/') . '-(\d+)$/';
+
+        return (int) (Product::withTrashed()
+            ->where('sku', 'like', $prefix . '-%')
+            ->pluck('sku')
+            ->map(fn ($sku) => preg_match($pattern, (string) $sku, $matches) ? (int) $matches[1] : 0)
+            ->max() ?? 0);
+    }
+
+    public static function formatSku(string $prefix, int $number): string
+    {
+        return $prefix . '-' . str_pad((string) $number, 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -561,18 +584,10 @@ class ProductService extends BaseService
     public function nextProductSku(?int $categoryId, ?int $brandId): string
     {
         $prefix = $this->skuPrefix($categoryId, $brandId);
-        $pattern = '/^' . preg_quote($prefix, '/') . '-(\d+)$/';
-
-        $max = Product::withTrashed()
-            ->where('sku', 'like', $prefix . '-%')
-            ->pluck('sku')
-            ->map(fn ($sku) => preg_match($pattern, (string) $sku, $matches) ? (int) $matches[1] : 0)
-            ->max() ?? 0;
-
-        $next = $max + 1;
+        $next = $this->maxSkuNumber($prefix) + 1;
 
         do {
-            $sku = $prefix . '-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+            $sku = self::formatSku($prefix, $next);
             $taken = Product::withTrashed()->where('sku', $sku)->exists();
             $next++;
         } while ($taken);

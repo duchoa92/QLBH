@@ -367,8 +367,8 @@ class SaleController extends Controller
                 $unitId = $row['unit_id'] ?? $product->unit_id;
                 $unitName = filled($row['unit_name'] ?? null) ? trim($row['unit_name']) : ($product->unit?->short_name ?: $product->unit?->name);
                 $unitCost = (float) ($imei?->cost_price ?? $variant?->cost_price ?? $product->cost_price ?? 0);
-                // Sản phẩm cũ (IMEI nhập là hàng cũ) không chịu VAT.
-                $vatApplied = ! ($imei?->is_used) && filter_var($row['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                // Sản phẩm cũ (IMEI nhập là hàng cũ) mặc định không chịu VAT, trừ khi cửa hàng bật tính VAT cho hàng cũ.
+                $vatApplied = (! ($imei?->is_used) || filter_var(setting('pos_vat_used_enabled', false), FILTER_VALIDATE_BOOLEAN)) && filter_var($row['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 $newItems[] = compact('product', 'variant', 'quantity', 'baseQuantity', 'conversionFactor', 'unitId', 'unitName', 'price', 'unitCost', 'type', 'value', 'lineDiscount', 'lineTotal', 'imei', 'gifts', 'warrantyDays', 'warranty_note', 'note', 'vatApplied');
             }
 

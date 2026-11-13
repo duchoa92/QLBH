@@ -64,6 +64,7 @@ return new class extends Migration
 
             $table->string('storage')
                 ->nullable();
+            $table->json('extra_info')->nullable();
 
 
 
@@ -118,6 +119,14 @@ return new class extends Migration
 
             $table->timestamp('warranty_expired_at')
                 ->nullable();
+            $table->timestamp('customer_warranty_expires_at')->nullable();
+            $table->unsignedInteger('customer_warranty_days')->nullable();
+            $table->timestamp('customer_warranty_voided_at')->nullable();
+            $table->text('customer_warranty_void_reason')->nullable();
+            $table->foreignId('customer_warranty_voided_by')
+                ->nullable()
+                ->constrained('users')
+                ->nullOnDelete();
 
             /*
             |--------------------------------------------------------------------------
@@ -144,6 +153,7 @@ return new class extends Migration
             */
 
             $table->enum('status', ['in_stock', 'sold'])->default('in_stock');
+            $table->boolean('is_used')->default(false);
 
             /*
             |--------------------------------------------------------------------------

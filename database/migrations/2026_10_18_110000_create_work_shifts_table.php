@@ -29,10 +29,22 @@ return new class extends Migration
         Schema::table('sales', function (Blueprint $table): void {
             $table->foreignId('work_shift_id')->nullable()->after('user_id')->constrained()->nullOnDelete();
         });
+
+        // Gắn tiền thu khi trả máy sửa vào ca làm, giống hóa đơn bán hàng (sales.work_shift_id).
+        // work_shifts được tạo sau repairs nên khóa ngoại nằm ở migration này.
+        Schema::table('repairs', function (Blueprint $table): void {
+            $table->foreignId('work_shift_id')->nullable()->constrained()->nullOnDelete();
+            $table->index(['work_shift_id', 'status']);
+        });
     }
 
     public function down(): void
     {
+        Schema::table('repairs', function (Blueprint $table): void {
+            $table->dropIndex(['work_shift_id', 'status']);
+            $table->dropConstrainedForeignId('work_shift_id');
+        });
+
         Schema::table('sales', function (Blueprint $table): void {
             $table->dropConstrainedForeignId('work_shift_id');
         });

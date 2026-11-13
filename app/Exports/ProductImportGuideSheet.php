@@ -21,7 +21,7 @@ class ProductImportGuideSheet implements FromArray, WithHeadings, WithTitle, Wit
         return [
             ['STT', 'Không', 'Chỉ để đếm dòng, hệ thống bỏ qua cột này. Có thể để trống hoặc xóa.'],
             ['Tên sản phẩm', 'Có', 'Tối đa 255 ký tự.'],
-            ['SKU', 'Có', 'Mã duy nhất, tối đa 100 ký tự. Không phân biệt hoa/thường và dấu. Không được trùng sản phẩm đang có hoặc sản phẩm trong thùng rác.'],
+            ['SKU', 'Không', 'Để trống thì hệ thống tự tạo giống khi thêm thủ công: viết tắt Danh mục-Thương hiệu-số thứ tự (vd. DT-SAM-0001). Nếu tự điền: mã duy nhất, tối đa 100 ký tự, không phân biệt hoa/thường và dấu. SKU trùng sản phẩm đang có hoặc trong thùng rác sẽ xử lý theo lựa chọn ở bước kiểm tra (báo lỗi, bỏ qua, cập nhật sản phẩm có sẵn hoặc tạo SKU mới).'],
             ['Model', 'Không', 'Model/mã hiệu sản phẩm (không cần duy nhất), tối đa 100 ký tự.'],
             ['Danh mục', 'Có', 'Nên chọn đúng tên trong sheet "Danh mục". Tên chưa có sẽ được TẠO MỚI (xem cảnh báo ở bước kiểm tra).'],
             ['Thương hiệu', 'Không', 'Tên chưa có sẽ được tạo mới.'],
@@ -32,10 +32,10 @@ class ProductImportGuideSheet implements FromArray, WithHeadings, WithTitle, Wit
             ['Loại sản phẩm', 'Không', 'normal (mặc định) | imei | service | combo. Chọn trong danh sách thả xuống.'],
             ['Có IMEI', 'Không', '1 = quản lý theo IMEI/Serial, 0 = không. Nếu bằng 1 thì sản phẩm tự thành loại imei.'],
             ['Trạng thái', 'Không', '1 = đang kinh doanh (mặc định), 0 = ngừng.'],
-            ['Ảnh', 'Không', 'Tên file ảnh (vd. camera-h8c.jpg), sau đó chọn ảnh hoặc file zip ảnh ở bước nhập. File xuất từ hệ thống đã ghi sẵn tên ảnh đang dùng. Chỉ khớp chính xác tên, mỗi tên ảnh chỉ được dùng cho một file; hỗ trợ jpg, png, webp, gif (tối đa 5MB/ảnh).'],
+            ['Ảnh', 'Không', 'Tên file ảnh (vd. camera-h8c.jpg), sau đó chọn ảnh hoặc file zip ảnh ở bước nhập. File xuất từ hệ thống đã ghi sẵn tên ảnh đang dùng. Nếu xuất kèm hình ảnh (file .zip): giải nén lấy file Excel, rồi chọn chính file .zip đó ở ô chọn ảnh khi nhập. Chỉ khớp chính xác tên, mỗi tên ảnh chỉ được dùng cho một file; hỗ trợ jpg, png, webp, gif (tối đa 5MB/ảnh).'],
             ['Mô tả', 'Không', 'Văn bản tự do.'],
             ['', '', ''],
-            ['Lưu ý chung', '', 'Hãy xóa 4 dòng ví dụ trước khi nhập (nếu không chúng sẽ được nhập như sản phẩm thật). Tối đa 5.000 sản phẩm mỗi lần. Dòng có lỗi sẽ được bỏ qua và xuất thành file lỗi để sửa.'],
+            ['Lưu ý chung', '', 'Hãy xóa 4 dòng ví dụ trước khi nhập (nếu không chúng sẽ được nhập như sản phẩm thật). Tối đa 5.000 sản phẩm mỗi lần. Ở bước kiểm tra bạn chọn cách xử lý dòng lỗi, SKU trùng và giá trị sai ở cột không bắt buộc; dòng lỗi được xuất thành file lỗi để sửa.'],
         ];
     }
 

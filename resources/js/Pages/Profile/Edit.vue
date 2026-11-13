@@ -28,7 +28,7 @@ const avatarUrl = computed(() => user.value.avatar ? imageUrl(user.value.avatar)
     <div class="space-y-3">
         <PageHeader 
             title="Thiết lập cá nhân" 
-            description="Quản lý thông tin hồ sơ hiển thị, email liên hệ và cài đặt bảo mật tài khoản." 
+            description="" 
         />
 
         <!-- Profile Overview Banner -->

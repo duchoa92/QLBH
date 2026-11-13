@@ -208,7 +208,6 @@ class RepairController extends Controller
                 'contact_phone' => $repair->contact_phone,
 
                 'serial' => $repair->serial,
-                'device_is_used' => $this->isUsedDevice($repair->imei ?: $repair->serial),
                 'screen_lock_type' => $repair->screen_lock_type,
                 'has_device_password' => filled($repair->getRawOriginal('screen_password'))
                     || filled($repair->getRawOriginal('screen_pattern'))
@@ -1709,19 +1708,6 @@ class RepairController extends Controller
     }
 
     /** Lưu lý do từ chối và vô hiệu hóa hạn bảo hành trên giao dịch gốc. */
-    /** Thiết bị trùng IMEI/serial với máy đã nhập vào kho dưới dạng sản phẩm cũ. */
-    private function isUsedDevice(?string $code): bool
-    {
-        $code = trim((string) $code);
-        if ($code === '') {
-            return false;
-        }
-
-        return (bool) ProductImei::query()
-            ->where(fn ($query) => $query->where('imei', $code)->orWhere('serial', $code))
-            ->value('is_used');
-    }
-
     private function ensureImeiHasNoOpenRepair(?string $imei, ?int $exceptRepairId = null): void
     {
         $identifier = mb_strtolower(trim((string) $imei));

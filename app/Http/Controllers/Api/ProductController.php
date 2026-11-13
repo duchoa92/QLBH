@@ -23,11 +23,23 @@ class ProductController extends Controller
 
     private const IMEI_LIMIT = 500;
 
-    /** Danh sách sản phẩm đang bán, lọc theo từ khóa / danh mục. */
+    /** Các kiểu sắp xếp cho phép ở màn hình bán hàng (khóa => cột và chiều sắp xếp). */
+    private const SORTS = [
+        'name_asc' => [['name', 'asc']],
+        'name_desc' => [['name', 'desc']],
+        'best_selling' => [['sold_count', 'desc'], ['name', 'asc']],
+        'newest' => [['id', 'desc']],
+        'price_asc' => [['sell_price', 'asc'], ['name', 'asc']],
+        'price_desc' => [['sell_price', 'desc'], ['name', 'asc']],
+        'stock_desc' => [['stock', 'desc'], ['name', 'asc']],
+    ];
+
+    /** Danh sách sản phẩm đang bán, lọc theo từ khóa / danh mục và sắp xếp theo lựa chọn. */
     public function index(Request $request): JsonResponse
     {
         $keyword = trim((string) $request->query('keyword', ''));
         $categoryId = $request->query('category_id');
+        $sort = self::SORTS[(string) $request->query('sort', '')] ?? self::SORTS['name_asc'];
 
         $products = Product::query()
             ->where('is_active', true)
@@ -49,7 +61,11 @@ class ProductController extends Controller
                 'conversionUnit:id,name,short_name',
                 'variants' => fn ($query) => $query->where('is_active', true)->orderBy('id'),
             ])
-            ->orderBy('name')
+            ->when(true, function ($query) use ($sort): void {
+                foreach ($sort as [$column, $direction]) {
+                    $query->orderBy($column, $direction);
+                }
+            })
             ->limit(self::LIST_LIMIT)
             ->get();
 
@@ -145,7 +161,7 @@ class ProductController extends Controller
             ->whereIn('product_id', $ids)
             ->where('remaining_quantity', '>', 0)
             ->orderBy('id')
-            ->get(['id', 'product_id', 'variant_id', 'remaining_quantity', 'cost_price', 'sell_price', 'imported_at'])
+            ->get(['id', 'product_id', 'variant_id', 'remaining_quantity', 'cost_price', 'sell_price', 'is_used', 'imported_at'])
             ->groupBy('product_id');
 
         // Phạm vi (biến thể, 0 = cấp sản phẩm) đã từng có lô, kể cả lô đã hết hàng. Backend kiểm
@@ -161,7 +177,7 @@ class ProductController extends Controller
         $imeiPrices = ProductImei::query()
             ->whereIn('product_id', $ids)
             ->where('status', ProductImei::STATUS_IN_STOCK)
-            ->selectRaw('product_id, MIN(NULLIF(sell_price, 0)) as price_min, MAX(sell_price) as price_max, MIN(NULLIF(cost_price, 0)) as cost_min, MAX(cost_price) as cost_max')
+            ->selectRaw('product_id, MIN(NULLIF(sell_price, 0)) as price_min, MAX(sell_price) as price_max, MIN(NULLIF(cost_price, 0)) as cost_min, MAX(cost_price) as cost_max, COUNT(*) as total_count, SUM(CASE WHEN is_used = 1 THEN 1 ELSE 0 END) as used_count')
             ->groupBy('product_id')
             ->get()
             ->keyBy('product_id');
@@ -206,6 +222,8 @@ class ProductController extends Controller
                 'price_max' => $priceMax,
                 'cost_price_min' => $costMin,
                 'cost_price_max' => $costMax,
+                'imei_in_stock_count' => $isImei ? (int) ($prices->total_count ?? 0) : 0,
+                'imei_used_count' => $isImei ? (int) ($prices->used_count ?? 0) : 0,
                 'unit_id' => $product->unit_id,
                 'unit_name' => $unitName,
                 'unit' => $product->unit,
@@ -234,16 +252,39 @@ class ProductController extends Controller
                 // IMEI tự quản lý giá theo từng máy nên không có lô FIFO.
                 'stock_batches' => $isImei
                     ? []
-                    : ($batches->get($product->id) ?? collect())->map(fn ($batch): array => [
-                        'id' => $batch->id,
-                        'product_id' => $batch->product_id,
-                        'variant_id' => $batch->variant_id,
-                        'remaining_quantity' => (int) $batch->remaining_quantity,
-                        'cost_price' => (float) $batch->cost_price,
-                        'sell_price' => (float) $batch->sell_price,
-                        'imported_at' => $batch->imported_at?->toDateString(),
-                    ])->values(),
+                    : $this->mergeBatchesBySellPrice($batches->get($product->id) ?? collect()),
             ];
         });
+    }
+    /**
+     * Gộp các lô cùng biến thể, cùng giá bán và cùng tình trạng (mới/cũ) thành một dòng để POS không
+     * tách nhiều dòng giống hệt nhau. Dòng gộp lấy id và giá vốn của lô cũ nhất, số lượng là tổng.
+     * Server vẫn trừ kho theo FIFO từng lô nên việc gộp ở đây chỉ ảnh hưởng cách hiển thị và chọn hàng.
+     *
+     * @param  Collection<int, ProductStockBatch>  $batches
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function mergeBatchesBySellPrice(Collection $batches): Collection
+    {
+        return $batches
+            ->sortBy('id')
+            ->groupBy(fn (ProductStockBatch $batch): string => ((int) $batch->variant_id).'|'.number_format((float) $batch->sell_price, 2, '.', '').'|'.($batch->is_used ? '1' : '0'))
+            ->map(function (Collection $group): array {
+                $first = $group->first();
+
+                return [
+                    'id' => $first->id,
+                    'product_id' => $first->product_id,
+                    'variant_id' => $first->variant_id,
+                    'remaining_quantity' => (int) $group->sum('remaining_quantity'),
+                    'cost_price' => (float) $first->cost_price,
+                    'sell_price' => (float) $first->sell_price,
+                    'is_used' => (bool) $first->is_used,
+                    'imported_at' => $first->imported_at?->toDateString(),
+                    'batch_ids' => $group->pluck('id')->values(),
+                ];
+            })
+            ->sortBy('id')
+            ->values();
     }
 }

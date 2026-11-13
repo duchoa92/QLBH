@@ -542,6 +542,7 @@ class StockImportService
                         'remaining_quantity' => $baseQuantity,
                         'cost_price' => round($costPrice / $conversionFactor, 2),
                         'sell_price' => $sellPrice ?? 0,
+                        'is_used' => $isUsed,
                         'imported_at' => $import->import_date,
                     ]);
 

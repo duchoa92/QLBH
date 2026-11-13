@@ -1,12 +1,12 @@
 <script setup>
-import { computed, ref, onBeforeUnmount } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useProductSearch } from '@/Modules/POS/Product/Composables/useProductSearch'
 import { toast } from 'vue-sonner'
 import { productService } from '@/Modules/POS/Product/Services/productService'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
-import { RotateCw, Search, PackageX, Loader2 } from 'lucide-vue-next'
+import { RotateCw, Search, PackageX, Loader2, ArrowUpDown, ChevronDown, Check, LayoutGrid } from 'lucide-vue-next'
 import { formatCurrency } from '@/utils/format'
 
 
@@ -32,6 +32,7 @@ const costPriceSuggestionEnabled = computed(() => page.props.settings?.pos_cost_
 const {
     keyword,
     categoryId,
+    sort,
     products,
     categories,
     loading,
@@ -194,6 +195,24 @@ const availableBatches = (product) => {
         if (remainingQuantity > 0) available.push({ ...batch, remaining_quantity: remainingQuantity })
         return available
     }, [])
+}
+
+// Hàng cũ (nhập từ khách) phải nhận biết được ngay ở danh sách: toàn bộ còn lại là hàng cũ thì ghi "Cũ",
+// vừa có hàng mới vừa có hàng cũ thì ghi "Có hàng cũ".
+const usedStockLabel = (product) => {
+    let total
+    let usedCount
+    if (product.has_imei || product.manage_stock_by_serial) {
+        total = Number(product.imei_in_stock_count || 0)
+        usedCount = Number(product.imei_used_count || 0)
+    } else {
+        const batches = availableBatches(product)
+        total = batches.length
+        usedCount = batches.filter(batch => batch.is_used).length
+    }
+    if (!total || usedCount === 0) return ''
+
+    return usedCount >= total ? 'Cũ' : 'Có hàng cũ'
 }
 
 const priceLabel = (product) => {
@@ -359,6 +378,46 @@ const refreshProducts = () => {
     loadProducts()
 }
 
+// Hai menu thu gọn (danh mục, sắp xếp) nằm cùng một hàng; chỉ mở một menu mỗi lúc
+const SORT_OPTIONS = [
+    { value: '', label: 'Tên A → Z' },
+    { value: 'name_desc', label: 'Tên Z → A' },
+    { value: 'best_selling', label: 'Bán chạy nhất' },
+    { value: 'newest', label: 'Mới thêm' },
+    { value: 'price_asc', label: 'Giá thấp → cao' },
+    { value: 'price_desc', label: 'Giá cao → thấp' },
+    { value: 'stock_desc', label: 'Tồn kho nhiều' },
+]
+
+const openMenu = ref(null) // 'category' | 'sort' | null
+const filterBar = ref(null)
+
+const toggleMenu = (name) => { openMenu.value = openMenu.value === name ? null : name }
+
+const pickCategory = (value) => {
+    categoryId.value = value
+    openMenu.value = null
+}
+
+const pickSort = (value) => {
+    sort.value = value
+    openMenu.value = null
+}
+
+const onDocumentPointerDown = (event) => {
+    if (openMenu.value && filterBar.value && !filterBar.value.contains(event.target)) openMenu.value = null
+}
+const onKeydown = (event) => { if (event.key === 'Escape') openMenu.value = null }
+
+onMounted(() => {
+    document.addEventListener('pointerdown', onDocumentPointerDown)
+    document.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+    document.removeEventListener('pointerdown', onDocumentPointerDown)
+    document.removeEventListener('keydown', onKeydown)
+})
+
 const categoryOptions = computed(() => [
     {
         value: '',
@@ -369,6 +428,11 @@ const categoryOptions = computed(() => [
         label: category.name,
     })),
 ])
+
+const selectedCategoryLabel = computed(() => categoryOptions.value
+    .find(category => String(category.value || '') === String(categoryId.value || ''))?.label || 'Tất cả danh mục')
+
+const selectedSortLabel = computed(() => SORT_OPTIONS.find(option => option.value === (sort.value || ''))?.label || SORT_OPTIONS[0].label)
 </script>
 
 <template>
@@ -400,20 +464,80 @@ const categoryOptions = computed(() => [
                 </button>
             </div>
 
-            <!-- LỌC DANH MỤC DẠNG CHIP -->
-            <div class="pos-category-scroll mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" aria-label="Lọc theo danh mục">
-                <button
-                    v-for="category in categoryOptions"
-                    :key="category.value || 'all'"
-                    type="button"
-                    class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors"
-                    :class="String(categoryId || '') === String(category.value || '')
-                        ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'"
-                    @click="categoryId = category.value"
-                >
-                    {{ category.label }}
-                </button>
+            <!-- DANH MỤC + SẮP XẾP: cùng một hàng, đều thu gọn thành menu -->
+            <div ref="filterBar" class="mt-2 grid grid-cols-2 items-center gap-2 sm:flex">
+
+                <!-- Danh mục -->
+                <div class="relative min-w-0 sm:flex-1">
+                    <button
+                        type="button"
+                        class="flex h-9 w-full items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors"
+                        :class="categoryId ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50'"
+                        aria-haspopup="listbox"
+                        :aria-expanded="openMenu === 'category'"
+                        title="Lọc theo danh mục"
+                        @click="toggleMenu('category')"
+                    >
+                        <LayoutGrid class="h-3.5 w-3.5 shrink-0" />
+                        <span class="min-w-0 flex-1 truncate text-left">{{ selectedCategoryLabel }}</span>
+                        <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform" :class="openMenu === 'category' ? 'rotate-180' : ''" />
+                    </button>
+
+                    <div
+                        v-if="openMenu === 'category'"
+                        role="listbox"
+                        class="absolute left-0 top-full z-30 mt-1 max-h-64 w-full min-w-[12rem] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                    >
+                        <button
+                            v-for="category in categoryOptions"
+                            :key="category.value || 'all'"
+                            type="button"
+                            role="option"
+                            class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-blue-50"
+                            :class="String(categoryId || '') === String(category.value || '') ? 'font-bold text-blue-700' : 'text-slate-700'"
+                            @click="pickCategory(category.value)"
+                        >
+                            <span class="truncate">{{ category.label }}</span>
+                            <Check v-if="String(categoryId || '') === String(category.value || '')" class="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sắp xếp -->
+                <div class="relative min-w-0 sm:shrink-0">
+                    <button
+                        type="button"
+                        class="flex h-9 w-full items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors sm:w-auto"
+                        :class="sort ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50'"
+                        aria-haspopup="listbox"
+                        :aria-expanded="openMenu === 'sort'"
+                        title="Sắp xếp sản phẩm"
+                        @click="toggleMenu('sort')"
+                    >
+                        <ArrowUpDown class="h-3.5 w-3.5 shrink-0" />
+                        <span class="min-w-0 flex-1 truncate text-left sm:max-w-[7rem] sm:flex-none">{{ selectedSortLabel }}</span>
+                        <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform" :class="openMenu === 'sort' ? 'rotate-180' : ''" />
+                    </button>
+
+                    <div
+                        v-if="openMenu === 'sort'"
+                        role="listbox"
+                        class="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                    >
+                        <button
+                            v-for="option in SORT_OPTIONS"
+                            :key="option.value || 'default'"
+                            type="button"
+                            role="option"
+                            class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-blue-50"
+                            :class="(sort || '') === option.value ? 'font-bold text-blue-700' : 'text-slate-700'"
+                            @click="pickSort(option.value)"
+                        >
+                            <span>{{ option.label }}</span>
+                            <Check v-if="(sort || '') === option.value" class="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -494,6 +618,14 @@ const categoryOptions = computed(() => [
                             {{ displayedPriceLabel(product) }}
                         </div>
 
+                        <!-- BADGE HÀNG CŨ -->
+                        <div
+                            v-if="usedStockLabel(product)"
+                            class="pointer-events-none absolute left-2 top-2 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-800 shadow-sm"
+                        >
+                            {{ usedStockLabel(product) }}
+                        </div>
+
                         <!-- BADGE LOẠI SẢN PHẨM -->
                         <div
                             v-if="product.product_type === 'imei' || product.manage_stock_by_serial"
@@ -560,8 +692,6 @@ const categoryOptions = computed(() => [
     user-select: none;
 }
 
-.pos-category-scroll { scrollbar-width: none; }
-.pos-category-scroll::-webkit-scrollbar { display: none; }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 </style>

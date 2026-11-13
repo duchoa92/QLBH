@@ -37,6 +37,12 @@ return new class extends Migration
                 ->nullable()
                 ->constrained()
                 ->nullOnDelete();
+            $table->boolean('has_unit_conversion')->default(false);
+            $table->foreignId('conversion_unit_id')
+                ->nullable()
+                ->constrained('units')
+                ->nullOnDelete();
+            $table->unsignedInteger('conversion_factor')->default(1);
 
             /*
             |--------------------------------------------------------------------------
@@ -57,9 +63,7 @@ return new class extends Migration
 
             $table->string('sku')->nullable()->unique();
 
-            $table->string('barcode')
-                ->nullable()
-                ->unique();
+            $table->string('model')->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -141,8 +145,7 @@ return new class extends Migration
             |--------------------------------------------------------------------------
             */
 
-            $table->unsignedInteger('stock')
-                ->default(0);
+            $table->integer('stock')->default(0);
 
             $table->unsignedBigInteger('sold_count')
                 ->default(0);
@@ -187,7 +190,7 @@ return new class extends Migration
 
             $table->index('sku');
 
-            $table->index('barcode');
+            $table->index('model');
 
             $table->index('product_type');
 

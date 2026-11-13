@@ -83,9 +83,16 @@ const normalizeTabs = (raw) => {
 export function useCart() {
     const page = usePage()
     const allowsNegativeStock = computed(() => [true, 1, '1', 'true', 'on'].includes(page.props.settings?.allow_negative_stock))
-    const defaultVatSelection = product => Boolean(page.props.settings?.pos_vat_default_enabled)
-        && !product.is_used
-        && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
+    const usedVatEnabled = computed(() => Boolean(page.props.settings?.pos_vat_used_enabled))
+    // Hàng cũ chỉ tính VAT khi cửa hàng cho phép; khi cho phép thì có mặc định chọn riêng.
+    const defaultVatSelection = product => {
+        if (product.is_used) {
+            return usedVatEnabled.value && Boolean(page.props.settings?.pos_vat_used_default)
+        }
+
+        return Boolean(page.props.settings?.pos_vat_default_enabled)
+            && (page.props.settings?.pos_vat_default_scope !== 'vat_products' || Boolean(product.has_vat))
+    }
 
     const normalizedStockLimit = value => {
         const stock = Number(value)
@@ -144,6 +151,14 @@ export function useCart() {
         || (product.batch_scopes || []).some(scope => Number(scope) === Number(variantId || 0))
 
     const applyBatchToItem = (item, product, batch) => {
+        if (batch) {
+            // Hàng cũ không chịu VAT và phải luôn hiện nhãn "CŨ" theo đúng lô đang bán.
+            item.is_used = Boolean(batch.is_used)
+            if (item.is_used) {
+                item.has_vat = false
+                if (!usedVatEnabled.value) item.apply_vat = false
+            }
+        }
         item.stock_batches = product.stock_batches || item.stock_batches || []
         item.batch_id = batch?.id ?? null
         item.batch_quantity_limit = batch ? Number(batch.remaining_quantity || 0) : null
@@ -729,10 +744,10 @@ export function useCart() {
                 name:
                     product.name,
 
-                has_vat: Boolean(product.has_vat),
+                has_vat: Boolean(product.has_vat) && !batch?.is_used,
 
-                is_used: Boolean(product.is_used),
-                apply_vat: defaultVatSelection(product),
+                is_used: Boolean(batch?.is_used ?? product.is_used),
+                apply_vat: defaultVatSelection({ ...product, is_used: Boolean(batch?.is_used ?? product.is_used) }),
                 tax_percent: Number(product.tax_percent || 0),
 
                 warranty_days:
@@ -820,10 +835,10 @@ export function useCart() {
             name:
                 product.name,
 
-            has_vat: Boolean(product.has_vat),
+            has_vat: Boolean(product.has_vat) && !batch?.is_used,
 
-            is_used: Boolean(product.is_used),
-            apply_vat: defaultVatSelection(product),
+            is_used: Boolean(batch?.is_used ?? product.is_used),
+            apply_vat: defaultVatSelection({ ...product, is_used: Boolean(batch?.is_used ?? product.is_used) }),
             tax_percent: Number(product.tax_percent || 0),
 
             warranty_days:

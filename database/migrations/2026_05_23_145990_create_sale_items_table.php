@@ -28,6 +28,10 @@ return new class extends Migration
             $table->foreignId('product_id')
                 ->constrained()
                 ->cascadeOnDelete();
+            $table->foreignId('variant_id')
+                ->nullable()
+                ->constrained('product_variants')
+                ->nullOnDelete();
 
             $table->foreignId('product_imei_id')
                 ->nullable()
@@ -50,6 +54,8 @@ return new class extends Migration
 
             $table->integer('quantity')
                 ->default(1);
+            $table->unsignedInteger('base_quantity')->default(1);
+            $table->unsignedInteger('conversion_factor')->default(1);
 
             /*
             |--------------------------------------------------------------------------
@@ -62,6 +68,7 @@ return new class extends Migration
                 15,
                 2
             );
+            $table->decimal('unit_cost', 15, 2)->nullable();
 
             $table->decimal(
                 'discount',
@@ -74,6 +81,8 @@ return new class extends Migration
                 15,
                 2
             )->default(0);
+            $table->boolean('has_vat')->default(false);
+            $table->boolean('vat_applied')->default(false);
 
             $table->decimal(
                 'subtotal',
@@ -98,6 +107,10 @@ return new class extends Migration
                 15,
                 2
             )->default(0);
+            $table->unsignedInteger('warranty_days')->default(0);
+            $table->unsignedInteger('warranty_value')->nullable();
+            $table->string('warranty_unit', 12)->nullable();
+            $table->text('warranty_note')->nullable();
 
             $table->timestamps();
         });

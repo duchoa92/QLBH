@@ -31,7 +31,7 @@ class ProductsTemplateSheet extends DefaultValueBinder implements FromArray, Wit
         return [
             [1, 'Camera Ezviz H8C 2K', 'CAM-EZVIZ-H8C', 'H8C', 'Camera', 'Ezviz', 650000, 520000, 0, 'Cái', 'imei', 1, 1, '', 'Sản phẩm quản lý IMEI: để tồn kho = 0, nhập hàng qua phiếu nhập.'],
             [2, 'Dây mạng Cat6 UTP', 'DAY-CAT6', '', 'Phụ kiện', '', 5000, 3000, 100, 'Mét', 'normal', 0, 1, '', 'Hàng thường có tồn đầu kỳ 100 mét (tự tạo lô tồn đầu kỳ).'],
-            [3, 'Công lắp đặt camera', 'DV-LAP-CAM', '', 'Dịch vụ', '', 200000, 0, 0, 'Lần', 'service', 0, 1, '', 'Dịch vụ: không có tồn kho.'],
+            [3, 'Công lắp đặt camera', '', '', 'Dịch vụ', '', 200000, 0, 0, 'Lần', 'service', 0, 1, '', 'Dịch vụ, để trống SKU: hệ thống tự tạo (vd. DV-0001).'],
             [4, 'Củ sạc 20W (ngừng bán)', 'SAC-20W', '20W-PD', 'Phụ kiện', 'Anker', 250000, 150000, 0, 'Cái', 'normal', 0, 0, '', 'Trạng thái 0 = ngừng kinh doanh.'],
         ];
     }

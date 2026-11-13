@@ -1,14 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ClipboardList, PackageSearch, ShoppingCart, X, Store } from 'lucide-vue-next'
+import { ClipboardList, PackageSearch, ShoppingCart, Wallet, X, Store } from 'lucide-vue-next'
 import OfflineStatus from '@/Components/OfflineStatus.vue'
 
-const emit = defineEmits(['close', 'manage-shift', 'show-shift-history'])
+const emit = defineEmits(['close', 'manage-shift', 'show-shift-history', 'checkout'])
 const props = defineProps({
   cartCount: { type: Number, default: 0 },
   grandTotal: { type: Number, default: 0 },
   shift: { type: Object, default: null },
   openingCountEnabled: { type: Boolean, default: true },
+  checkoutLoading: { type: Boolean, default: false },
 })
 const mobilePanel = ref('products')
 const cartButton = ref(null)
@@ -146,7 +147,21 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
         <PackageSearch class="h-4 w-4 shrink-0" />
         <span>Sản phẩm</span>
       </button>
-      <button ref="cartButton" type="button" class="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-lg px-3 text-xs font-semibold transition" :class="[mobilePanel === 'cart' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100', cartPulse ? 'scale-[1.04] ring-2 ring-blue-300' : '']" @click="showCart">
+      <!-- Đang ở giỏ hàng: nút Thanh toán thay chỗ nút Giỏ hàng -->
+      <button
+        v-if="mobilePanel === 'cart'"
+        type="button"
+        :disabled="cartCount === 0 || checkoutLoading"
+        class="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white shadow-md shadow-blue-200 transition active:scale-[0.98] hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+        @click="emit('checkout')"
+      >
+        <span class="flex min-w-0 items-center gap-1.5 uppercase tracking-wide">
+          <Wallet class="h-4 w-4 shrink-0" />
+          <span class="truncate">Thanh toán</span>
+        </span>
+        <span class="shrink-0 rounded-md border border-white/30 bg-white/15 px-2 py-0.5 text-[12px] font-extrabold tabular-nums">{{ formattedTotal }}</span>
+      </button>
+      <button v-else ref="cartButton" type="button" class="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-lg px-3 text-xs font-semibold transition" :class="[mobilePanel === 'cart' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100', cartPulse ? 'scale-[1.04] ring-2 ring-blue-300' : '']" @click="showCart">
         <span class="flex min-w-0 items-center gap-1.5">
           <ShoppingCart class="h-4 w-4 shrink-0" />
           <span class="truncate">Giỏ hàng</span>

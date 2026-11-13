@@ -9,7 +9,7 @@ class ProductImportColumns
     public const HEADINGS = [
         'STT',
         'Tên sản phẩm*',
-        'SKU*',
+        'SKU',
         'Model',
         'Danh mục*',
         'Thương hiệu',
@@ -27,7 +27,6 @@ class ProductImportColumns
     /** Cột bắt buộc phải có trong file (field => tên hiển thị). */
     public const REQUIRED = [
         'name' => 'Tên sản phẩm',
-        'sku' => 'SKU',
         'category' => 'Danh mục',
         'sell_price' => 'Giá bán',
     ];
@@ -57,6 +56,41 @@ class ProductImportColumns
             ...array_slice(self::HEADINGS, 1),
             'Lỗi',
         ];
+    }
+
+    /**
+     * File không có dòng tiêu đề (dữ liệu bắt đầu ngay dòng 1): đọc theo thứ tự cột của file mẫu.
+     * Có cột STT đầu tiên (ô đầu là số thứ tự, ô thứ hai là chữ) thì lệch một cột.
+     *
+     * @return array{0: int, 1: array<string, int>}|null [-1 (không có dòng tiêu đề), bản đồ cột]; null nếu file trống/quá ít cột
+     */
+    public static function headerlessMap(array $rows): ?array
+    {
+        foreach ($rows as $row) {
+            $row = array_values((array) $row);
+
+            if (! array_filter($row, fn ($cell) => $cell !== null && trim((string) $cell) !== '')) {
+                continue;
+            }
+
+            if (count($row) < 3) {
+                return null;
+            }
+
+            $first = trim((string) ($row[0] ?? ''));
+            $second = trim((string) ($row[1] ?? ''));
+            $offset = preg_match('/^\d{1,5}(\.0+)?$/', $first) && $second !== '' && ! is_numeric($second) ? 1 : 0;
+
+            $map = [];
+
+            foreach (array_keys(self::ALIASES) as $position => $field) {
+                $map[$field] = $position + $offset;
+            }
+
+            return [-1, $map];
+        }
+
+        return null;
     }
 
     public static function headerMap(array $header): array
@@ -98,7 +132,8 @@ class ProductImportColumns
         foreach (array_slice($rows, 0, 10, true) as $index => $row) {
             $map = self::headerMap(array_values((array) $row));
 
-            if (isset($map['name'], $map['sku'])) {
+            // SKU không bắt buộc (để trống thì hệ thống tự tạo) nên dòng tiêu đề cần "Tên" và một cột đặc trưng khác.
+            if (isset($map['name']) && (isset($map['sku']) || isset($map['category']) || isset($map['sell_price']))) {
                 return [(int) $index, $map];
             }
         }

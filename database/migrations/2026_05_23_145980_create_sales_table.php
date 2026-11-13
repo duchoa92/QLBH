@@ -55,12 +55,14 @@ return new class extends Migration
                 15,
                 2
             )->default(0);
+            $table->decimal('invoice_discount', 15, 2)->default(0);
 
             $table->decimal(
                 'tax',
                 15,
                 2
             )->default(0);
+            $table->decimal('extra_fee', 15, 2)->default(0);
 
             $table->decimal(
                 'grand_total',
@@ -79,6 +81,8 @@ return new class extends Migration
                 15,
                 2
             )->default(0);
+            $table->decimal('cash_received_amount', 15, 2)->default(0);
+            $table->decimal('bank_received_amount', 15, 2)->default(0);
 
             $table->decimal(
                 'change_amount',
@@ -88,6 +92,7 @@ return new class extends Migration
 
             $table->string('payment_method')
                 ->default('cash');
+            $table->string('bank_account', 50)->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -97,6 +102,8 @@ return new class extends Migration
 
             $table->string('status')
                 ->default('completed');
+            $table->text('cancel_reason')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
 
             /*
             |--------------------------------------------------------------------------

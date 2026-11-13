@@ -28,7 +28,8 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <div class="shrink-0 bg-white p-1.5">
+    <!-- Mobile: nút thanh toán nằm ở thanh điều hướng dưới cùng (PosLayout) -->
+    <div class="hidden shrink-0 bg-white p-1.5 lg:block">
         <button
             :disabled="cart.length === 0 || loading"
             @click="emit('checkout')"

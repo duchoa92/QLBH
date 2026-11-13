@@ -21,6 +21,7 @@ return new class extends Migration
 
             $table->string('source_type')->nullable();
             $table->unsignedBigInteger('source_id')->nullable();
+            $table->string('payment_method')->nullable();
 
             $table->text('note')->nullable();
 

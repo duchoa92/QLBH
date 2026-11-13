@@ -120,6 +120,12 @@ class BackupController extends Controller
                 'files_by_disk' => $contents['files_by_disk'] ?? [],
                 'uploaded_file_details' => $contents['uploaded_file_details'] ?? [],
                 'uploaded_file_details_omitted' => $contents['uploaded_file_details_omitted'] ?? 0,
+                'referenced_images' => $contents['referenced_images'] ?? null,
+                'missing_referenced_images' => $contents['missing_referenced_images'] ?? null,
+                'missing_referenced_image_examples' => $contents['missing_referenced_image_examples'] ?? [],
+                'image_warning' => ($contents['missing_referenced_images'] ?? 0) > 0
+                    ? 'Có '.$contents['missing_referenced_images'].' ảnh được dữ liệu tham chiếu nhưng không tìm thấy trong thư mục lưu trữ nên chưa vào bản sao lưu (xem ví dụ đường dẫn bên dưới).'
+                    : null,
                 'cloud_destinations' => $uploadedCloudDestinations,
                 'cloud_failures' => $cloudFailures,
             ]);

@@ -17,7 +17,7 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import Form from './Form.vue'
 import ProductImeisModal from './ProductImeisModal.vue'
 import ProductDetailModal from './ProductDetailModal.vue'
-import { ArrowUpDown, DollarSign, Plus, Printer, SquarePen, Trash2 } from 'lucide-vue-next'
+import { DollarSign, Download, Plus, Printer, SquarePen, Trash2, Upload } from 'lucide-vue-next'
 import { useConfirm } from '@/Composables/useConfirm'
 import { closeModal, openModal, registerUrlModal } from '@/Stores/modal'
 import TrashModal from '@/Components/TrashModal.vue'
@@ -29,7 +29,8 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import Tooltip from '@/Components/UI/Tooltip.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
-import ImportExportModal from './ImportExportModal.vue'
+import ImportModal from './ImportModal.vue'
+import ExportModal from './ExportModal.vue'
 import BulkPriceUpdateModal from './BulkPriceUpdateModal.vue'
 import { useReferenceData } from '@/Stores/referenceData'
 import { imageUrl } from '@/utils/imageUrl'
@@ -320,14 +321,18 @@ watch(per_page, (val) => {
 })
  
  
-// nhập xuất file
-const openImportExport = () => {
-    openModal(ImportExportModal, {
+// nhập file / xuất file (hai giao diện riêng)
+const openImport = () => {
+    openModal(ImportModal, {
         props: {
             endpoint: 'products'
         },
         onUpdated: loadData
     })
+}
+
+const openExport = () => {
+    openModal(ExportModal)
 }
  
 const formatMoney = formatCurrency
@@ -395,7 +400,8 @@ const openImeiList = (row) => {
         <template #search-end><BarcodeCameraButton class="absolute right-8 top-1/2 z-10 -translate-y-1/2" @scanned="(code) => search = code" /></template>
         <template #actions>
             <ActionButton @click="openCreate"><Plus :size="16" />Thêm sản phẩm</ActionButton>
-            <ActionButton variant="secondary" @click="openImportExport"><ArrowUpDown :size="16" />Nhập / xuất</ActionButton>
+            <ActionButton variant="secondary" @click="openImport"><Upload :size="16" />Nhập file</ActionButton>
+            <ActionButton variant="secondary" @click="openExport"><Download :size="16" />Xuất file</ActionButton>
             <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
         </template>
     </ListToolbar>

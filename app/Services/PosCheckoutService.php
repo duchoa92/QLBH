@@ -62,8 +62,10 @@ class PosCheckoutService
             |--------------------------------------------------------------------------
             */
 
-            // Sản phẩm cũ không chịu VAT: không tin cờ apply_vat từ client với IMEI đã nhập là hàng cũ.
-            $usedImeiIds = ProductImei::query()
+            // Hàng cũ mặc định không chịu VAT (trừ khi cửa hàng bật tính VAT cho hàng cũ):
+            // không tin cờ apply_vat từ client với IMEI đã nhập là hàng cũ.
+            $usedVatEnabled = filter_var(setting('pos_vat_used_enabled', false), FILTER_VALIDATE_BOOLEAN);
+            $usedImeiIds = $usedVatEnabled ? [] : ProductImei::query()
                 ->whereIn('id', collect($items)->pluck('imei_id')->filter()->unique())
                 ->where('is_used', true)
                 ->pluck('id')
@@ -305,7 +307,7 @@ class PosCheckoutService
                         $lineDiscount,
 
                     'has_vat' => ! ($imei?->is_used) && in_array((int) $product->id, $vatProductIds, true),
-                    'vat_applied' => ! ($imei?->is_used) && filter_var($item['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'vat_applied' => (! ($imei?->is_used) || $usedVatEnabled) && filter_var($item['apply_vat'] ?? false, FILTER_VALIDATE_BOOLEAN),
 
                     'subtotal' =>
                         $lineTotal - $lineDiscount,

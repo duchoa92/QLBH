@@ -22,6 +22,13 @@ export function useProductSearch(emit) {
 
     const categoryId = ref('')
 
+    // Kiểu sắp xếp: nhớ lại lựa chọn lần trước của người bán trên thiết bị này
+    const SORT_STORAGE_KEY = 'pos_product_sort'
+    const readSavedSort = () => {
+        try { return localStorage.getItem(SORT_STORAGE_KEY) || '' } catch { return '' }
+    }
+    const sort = ref(readSavedSort())
+
     const products = ref([])
 
     const { categories } = useReferenceData()
@@ -58,7 +65,8 @@ export function useProductSearch(emit) {
             const response =
                 await productService.search(
                     keyword.value,
-                    categoryId.value
+                    categoryId.value,
+                    sort.value
                 )
 
             // Chỉ phản hồi mới nhất được phép thay catalog. Nếu phản hồi cũ
@@ -67,7 +75,7 @@ export function useProductSearch(emit) {
 
             products.value = response
             if (Array.isArray(response) && response.length) {
-                await cacheOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}`, response).catch(() => {})
+                await cacheOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}|${sort.value}`, response).catch(() => {})
             }
 
             /*
@@ -102,7 +110,7 @@ export function useProductSearch(emit) {
             }
 
         } catch (error) {
-            const cached = await readOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}`).catch(() => null)
+            const cached = await readOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}|${sort.value}`).catch(() => null)
             if (requestId !== latestRequest) return
             products.value = cached?.products || []
 
@@ -157,6 +165,12 @@ export function useProductSearch(emit) {
         }
     )
 
+    // Đổi cách sắp xếp: lưu lại và tải ngay (không cần chờ gõ phím)
+    watch(sort, (value) => {
+        try { localStorage.setItem(SORT_STORAGE_KEY, value || '') } catch { /* bỏ qua */ }
+        loadProducts()
+    })
+
     /*
     |--------------------------------------------------------------------------
     | MOUNT
@@ -205,6 +219,8 @@ export function useProductSearch(emit) {
         keyword,
 
         categoryId,
+
+        sort,
 
         products,
 

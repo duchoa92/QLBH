@@ -24,9 +24,20 @@ return new class extends Migration
             $table->foreignId('product_id')
                 ->constrained()
                 ->cascadeOnDelete();
+            $table->foreignId('product_imei_id')
+                ->nullable()
+                ->constrained('product_imeis')
+                ->nullOnDelete();
+            $table->foreignId('variant_id')
+                ->nullable()
+                ->constrained('product_variants')
+                ->nullOnDelete();
 
             $table->integer('quantity')
                 ->default(1);
+            $table->decimal('unit_cost', 15, 2)->nullable();
+            $table->unsignedInteger('base_quantity')->default(1);
+            $table->unsignedInteger('conversion_factor')->default(1);
 
             $table->timestamps();
         });

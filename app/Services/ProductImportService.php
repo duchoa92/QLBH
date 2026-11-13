@@ -5,9 +5,12 @@ namespace App\Services;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductStockBatch;
 use App\Models\Unit;
+use App\Services\Product\ProductService;
 use App\Services\Stock\OpeningStockBatchService;
 use App\Support\ProductImportColumns;
+use App\Support\ProductImportOptions;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\File;
@@ -49,35 +52,71 @@ class ProductImportService
     /** @var array<string, Unit> */
     private array $units = [];
 
-    public function __construct(private readonly OpeningStockBatchService $openingStock)
+    /** Ghi chú cho người dùng sau khi đọc file (vd. file không có dòng tiêu đề). */
+    public ?string $notice = null;
+
+    public function __construct(
+        private readonly OpeningStockBatchService $openingStock,
+        private readonly ProductService $productService,
+    ) {
+    }
+
+    /**
+     * Kiểm tra file theo các lựa chọn của người dùng, trả về từng dòng kèm hành động sẽ làm:
+     * create (thêm mới) | update (cập nhật sản phẩm có sẵn) | skip (bỏ qua) | error (lỗi).
+     *
+     * @param array<int, mixed> $images UploadedFile hoặc ['name' => ..., 'path' => ...]
+     * @param array<int, int|string> $skipRows Số dòng (theo file Excel) người dùng chọn bỏ qua
+     */
+    public function preview(array $rows, array $images = [], ?ProductImportOptions $options = null, array $skipRows = []): array
     {
+        return $this->readRows($rows, $images, $options ?? new ProductImportOptions(), $skipRows)['rows'];
     }
 
     /**
      * @param array<int, mixed> $images UploadedFile hoặc ['name' => ..., 'path' => ...]
+     * @param array<int, int|string> $skipRows
      */
-    public function preview(array $rows, array $images = []): array
+    public function handle(array $rows, array $images = [], ?ProductImportOptions $options = null, array $skipRows = []): array
     {
-        return $this->readRows($rows, $images)['rows'];
-    }
+        $options ??= new ProductImportOptions();
+        $parsed = $this->readRows($rows, $images, $options, $skipRows);
 
-    /**
-     * @param array<int, mixed> $images UploadedFile hoặc ['name' => ..., 'path' => ...]
-     */
-    public function handle(array $rows, array $images = []): array
-    {
-        $parsed = $this->readRows($rows, $images);
         $errors = [];
-        $success = 0;
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
         $storedImages = [];
         $currentRow = null;
+
+        $errorRows = array_values(array_filter($parsed['rows'], fn (array $row) => $row['action'] === 'error'));
+
+        // Chế độ "dừng nếu có lỗi": không nhập gì cả khi còn dòng lỗi.
+        if ($options->onError === 'abort' && $errorRows !== []) {
+            return [
+                'success' => false,
+                'aborted' => true,
+                'count' => 0,
+                'created' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'message' => 'Có ' . count($errorRows) . ' dòng lỗi nên chưa nhập sản phẩm nào (bạn đã chọn dừng khi có lỗi).',
+                'errors' => array_map(fn (array $row) => $this->errorPayload($row, $row['status']), $errorRows),
+                'error_count' => count($errorRows),
+            ];
+        }
 
         DB::beginTransaction();
 
         try {
             foreach ($parsed['rows'] as $row) {
-                if ($row['is_error']) {
+                if ($row['action'] === 'error') {
                     $errors[] = $this->errorPayload($row, $row['status']);
+                    continue;
+                }
+
+                if ($row['action'] === 'skip') {
+                    $skipped++;
                     continue;
                 }
 
@@ -86,15 +125,41 @@ class ProductImportService
                 $category = $this->findOrCreateCategory($row['category']);
                 $brand = $this->findOrCreateBrand($row['brand'], $category);
                 $unit = $this->findOrCreateUnit($row['unit']);
-                $isImei = $row['type'] === 'imei';
-                $stock = $isImei ? 0 : (int) ($row['stock'] === '' ? 0 : $row['stock']);
                 $cost = $row['cost_price'] !== '' ? (float) $row['cost_price'] : 0.0;
                 $sell = (float) $row['sell_price'];
+                $imageSource = $parsed['image_sources'][$row['row']] ?? null;
 
-                // SKU đã được kiểm tra trùng ở bước đọc file; nếu vẫn trùng (người khác vừa tạo) thì DB báo lỗi và hoàn tác.
+                if ($row['action'] === 'update') {
+                    $product = Product::withTrashed()->find($row['existing_id']);
+
+                    if (! $product) {
+                        $errors[] = $this->errorPayload($row, 'Không tìm thấy sản phẩm để cập nhật (có thể vừa bị xóa vĩnh viễn)');
+                        continue;
+                    }
+
+                    if ($product->trashed()) {
+                        $product->restore();
+                    }
+
+                    $imagePath = $this->storeImage($imageSource, $product->sku);
+
+                    if ($imagePath !== null) {
+                        $storedImages[] = $imagePath;
+                    }
+
+                    $this->applyUpdate($product, $row, $category, $brand, $unit, $cost, $sell, $imagePath);
+                    $updated++;
+
+                    continue;
+                }
+
+                $isImei = $row['type'] === 'imei';
+                $stock = $isImei ? 0 : (int) ($row['stock'] === '' ? 0 : $row['stock']);
+
+                // SKU đã được kiểm tra trùng (hoặc tự tạo) ở bước đọc file; nếu vẫn trùng (người khác vừa tạo) thì DB báo lỗi và hoàn tác.
                 $sku = $row['sku'];
 
-                $imagePath = $this->storeImage($parsed['image_sources'][$row['row']] ?? null, $sku);
+                $imagePath = $this->storeImage($imageSource, $sku);
 
                 if ($imagePath !== null) {
                     $storedImages[] = $imagePath;
@@ -128,14 +193,17 @@ class ProductImportService
                     $this->openingStock->create($product, $stock, $cost, $sell);
                 }
 
-                $success++;
+                $created++;
             }
 
             DB::commit();
 
             return [
                 'success' => true,
-                'count' => $success,
+                'count' => $created + $updated,
+                'created' => $created,
+                'updated' => $updated,
+                'skipped' => $skipped,
                 'errors' => $errors,
                 'error_count' => count($errors),
             ];
@@ -150,7 +218,10 @@ class ProductImportService
 
             return [
                 'success' => false,
-                'count' => 0, // đã hoàn tác toàn bộ: không có sản phẩm nào được thêm
+                'count' => 0, // đã hoàn tác toàn bộ: không có sản phẩm nào được thêm/cập nhật
+                'created' => 0,
+                'updated' => 0,
+                'skipped' => 0,
                 'errors' => [[
                     'row' => $currentRow['row'] ?? '',
                     'name' => $currentRow['name'] ?? '',
@@ -162,16 +233,87 @@ class ProductImportService
         }
     }
 
+    /**
+     * Cập nhật sản phẩm có sẵn từ một dòng file. Chỉ ghi đè ô có giá trị; KHÔNG đổi tồn kho,
+     * loại sản phẩm và cờ IMEI (đổi những thứ này làm lệch tồn kho/lô hàng).
+     */
+    private function applyUpdate(Product $product, array $row, ?Category $category, ?Brand $brand, ?Unit $unit, float $cost, float $sell, ?string $imagePath): void
+    {
+        $priceChanged = (float) $product->sell_price !== $sell;
+
+        $attributes = [
+            'name' => $row['name'],
+            'category_id' => $category?->id,
+            'sell_price' => $sell,
+        ];
+
+        if ($row['model'] !== '') {
+            $attributes['model'] = $row['model'];
+        }
+
+        if ($brand) {
+            $attributes['brand_id'] = $brand->id;
+        }
+
+        if ($unit) {
+            $attributes['unit_id'] = $unit->id;
+        }
+
+        if ($row['cost_price'] !== '') {
+            $attributes['cost_price'] = $cost;
+        }
+
+        if ($row['description'] !== '') {
+            $attributes['description'] = $row['description'];
+        }
+
+        if ($row['active_given']) {
+            $attributes['is_active'] = $row['active'] === '1';
+        }
+
+        if ($imagePath !== null) {
+            $attributes['image'] = $imagePath;
+        }
+
+        $product->fill($attributes);
+        $product->setRelation('category', $category);
+
+        if ($brand) {
+            $product->setRelation('brand', $brand);
+        }
+
+        $product->save();
+
+        // Giống cập nhật giá hàng loạt: giá bán mới áp dụng cho các lô còn tồn.
+        if ($priceChanged) {
+            ProductStockBatch::query()
+                ->where('product_id', $product->id)
+                ->whereNull('variant_id')
+                ->where('remaining_quantity', '>', 0)
+                ->update(['sell_price' => $sell]);
+        }
+    }
+
     /* ------------------------------------------------------------------
      | Đọc & kiểm tra dữ liệu
      * ------------------------------------------------------------------ */
 
-    private function readRows(array $rows, array $images): array
+    private function readRows(array $rows, array $images, ProductImportOptions $options, array $skipRows): array
     {
+        $this->notice = null;
         $header = ProductImportColumns::detectHeader($rows);
 
+        // Không có dòng tiêu đề (dữ liệu bắt đầu từ dòng 1): đọc theo thứ tự cột của file mẫu và báo rõ cho người dùng.
         if ($header === null) {
-            throw new ProductImportException('Không tìm thấy dòng tiêu đề. Vui lòng dùng file mẫu (cần ít nhất cột "Tên sản phẩm" và "SKU").');
+            $header = ProductImportColumns::headerlessMap($rows);
+
+            if ($header !== null) {
+                $this->notice = 'File không có dòng tiêu đề nên dòng 1 được đọc như dữ liệu, theo thứ tự cột của file mẫu. Hãy kiểm tra cột trong bảng bên dưới; nếu sai, hãy thêm dòng tiêu đề (dùng file mẫu).';
+            }
+        }
+
+        if ($header === null) {
+            throw new ProductImportException('Không tìm thấy dòng tiêu đề. Vui lòng dùng file mẫu (cần có cột "Tên sản phẩm" và ít nhất một cột như "Danh mục", "Giá bán" hoặc "SKU").');
         }
 
         [$headerIndex, $headerMap] = $header;
@@ -181,6 +323,7 @@ class ProductImportService
             throw new ProductImportException('File thiếu cột bắt buộc: ' . implode(', ', $missing) . '. Vui lòng dùng file mẫu.');
         }
 
+        $skipLookup = array_fill_keys(array_map('intval', $skipRows), true);
         $records = [];
 
         foreach ($rows as $index => $row) {
@@ -194,7 +337,7 @@ class ProductImportService
                 continue;
             }
 
-            $records[] = $this->rowData($row, $headerMap, $index + 1);
+            $records[] = $this->rowData($row, $headerMap, $index + 1, $options);
         }
 
         if (count($records) > self::MAX_ROWS) {
@@ -206,9 +349,19 @@ class ProductImportService
         $imageIndex = $this->indexImages($this->normalizeImages($images));
         $existingSku = $this->existingProducts('sku', array_column($records, 'sku'));
 
+        // Mọi SKU người dùng tự điền trong file: SKU tự tạo phải tránh các số này.
+        $explicitSku = [];
+
+        foreach ($records as $record) {
+            if ($record['sku'] !== '') {
+                $explicitSku[$this->dupKey($record['sku'])] = true;
+            }
+        }
+
         $result = [];
         $imageSources = [];
         $seenSku = [];
+        $skuCounters = [];
         $announced = ['category' => [], 'brand' => [], 'unit' => []];
 
         foreach ($records as $data) {
@@ -216,54 +369,126 @@ class ProductImportService
             $warnings = $data['parse_warnings'];
             unset($data['parse_errors'], $data['parse_warnings']);
 
-            $errors = [...$errors, ...$this->validateFields($data)];
+            // Người dùng chọn bỏ qua dòng này: không tham gia kiểm tra trùng hay cấp SKU.
+            if (isset($skipLookup[$data['row']])) {
+                $result[] = $this->finishRow($data, 'skip', 'Bỏ qua theo lựa chọn của bạn', $warnings, null, false);
+                continue;
+            }
 
-            // Trùng trong file: dòng đầu tiên được giữ, các dòng sau báo lỗi (xem trước và nhập dùng chung luật này).
-            if ($data['sku'] !== '') {
-                $key = $this->dupKey($data['sku']);
+            [$fieldErrors, $fieldWarnings] = $this->validateFields($data, $options);
+            $errors = [...$errors, ...$fieldErrors];
+            $warnings = [...$warnings, ...$fieldWarnings];
 
-                if (isset($seenSku[$key])) {
-                    $errors[] = 'SKU trong file bị lặp (trùng dòng ' . $seenSku[$key] . ')';
-                } else {
-                    $seenSku[$key] = $data['row'];
+            // Danh mục / thương hiệu / đơn vị chưa có trong hệ thống.
+            foreach ([
+                'category' => ['danh mục', $this->categories, true],
+                'brand' => ['thương hiệu', $this->brands, false],
+                'unit' => ['đơn vị tính', $this->units, false],
+            ] as $kind => [$label, $known, $required]) {
+                $name = $data[$kind];
+                $key = $this->dupKey($name);
+
+                if ($name === '' || isset($known[$key])) {
+                    continue;
                 }
 
-                if (isset($existingSku[$key])) {
-                    $errors[] = $existingSku[$key] === 'trashed'
-                        ? 'SKU đang nằm trong thùng rác (hãy khôi phục hoặc xóa vĩnh viễn sản phẩm đó trước)'
-                        : 'SKU đã tồn tại';
+                if ($options->missingReference === 'create') {
+                    if (! isset($announced[$kind][$key])) {
+                        $announced[$kind][$key] = true;
+                        $warnings[] = 'Sẽ tạo mới ' . $label . ' "' . $name . '"';
+                    }
+
+                    continue;
+                }
+
+                $message = ucfirst($label) . ' "' . $name . '" chưa có trong hệ thống';
+
+                if ($required || $options->optionalField === 'error') {
+                    $errors[] = $message;
+                } else {
+                    $warnings[] = $message . ' → đã bỏ qua giá trị này';
+                    $data[$kind] = '';
                 }
             }
 
             if ($data['image_name'] !== '') {
                 $match = $this->matchImage($data['image_name'], $imageIndex);
 
-                if ($match['error'] !== null) {
-                    $errors[] = $match['error'];
-                } else {
+                if ($match['error'] === null) {
                     $imageSources[$data['row']] = $match['source'];
+                } elseif ($options->optionalField === 'ignore') {
+                    $warnings[] = $match['error'] . ' → nhập không kèm ảnh';
+                    $data['image_name'] = '';
+                } else {
+                    $errors[] = $match['error'];
                 }
             }
 
-            foreach ([
-                'category' => [$data['category'], $this->categories, 'danh mục'],
-                'brand' => [$data['brand'], $this->brands, 'thương hiệu'],
-                'unit' => [$data['unit'], $this->units, 'đơn vị tính'],
-            ] as $kind => [$name, $known, $label]) {
-                $key = $this->dupKey($name);
+            // SKU: trùng trong file, trùng hệ thống, hoặc để trống (tự tạo).
+            $action = 'create';
+            $skipReason = null;
+            $existingId = null;
+            $needAuto = $data['sku'] === '';
+            $skuAuto = $needAuto;
 
-                if ($name !== '' && ! isset($known[$key]) && ! isset($announced[$kind][$key])) {
-                    $announced[$kind][$key] = true;
-                    $warnings[] = 'Sẽ tạo mới ' . $label . ' "' . $name . '"';
+            if ($data['sku'] !== '') {
+                $key = $this->dupKey($data['sku']);
+
+                if (isset($seenSku[$key])) {
+                    if ($options->duplicateInFile === 'error') {
+                        $errors[] = 'SKU trong file bị lặp (trùng dòng ' . $seenSku[$key] . ')';
+                    } elseif ($options->duplicateInFile === 'skip') {
+                        $action = 'skip';
+                        $skipReason = 'SKU lặp trong file (trùng dòng ' . $seenSku[$key] . '), bỏ qua dòng này';
+                    } else {
+                        $needAuto = true;
+                        $skuAuto = true;
+                        $warnings[] = 'SKU "' . $data['sku'] . '" lặp trong file (trùng dòng ' . $seenSku[$key] . '), đã tạo SKU mới';
+                    }
+                } else {
+                    $seenSku[$key] = $data['row'];
+
+                    if (isset($existingSku[$key])) {
+                        $existing = $existingSku[$key];
+                        $trashed = $existing['state'] === 'trashed';
+
+                        if ($options->duplicateSku === 'error') {
+                            $errors[] = $trashed
+                                ? 'SKU đang nằm trong thùng rác (hãy khôi phục, xóa vĩnh viễn, hoặc chọn cách xử lý SKU trùng ở trên)'
+                                : 'SKU đã tồn tại';
+                        } elseif ($options->duplicateSku === 'skip') {
+                            $action = 'skip';
+                            $skipReason = $trashed ? 'SKU đang trong thùng rác, bỏ qua dòng này' : 'SKU đã tồn tại, bỏ qua dòng này';
+                        } elseif ($options->duplicateSku === 'update') {
+                            $action = 'update';
+                            $existingId = $existing['id'];
+                            $warnings[] = $trashed
+                                ? 'Sản phẩm đang trong thùng rác: sẽ khôi phục và cập nhật'
+                                : 'Sẽ cập nhật sản phẩm có sẵn (không đổi tồn kho)';
+
+                            if ($data['stock'] !== '' && (float) $data['stock'] > 0) {
+                                $warnings[] = 'Cột tồn kho được bỏ qua khi cập nhật';
+                            }
+                        } else {
+                            $needAuto = true;
+                            $skuAuto = true;
+                            $warnings[] = 'SKU "' . $data['sku'] . '" đã tồn tại, đã tạo SKU mới';
+                        }
+                    }
                 }
             }
 
-            $result[] = [
-                ...$data,
-                'status' => $errors === [] ? 'OK' : implode('; ', $errors),
-                'is_error' => $errors !== [],
-                'warning' => implode('; ', $warnings),
-            ];
+            if ($needAuto && $errors === [] && $action === 'create') {
+                $data['sku'] = $this->generateSku($data, $skuCounters, $explicitSku, $seenSku);
+            }
+
+            if ($errors !== []) {
+                $result[] = $this->finishRow($data, 'error', implode('; ', $errors), $warnings, null, $skuAuto);
+            } elseif ($action === 'skip') {
+                $result[] = $this->finishRow($data, 'skip', (string) $skipReason, $warnings, null, $skuAuto);
+            } else {
+                $result[] = $this->finishRow($data, $action, $action === 'update' ? 'Cập nhật' : 'OK', $warnings, $existingId, $skuAuto, $action === 'update' && ($existingSku[$this->dupKey($data['sku'])]['state'] ?? '') === 'trashed');
+            }
         }
 
         return [
@@ -272,10 +497,68 @@ class ProductImportService
         ];
     }
 
-    private function rowData(array $row, array $headerMap, int $rowNumber): array
+    private function finishRow(array $data, string $action, string $status, array $warnings, ?int $existingId, bool $skuAuto, bool $existingTrashed = false): array
+    {
+        return [
+            ...$data,
+            'action' => $action,
+            'status' => $status,
+            'is_error' => $action === 'error',
+            'is_skipped' => $action === 'skip',
+            'warning' => implode('; ', $warnings),
+            'sku_auto' => $skuAuto,
+            'existing_id' => $existingId,
+            'existing_trashed' => $existingTrashed,
+        ];
+    }
+
+    /**
+     * SKU tự tạo giống khi thêm thủ công: TIỀN_TỐ(danh mục)-(thương hiệu)-SỐ_THỨ_TỰ, vd. DT-SAM-0001.
+     * Số thứ tự tiếp nối số lớn nhất đang có trong hệ thống (kể cả thùng rác) và không trùng SKU nào trong file.
+     *
+     * @param array<string, int> $counters
+     * @param array<string, bool> $explicit
+     * @param array<string, int> $seen
+     */
+    private function generateSku(array $data, array &$counters, array $explicit, array &$seen): string
+    {
+        $category = $this->categories[$this->dupKey($data['category'])] ?? null;
+        $brand = $data['brand'] !== '' ? ($this->brands[$this->dupKey($data['brand'])] ?? null) : null;
+
+        $prefix = ProductService::skuPrefixForNames(
+            $category?->name ?? $data['category'],
+            $data['brand'] !== '' ? ($brand?->name ?? $data['brand']) : null
+        );
+
+        $counters[$prefix] ??= $this->productService->maxSkuNumber($prefix);
+
+        do {
+            $sku = ProductService::formatSku($prefix, ++$counters[$prefix]);
+            $key = $this->dupKey($sku);
+        } while (isset($explicit[$key]) || isset($seen[$key]));
+
+        $seen[$key] = (int) $data['row'];
+
+        return $sku;
+    }
+
+    private function rowData(array $row, array $headerMap, int $rowNumber, ProductImportOptions $options): array
     {
         $errors = [];
         $warnings = [];
+
+        // Giá trị sai ở cột không bắt buộc: bỏ qua giá trị (dùng mặc định) hoặc coi cả dòng là lỗi, theo lựa chọn.
+        $optionalIssue = function (string $message) use (&$errors, &$warnings, $options): bool {
+            if ($options->optionalField === 'ignore') {
+                $warnings[] = $message . ' → đã bỏ qua giá trị này';
+
+                return true;
+            }
+
+            $errors[] = $message;
+
+            return false;
+        };
 
         $typeText = ProductImportColumns::value($row, $headerMap, 'type');
         $imeiText = ProductImportColumns::value($row, $headerMap, 'manage_stock_by_serial');
@@ -285,16 +568,23 @@ class ProductImportService
         $hasImei = $imeiText === '' ? null : $this->parseBool($imeiText);
         $active = $activeText === '' ? true : $this->parseBool($activeText);
 
-        if ($typeText !== '' && $type === null) {
-            $errors[] = 'Loại sản phẩm không hợp lệ ("' . $typeText . '"), chỉ nhận: normal, imei, service, combo';
+        $typeInvalid = $typeText !== '' && $type === null;
+        $imeiInvalid = $imeiText !== '' && $hasImei === null;
+        $activeInvalid = $activeText !== '' && $active === null;
+
+        if ($typeInvalid && $optionalIssue('Loại sản phẩm không hợp lệ ("' . $typeText . '"), chỉ nhận: normal, imei, service, combo')) {
+            $typeInvalid = false; // dùng mặc định: normal
         }
 
-        if ($imeiText !== '' && $hasImei === null) {
-            $errors[] = 'Cột "Có IMEI" không hợp lệ ("' . $imeiText . '"), hãy nhập 1/0 hoặc Có/Không';
+        if ($imeiInvalid && $optionalIssue('Cột "Có IMEI" không hợp lệ ("' . $imeiText . '"), hãy nhập 1/0 hoặc Có/Không')) {
+            $imeiInvalid = false;
+            $hasImei = null;
         }
 
-        if ($activeText !== '' && $active === null) {
-            $errors[] = 'Cột "Trạng thái" không hợp lệ ("' . $activeText . '"), hãy nhập 1/0 hoặc Hoạt động/Ngừng';
+        if ($activeInvalid && $optionalIssue('Cột "Trạng thái" không hợp lệ ("' . $activeText . '"), hãy nhập 1/0 hoặc Hoạt động/Ngừng')) {
+            $activeInvalid = false;
+            $active = true;
+            $activeText = '';
         }
 
         $isImei = $hasImei === true || $type === 'imei';
@@ -316,9 +606,10 @@ class ProductImportService
             'cost_price' => ProductImportColumns::normalizeNumber(ProductImportColumns::raw($row, $headerMap, 'cost_price')),
             'stock' => ProductImportColumns::normalizeNumber(ProductImportColumns::raw($row, $headerMap, 'stock')),
             'unit' => $this->cleanText(ProductImportColumns::value($row, $headerMap, 'unit')),
-            'type' => $typeText !== '' && $type === null ? $typeText : $finalType,
-            'manage_stock_by_serial' => $imeiText !== '' && $hasImei === null ? $imeiText : ($isImei ? '1' : '0'),
-            'active' => $activeText !== '' && $active === null ? $activeText : ($active === false ? '0' : '1'),
+            'type' => $typeInvalid ? $typeText : $finalType,
+            'manage_stock_by_serial' => $imeiInvalid ? $imeiText : ($isImei ? '1' : '0'),
+            'active' => $activeInvalid ? $activeText : ($active === false ? '0' : '1'),
+            'active_given' => $activeText !== '' && ! $activeInvalid,
             'image_name' => ProductImportColumns::value($row, $headerMap, 'image'),
             'description' => ProductImportColumns::value($row, $headerMap, 'description'),
             'parse_errors' => $errors,
@@ -326,10 +617,27 @@ class ProductImportService
         ];
     }
 
-    /** Kiểm tra từng ô (không phụ thuộc các dòng khác). @return array<int, string> */
-    private function validateFields(array $row): array
+    /**
+     * Kiểm tra từng ô (không phụ thuộc các dòng khác). Cột bắt buộc sai luôn là lỗi dòng;
+     * cột không bắt buộc sai thì bỏ qua giá trị hoặc báo lỗi tùy lựa chọn.
+     *
+     * @return array{0: array<int, string>, 1: array<int, string>} [lỗi, cảnh báo]
+     */
+    private function validateFields(array &$row, ProductImportOptions $options): array
     {
         $errors = [];
+        $warnings = [];
+
+        $optional = function (string $message, string $field, string $resetTo = '') use (&$errors, &$warnings, &$row, $options): void {
+            if ($options->optionalField === 'ignore') {
+                $warnings[] = $message . ' → đã bỏ qua giá trị này';
+                $row[$field] = $resetTo;
+
+                return;
+            }
+
+            $errors[] = $message;
+        };
 
         if ($row['name'] === '') {
             $errors[] = 'Thiếu tên sản phẩm';
@@ -337,48 +645,58 @@ class ProductImportService
             $errors[] = 'Tên sản phẩm quá dài (tối đa ' . self::MAX_NAME . ' ký tự)';
         }
 
-        if ($row['sku'] === '') {
-            $errors[] = 'Thiếu SKU';
-        } elseif (mb_strlen($row['sku']) > self::MAX_CODE) {
+        // SKU để trống là hợp lệ (hệ thống tự tạo); SKU đã điền thì phải đúng độ dài.
+        if ($row['sku'] !== '' && mb_strlen($row['sku']) > self::MAX_CODE) {
             $errors[] = 'SKU quá dài (tối đa ' . self::MAX_CODE . ' ký tự)';
         }
 
         if (mb_strlen($row['model']) > self::MAX_CODE) {
-            $errors[] = 'Model quá dài (tối đa ' . self::MAX_CODE . ' ký tự)';
+            $optional('Model quá dài (tối đa ' . self::MAX_CODE . ' ký tự)', 'model');
         }
 
         if ($row['category'] === '') {
             $errors[] = 'Thiếu danh mục';
+        } elseif (mb_strlen($row['category']) > self::MAX_NAME) {
+            $errors[] = 'Danh mục quá dài (tối đa ' . self::MAX_NAME . ' ký tự)';
         }
 
-        foreach (['category' => 'Danh mục', 'brand' => 'Thương hiệu', 'unit' => 'Đơn vị tính'] as $field => $label) {
+        foreach (['brand' => 'Thương hiệu', 'unit' => 'Đơn vị tính'] as $field => $label) {
             if (mb_strlen($row[$field]) > self::MAX_NAME) {
-                $errors[] = $label . ' quá dài (tối đa ' . self::MAX_NAME . ' ký tự)';
+                $optional($label . ' quá dài (tối đa ' . self::MAX_NAME . ' ký tự)', $field);
             }
         }
 
         if (mb_strlen($row['image_name']) > self::MAX_NAME) {
-            $errors[] = 'Tên ảnh quá dài';
+            $optional('Tên ảnh quá dài', 'image_name');
         }
 
         $errors = [...$errors, ...$this->validateMoney($row['sell_price'], 'Giá bán', true)];
-        $errors = [...$errors, ...$this->validateMoney($row['cost_price'], 'Giá nhập', false)];
+
+        foreach ($this->validateMoney($row['cost_price'], 'Giá nhập', false) as $message) {
+            $optional($message, 'cost_price');
+        }
 
         if ($row['stock'] !== '') {
+            $stockError = null;
+
             if (! is_numeric($row['stock'])) {
-                $errors[] = 'Tồn kho không hợp lệ';
+                $stockError = 'Tồn kho không hợp lệ';
             } elseif ((float) $row['stock'] < 0) {
-                $errors[] = 'Tồn kho không được âm';
+                $stockError = 'Tồn kho không được âm';
             } elseif (floor((float) $row['stock']) !== (float) $row['stock']) {
-                $errors[] = 'Tồn kho phải là số nguyên';
+                $stockError = 'Tồn kho phải là số nguyên';
             } elseif ((float) $row['stock'] > self::MAX_STOCK) {
-                $errors[] = 'Tồn kho quá lớn';
+                $stockError = 'Tồn kho quá lớn';
             } elseif ($row['type'] === 'imei' && (float) $row['stock'] > 0) {
-                $errors[] = 'Sản phẩm IMEI phải nhập tồn qua phiếu nhập hàng, không nhập tồn trực tiếp trong file sản phẩm';
+                $stockError = 'Sản phẩm IMEI phải nhập tồn qua phiếu nhập hàng, không nhập tồn trực tiếp trong file sản phẩm';
+            }
+
+            if ($stockError !== null) {
+                $optional($stockError, 'stock', $row['type'] === 'imei' ? '0' : '');
             }
         }
 
-        return $errors;
+        return [$errors, $warnings];
     }
 
     /** @return array<int, string> */
@@ -442,7 +760,7 @@ class ProductImportService
 
     /**
      * @param array<int, string> $values
-     * @return array<string, 'active'|'trashed'>
+     * @return array<string, array{state: 'active'|'trashed', id: int}>
      */
     private function existingProducts(string $column, array $values): array
     {
@@ -452,14 +770,14 @@ class ProductImportService
         foreach (array_chunk($values, 500) as $chunk) {
             Product::withTrashed()
                 ->whereIn($column, $chunk)
-                ->get([$column, 'deleted_at'])
+                ->get([$column, 'deleted_at', 'id'])
                 ->each(function (Product $product) use ($column, &$found): void {
                     $key = $this->dupKey((string) $product->{$column});
                     $state = $product->deleted_at ? 'trashed' : 'active';
 
-                    // Có cả bản đang dùng lẫn bản trong thùng rác: ưu tiên báo "đã tồn tại".
+                    // Có cả bản đang dùng lẫn bản trong thùng rác: ưu tiên bản đang dùng.
                     if (! isset($found[$key]) || $state === 'active') {
-                        $found[$key] = $state;
+                        $found[$key] = ['state' => $state, 'id' => (int) $product->id];
                     }
                 });
         }

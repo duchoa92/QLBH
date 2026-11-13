@@ -32,6 +32,7 @@ return new class extends Migration
 
             // tồn kho
             $table->integer('stock')->default(0);
+            $table->boolean('is_active')->default(true);
 
             $table->timestamps();
         });

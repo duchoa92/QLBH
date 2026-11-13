@@ -25,7 +25,14 @@ return new class extends Migration
                 ->nullable();
 
             $table->integer('quantity')->default(0);
+            $table->unsignedInteger('base_quantity')->default(0);
+            $table->unsignedInteger('conversion_factor')->default(1);
             $table->decimal('cost_price', 12, 2)->default(0);
+            $table->boolean('has_vat')->default(false);
+            $table->boolean('is_used')->default(false);
+            $table->unsignedInteger('supplier_warranty_value')->nullable();
+            $table->string('supplier_warranty_unit', 12)->nullable();
+            $table->json('extra_info')->nullable();
 
             $table->timestamps();
 

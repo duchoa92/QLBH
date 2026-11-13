@@ -41,8 +41,23 @@ return new class extends Migration
 
             $table->longText('description')
                 ->nullable();
+            $table->json('issue')->nullable();
+            $table->text('parts_needed')->nullable();
+            $table->boolean('waiting_for_parts')->default(false);
+            $table->string('waiting_mode', 20)->default('repair_now');
+            $table->unsignedInteger('expected_days')->nullable();
 
             $table->timestamps();
+        });
+
+        // repair_images được tạo trước repair_timelines nên không thể khai báo
+        // khóa ngoại timeline_id ngay trong migration của nó; bổ sung tại đây.
+        Schema::table('repair_images', function (Blueprint $table): void {
+            $table->foreignId('timeline_id')
+                ->nullable()
+                ->after('repair_id')
+                ->constrained('repair_timelines')
+                ->nullOnDelete();
         });
     }
 
@@ -51,6 +66,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::table('repair_images', function (Blueprint $table): void {
+            $table->dropConstrainedForeignId('timeline_id');
+        });
+
         Schema::dropIfExists(
             'repair_timelines'
         );

@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('invoice_code', 32)->unique();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('work_shift_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('work_shift_id')->nullable()->constrained()->nullOnDelete();
             $table->string('bank_account', 50);
             $table->unsignedBigInteger('expected_amount');
             $table->unsignedBigInteger('received_amount')->default(0);

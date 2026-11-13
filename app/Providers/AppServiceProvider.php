@@ -56,6 +56,8 @@ class AppServiceProvider extends ServiceProvider
                 'pos_vat_default_enabled' => filter_var(setting('pos_vat_default_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 'pos_vat_default_scope' => in_array(setting('pos_vat_default_scope', 'all'), ['all', 'vat_products'], true) ? setting('pos_vat_default_scope', 'all') : 'all',
                 'pos_vat_rate' => min(100, max(0, (float) setting('pos_vat_rate', 10))),
+                'pos_vat_used_enabled' => filter_var(setting('pos_vat_used_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'pos_vat_used_default' => filter_var(setting('pos_vat_used_default', false), FILTER_VALIDATE_BOOLEAN),
                 'pos_cost_price_suggestion_enabled' => filter_var(setting('pos_cost_price_suggestion_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_opening_count_enabled' => filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),

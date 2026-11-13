@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -484,7 +485,20 @@ class BackupRestoreService
         } finally {
             File::deleteDirectory($staging);
         }
+        $this->ensurePublicStorageLink();
         return $fileReport;
+    }
+
+    /** Máy mới/khôi phục lần đầu thường thiếu liên kết public/storage nên ảnh đã khôi phục vẫn không hiển thị. */
+    private function ensurePublicStorageLink(): void
+    {
+        $link = public_path('storage');
+        if (file_exists($link) || is_link($link)) return;
+        try {
+            Artisan::call('storage:link');
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function foreignKeyOrphanCounts(): array

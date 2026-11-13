@@ -50,7 +50,7 @@ class CloudBackupStorage
                     'supportsAllDrives' => 'true',
                 ], fn ($value) => $value !== null))->throw()->json();
                 foreach ($response['files'] ?? [] as $file) {
-                    if ($this->isBackupName($file['name'] ?? '')) $files[] = ['name' => $file['name'], 'size' => (int) ($file['size'] ?? 0), 'created_at' => isset($file['modifiedTime']) ? date('Y-m-d H:i:s', strtotime($file['modifiedTime'])) : null];
+                    if ($this->isBackupName($file['name'] ?? '')) $files[] = ['name' => $file['name'], 'size' => (int) ($file['size'] ?? 0), 'type' => BackupService::describe($file['name'])['type'], 'type_label' => BackupService::describe($file['name'])['label'], 'created_at' => $this->backupTime($file['name'], $file['modifiedTime'] ?? null)];
                 }
                 $pageToken = $response['nextPageToken'] ?? null;
             } while ($pageToken);
@@ -63,7 +63,7 @@ class CloudBackupStorage
             while ($url) {
                 $response = $this->graphApi($connection)->get($url)->throw()->json();
                 foreach ($response['value'] ?? [] as $file) {
-                    if ($this->isBackupName($file['name'] ?? '')) $files[] = ['name' => $file['name'], 'size' => (int) ($file['size'] ?? 0), 'created_at' => isset($file['lastModifiedDateTime']) ? date('Y-m-d H:i:s', strtotime($file['lastModifiedDateTime'])) : null];
+                    if ($this->isBackupName($file['name'] ?? '')) $files[] = ['name' => $file['name'], 'size' => (int) ($file['size'] ?? 0), 'type' => BackupService::describe($file['name'])['type'], 'type_label' => BackupService::describe($file['name'])['label'], 'created_at' => $this->backupTime($file['name'], $file['lastModifiedDateTime'] ?? null)];
                 }
                 $url = $response['@odata.nextLink'] ?? null;
             }
@@ -305,9 +305,18 @@ class CloudBackupStorage
         };
     }
 
+    /** Giờ tạo lấy từ tên tệp; thiếu thì đổi giờ của dịch vụ đám mây (UTC) sang múi giờ cài đặt. */
+    private function backupTime(string $name, ?string $remoteTime): ?string
+    {
+        $fromName = BackupService::describe($name)['created_at'];
+        if ($fromName !== null) return $fromName;
+
+        return $remoteTime ? \Illuminate\Support\Carbon::parse($remoteTime)->setTimezone(BackupService::timezone())->format('Y-m-d H:i:s') : null;
+    }
+
     private function isBackupName(string $name): bool
     {
-        return (bool) preg_match('/^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d{6})?\.zip$/', $name);
+        return BackupService::isBackupName($name);
     }
 
     private function assertBackupName(string $name): void

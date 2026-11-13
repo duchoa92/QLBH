@@ -10,7 +10,7 @@ class ProductStockBatch extends Model
 {
     protected $fillable = [
         'product_id', 'variant_id', 'stock_import_item_id', 'initial_quantity',
-        'remaining_quantity', 'cost_price', 'sell_price', 'imported_at', 'is_opening_balance',
+        'remaining_quantity', 'cost_price', 'sell_price', 'imported_at', 'is_opening_balance', 'is_used',
     ];
 
     protected $casts = [
@@ -20,6 +20,7 @@ class ProductStockBatch extends Model
         'sell_price' => 'decimal:2',
         'imported_at' => 'date',
         'is_opening_balance' => 'boolean',
+        'is_used' => 'boolean',
     ];
 
     public function product(): BelongsTo { return $this->belongsTo(Product::class); }

@@ -9,6 +9,11 @@ return new class extends Migration
     /** Linh kiện sửa chữa cũng phải trừ/hoàn theo lô như hàng bán và quà tặng. */
     public function up(): void
     {
+        // Bảng tạo mới (migration đã gộp) có thể đã có sẵn cột này.
+        if (Schema::hasColumn('sale_item_stock_batches', 'repair_part_id')) {
+            return;
+        }
+
         Schema::table('sale_item_stock_batches', function (Blueprint $table): void {
             $table->foreignId('repair_part_id')
                 ->nullable()
@@ -20,6 +25,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasColumn('sale_item_stock_batches', 'repair_part_id')) {
+            return;
+        }
+
         Schema::table('sale_item_stock_batches', function (Blueprint $table): void {
             $table->dropConstrainedForeignId('repair_part_id');
         });

@@ -23,6 +23,8 @@ use App\Models\StockImportItem;
 use App\Models\ExportHistory;
 use App\Services\ProductImportException;
 use App\Services\ProductImportImageStore;
+use App\Support\ProductImportColumns;
+use App\Support\ProductImportOptions;
 
 
 
@@ -476,6 +478,9 @@ class ProductController extends Controller
         return [
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
             'image_token' => ['nullable', 'uuid'],
+            // Lựa chọn xử lý lỗi/trùng (JSON) và danh sách dòng người dùng chọn bỏ qua (JSON).
+            'options' => ['nullable', 'string', 'max:2000'],
+            'skip_rows' => ['nullable', 'string', 'max:100000'],
             'images' => ['nullable', 'array', 'max:20'],
             'images.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
         ];
@@ -497,12 +502,36 @@ class ProductController extends Controller
     private function readSpreadsheetRows(Request $request): array
     {
         try {
-            return Excel::toArray([], $request->file('file'))[0] ?? [];
+            $sheets = Excel::toArray([], $request->file('file'));
+
+            // Ưu tiên sheet đầu tiên có dòng tiêu đề đúng mẫu (file có thể có sheet Hướng dẫn đứng trước); không có thì lấy sheet đầu.
+            foreach ($sheets as $sheet) {
+                if (ProductImportColumns::detectHeader($sheet) !== null) {
+                    return $sheet;
+                }
+            }
+
+            return $sheets[0] ?? [];
         } catch (\Throwable $e) {
             report($e);
 
             throw new ProductImportException('Không đọc được file. Hãy dùng file mẫu (.xlsx) và chắc chắn file không bị hỏng hoặc đặt mật khẩu.');
         }
+    }
+
+    private function importOptions(Request $request): ProductImportOptions
+    {
+        return ProductImportOptions::fromRequestValue($request->input('options'));
+    }
+
+    /** @return array<int, int> */
+    private function importSkipRows(Request $request): array
+    {
+        $rows = json_decode((string) $request->input('skip_rows', '[]'), true);
+
+        return is_array($rows)
+            ? array_values(array_unique(array_filter(array_map('intval', $rows), fn (int $row) => $row > 0)))
+            : [];
     }
 
     /** @return array<int, mixed> */
@@ -525,7 +554,7 @@ class ProductController extends Controller
         try {
             $rows = $this->readSpreadsheetRows($request);
             $images = $this->importImages($request, $imageStore);
-            $result = $service->handle($rows, $images);
+            $result = $service->handle($rows, $images, $this->importOptions($request), $this->importSkipRows($request));
         } catch (ProductImportException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -537,7 +566,12 @@ class ProductController extends Controller
 
         return response()->json([
             'success' => $result['success'] ?? true,
+            'aborted' => $result['aborted'] ?? false,
+            'message' => $result['message'] ?? null,
             'count' => $result['count'] ?? 0,
+            'created' => $result['created'] ?? 0,
+            'updated' => $result['updated'] ?? 0,
+            'skipped' => $result['skipped'] ?? 0,
             'errors' => $result['errors'] ?? [],
             'error_count' => $result['error_count'] ?? 0,
         ]);
@@ -557,14 +591,22 @@ class ProductController extends Controller
         try {
             $rows = $this->readSpreadsheetRows($request);
             $images = $this->importImages($request, $imageStore);
-            $valid = $service->preview($rows, $images);
+            $valid = $service->preview($rows, $images, $this->importOptions($request), $this->importSkipRows($request));
         } catch (ProductImportException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
         return response()->json([
             'valid' => $valid,
-            'error_count' => collect($valid)->where('is_error', true)->count()
+            'notice' => $service->notice,
+            'error_count' => collect($valid)->where('action', 'error')->count(),
+            'summary' => [
+                'total' => count($valid),
+                'create' => collect($valid)->where('action', 'create')->count(),
+                'update' => collect($valid)->where('action', 'update')->count(),
+                'skip' => collect($valid)->where('action', 'skip')->count(),
+                'error' => collect($valid)->where('action', 'error')->count(),
+            ],
         ]);
     }
 
@@ -592,15 +634,16 @@ class ProductController extends Controller
         return response()->json(['token' => $token, 'count' => $count]);
     }
 
-    public function startExport()
+    public function startExport(Request $request)
     {
         try {
+            $withImages = $request->boolean('with_images');
 
             $export = ExportHistory::create([
                 'type' => 'products'
             ]);
 
-            \App\Jobs\ExportProductsJob::dispatch($export->id);
+            ExportProductsJob::dispatch($export->id, $withImages);
 
             return response()->json([
                 'id' => $export->id
@@ -644,9 +687,12 @@ class ProductController extends Controller
             ], 404);
         }
 
+        // Xuất kèm ảnh thì file là .zip (Excel + thư mục images), không kèm ảnh là .xlsx.
+        $extension = strtolower(pathinfo($export->file, PATHINFO_EXTENSION)) === 'zip' ? 'zip' : 'xlsx';
+
         return Storage::disk('local')->download(
             $export->file,
-            'san_pham_' . now()->format('Ymd_His') . '.xlsx'
+            'san_pham_' . now()->format('Ymd_His') . '.' . $extension
         );
     }
 

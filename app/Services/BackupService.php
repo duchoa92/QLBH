@@ -29,17 +29,34 @@ class BackupService
             $progress(47, 'Đang sao lưu tệp đã tải lên.');
             $sources = array_values(array_filter([storage_path('app/public'), storage_path('app/private')], 'is_dir'));
             $copyList = [];
-            foreach ($sources as $source) foreach (File::allFiles($source) as $file) $copyList[] = [$source, $file];
+            $publicKeys = [];
+            foreach ($sources as $source) {
+                foreach (File::allFiles($source) as $file) {
+                    $diskName = basename($source);
+                    $copyList[] = [$source, $file, $diskName];
+                    if ($diskName === 'public') $publicKeys[$this->pathKey(substr($file->getPathname(), strlen($source) + 1))] = true;
+                }
+            }
+            // Ảnh còn nằm trong public/storage dưới dạng thư mục thật (không phải liên kết tới storage/app/public)
+            // thường xảy ra khi chép/giải nén dự án trên Windows; gom nốt các tệp chưa có trong storage/app/public.
+            $webStorage = public_path('storage');
+            if (is_dir($webStorage) && ! is_link($webStorage) && realpath($webStorage) !== realpath(storage_path('app/public'))) {
+                foreach (File::allFiles($webStorage) as $file) {
+                    $key = $this->pathKey(substr($file->getPathname(), strlen($webStorage) + 1));
+                    if (isset($publicKeys[$key])) continue;
+                    $publicKeys[$key] = true;
+                    $copyList[] = [$webStorage, $file, 'public'];
+                }
+            }
             $filesByDisk = ['public' => 0, 'private' => 0];
             $uploadedBytes = 0;
             $uploadedFileDetails = [];
             $copyTotal = max(1, count($copyList));
-            foreach ($copyList as $index => [$source, $file]) {
+            foreach ($copyList as $index => [$source, $file, $diskName]) {
                 $relative = substr($file->getPathname(), strlen($source) + 1);
-                $destination = $filesDirectory.DIRECTORY_SEPARATOR.basename($source).DIRECTORY_SEPARATOR.$relative;
+                $destination = $filesDirectory.DIRECTORY_SEPARATOR.$diskName.DIRECTORY_SEPARATOR.$relative;
                 File::ensureDirectoryExists(dirname($destination));
                 if (! File::copy($file->getPathname(), $destination)) throw new RuntimeException('Không sao chép được tệp '.$relative.' vào vùng tạo bản sao lưu.');
-                $diskName = basename($source);
                 $filesByDisk[$diskName] = ($filesByDisk[$diskName] ?? 0) + 1;
                 $uploadedBytes += $file->getSize();
                 if (count($uploadedFileDetails) < 200) {
@@ -47,6 +64,7 @@ class BackupService
                 }
                 $progress(47 + (int) floor(($index + 1) / $copyTotal * 25), 'Đang sao lưu tệp tải lên ('.($index + 1).' / '.count($copyList).').');
             }
+            $imageReport = $this->imageReferenceReport($publicKeys);
             $progress(72, 'Đã sao lưu các tệp; đang đóng gói bản sao lưu.');
 
             File::put($working.DIRECTORY_SEPARATOR.'manifest.json', json_encode([
@@ -60,6 +78,7 @@ class BackupService
                     'files_by_disk' => $filesByDisk,
                     'uploaded_file_details' => $uploadedFileDetails,
                     'uploaded_file_details_omitted' => max(0, array_sum($filesByDisk) - count($uploadedFileDetails)),
+                    ...$imageReport,
                 ],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
 
@@ -91,6 +110,33 @@ class BackupService
             return $archivePath;
         } finally {
             File::deleteDirectory($working);
+        }
+    }
+
+    private function pathKey(string $relative): string
+    {
+        return strtolower(str_replace('\\', '/', ltrim($relative, '/\\')));
+    }
+
+    /**
+     * Đối chiếu ảnh/tệp mà dữ liệu đang tham chiếu (sản phẩm, khách, sửa chữa, avatar, ảnh IMEI)
+     * với những gì thực sự đã đưa vào bản sao lưu, để biết ngay có ảnh nào bị thiếu.
+     */
+    private function imageReferenceReport(array $backedUpPublicKeys): array
+    {
+        try {
+            $referenced = array_keys(app(SystemCleanupService::class)->referencedPaths());
+            $missing = array_values(array_filter($referenced, fn (string $path) => ! isset($backedUpPublicKeys[$path])));
+
+            return [
+                'referenced_images' => count($referenced),
+                'missing_referenced_images' => count($missing),
+                'missing_referenced_image_examples' => array_slice($missing, 0, 20),
+            ];
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return ['referenced_images' => null, 'missing_referenced_images' => null, 'missing_referenced_image_examples' => []];
         }
     }
 
