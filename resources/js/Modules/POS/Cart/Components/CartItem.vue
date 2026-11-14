@@ -1,4 +1,6 @@
 <script setup>
+import UnitInput from '@/Components/UI/UnitInput.vue'
+import { WARRANTY_UNIT_OPTIONS, DEFAULT_WARRANTY_UNIT, splitWarrantyDays, warrantyUnitDays, warrantyMaxValue } from '@/utils/warranty'
 import { computed, ref } from 'vue'
 import { BadgeCheck, Gift, MessageSquareText, X } from 'lucide-vue-next'
 import CartItemHeader from './CartItemHeader.vue'
@@ -30,9 +32,10 @@ const openEditor = type => {
     const nextDraft = cloneItemForEditing()
     if (type === 'warranty') {
         const days = Number(props.item.customer_warranty_days ?? props.item.warranty_days ?? 0)
-        const unit = props.item.customer_warranty_unit || (days > 0 && days % 30 === 0 ? 'month' : 'day')
+        const split = splitWarrantyDays(days)
+        const unit = props.item.customer_warranty_unit || split.unit
         nextDraft.customer_warranty_unit = unit
-        nextDraft.customer_warranty_value = props.item.customer_warranty_value ?? (days > 0 ? days / (unit === 'month' ? 30 : 1) : '')
+        nextDraft.customer_warranty_value = props.item.customer_warranty_value ?? (days > 0 ? days / warrantyUnitDays(unit) : '')
         nextDraft.customer_warranty_days = days
     }
     if (type === 'promotion') nextDraft.showPromotion = true
@@ -46,8 +49,8 @@ const closeEditor = () => {
     draft.value = null
 }
 
-const warrantyMultiplier = computed(() => draft.value?.customer_warranty_unit === 'month' ? 30 : 1)
-const maxWarrantyValue = computed(() => draft.value?.customer_warranty_unit === 'month' ? Math.floor(3650 / 30) : 3650)
+const warrantyMultiplier = computed(() => warrantyUnitDays(draft.value?.customer_warranty_unit || DEFAULT_WARRANTY_UNIT))
+const maxWarrantyValue = computed(() => warrantyMaxValue(draft.value?.customer_warranty_unit || DEFAULT_WARRANTY_UNIT))
 const warrantyValue = computed({
     get: () => draft.value?.customer_warranty_value ?? '',
     set: value => {
@@ -58,13 +61,13 @@ const warrantyValue = computed({
     },
 })
 const warrantyUnit = computed({
-    get: () => draft.value?.customer_warranty_unit || 'day',
+    get: () => draft.value?.customer_warranty_unit || DEFAULT_WARRANTY_UNIT,
     set: value => {
         if (!draft.value) return
         const oldMultiplier = warrantyMultiplier.value
         const currentDays = Number(draft.value.customer_warranty_value || 0) * oldMultiplier
         draft.value.customer_warranty_unit = value
-        draft.value.customer_warranty_value = currentDays ? currentDays / (value === 'month' ? 30 : 1) : ''
+        draft.value.customer_warranty_value = currentDays ? Number((currentDays / warrantyUnitDays(value)).toFixed(2)) : ''
         draft.value.customer_warranty_days = currentDays || null
     },
 })
@@ -210,10 +213,15 @@ const editorTitle = computed(() => ({
                                 <label class="text-xs font-bold text-emerald-950">Thời hạn bảo hành cho khách</label>
                                 <span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="draft.customer_warranty_days ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-500'">{{ draft.customer_warranty_days ? `${draft.customer_warranty_days} ngày` : 'Chưa thiết lập' }}</span>
                             </div>
-                            <div class="mt-2 flex h-11 overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm">
-                                <input v-model.number="warrantyValue" type="number" min="1" :max="maxWarrantyValue" step="1" placeholder="0" aria-label="Thời hạn bảo hành" class="min-w-0 flex-1 border-0 bg-white px-3 text-base font-bold text-slate-800 outline-none placeholder:font-medium placeholder:text-slate-400 focus:ring-0" />
-                                <select v-model="warrantyUnit" aria-label="Đơn vị thời hạn bảo hành" class="w-24 border-0 border-l border-emerald-100 bg-emerald-50 px-2 text-sm font-semibold text-emerald-900 outline-none focus:ring-0"><option value="month">Tháng</option><option value="day">Ngày</option></select>
-                            </div>
+                            <UnitInput
+                                class="mt-3"
+                                :model-value="warrantyValue"
+                                v-model:unit="warrantyUnit"
+                                :unit-options="WARRANTY_UNIT_OPTIONS"
+                                type="number" min="1" :max="maxWarrantyValue" step="1"
+                                label="Thời hạn bảo hành" unit-label="Đơn vị thời hạn bảo hành"
+                                @update:model-value="warrantyValue = $event === '' ? '' : Number($event)"
+                            />
                             <p class="mt-2 text-[11px] font-medium text-emerald-800/80">{{ draft.customer_warranty_days ? `Tương đương ${draft.customer_warranty_days} ngày bảo hành.` : 'Nhập số lượng và chọn đơn vị áp dụng.' }}</p>
                         </div>
 

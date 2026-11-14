@@ -24,6 +24,7 @@ use App\Models\ExportHistory;
 use App\Services\ProductImportException;
 use App\Services\ProductImportImageStore;
 use App\Support\ProductImportColumns;
+use App\Support\WarrantyDuration;
 use App\Support\ProductImportOptions;
 
 
@@ -774,6 +775,7 @@ class ProductController extends Controller
                 'has_unit_conversion',
                 'conversion_unit_id',
                 'conversion_factor',
+                'warranty_days',
             ])
 
             ->orderBy('name')
@@ -794,7 +796,7 @@ class ProductController extends Controller
                 $extra = is_array($item->extra_info) ? $item->extra_info : [];
                 $value = (int) ($extra['customer_warranty_duration_value'] ?? 0);
                 $unit = $extra['customer_warranty_duration_unit'] ?? 'months';
-                if ($value <= 0 || ! in_array($unit, ['days', 'months'], true)) return;
+                if ($value <= 0 || ! in_array($unit, ['days', 'weeks', 'months', 'years'], true)) return;
 
                 $warranty = ['value' => $value, 'unit' => $unit];
                 $productKey = (int) $item->product_id;
@@ -803,8 +805,12 @@ class ProductController extends Controller
                 if ($variantKey && ! isset($warrantyByVariant[$variantKey])) $warrantyByVariant[$variantKey] = $warranty;
             });
 
+        // Thứ tự ưu tiên của mặc định khi nhập hàng: BH khách đã khai báo ở sản phẩm → lần nhập gần nhất.
+        // (Riêng biến thể vẫn ưu tiên giá trị lần nhập gần nhất của chính biến thể đó.)
         $products->each(function (Product $product) use ($warrantyByProduct, $warrantyByVariant): void {
-            $productWarranty = $warrantyByProduct[(int) $product->id] ?? null;
+            $productWarranty = WarrantyDuration::fromDays((int) $product->warranty_days)
+                ?? $warrantyByProduct[(int) $product->id]
+                ?? null;
             $product->setAttribute('last_customer_warranty', $productWarranty);
             $product->variants->each(function (ProductVariant $variant) use ($productWarranty, $warrantyByVariant): void {
                 $variant->setAttribute('last_customer_warranty', $warrantyByVariant[(int) $variant->id] ?? $productWarranty);

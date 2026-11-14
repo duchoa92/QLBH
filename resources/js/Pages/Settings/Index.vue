@@ -180,7 +180,14 @@ const syncSectionUrl = (section) => {
 }
 
 // Chạy khi vào trang bằng link có ?section=... hoặc khi server trả về section mới.
-watch(() => props.active_section, applySection, { immediate: true })
+// Sau khi lưu, server redirect về địa chỉ còn ?section=... nên prop active_section đổi giá trị ngay sau khi modal vừa đóng
+// và sẽ mở lại modal (lần lưu thứ hai prop không đổi nên mới đóng được). Bỏ qua thay đổi đó trong lúc đang lưu.
+// Mốc thời gian đặt trên window để còn hiệu lực cả khi trang bị dựng lại sau lần lưu (state trong component sẽ mất).
+const ignoreServerSectionForAWhile = () => { window.__settingsIgnoreSectionUntil = Date.now() + 4000 }
+watch(() => props.active_section, (section) => {
+    if (Date.now() < (window.__settingsIgnoreSectionUntil || 0)) return
+    applySection(section)
+}, { immediate: true })
 
 // Nạp ngầm cài đặt mới nhất từ server (không chặn giao diện, không tải lại trang).
 // Chỉ ghi vào form khi chưa có chỉnh sửa dở, tránh đè lên dữ liệu người dùng đang nhập.
@@ -532,10 +539,16 @@ const unitForm = useForm({
 })
 
 const save = () => {
+    ignoreServerSectionForAWhile()
     if (activeModal.value !== 'payments') {
-        const keys = SECTION_KEYS[activeModal.value] || []
+        const currentSection = activeModal.value
+        const keys = SECTION_KEYS[currentSection] || []
+        // Bỏ ?section=... trước khi gửi để địa chỉ server redirect về không mở lại modal vừa đóng (lỗi thì khôi phục).
+        syncSectionUrl(null)
         form.transform(data => Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)))).post(route('settings.update'), {
             preserveScroll: true,
+            preserveState: true,
+            onError: () => syncSectionUrl(currentSection),
             onSuccess: () => {
                 form.defaults()
                 closeModal()
@@ -561,8 +574,13 @@ const save = () => {
 
     const section = activeModal.value
     const keys = SECTION_KEYS[section] || []
+    // Server redirect về đúng địa chỉ đang mở: nếu còn ?section=... thì trang trả về sẽ mở lại modal ngay sau khi đóng.
+    // Bỏ tham số này trước khi gửi (lưu lỗi thì khôi phục lại để F5 vẫn mở đúng mục).
+    syncSectionUrl(null)
     form.transform(data => Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)))).post(route('settings.update'), {
         preserveScroll: true,
+        preserveState: true,
+        onError: () => syncSectionUrl(section),
         onSuccess: () => {
             if (section === 'payments') {
                 // Nạp lại từ máy chủ: khóa bí mật vừa nhập đã được mã hóa, trạng thái "đang bật/chưa đủ cấu hình" cũng được cập nhật.

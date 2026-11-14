@@ -356,13 +356,17 @@ class StockImportController extends Controller
             'items.*.supplier_warranty_unit' => [
                 'nullable',
                 'string',
-                Rule::in(['days', 'months']),
+                Rule::in(['days', 'weeks', 'months', 'years']),
             ],
 
             'items.*.extra_info' => ['nullable', 'array'],
             'items.*.extra_info.is_used' => ['nullable', 'boolean'],
             'items.*.extra_info.account' => ['nullable', 'string', 'max:255'],
             'items.*.extra_info.password' => ['nullable', 'string', 'max:255'],
+            // BH khách (ghi lúc nhập, POS dùng khi bán): phải nằm trong danh sách rule thì mới không bị validate() loại bỏ.
+            'items.*.extra_info.note' => ['nullable', 'string', 'max:2000'],
+            'items.*.extra_info.customer_warranty_duration_value' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'items.*.extra_info.customer_warranty_duration_unit' => ['nullable', 'string', Rule::in(['days', 'weeks', 'months', 'years'])],
 
             'items.*.imeis' => [
                 'nullable',
@@ -409,6 +413,8 @@ class StockImportController extends Controller
             'items.*.imeis.*.extra_info.is_used' => ['nullable', 'boolean'],
             'items.*.imeis.*.extra_info.account' => ['nullable', 'string', 'max:255'],
             'items.*.imeis.*.extra_info.password' => ['nullable', 'string', 'max:255'],
+            'items.*.imeis.*.extra_info.customer_warranty_duration_value' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'items.*.imeis.*.extra_info.customer_warranty_duration_unit' => ['nullable', 'string', Rule::in(['days', 'weeks', 'months', 'years'])],
 
             'items.*.imeis.*.info_image' => [
                 'nullable',
@@ -425,7 +431,7 @@ class StockImportController extends Controller
             'items.*.imeis.*.warranty_duration_unit' => [
                 'nullable',
                 'string',
-                Rule::in(['days', 'months']),
+                Rule::in(['days', 'weeks', 'months', 'years']),
             ],
 
             'discount' => [

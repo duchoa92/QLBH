@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cài chứng chỉ HTTPS cho iPhone</title>
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#2563eb;--warn:#fef3c7;--warn-t:#92400e}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#111a2e;--text:#e5e7eb;--muted:#94a3b8;--line:#1f2a44;--brand:#60a5fa;--warn:#3a2d0b;--warn-t:#fcd34d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:8px 0 4px}
+.sub{color:var(--muted);margin:0 0 18px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.btn{display:block;text-align:center;background:var(--brand);color:#fff;text-decoration:none;font-weight:600;padding:13px;border-radius:12px}
+.step{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.step:first-of-type{border-top:0}
+.n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+.step b{display:block}
+.step span{color:var(--muted);font-size:14px}
+.path{font-weight:600;color:var(--text)}
+.warn{background:var(--warn);color:var(--warn-t);border-radius:12px;padding:12px 14px;font-size:14px}
+h2{font-size:16px;margin:0 0 6px}
+code{background:var(--bg);padding:1px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Cài chứng chỉ HTTPS cho iPhone</h1>
+  <p class="sub">Làm một lần để iPhone tin cậy địa chỉ <code id="host">https://…</code> và dùng được camera, quét mã.</p>
+
+  <div class="card">
+    <a class="btn" id="dl" href="/certs/rootCA.crt" download>Tải chứng chỉ về iPhone</a>
+  </div>
+
+  <div class="card">
+    <h2>Bước 1 – Tải và cài hồ sơ</h2>
+    <div class="step"><div class="n">1</div><div><b>Mở trang này bằng Safari</b><span>Chrome trên iPhone không cài được chứng chỉ.</span></div></div>
+    <div class="step"><div class="n">2</div><div><b>Bấm “Tải chứng chỉ”, chọn Cho phép</b><span>Khi hiện “Trang web đang cố tải về hồ sơ cấu hình”.</span></div></div>
+    <div class="step"><div class="n">3</div><div><b>Mở <span class="path">Cài đặt → Đã tải về hồ sơ</span></b><span>Dòng này nằm ngay dưới tên Apple ID. Bấm vào, chọn <b style="display:inline">Cài đặt</b>, nhập mật mã, rồi bấm Cài đặt lần nữa.</span></div></div>
+  </div>
+
+  <div class="card">
+    <h2>Bước 2 – Bật tin cậy hoàn toàn</h2>
+    <div class="step"><div class="n">4</div><div><b>Mở <span class="path">Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng nhận</span></b><span>Ở cuối trang.</span></div></div>
+    <div class="step"><div class="n">5</div><div><b>Bật công tắc cho chứng chỉ vừa cài</b><span>Bấm Tiếp tục khi có cảnh báo.</span></div></div>
+    <div class="step"><div class="n">6</div><div><b>Mở lại Safari và vào địa chỉ ứng dụng</b><span>Thấy biểu tượng ổ khóa là xong.</span></div></div>
+  </div>
+
+  <div class="warn">
+    <b>Lưu ý:</b> chỉ cài chứng chỉ do chính cửa hàng bạn cung cấp. Cần gỡ thì vào <b>Cài đặt → Cài đặt chung → VPN và quản lý thiết bị</b>, chọn hồ sơ rồi Xóa.
+  </div>
+</main>
+<script>
+try{document.getElementById('host').textContent=location.origin}catch(e){}
+</script>
+</body>
+</html>

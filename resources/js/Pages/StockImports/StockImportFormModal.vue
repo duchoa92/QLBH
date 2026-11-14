@@ -57,6 +57,7 @@ const emit = defineEmits([
 ])
 const page = usePage()
 const isEditingImport = computed(() => Boolean(props.initialImport))
+const originalGrandTotal = ref(null) // tổng tiền của phiếu lúc mở sửa: không đổi thì giữ nguyên thanh toán cũ
 
 const form = useForm({
     party_type: props.initialPartyType,
@@ -410,6 +411,7 @@ const hydrateInitialImport = (stockImport) => {
     form.import_date = stockImport.import_date?.slice(0, 10) || form.import_date
     form.discount = Number(stockImport.discount || 0)
     form.extra_fee = Number(stockImport.extra_fee || 0)
+    originalGrandTotal.value = Number(stockImport.grand_total ?? stockImport.total_amount ?? 0)
     form.paid_amount = Number(stockImport.paid_amount || 0)
     form.tendered_amount = Number(stockImport.tendered_amount || 0)
     form.change_amount = Number(stockImport.change_amount || 0)
@@ -446,7 +448,19 @@ const hydrateInitialImport = (stockImport) => {
 
     const grouped = new Map()
     ;(stockImport.items || []).forEach(source => {
-        const imeis = (source.import_imeis || []).map(history => ({
+        const imeis = (source.import_imeis || []).map(history => {
+            // Bảo hành lưu trong extra_info của máy (ưu tiên) hoặc lịch sử nhập; chưa có thì lấy BH khách của dòng nhập.
+            const savedExtra = {
+                ...(history.meta?.extra_info || {}),
+                ...(history.product_imei?.extra_info || {}),
+            }
+            if (!savedExtra.customer_warranty_duration_value && source.extra_info?.customer_warranty_duration_value) {
+                savedExtra.customer_warranty_duration_value = source.extra_info.customer_warranty_duration_value
+                savedExtra.customer_warranty_duration_unit = source.extra_info.customer_warranty_duration_unit
+            }
+            const supplierValue = Number(savedExtra.supplier_warranty_value || source.supplier_warranty_value || 0)
+
+            return {
             imei: history.product_imei?.imei || history.imei,
             variant_id: history.product_imei?.variant_id || source.variant_id || null,
             variant: history.product_imei?.variant || source.variant || null,
@@ -454,10 +468,11 @@ const hydrateInitialImport = (stockImport) => {
             // sản phẩm thì sửa phiếu không được đặt lại về giá cũ lúc nhập.
             cost_price: storedPrice(history.product_imei?.cost_price, history.cost_price, source.cost_price),
             sell_price: storedPrice(history.product_imei?.sell_price, history.sell_price, source.variant?.sell_price, source.product?.sell_price),
-            extra_info: history.product_imei?.extra_info || history.meta?.extra_info || null,
-            warranty_duration_value: null,
-            warranty_duration_unit: 'months',
-        }))
+            extra_info: Object.keys(savedExtra).length ? savedExtra : null,
+            warranty_duration_value: supplierValue > 0 ? supplierValue : null,
+            warranty_duration_unit: savedExtra.supplier_warranty_unit || source.supplier_warranty_unit || 'months',
+            }
+        })
         const type = imeis.length ? (source.variant_id ? 'imei_variant' : 'imei') : (source.variant_id ? 'variant' : 'simple')
         const key = `${source.product_id}-${type}`
         let item = grouped.get(key)
@@ -485,6 +500,11 @@ const hydrateInitialImport = (stockImport) => {
             quantity: Number(source.quantity || 0),
             cost_price: storedPrice(source.cost_price, source.variant?.cost_price),
             sell_price: savedSellPrice(source),
+            // BH riêng từng dòng biến thể, nạp lại đúng như đã lưu
+            supplier_warranty_value: Number(source.supplier_warranty_value || 0) > 0 ? Number(source.supplier_warranty_value) : null,
+            supplier_warranty_unit: source.supplier_warranty_unit || 'months',
+            customer_warranty_value: Number(source.extra_info?.customer_warranty_duration_value || 0) > 0 ? Number(source.extra_info.customer_warranty_duration_value) : null,
+            customer_warranty_unit: source.extra_info?.customer_warranty_duration_unit || 'months',
         })
         else item.imeis.push(...imeis)
     })
@@ -1113,6 +1133,21 @@ const handlePaymentAction = () => {
         return
     }
 
+    // Sửa phiếu mà tổng tiền không đổi: giữ thanh toán cũ, không cần mở lại bước thanh toán.
+    if (isEditingImport.value && originalGrandTotal.value !== null
+        && Math.abs(Number(total.value || 0) - originalGrandTotal.value) < 0.5) {
+        confirm({
+            payment_method: form.payment_method,
+            tendered_amount: form.tendered_amount,
+            paid_amount: form.paid_amount,
+            change_amount: form.change_amount,
+            old_debt_paid: form.old_debt_paid,
+            old_debt_allocations: form.old_debt_allocations,
+            payment_reference: form.payment_reference,
+        })
+        return
+    }
+
     if (partyType.value === 'supplier') {
         openModal(SupplierPaymentModal, {
             props: {
@@ -1206,9 +1241,19 @@ const confirm = (payment = {}) => {
                     sell_price: importPrice(item, row.sell_price),
                     has_vat: item.is_used ? false : Boolean(item.has_vat),
                     is_used: Boolean(item.is_used),
-                    supplier_warranty_value: item.supplier_warranty_value || null,
-                    supplier_warranty_unit: item.supplier_warranty_unit || 'months',
-                    extra_info: itemExtraInfo(item),
+                    // Dòng chưa có BH riêng (thêm trước khi có tính năng này) thì dùng BH chung của sản phẩm.
+                    supplier_warranty_value: (row.supplier_warranty_value === undefined ? item.supplier_warranty_value : row.supplier_warranty_value) || null,
+                    supplier_warranty_unit: (row.supplier_warranty_value === undefined ? item.supplier_warranty_unit : row.supplier_warranty_unit) || 'months',
+                    extra_info: row.customer_warranty_value === undefined
+                        ? itemExtraInfo(item)
+                        : itemExtraInfo({
+                            ...item,
+                            extra_info: {
+                                ...(item.extra_info || {}),
+                                customer_warranty_duration_value: row.customer_warranty_value || null,
+                                customer_warranty_duration_unit: row.customer_warranty_unit || 'months',
+                            },
+                        }),
                     imeis: [],
                 }))
         }

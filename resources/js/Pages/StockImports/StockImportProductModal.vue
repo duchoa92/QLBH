@@ -12,6 +12,8 @@ import {
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import { WARRANTY_UNIT_OPTIONS_PLURAL, formatWarranty } from '@/utils/warranty'
+import UnitInput from '@/Components/UI/UnitInput.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
@@ -22,6 +24,9 @@ import { formatNumber, formatDateTime } from '@/utils/format'
 import {
     Plus,
     Trash2,
+    Pencil,
+    Check,
+    X,
     QrCode,
     Camera,
     CameraOff,
@@ -92,10 +97,7 @@ const entryModal = ref({
     price_unit_basis: 'base',
 })
 const entryError = ref('')
-const warrantyUnitOptions = [
-    { label: 'Tháng', value: 'months' },
-    { label: 'Ngày', value: 'days' },
-]
+const warrantyUnitOptions = WARRANTY_UNIT_OPTIONS_PLURAL
 
 const stopCamera = () => {
     scanSession += 1
@@ -300,6 +302,13 @@ watch(() => entryModal.value.imei_input, (value) => {
     entryError.value = ''
 
     if (entryModal.value.mode !== 'imei' || imei.length < 4) return
+
+    // Đang sửa đúng dòng này mà không đổi IMEI: không tra cứu kho để khỏi báo "đang còn trong kho"
+    if (editingEntryIndex.value !== null) {
+        const original = entryModal.value.item?.imeis?.[editingEntryIndex.value]
+        const originalImei = String((typeof original === 'string' ? original : original?.imei) || '').trim()
+        if (originalImei && originalImei.toLowerCase() === imei.toLowerCase()) return
+    }
 
     imeiLookupTimeout = setTimeout(() => {
         lookupImei(imei)
@@ -509,11 +518,13 @@ const resetEntryInputs = (keepPrices = false, keepVariant = false) => {
 
 }
 
-const selectImeiEntry = (index) => {
+// copy = true: bấm vào dòng để sao chép dữ liệu sang IMEI mới (không sửa dòng cũ); copy = false: sửa chính dòng đó
+const selectImeiEntry = (index, copy = false) => {
     const row = entryModal.value.item?.imeis?.[index]
     if (!row) return
-    editingEntryIndex.value = index
-    entryModal.value.imei_input = typeof row === 'string' ? row : (row.imei || '')
+    editingEntryIndex.value = copy ? null : index
+    entryError.value = ''
+    entryModal.value.imei_input = copy ? '' : (typeof row === 'string' ? row : (row.imei || ''))
     entryModal.value.variant_input = typeof row === 'string' ? null : (row.variant_id || null)
     entryModal.value.info_text_input = row.extra_info?.note || ''
     entryModal.value.account_input = row.extra_info?.account || ''
@@ -529,15 +540,47 @@ const selectImeiEntry = (index) => {
         entryModal.value.cost_price_input = Number(row.cost_price ?? entryModal.value.item.cost_price ?? 0)
         entryModal.value.sell_price_input = Number(row.sell_price ?? entryModal.value.item.sell_price ?? 0)
         entryFormRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        if (copy) document.getElementById('stock-import-imei-input')?.focus()
     })
 }
 
-const selectVariantEntry = (index) => {
+// Bảo hành của một dòng biến thể (nhà cung cấp / khách), lưu riêng từng dòng như IMEI
+const variantRowWarranty = (modal) => {
+    const supplierValue = props.customerImport ? 0 : Number(modal.warranty_duration_value_input || 0)
+    const customerValue = Number(modal.customer_warranty_duration_value_input || 0)
+    return {
+        supplier_warranty_value: supplierValue > 0 ? supplierValue : null,
+        supplier_warranty_unit: modal.warranty_duration_unit_input || 'months',
+        customer_warranty_value: customerValue > 0 ? customerValue : null,
+        customer_warranty_unit: modal.customer_warranty_duration_unit_input || 'months',
+    }
+}
+
+const sameRowWarranty = (row, warranty) =>
+    Number(row.supplier_warranty_value || 0) === Number(warranty.supplier_warranty_value || 0)
+    && Number(row.customer_warranty_value || 0) === Number(warranty.customer_warranty_value || 0)
+    && (!warranty.supplier_warranty_value || row.supplier_warranty_unit === warranty.supplier_warranty_unit)
+    && (!warranty.customer_warranty_value || row.customer_warranty_unit === warranty.customer_warranty_unit)
+
+const rowWarrantyLines = (row) => {
+    const lines = []
+    if (!props.customerImport && Number(row.supplier_warranty_value) > 0) lines.push(`NCC: ${formatWarranty(row.supplier_warranty_value, row.supplier_warranty_unit)}`)
+    if (Number(row.customer_warranty_value) > 0) lines.push(`Khách: ${formatWarranty(row.customer_warranty_value, row.customer_warranty_unit)}`)
+    return lines
+}
+
+// copy = true: bấm vào dòng để sao chép dữ liệu thành dòng mới; copy = false: sửa chính dòng đó
+const selectVariantEntry = (index, copy = false) => {
     const row = entryModal.value.item?.rows?.[index]
     if (!row) return
-    editingEntryIndex.value = index
+    editingEntryIndex.value = copy ? null : index
+    entryError.value = ''
     entryModal.value.variant_input = row.variant_id
     entryModal.value.quantity_input = Number(row.quantity || 1)
+    entryModal.value.warranty_duration_value_input = row.supplier_warranty_value || null
+    entryModal.value.warranty_duration_unit_input = row.supplier_warranty_unit || 'months'
+    entryModal.value.customer_warranty_duration_value_input = row.customer_warranty_value || null
+    entryModal.value.customer_warranty_duration_unit_input = row.customer_warranty_unit || 'months'
     variantSearch.value = variantLabel(row.variant || (entryModal.value.item.available_variants || []).find((option) => Number(option.id) === Number(row.variant_id)))
     showVariantDropdown.value = false
     nextTick(() => {
@@ -569,6 +612,7 @@ const addEntry = async () => {
                 quantity: qty,
                 cost_price: Number(modal.cost_price_input),
                 sell_price: Number(modal.sell_price_input),
+                ...variantRowWarranty(modal),
             }
             resetEntryInputs()
             return true
@@ -576,10 +620,12 @@ const addEntry = async () => {
 
         // Không gộp hai lô cùng biến thể nếu giá nhập/giá bán khác nhau.
         // Mỗi giá là một lô tồn riêng để xuất FIFO và tính lãi chính xác.
+        const rowWarranty = variantRowWarranty(modal)
         const exist = item.rows.find(row =>
             Number(row.variant_id) === Number(variant.id)
             && Number(row.cost_price) === Number(modal.cost_price_input)
             && Number(row.sell_price) === Number(modal.sell_price_input)
+            && sameRowWarranty(row, rowWarranty)
         )
 
         if (exist) {
@@ -593,6 +639,7 @@ const addEntry = async () => {
                 quantity: qty,
                 cost_price: Number(modal.cost_price_input),
                 sell_price: Number(modal.sell_price_input),
+                ...rowWarranty,
             })
         }
         resetEntryInputs()
@@ -622,7 +669,10 @@ const addEntry = async () => {
         entryError.value = ''
         imeiLookupLoading.value = true
         try {
-            const lookup = await lookupImei(imei)
+            const original = editingEntryIndex.value !== null ? item.imeis[editingEntryIndex.value] : null
+            const originalImei = original ? String(typeof original === 'string' ? original : original.imei || '') : ''
+            const unchanged = originalImei !== '' && originalImei.toLowerCase() === imei.toLowerCase()
+            const lookup = unchanged ? null : await lookupImei(imei)
             if (lookup && !lookup.can_import) {
                 entryError.value = lookup.message || `IMEI ${imei} không thể nhập.`
                 return false
@@ -741,6 +791,7 @@ onBeforeUnmount(() => {
         "
         size="xl"
         body-class="p-3 sm:p-4"
+        footer-class="py-1.5"
         @close="close"
     >
         <div class="flex flex-col gap-3">
@@ -769,10 +820,6 @@ onBeforeUnmount(() => {
 
             <!-- KHU VỰC 1: KHUNG DỰT FORM NHẬP TẬP TRUNG (CONTROL PANEL) -->
             <div ref="entryFormRef" class="order-1 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div v-if="editingEntryIndex !== null" class="mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                    <span>Đang nạp dòng đã chọn vào biểu mẫu.</span>
-                    <button type="button" class="font-semibold underline" @click="resetEntryInputs">Thoát sửa</button>
-                </div>
                 <div v-if="scanning" class="relative mb-3 overflow-hidden rounded-lg bg-slate-950">
                     <video ref="videoRef" autoplay muted playsinline class="h-44 w-full object-cover sm:h-52" />
                     <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -801,8 +848,7 @@ onBeforeUnmount(() => {
                     </label>
                 </div>
                 <div
-                    class="grid grid-flow-row-dense items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]"
-                    :class="entryModal.item?.type === 'imei_variant' ? 'md:grid-cols-6' : ''"
+                    class="flex flex-wrap items-end gap-2.5 [&>*]:min-w-0 [&>*]:flex-[1_1_145px]"
                 >
 
                     <!-- INPUT: SẢN PHẨM THƯỜNG -->
@@ -816,7 +862,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- IMEI / SERIAL -->
-                    <div v-if="entryModal.mode === 'imei'" class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
+                    <div v-if="entryModal.mode === 'imei'" class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:!basis-[calc(33.333%-0.5rem)]' : ''">
                         <div class="relative">
                             <input
                                 id="stock-import-imei-input"
@@ -845,7 +891,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- INPUT: BIẾN THỂ -->
-                    <div v-if="entryModal.mode === 'variant' || entryModal.item?.type === 'imei_variant'" class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
+                    <div v-if="entryModal.mode === 'variant' || entryModal.item?.type === 'imei_variant'" class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:!basis-[calc(33.333%-0.5rem)]' : ''">
                         <div ref="dropdownVariantRef" class="relative w-full">
                             <FloatingInput
                                 v-model="variantSearch"
@@ -884,7 +930,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- GIÁ NHẬP -->
-                    <div class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-1' : ''">
+                    <div class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:!basis-[calc(16.666%-0.5rem)]' : ''">
                         <FloatingInput
                             v-if="entryModal.mode !== 'normal'"
                             :model-value="formatPrice(entryModal.cost_price_input)"
@@ -905,7 +951,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- GIÁ BÁN -->
-                    <div class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-1' : ''">
+                    <div class="min-w-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:!basis-[calc(16.666%-0.5rem)]' : ''">
                         <FloatingInput
                             v-if="entryModal.mode !== 'normal'"
                             :model-value="formatPrice(entryModal.sell_price_input)"
@@ -925,84 +971,78 @@ onBeforeUnmount(() => {
                         />
                     </div>
 
-                    <div v-if="!props.customerImport" class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(64px,0.3fr)] items-end gap-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
-                        <input
-                            v-model.number="entryModal.warranty_duration_value_input"
-                            type="number"
-                            min="0"
-                            placeholder="BH nhà cung cấp"
-                            aria-label="Thời hạn bảo hành nhà cung cấp"
-                            class="h-9 min-w-0 w-full rounded-l-lg rounded-r-none border border-gray-300 px-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-0"
-                        />
-                        <select
-                            v-model="entryModal.warranty_duration_unit_input"
-                            aria-label="Đơn vị bảo hành nhà cung cấp"
-                            class="h-9 min-w-0 w-full rounded-l-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-0"
-                        >
-                            <option v-for="option in warrantyUnitOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                        </select>
+                    <UnitInput v-if="!props.customerImport" stacked-label :class="entryModal.item?.type === 'imei_variant' ? 'md:!basis-[calc(33.333%-0.5rem)]' : ''"
+                        v-model="entryModal.warranty_duration_value_input"
+                        v-model:unit="entryModal.warranty_duration_unit_input"
+                        :unit-options="warrantyUnitOptions"
+                        type="number" min="0"
+                        label="BH nhà cung cấp" unit-label="Đơn vị bảo hành nhà cung cấp"
+                    />
+
+                    <UnitInput stacked-label :class="entryModal.item?.type === 'imei_variant' ? 'md:!basis-[calc(33.333%-0.5rem)]' : ''"
+                        v-model="entryModal.customer_warranty_duration_value_input"
+                        v-model:unit="entryModal.customer_warranty_duration_unit_input"
+                        :unit-options="warrantyUnitOptions"
+                        type="number" min="0"
+                        label="BH khách hàng" unit-label="Đơn vị bảo hành khách hàng"
+                    />
+
+                    <div v-if="entryModal.mode === 'imei' || props.customerImport" class="min-w-0 max-md:!basis-full" :class="entryModal.item?.type === 'imei_variant' ? (props.customerImport ? 'md:!basis-[calc(66.666%-0.5rem)]' : 'md:!basis-[calc(33.333%-0.5rem)]') : ''">
+                        <label class="mb-0.5 block truncate text-[11px] font-medium text-slate-500">Thông tin thiết bị</label>
+                        <div class="relative">
+                            <FloatingInput
+                                v-model="entryModal.info_text_input"
+                                label="Thông tin thiết bị"
+                                :floating-label="false"
+                                placeholder-text="QR, service code, ghi chú..."
+                                placeholder-class="right-11 overflow-hidden text-ellipsis whitespace-nowrap"
+                                input-class="pr-12 !pt-2"
+                            />
+                            <BarcodeCameraButton
+                                class="absolute right-1 top-1/2 z-10 -translate-y-1/2"
+                                @scanned="appendScannedInfo"
+                            />
+                        </div>
                     </div>
 
-                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(64px,0.3fr)] items-end gap-0" :class="entryModal.item?.type === 'imei_variant' ? 'md:col-span-2' : ''">
-                        <input
-                            v-model.number="entryModal.customer_warranty_duration_value_input"
-                            type="number"
-                            min="0"
-                            placeholder="BH khách"
-                            aria-label="Thời hạn bảo hành khách hàng"
-                            class="h-9 min-w-0 w-full rounded-l-lg rounded-r-none border border-gray-300 px-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-0"
-                        />
-                        <select
-                            v-model="entryModal.customer_warranty_duration_unit_input"
-                            aria-label="Đơn vị bảo hành khách hàng"
-                            class="h-9 min-w-0 w-full rounded-l-none rounded-r-lg border border-l-0 border-gray-300 bg-white px-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-0"
-                        >
-                            <option v-for="option in warrantyUnitOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                        </select>
-                    </div>
-
-                    <div v-if="entryModal.mode === 'imei' || props.customerImport" class="relative min-w-0" :class="entryModal.item?.type === 'imei_variant' ? (props.customerImport ? 'md:col-span-4' : 'md:col-span-2') : ''">
-                        <FloatingInput
-                            v-model="entryModal.info_text_input"
-                            label="Thông tin thiết bị"
-                            placeholder-text="QR, service code, ghi chú..."
-                            placeholder-class="right-11 overflow-hidden text-ellipsis whitespace-nowrap"
-                            input-class="pr-12"
-                        />
-                        <BarcodeCameraButton
-                            class="absolute right-1 top-1/2 z-10 -translate-y-1/2"
-                            @scanned="appendScannedInfo"
-                        />
-                    </div>
-
-                </div>
-
-                <p v-if="scanError" class="mt-2 text-xs font-medium text-rose-600">{{ scanError }}</p>
-
-                <div v-if="entryModal.item" class="mt-2.5 flex flex-wrap items-center gap-2">
-                    <label class="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800">
+                <div v-if="entryModal.item" class="contents">
+                    <label class="inline-flex min-h-9 w-fit min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800">
                         <input v-model="entryModal.item.is_used" type="checkbox" class="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500" @change="entryModal.item.is_used && (entryModal.item.has_vat = false)" />
                         Sản phẩm cũ
                     </label>
-                    <label class="inline-flex min-h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800" :class="entryModal.item.is_used ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'" :title="entryModal.item.is_used ? 'Sản phẩm cũ không áp dụng VAT' : ''">
+                    <label class="inline-flex min-h-9 w-fit min-w-0 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800" :class="entryModal.item.is_used ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'" :title="entryModal.item.is_used ? 'Sản phẩm cũ không áp dụng VAT' : ''">
                         <input v-model="entryModal.item.has_vat" :disabled="entryModal.item.is_used" type="checkbox" class="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
                         VAT
                     </label>
-                    <div v-if="entryModal.item.has_vat" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                    <div v-if="entryModal.item.has_vat" class="max-w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
                         <span class="font-bold text-amber-800">Thuế dự kiến: {{ formatPrice(vatEstimate) }} {{ $currency() }}</span>
                         <span class="ml-1 text-amber-700">(giá bán chưa bao gồm thuế)</span>
                     </div>
                 </div>
+                </div>
 
-                <div v-if="entryModal.item && entryModal.mode !== 'normal'" class="mt-2.5 flex flex-wrap items-center justify-end gap-2">
+                <p v-if="scanError" class="mt-2 text-xs font-medium text-rose-600">{{ scanError }}</p>
+
+                <div v-if="entryModal.item && entryModal.mode !== 'normal'" class="mt-3 flex items-center justify-center gap-2">
                     <button
                         type="button"
-                        class="inline-flex h-8 min-w-[126px] items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        class="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:min-w-[220px] sm:px-6"
+                        :class="editingEntryIndex !== null ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'"
                         :disabled="imeiLookupLoading"
                         @click="addEntry"
                     >
-                        <Plus class="h-4 w-4" />
+                        <Check v-if="editingEntryIndex !== null" class="h-4 w-4 shrink-0" />
+                        <Plus v-else class="h-4 w-4 shrink-0" />
                         {{ editingEntryIndex !== null ? 'Cập nhật' : 'Thêm vào đơn' }}
+                    </button>
+                    <button
+                        v-if="editingEntryIndex !== null"
+                        type="button"
+                        class="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:min-w-[120px] sm:px-4"
+                        @click="resetEntryInputs"
+                    >
+                        <X class="h-4 w-4" />
+                        Hủy sửa
                     </button>
                 </div>
             </div>
@@ -1016,23 +1056,23 @@ onBeforeUnmount(() => {
                         <h3 class="text-xs font-bold text-slate-800">IMEI đã thêm</h3>
                         <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ entryModal.item.imeis.length }}</span>
                     </div>
-                    <span class="text-[10px] text-slate-500">Chọn một mục để sửa</span>
+                    <span class="text-[10px] text-slate-500">Bấm dòng để sao chép, bấm ✎ để sửa</span>
                 </div>
-                <div v-if="entryModal.item?.imeis?.length" class="hidden max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white md:block">
-                    <table class="w-full min-w-[720px] table-fixed text-xs">
+                <div v-if="entryModal.item?.imeis?.length" class="hidden max-h-60 overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white md:block">
+                    <table class="w-full table-fixed text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
                                 <th class="px-3 py-2.5 text-left">IMEI / Serial</th>
                                 <th v-if="entryModal.item?.type === 'imei_variant'" class="w-48 px-3 py-2.5 text-left">Biến thể</th>
-                                <th class="px-3 py-2.5 text-right">Giá nhập</th>
-                                <th class="px-3 py-2.5 text-right">Giá bán</th>
-                                <th class="px-3 py-2.5 text-left">Bảo hành</th>
+                                <th class="w-28 px-2 py-2.5 text-right">Giá nhập</th>
+                                <th class="w-28 px-2 py-2.5 text-right">Giá bán</th>
+                                <th class="w-28 px-2 py-2.5 text-left">Bảo hành</th>
                                 <th v-if="hasAnyImeiExtraInfo" class="px-3 py-2.5 text-left">Thông tin thêm</th>
                                 <th class="w-10 px-2 py-2.5"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
-                            <tr v-for="(row, index) in entryModal.item.imeis" :key="index" class="cursor-pointer hover:bg-blue-50/70" :class="editingEntryIndex === index ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : ''" @click="selectImeiEntry(index)">
+                            <tr v-for="(row, index) in entryModal.item.imeis" :key="index" class="cursor-pointer hover:bg-blue-50/70" :class="editingEntryIndex === index ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : ''" @click="selectImeiEntry(index, true)">
                                 <td class="px-3 py-2 font-mono font-medium text-slate-800">
                                     {{ typeof row === 'string' ? row : row.imei }}
                                 </td>
@@ -1047,7 +1087,7 @@ onBeforeUnmount(() => {
                                         :value="formatPrice(row.cost_price)"
                                         type="text"
                                         inputmode="numeric"
-                                        class="h-7 w-24 rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
+                                        class="h-7 w-full max-w-[6.5rem] rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                         @input="updateRowMoney(row, 'cost_price', $event)"
                                         @click.stop
                                     />
@@ -1059,7 +1099,7 @@ onBeforeUnmount(() => {
                                         :value="formatPrice(row.sell_price)"
                                         type="text"
                                         inputmode="numeric"
-                                        class="h-7 w-24 rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
+                                        class="h-7 w-full max-w-[6.5rem] rounded-lg border border-slate-200 px-2 text-right text-xs outline-none focus:border-blue-500"
                                         @input="updateRowMoney(row, 'sell_price', $event)"
                                         @click.stop
                                     />
@@ -1071,12 +1111,12 @@ onBeforeUnmount(() => {
                                             ? formatDate(row.warranty_expired_at)
                                             : (
                                                 typeof row !== 'string' && row.warranty_duration_value
-                                                    ? `${row.warranty_duration_value} ${row.warranty_duration_unit === 'days' ? 'ngày' : 'tháng'}`
+                                                    ? formatWarranty(row.warranty_duration_value, row.warranty_duration_unit)
                                                     : '-'
                                             )
                                     }}</div>
                                     <div v-if="typeof row !== 'string' && row.extra_info?.customer_warranty_duration_value" :class="props.customerImport ? '' : 'mt-0.5 text-[11px] text-blue-700'">
-                                        Khách: {{ row.extra_info.customer_warranty_duration_value }} {{ row.extra_info.customer_warranty_duration_unit === 'days' ? 'ngày' : 'tháng' }}
+                                        Khách: {{ formatWarranty(row.extra_info.customer_warranty_duration_value, row.extra_info.customer_warranty_duration_unit) }}
                                     </div>
                                 </td>
                                 <td v-if="hasAnyImeiExtraInfo" class="px-3 py-2 text-slate-600">
@@ -1086,13 +1126,19 @@ onBeforeUnmount(() => {
                                     <span v-else class="text-slate-300">-</span>
                                 </td>
                                 <td class="px-2 text-center">
-                                    <button
-                                        type="button"
-                                        class="p-1 text-slate-400 hover:text-red-500"
-                                        @click.stop="removeImei(entryModal.item, index)"
-                                    >
-                                        <Trash2 class="h-4 w-4" />
-                                    </button>
+                                    <div class="flex items-center justify-center gap-0.5">
+                                        <button type="button" class="p-1 text-slate-400 hover:text-blue-600" title="Sửa" @click.stop="selectImeiEntry(index)">
+                                            <Pencil class="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="p-1 text-slate-400 hover:text-red-500"
+                                            title="Xóa"
+                                            @click.stop="removeImei(entryModal.item, index)"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -1106,16 +1152,21 @@ onBeforeUnmount(() => {
                         type="button"
                         class="w-full rounded-xl border p-3 text-left shadow-sm transition"
                         :class="editingEntryIndex === index ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-white hover:border-blue-300'"
-                        @click="selectImeiEntry(index)"
+                        @click="selectImeiEntry(index, true)"
                     >
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">IMEI / Serial · {{ index + 1 }}</div>
                                 <div class="mt-0.5 break-all font-mono text-sm font-bold text-slate-900">{{ typeof row === 'string' ? row : row.imei }}</div>
                             </div>
-                            <button type="button" class="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa IMEI" @click.stop="removeImei(entryModal.item, index)">
-                                <Trash2 class="h-4 w-4" />
-                            </button>
+                            <div class="flex shrink-0 items-center">
+                                <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600" aria-label="Sửa IMEI" @click.stop="selectImeiEntry(index)">
+                                    <Pencil class="h-4 w-4" />
+                                </button>
+                                <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa IMEI" @click.stop="removeImei(entryModal.item, index)">
+                                    <Trash2 class="h-4 w-4" />
+                                </button>
+                            </div>
                         </div>
                         <div v-if="entryModal.item?.type === 'imei_variant'" class="mt-2 rounded-lg bg-slate-50 px-2.5 py-2">
                             <div class="text-[10px] font-semibold uppercase text-slate-500">Biến thể</div>
@@ -1134,8 +1185,8 @@ onBeforeUnmount(() => {
                             </label>
                         </div>
                         <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-[11px]">
-                            <span v-if="!props.customerImport" class="text-slate-500">Bảo hành NCC: <strong class="text-slate-700">{{ typeof row !== 'string' && row.warranty_duration_value ? `${row.warranty_duration_value} ${row.warranty_duration_unit === 'days' ? 'ngày' : 'tháng'}` : '-' }}</strong></span>
-                            <span class="text-slate-500">Bảo hành khách: <strong class="text-blue-700">{{ typeof row !== 'string' && row.extra_info?.customer_warranty_duration_value ? `${row.extra_info.customer_warranty_duration_value} ${row.extra_info.customer_warranty_duration_unit === 'days' ? 'ngày' : 'tháng'}` : '-' }}</strong></span>
+                            <span v-if="!props.customerImport" class="text-slate-500">Bảo hành NCC: <strong class="text-slate-700">{{ typeof row !== 'string' && row.warranty_duration_value ? formatWarranty(row.warranty_duration_value, row.warranty_duration_unit) : '-' }}</strong></span>
+                            <span class="text-slate-500">Bảo hành khách: <strong class="text-blue-700">{{ typeof row !== 'string' && row.extra_info?.customer_warranty_duration_value ? formatWarranty(row.extra_info.customer_warranty_duration_value, row.extra_info.customer_warranty_duration_unit) : '-' }}</strong></span>
                         </div>
                     </button>
                 </div>
@@ -1157,9 +1208,9 @@ onBeforeUnmount(() => {
                         <h3 class="text-xs font-bold text-slate-800">Biến thể đã thêm</h3>
                         <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ entryModal.item.rows.length }}</span>
                     </div>
-                    <span class="text-[10px] text-slate-500">Chọn một mục để sửa</span>
+                    <span class="text-[10px] text-slate-500">Bấm dòng để sao chép, bấm ✎ để sửa</span>
                 </div>
-                <div v-if="entryModal.item?.rows?.length" class="hidden max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white md:block">
+                <div v-if="entryModal.item?.rows?.length" class="hidden max-h-60 overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white md:block">
                     <table class="w-full text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
@@ -1167,11 +1218,12 @@ onBeforeUnmount(() => {
                                 <th class="w-24 px-3 py-2.5 text-center">Số lượng</th>
                                 <th class="w-32 px-3 py-2.5 text-right">Giá nhập</th>
                                 <th class="w-32 px-3 py-2.5 text-right">Giá bán</th>
-                                <th class="w-10 px-2 py-2.5"></th>
+                                <th class="w-28 px-2 py-2.5 text-left">Bảo hành</th>
+                                <th class="w-16 px-2 py-2.5"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
-                            <tr v-for="(row, index) in entryModal.item.rows" :key="row.variant_id" class="cursor-pointer hover:bg-blue-50/70" :class="editingEntryIndex === index ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : ''" @click="selectVariantEntry(index)">
+                            <tr v-for="(row, index) in entryModal.item.rows" :key="`${index}-${row.variant_id}`" class="cursor-pointer hover:bg-blue-50/70" :class="editingEntryIndex === index ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : ''" @click="selectVariantEntry(index, true)">
                                 <td class="px-3 py-2 font-medium text-slate-800">{{ variantLabel(row.variant) }}</td>
                                 <td class="px-3 py-2">
                                     <input
@@ -1202,14 +1254,26 @@ onBeforeUnmount(() => {
                                         @click.stop
                                     />
                                 </td>
+                                <td class="px-2 py-2 text-slate-600">
+                                    <template v-if="rowWarrantyLines(row).length">
+                                        <div v-for="line in rowWarrantyLines(row)" :key="line">{{ line }}</div>
+                                    </template>
+                                    <span v-else class="text-slate-300">-</span>
+                                </td>
                                 <td class="px-2 text-center">
-                                    <button
-                                        type="button"
-                                        class="p-1 text-slate-400 hover:text-red-500"
-                                        @click.stop="removeVariantRow(entryModal.item, index)"
-                                    >
-                                        <Trash2 class="h-4 w-4" />
-                                    </button>
+                                    <div class="flex items-center justify-center gap-0.5">
+                                        <button type="button" class="p-1 text-slate-400 hover:text-blue-600" title="Sửa" @click.stop="selectVariantEntry(index)">
+                                            <Pencil class="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="p-1 text-slate-400 hover:text-red-500"
+                                            title="Xóa"
+                                            @click.stop="removeVariantRow(entryModal.item, index)"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -1219,20 +1283,28 @@ onBeforeUnmount(() => {
                 <div v-if="entryModal.item?.rows?.length" class="space-y-2 md:hidden">
                     <button
                         v-for="(row, index) in entryModal.item.rows"
-                        :key="`mobile-variant-${row.variant_id}`"
+                        :key="`mobile-variant-${index}-${row.variant_id}`"
                         type="button"
                         class="w-full rounded-xl border p-3 text-left shadow-sm transition"
                         :class="editingEntryIndex === index ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-white hover:border-blue-300'"
-                        @click="selectVariantEntry(index)"
+                        @click="selectVariantEntry(index, true)"
                     >
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Biến thể · {{ index + 1 }}</div>
                                 <div class="mt-0.5 break-words text-sm font-bold text-slate-900">{{ variantLabel(row.variant) }}</div>
                             </div>
-                            <button type="button" class="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa biến thể" @click.stop="removeVariantRow(entryModal.item, index)">
-                                <Trash2 class="h-4 w-4" />
-                            </button>
+                            <div class="flex shrink-0 items-center">
+                                <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600" aria-label="Sửa biến thể" @click.stop="selectVariantEntry(index)">
+                                    <Pencil class="h-4 w-4" />
+                                </button>
+                                <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa biến thể" @click.stop="removeVariantRow(entryModal.item, index)">
+                                    <Trash2 class="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="rowWarrantyLines(row).length" class="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-700">
+                            <span v-for="line in rowWarrantyLines(row)" :key="line" class="mr-3 inline-block">{{ line }}</span>
                         </div>
                         <div class="mt-2 grid grid-cols-3 gap-2">
                             <label class="min-w-0 rounded-lg bg-slate-50 px-2 py-2 text-[10px] font-semibold text-slate-500" @click.stop>
@@ -1265,7 +1337,7 @@ onBeforeUnmount(() => {
             <div class="flex justify-end">
                 <button
                     type="button"
-                    class="min-h-12 rounded-xl bg-blue-600 px-8 py-3 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    class="min-h-9 rounded-lg bg-blue-600 px-6 py-1.5 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                     :disabled="imeiLookupLoading"
                     @click="complete"
                 >

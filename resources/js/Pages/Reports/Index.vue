@@ -95,56 +95,14 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
 const today = new Date()
 const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 
-const toInputDate = (date) => date.toISOString().slice(0, 10)
+// Dùng ngày theo giờ máy (không dùng toISOString vì quy về UTC làm lệch 1 ngày ở múi giờ +7,
+// ví dụ 01/11 00:00 giờ Việt Nam sẽ thành 31/10).
+const toInputDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 const filters = reactive({
     from: toInputDate(firstDayOfMonth),
     to: toInputDate(today),
 })
-
-// Báo cáo luôn cần một khoảng ngày: nếu bấm "Xóa" thì quay về đầu tháng → hôm nay.
-const resetEmptyRange = ({ from, to }) => {
-    if (from || to) return
-    filters.from = toInputDate(firstDayOfMonth)
-    filters.to = toInputDate(today)
-}
-
-const quickRanges = [
-    {
-        label: 'Hôm nay',
-        apply: () => {
-            filters.from = toInputDate(new Date())
-            filters.to = toInputDate(new Date())
-        },
-    },
-    {
-        label: '7 ngày qua',
-        apply: () => {
-            const d = new Date()
-            d.setDate(d.getDate() - 6)
-            filters.from = toInputDate(d)
-            filters.to = toInputDate(new Date())
-        },
-    },
-    {
-        label: 'Tháng này',
-        apply: () => {
-            const d = new Date()
-            filters.from = toInputDate(new Date(d.getFullYear(), d.getMonth(), 1))
-            filters.to = toInputDate(d)
-        },
-    },
-    {
-        label: 'Tháng trước',
-        apply: () => {
-            const d = new Date()
-            const first = new Date(d.getFullYear(), d.getMonth() - 1, 1)
-            const last = new Date(d.getFullYear(), d.getMonth(), 0)
-            filters.from = toInputDate(first)
-            filters.to = toInputDate(last)
-        },
-    },
-]
 
 /*
 |--------------------------------------------------------------------------
@@ -254,6 +212,15 @@ const bestSellers = reactive({
 })
 
 const bestSellerOrder = ref('best') // best | worst
+const bestSellerOrderOptions = [
+    { value: 'best', label: 'Bán chạy nhất' },
+    { value: 'worst', label: 'Bán chậm nhất' },
+]
+const bestSellerLimitOptions = [
+    { value: 10, label: 'Top 10' },
+    { value: 20, label: 'Top 20' },
+    { value: 50, label: 'Top 50' },
+]
 const bestSellerLimit = ref(10)
 const bestSellerFilters = reactive({ search: '', category_id: '', brand_id: '' })
 
@@ -491,28 +458,15 @@ onMounted(() => {
                 </div>
             </section>
 
-            <!-- DATE FILTER (revenue / profit / best-sellers) -->
+            <!-- BỘ LỌC: mỗi tab chỉ có MỘT thanh lọc; ngày + các ô lọc nằm chung, đổi là tự lọc -->
             <section
-                v-if="['revenue', 'profit', 'best-sellers'].includes(activeTab)"
+                v-if="activeTab === 'revenue'"
                 class="flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4"
             >
-                <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" align="left" @change="resetEmptyRange" />
-                <template v-if="activeTab === 'revenue'">
-                    <ListFilterSelect v-model="revenueFilters.source" label="Nguồn thu" :show-placeholder="false" :options="sourceOptions" />
-                    <ListFilterSelect v-model="revenueFilters.payment_method" label="Thanh toán" :show-placeholder="false" :options="paymentOptions" />
-                    <ListFilterSelect v-model="revenueFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
-                </template>
-                <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:ml-auto">
-                    <button
-                        v-for="range in quickRanges"
-                        :key="range.label"
-                        type="button"
-                        class="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900"
-                        @click="range.apply()"
-                    >
-                        {{ range.label }}
-                    </button>
-                </div>
+                <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" :allow-all="false" align="left" />
+                <ListFilterSelect v-model="revenueFilters.source" label="Nguồn thu" :show-placeholder="false" :options="sourceOptions" />
+                <ListFilterSelect v-model="revenueFilters.payment_method" label="Thanh toán" :show-placeholder="false" :options="paymentOptions" />
+                <ListFilterSelect v-model="revenueFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
             </section>
 
             <!-- ================================================= -->
@@ -606,6 +560,7 @@ onMounted(() => {
 
                 <ListToolbar v-model="profitFilters.search" placeholder="Tìm sản phẩm theo tên...">
                     <template #filters>
+                        <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" :allow-all="false" align="left" />
                         <ListFilterSelect v-model="profitFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />
                         <ListFilterSelect v-model="profitFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
                     </template>
@@ -698,40 +653,13 @@ onMounted(() => {
 
                 <ListToolbar v-model="bestSellerFilters.search" placeholder="Tìm sản phẩm theo tên hoặc SKU...">
                     <template #filters>
+                        <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" :allow-all="false" align="left" />
                         <ListFilterSelect v-model="bestSellerFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />
                         <ListFilterSelect v-model="bestSellerFilters.brand_id" label="Thương hiệu" :show-placeholder="false" :options="brandOptions" />
+                        <ListFilterSelect v-model="bestSellerOrder" label="Sắp xếp" :show-placeholder="false" :options="bestSellerOrderOptions" />
+                        <ListFilterSelect v-model="bestSellerLimit" label="Số dòng" :show-placeholder="false" :options="bestSellerLimitOptions" width="sm:w-[120px]" />
                     </template>
                 </ListToolbar>
-
-                <section class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div class="flex overflow-hidden rounded-md border border-slate-200">
-                        <button
-                            type="button"
-                            class="px-4 py-2 text-xs font-bold"
-                            :class="bestSellerOrder === 'best' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
-                            @click="bestSellerOrder = 'best'"
-                        >
-                            Bán chạy nhất
-                        </button>
-                        <button
-                            type="button"
-                            class="px-4 py-2 text-xs font-bold"
-                            :class="bestSellerOrder === 'worst' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
-                            @click="bestSellerOrder = 'worst'"
-                        >
-                            Bán chậm nhất
-                        </button>
-                    </div>
-
-                    <select
-                        v-model.number="bestSellerLimit"
-                        class="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    >
-                        <option :value="10">Top 10</option>
-                        <option :value="20">Top 20</option>
-                        <option :value="50">Top 50</option>
-                    </select>
-                </section>
 
                 <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                     <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">

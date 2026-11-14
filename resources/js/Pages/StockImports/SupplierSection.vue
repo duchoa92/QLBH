@@ -17,6 +17,7 @@ import {
     UserRoundPlus,
     LoaderCircle,
     Printer,
+    CalendarDays,
 } from 'lucide-vue-next'
 
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
@@ -352,7 +353,7 @@ const handleCustomerOutsideClick = event => {
         <!-- ===================================================== -->
 
         <div
-            class="grid grid-cols-[minmax(0,1fr)_132px] gap-2 lg:items-center"
+            class="grid grid-cols-[minmax(0,1fr)_44px] gap-2 sm:grid-cols-[minmax(0,1fr)_132px] lg:items-center"
             :class="props.partyTypeLocked
                 ? 'lg:grid-cols-[minmax(0,1fr)_190px]'
                 : 'lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,0.42fr)]'"
@@ -482,7 +483,9 @@ const handleCustomerOutsideClick = event => {
                         v-model="keyword"
                         @keydown="onKeyDown"
                         type="text"
-                        label="Nhập tên, SĐT hoặc mã nhà cung cấp"
+                        label="Nhà cung cấp"
+                        placeholder-text="Tên, SĐT, mã"
+                        placeholder-class="overflow-hidden text-ellipsis whitespace-nowrap"
                     />
 
 
@@ -527,7 +530,7 @@ const handleCustomerOutsideClick = event => {
                     <button type="button" title="Bỏ chọn người bán" class="ml-2 rounded-full p-1 text-blue-500 hover:bg-white hover:text-rose-600" @click="clearCustomer"><X :size="15" /></button>
                 </div>
                 <div v-else class="relative">
-                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Tìm khách hàng theo tên, SĐT hoặc CCCD" placeholder-text="Khách lẻ" input-class="pr-20" />
+                    <FloatingInput v-model="customerKeyword" type="text" autocomplete="off" label="Khách hàng" placeholder-text="Khách lẻ · tên, SĐT" placeholder-class="right-24 overflow-hidden text-ellipsis whitespace-nowrap" input-class="pr-20" />
                     <LoaderCircle v-if="customerSearchLoading" class="absolute right-20 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
                     <button v-if="customerKeyword.trim()" type="button" title="Thêm khách lẻ mới" aria-label="Thêm khách lẻ mới" class="absolute right-10 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-700 transition hover:bg-blue-50" @click="createCustomer"><UserRoundPlus class="h-5 w-5" /></button>
                     <CustomerIdCardScanner class="absolute right-1 top-1/2 z-10 -translate-y-1/2 !h-8 !w-8" @read="onCustomerIdCardRead" @search="customerKeyword = $event" />
@@ -547,11 +550,18 @@ const handleCustomerOutsideClick = event => {
 
             <div class="relative min-w-0">
 
-                <FloatingInput
-                    v-model="importDate"
-                    type="date"
-                    label="Ngày nhập hàng"
-                />
+                <!-- Điện thoại: chỉ biểu tượng lịch, bấm vào là chọn ngày -->
+                <label class="relative flex h-10 w-11 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white text-blue-600 sm:hidden" :title="'Ngày nhập: ' + importDate">
+                    <CalendarDays class="h-5 w-5" />
+                    <input v-model="importDate" type="date" aria-label="Ngày nhập hàng" class="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+                </label>
+                <div class="hidden sm:block">
+                    <FloatingInput
+                        v-model="importDate"
+                        type="date"
+                        label="Ngày nhập hàng"
+                    />
+                </div>
 
             </div>
 

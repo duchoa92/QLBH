@@ -1,4 +1,5 @@
 <script setup>
+import { formatWarranty } from '@/utils/warranty'
 // Modal phiếu nhập mở từ ô tìm nhanh: cùng giao diện/logic hiển thị như modal "Chi tiết đơn nhập" ở trang Phiếu nhập hàng.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
@@ -106,9 +107,7 @@ const paymentMethodLabel = (method) => ({ cash: 'Tiền mặt', bank: 'Chuyển 
 const warrantyLabel = (item) => {
     const value = Number(item?.supplier_warranty_value || 0)
     if (!value) return ''
-    const unit = String(item.supplier_warranty_unit || 'months').toLowerCase()
-    const label = unit.startsWith('day') ? 'ngày' : unit.startsWith('year') ? 'năm' : 'tháng'
-    return `${value} ${label}`
+    return formatWarranty(value, item.supplier_warranty_unit)
 }
 
 

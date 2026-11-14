@@ -77,8 +77,8 @@ onBeforeUnmount(() => {
                 {{ option[optionLabel] }}
             </button>
             <div v-if="!filteredOptions.length" class="px-3 py-2 text-sm text-slate-500">Không tìm thấy dữ liệu phù hợp.</div>
-            <button type="button" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50" @mousedown.prevent="create">
-                <Plus class="h-4 w-4" />
+            <button type="button" class="flex w-full items-center gap-2 border-t-2 border-blue-200 bg-blue-50 px-3 py-2.5 text-left text-sm font-bold text-blue-700 hover:bg-blue-100" @mousedown.prevent="create">
+                <Plus class="h-4 w-4 shrink-0 rounded bg-blue-600 p-0.5 text-white" />
                 {{ query.trim() ? `Tạo mới “${query.trim()}”` : `Tạo ${label.toLocaleLowerCase()} mới` }}
             </button>
         </div>

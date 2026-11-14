@@ -5,6 +5,7 @@ import { Plus, Save, Trash2, MessageSquare, Gift, Receipt } from 'lucide-vue-nex
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { formatMoney, formatDate, formatDatePlusDays } from '@/utils/format'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import UnitInput from '@/Components/UI/UnitInput.vue'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
@@ -662,8 +663,20 @@ const confirmItemOptions = ({ variant, imei }) => {
                         <div class="flex justify-between text-slate-500"><span>Tiền hàng</span><b class="text-slate-800">{{ formatMoney(subtotal) }}</b></div>
                         <div class="flex justify-between text-rose-600"><span>Giảm giá</span><b>{{ formatMoney(discount) }}</b></div>
                         <div class="grid grid-cols-2 gap-2 border-t border-dashed border-slate-200 pt-2">
-                            <div class="relative min-w-0"><FloatingInput :model-value="extraFeeInputValue" label="Phí phụ thu" :format-thousands="form.extra_fee_type !== 'percent'" :inputmode="form.extra_fee_type === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-10 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateExtraFee" /><button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white" :class="form.extra_fee_type === 'percent' ? 'bg-amber-500' : 'bg-blue-600'" @click="toggleExtraFeeType">{{ form.extra_fee_type === 'percent' ? '%' : $currency() }}</button></div>
-                            <div class="relative min-w-0"><FloatingInput :model-value="discountInputValue" label="Chiết khấu đơn" :format-thousands="form.invoice_discount_type !== 'percent'" :inputmode="form.invoice_discount_type === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-10 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateInvoiceDiscount" /><button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white" :class="form.invoice_discount_type === 'percent' ? 'bg-amber-500' : 'bg-blue-600'" @click="toggleInvoiceDiscountType">{{ form.invoice_discount_type === 'percent' ? '%' : $currency() }}</button></div>
+                            <UnitInput
+                                size="sm" toggle label="Phí phụ thu"
+                                :model-value="extraFeeInputValue" :format-thousands="form.extra_fee_type !== 'percent'" :inputmode="form.extra_fee_type === 'percent' ? 'decimal' : 'numeric'"
+                                :unit="form.extra_fee_type" :unit-options="[{ value: 'amount', label: $currency(), tone: 'blue' }, { value: 'percent', label: '%', tone: 'amber' }]"
+                                :unit-title="form.extra_fee_type === 'percent' ? 'Đang tính phí theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang tính phí theo số tiền, nhấn để chuyển sang phần trăm'"
+                                @update:model-value="updateExtraFee" @toggle="toggleExtraFeeType"
+                            />
+                            <UnitInput
+                                size="sm" toggle label="Chiết khấu đơn"
+                                :model-value="discountInputValue" :format-thousands="form.invoice_discount_type !== 'percent'" :inputmode="form.invoice_discount_type === 'percent' ? 'decimal' : 'numeric'"
+                                :unit="form.invoice_discount_type" :unit-options="[{ value: 'amount', label: $currency(), tone: 'blue' }, { value: 'percent', label: '%', tone: 'amber' }]"
+                                :unit-title="form.invoice_discount_type === 'percent' ? 'Đang giảm theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang giảm theo số tiền, nhấn để chuyển sang phần trăm'"
+                                @update:model-value="updateInvoiceDiscount" @toggle="toggleInvoiceDiscountType"
+                            />
                         </div>
                         <div v-if="invoiceDiscountAmount > 0" class="flex justify-between text-rose-600"><span>Chiết khấu đơn</span><b>-{{ formatMoney(invoiceDiscountAmount) }}</b></div>
                         <div v-if="vat > 0" class="flex justify-between text-emerald-700"><span>Thuế VAT bán hàng</span><b>{{ formatMoney(vat) }}</b></div>

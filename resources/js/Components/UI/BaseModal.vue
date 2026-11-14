@@ -24,6 +24,10 @@ const props = defineProps({
         type: String,
         default: 'z-[1000]',
     },
+    footerClass: {
+        type: String,
+        default: 'py-3',
+    },
     embedded: {
         type: Boolean,
         default: false,
@@ -92,7 +96,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- FOOTER -->
-            <div v-if="$slots.footer" class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <div v-if="$slots.footer" class="shrink-0 border-t border-slate-200 bg-slate-50 px-4" :class="footerClass">
                 <slot name="footer" />
             </div>
 

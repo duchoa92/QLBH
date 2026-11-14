@@ -150,6 +150,45 @@ input[type="search"]::-webkit-search-results-decoration {
 
 /*
 |--------------------------------------------------------------------------
+| SONNER: phối màu thông báo dễ đọc
+| Nền nhạt + chữ đậm cùng tông (độ tương phản cao) + vạch màu bên trái và
+| biểu tượng đúng màu, thay cho nền rực/chữ nhạt của richColors mặc định.
+|--------------------------------------------------------------------------
+*/
+[data-sonner-toast][data-rich-colors='true'] {
+    border-left-width: 4px !important;
+    box-shadow: 0 8px 24px -8px rgb(15 23 42 / 0.25) !important;
+    font-weight: 600 !important;
+}
+[data-sonner-toast][data-rich-colors='true'] [data-description] {
+    color: inherit !important;
+    opacity: 0.85;
+    font-weight: 500 !important;
+}
+[data-sonner-toast][data-rich-colors='true'] [data-close-button] {
+    background: rgb(255 255 255 / 0.85) !important;
+    color: #334155 !important;
+    border-color: rgb(15 23 42 / 0.15) !important;
+}
+[data-sonner-toast][data-rich-colors='true'][data-type='success'] {
+    background: #ecfdf5 !important; color: #064e3b !important; border-color: #6ee7b7 !important; border-left-color: #059669 !important;
+}
+[data-sonner-toast][data-rich-colors='true'][data-type='error'] {
+    background: #fef2f2 !important; color: #7f1d1d !important; border-color: #fca5a5 !important; border-left-color: #dc2626 !important;
+}
+[data-sonner-toast][data-rich-colors='true'][data-type='warning'] {
+    background: #fffbeb !important; color: #78350f !important; border-color: #fcd34d !important; border-left-color: #d97706 !important;
+}
+[data-sonner-toast][data-rich-colors='true'][data-type='info'] {
+    background: #eff6ff !important; color: #1e3a8a !important; border-color: #93c5fd !important; border-left-color: #2563eb !important;
+}
+[data-sonner-toast][data-type='success'] [data-icon] { color: #059669; }
+[data-sonner-toast][data-type='error'] [data-icon] { color: #dc2626; }
+[data-sonner-toast][data-type='warning'] [data-icon] { color: #d97706; }
+[data-sonner-toast][data-type='info'] [data-icon] { color: #2563eb; }
+
+/*
+|--------------------------------------------------------------------------
 | SONNER FIX POSITION
 |--------------------------------------------------------------------------
 */

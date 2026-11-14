@@ -294,7 +294,7 @@ class PosCheckoutService
                             : null,
 
                     'warranty_unit' =>
-                        in_array(($item['warranty_unit'] ?? null), ['day', 'month'], true)
+                        in_array(($item['warranty_unit'] ?? null), ['day', 'week', 'month', 'year'], true)
                             ? $item['warranty_unit']
                             : null,
 

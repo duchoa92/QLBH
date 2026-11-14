@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { History, ChevronDown } from 'lucide-vue-next'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import UnitInput from '@/Components/UI/UnitInput.vue'
 
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
 import CartTable from '@/Modules/POS/Cart/Components/CartTable.vue'
@@ -191,14 +192,20 @@ const toggleInvoiceDiscountType = () => {
                     <span>Chiết khấu sản phẩm:</span><strong>-{{ $money(discount) }}</strong>
                 </div>
                 <div v-show="showFeeDiscount" class="grid grid-cols-2 gap-2 pt-0.5">
-                    <div class="relative min-w-0">
-                        <FloatingInput :model-value="extraFeeInputValue" label="Phí phụ thu" :format-thousands="extraFeeType !== 'percent'" :inputmode="extraFeeType === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-11 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateExtraFee" />
-                        <button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white shadow-sm" :class="extraFeeType === 'percent' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'" :aria-label="extraFeeType === 'percent' ? 'Đang tính phí theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang tính phí theo số tiền, nhấn để chuyển sang phần trăm'" @click="toggleExtraFeeType">{{ extraFeeType === 'percent' ? '%' : $currency() }}</button>
-                    </div>
-                    <div class="relative min-w-0">
-                        <FloatingInput :model-value="discountInputValue" label="Chiết khấu đơn" :format-thousands="invoiceDiscountType !== 'percent'" :inputmode="invoiceDiscountType === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-11 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateInvoiceDiscount" />
-                        <button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white shadow-sm" :class="invoiceDiscountType === 'percent' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'" :aria-label="invoiceDiscountType === 'percent' ? 'Đang giảm theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang giảm theo số tiền, nhấn để chuyển sang phần trăm'" @click="toggleInvoiceDiscountType">{{ invoiceDiscountType === 'percent' ? '%' : $currency() }}</button>
-                    </div>
+                    <UnitInput
+                        size="sm" toggle label="Phí phụ thu"
+                        :model-value="extraFeeInputValue" :format-thousands="extraFeeType !== 'percent'" :inputmode="extraFeeType === 'percent' ? 'decimal' : 'numeric'"
+                        :unit="extraFeeType" :unit-options="[{ value: 'amount', label: $currency(), tone: 'blue' }, { value: 'percent', label: '%', tone: 'amber' }]"
+                        :unit-title="extraFeeType === 'percent' ? 'Đang tính phí theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang tính phí theo số tiền, nhấn để chuyển sang phần trăm'"
+                        @update:model-value="updateExtraFee" @toggle="toggleExtraFeeType"
+                    />
+                    <UnitInput
+                        size="sm" toggle label="Chiết khấu đơn"
+                        :model-value="discountInputValue" :format-thousands="invoiceDiscountType !== 'percent'" :inputmode="invoiceDiscountType === 'percent' ? 'decimal' : 'numeric'"
+                        :unit="invoiceDiscountType" :unit-options="[{ value: 'amount', label: $currency(), tone: 'blue' }, { value: 'percent', label: '%', tone: 'amber' }]"
+                        :unit-title="invoiceDiscountType === 'percent' ? 'Đang giảm theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang giảm theo số tiền, nhấn để chuyển sang phần trăm'"
+                        @update:model-value="updateInvoiceDiscount" @toggle="toggleInvoiceDiscountType"
+                    />
                 </div>
                 <div v-if="vat > 0" class="flex items-center justify-between border-t border-dashed border-slate-200 pt-1 text-emerald-700">
                     <span>Thuế VAT bán hàng:</span><strong>{{ $money(vat) }}</strong>

@@ -885,7 +885,7 @@ class StockImportService
         $value = (int) ($imeiData['warranty_duration_value'] ?? 0);
         $unit = $imeiData['warranty_duration_unit'] ?? null;
 
-        if ($value <= 0 || ! in_array($unit, ['days', 'months'], true)) {
+        if ($value <= 0 || ! in_array($unit, ['days', 'weeks', 'months', 'years'], true)) {
             return null;
         }
 
@@ -893,8 +893,11 @@ class StockImportService
             ? Carbon::parse($importDate)->startOfDay()
             : now()->startOfDay();
 
-        return $unit === 'months'
-            ? $date->addMonths($value)
-            : $date->addDays($value);
+        return match ($unit) {
+            'years' => $date->addYears($value),
+            'months' => $date->addMonths($value),
+            'weeks' => $date->addWeeks($value),
+            default => $date->addDays($value),
+        };
     }
 }

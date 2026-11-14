@@ -18,6 +18,8 @@ const MAX_PREVIEW_ROWS = 1000
 
 const file = ref(null)
 const images = ref([])
+const ingesting = ref(false)
+const dragging = ref(false)
 const previewData = ref([])
 const summary = ref({ total: 0, create: 0, update: 0, skip: 0, error: 0 })
 const step = ref('upload') // upload | preview
@@ -98,7 +100,8 @@ const OPTION_GROUPS = [
 const options = ref({ ...DEFAULT_OPTIONS })
 const skipRows = ref([]) // số dòng (theo file Excel) người dùng chọn bỏ qua
 const viewMode = ref('issues') // all | issues
-const showOptions = ref(false) // phần chọn cách xử lý lỗi/trùng chỉ hiện khi bấm
+// Hướng xử lý lỗi: null = chưa chọn (còn lỗi thì chưa cho nhập); skip = TH1 bỏ qua dòng lỗi; custom = TH2 chọn cách xử lý từng loại lỗi
+const errorMode = ref(null) // null = chưa chọn: còn lỗi thì chưa cho nhập
 const notice = ref('')
 let recheckTimer = null
 
@@ -244,15 +247,8 @@ const acceptExcelFile = (f) => {
     return true
 }
 
-const handleFile = (e) => {
-    acceptExcelFile(e.target.files[0])
-
-    // reset input để lần sau chọn lại vẫn trigger
-    e.target.value = null
-}
-
-// Thêm ảnh vào danh sách: bỏ ảnh sai định dạng / quá lớn
-const addImageFiles = (files) => {
+// Thêm ảnh vào danh sách: bỏ ảnh sai định dạng / quá lớn. Trả về số ảnh đã thêm.
+const addImageFiles = (files, quiet = false) => {
     let tooBig = 0
     let invalid = 0
     const accepted = []
@@ -276,46 +272,169 @@ const addImageFiles = (files) => {
     images.value = [...images.value, ...accepted]
 
     if (tooBig) toast.warning(`${tooBig} ảnh lớn hơn ${MAX_IMAGE_MB}MB đã bị bỏ qua`)
-    if (invalid && accepted.length === 0) toast.error('Chỉ nhận ảnh jpg, png, webp, gif hoặc file zip chứa ảnh')
+    if (!quiet && invalid && accepted.length === 0) toast.error('Chỉ nhận ảnh jpg, png, webp, gif')
+
+    return accepted.length
 }
 
-const extractZip = async (zipFile) => {
+/* ================= MỘT VÙNG CHỌN: file Excel + ảnh (file lẻ, thư mục, zip) ================= */
+const sheetPath = ref('') // đường dẫn của file Excel đang dùng (để chọn ảnh gần nó nhất khi trùng tên)
+
+const dirSegments = (path = '') => path.replace(/\\/g, '/').split('/').slice(0, -1).filter(Boolean)
+const baseNameOf = (path = '') => path.replace(/\\/g, '/').split('/').pop()
+const isJunkPath = (path) => {
+    const parts = path.replace(/\\/g, '/').split('/')
+    return path.includes('__MACOSX') || parts.some(part => part.startsWith('.') || part.startsWith('~$'))
+}
+
+// Ảnh nằm càng gần file Excel (cùng thư mục, thư mục con, thư mục cha...) điểm càng cao
+const proximity = (imagePath, excelPath) => {
+    const a = dirSegments(imagePath)
+    const b = dirSegments(excelPath)
+    let shared = 0
+    while (shared < a.length && shared < b.length && a[shared].toLowerCase() === b[shared].toLowerCase()) shared++
+    return shared * 10 - (a.length - shared) - (b.length - shared)
+}
+
+// Giải nén zip: lấy cả file Excel và ảnh bên trong, giữ đường dẫn để biết ảnh nằm ở đâu so với file Excel
+const expandZip = async (zipFile) => {
     const zip = await JSZip.loadAsync(zipFile)
-    const extracted = []
+    const root = zipFile.name.replace(/\.zip$/i, '')
+    const items = []
 
     for (const entryName in zip.files) {
         const entry = zip.files[entryName]
-        const baseName = entryName.split('/').pop()
+        if (entry.dir || isJunkPath(entryName)) continue
 
-        // Bỏ thư mục, file ẩn và rác của macOS
-        if (entry.dir || entryName.includes('__MACOSX') || baseName.startsWith('.')) continue
-        if (!IMAGE_EXTENSIONS.includes(extensionOf(baseName))) continue
+        const ext = extensionOf(entryName)
+        if (!IMAGE_EXTENSIONS.includes(ext) && !EXCEL_EXTENSIONS.includes(ext)) continue
 
         const blob = await entry.async('blob')
-        extracted.push(new File([blob], baseName, { type: blob.type || 'image/jpeg' }))
+        items.push({
+            file: new File([blob], baseNameOf(entryName), { type: blob.type || '', lastModified: entry.date ? entry.date.getTime() : Date.now() }),
+            path: `${root}/${entryName}`,
+        })
     }
 
-    return extracted
+    return items
 }
 
-const handleImages = async (e) => {
-    const files = Array.from(e.target.files)
-    if (!files.length) return
+// Đọc đệ quy thư mục kéo-thả (FileSystemEntry)
+const readDirectory = (directory) => new Promise((resolve, reject) => {
+    const reader = directory.createReader()
+    const all = []
+    const readMore = () => reader.readEntries((batch) => {
+        if (!batch.length) return resolve(all)
+        all.push(...batch)
+        readMore()
+    }, reject)
+    readMore()
+})
 
-    // 1. Nếu là 1 file ZIP đơn lẻ
-    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
-        try {
-            addImageFiles(await extractZip(files[0]))
-        } catch (err) {
-            toast.error('File ZIP không hợp lệ hoặc bị lỗi!')
-        }
-        e.target.value = ''
-        return
+const walkEntry = async (entry) => {
+    if (entry.isFile) {
+        const file = await new Promise((resolve, reject) => entry.file(resolve, reject))
+        return [{ file, path: (entry.fullPath || file.name).replace(/^\//, '') }]
     }
 
-    // 2. Chọn file lẻ hoặc cả thư mục: nối thêm vào danh sách hiện có
-    addImageFiles(files)
+    if (!entry.isDirectory) return []
+
+    const children = await readDirectory(entry)
+    return (await Promise.all(children.map(walkEntry))).flat()
+}
+
+// Nhận một danh sách phẳng [{ file, path }] từ mọi nguồn: chọn file, chọn thư mục, kéo-thả file/thư mục/zip
+const ingest = async (rawItems) => {
+    if (ingesting.value) return
+    ingesting.value = true
+
+    try {
+        const items = []
+        let zipErrors = 0
+
+        for (const item of rawItems) {
+            if (isJunkPath(item.path)) continue
+
+            if (item.file.name.toLowerCase().endsWith('.zip')) {
+                try {
+                    items.push(...await expandZip(item.file))
+                } catch {
+                    zipErrors++
+                }
+                continue
+            }
+
+            items.push(item)
+        }
+
+        const sheets = items.filter(item => EXCEL_EXTENSIONS.includes(extensionOf(item.file.name)))
+        const pictures = items.filter(item => IMAGE_EXTENSIONS.includes(extensionOf(item.file.name)))
+
+        if (zipErrors) toast.error(zipErrors === 1 ? 'File ZIP không hợp lệ hoặc bị lỗi' : `${zipErrors} file ZIP không hợp lệ hoặc bị lỗi`)
+
+        // File Excel: nhiều file thì lấy file ở thư mục nông nhất, rồi file mới nhất
+        let usedSheet = null
+        if (sheets.length) {
+            const best = [...sheets].sort((x, y) => dirSegments(x.path).length - dirSegments(y.path).length || (y.file.lastModified || 0) - (x.file.lastModified || 0))[0]
+            if (acceptExcelFile(best.file)) {
+                usedSheet = best
+                sheetPath.value = best.path
+                if (sheets.length > 1) toast.info(`Có ${sheets.length} file Excel, đang dùng "${best.file.name}"`)
+            }
+        }
+
+        // Ảnh: bỏ trùng tên (giữ ảnh gần file Excel nhất), nối thêm vào ảnh đã chọn
+        const known = new Set(images.value.map(img => img.file.name.toLowerCase()))
+        const byName = new Map()
+        for (const item of pictures) {
+            const key = item.file.name.toLowerCase()
+            if (known.has(key)) continue
+            const current = byName.get(key)
+            if (!current || proximity(item.path, sheetPath.value) > proximity(current.path, sheetPath.value)) byName.set(key, item)
+        }
+
+        const added = addImageFiles([...byName.values()].map(item => item.file), true)
+
+        if (!usedSheet && !pictures.length && !zipErrors) {
+            toast.error('Không thấy file Excel (.xlsx, .xls, .csv) hoặc ảnh (jpg, png, webp, gif) trong lựa chọn')
+        } else if (usedSheet || added) {
+            const parts = []
+            if (usedSheet) parts.push('1 file Excel')
+            if (added) parts.push(`${added} ảnh`)
+            toast.success(`Đã nhận ${parts.join(' và ')}`)
+        }
+    } finally {
+        ingesting.value = false
+    }
+}
+
+const fromFileList = (list) => Array.from(list || []).map(file => ({ file, path: file.webkitRelativePath || file.name }))
+
+const handlePick = async (e) => {
+    const items = fromFileList(e.target.files)
     e.target.value = ''
+    if (items.length) await ingest(items)
+}
+
+const handleDropAll = async (e) => {
+    dragging.value = false
+
+    // Phải lấy entry ngay trong sự kiện drop (sau await danh sách này không còn dùng được)
+    const entries = Array.from(e.dataTransfer?.items || [])
+        .map(item => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+        .filter(Boolean)
+    const fallbackFiles = fromFileList(e.dataTransfer?.files)
+
+    if (entries.length) {
+        try {
+            const items = (await Promise.all(entries.map(walkEntry))).flat()
+            if (items.length) return await ingest(items)
+        } catch {
+            // rơi xuống cách đọc file thường bên dưới
+        }
+    }
+
+    if (fallbackFiles.length) await ingest(fallbackFiles)
 }
 
 const findImage = (name) => {
@@ -371,19 +490,26 @@ const toggleSkip = (row) => {
     scheduleRecheck()
 }
 
-const resetOptions = () => { options.value = { ...DEFAULT_OPTIONS } }
+const setErrorMode = (mode) => {
+    errorMode.value = mode
+    if (mode === 'skip') options.value = { ...DEFAULT_OPTIONS, on_error: 'skip_row' }
+    else options.value = { ...options.value, on_error: 'skip_row' }
+}
 
-// Dòng tóm tắt lựa chọn hiện tại (hiện khi phần chi tiết đang ẩn)
-const optionsSummary = computed(() => {
-    const changed = OPTION_GROUPS
-        .filter(group => options.value[group.key] !== DEFAULT_OPTIONS[group.key])
-        .map(group => `${group.label}: ${group.choices.find(c => c.value === options.value[group.key])?.short ?? ''}`)
-    return changed.length ? changed.join(' · ') : 'Mặc định: có lỗi thì không cho nhập'
-})
+const ERROR_MODES = [
+    { value: 'skip', title: 'Bỏ qua dòng lỗi' },
+    { value: 'custom', title: 'Xử lý từng loại lỗi' },
+]
+
+// Các loại lỗi chọn riêng ở TH2 (lỗi bắt buộc như thiếu tên/danh mục/giá bán chỉ có thể bỏ qua dòng hoặc dừng)
+const CUSTOM_GROUPS = OPTION_GROUPS.filter(g => g.key !== 'on_error')
+const RESIDUAL_GROUP = OPTION_GROUPS.find(g => g.key === 'on_error')
 
 const backToUpload = () => {
     step.value = 'upload'
     skipRows.value = []
+    errorMode.value = null
+    options.value = { ...DEFAULT_OPTIONS }
 }
 
 const importableCount = computed(() => Number(summary.value.create || 0) + Number(summary.value.update || 0))
@@ -426,27 +552,6 @@ const handleWheel = (e) => {
 
     e.preventDefault()
     previewContainer.value.scrollLeft += e.deltaY * 0.7
-}
-
-const handleDropExcel = (e) => {
-    e.preventDefault()
-    acceptExcelFile(e.dataTransfer.files[0])
-}
-
-// kéo thả ảnh (nối thêm, hỗ trợ cả zip)
-const handleDropImages = async (e) => {
-    const files = Array.from(e.dataTransfer.files)
-
-    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
-        try {
-            addImageFiles(await extractZip(files[0]))
-        } catch (err) {
-            toast.error('File ZIP không hợp lệ hoặc bị lỗi!')
-        }
-        return
-    }
-
-    addImageFiles(files)
 }
 
 const removeImage = (index) => {
@@ -507,180 +612,101 @@ const downloadTemplate = () => {
             <!-- BƯỚC 1: CHỌN FILE -->
             <div v-if="step === 'upload'" class="space-y-4">
 
-                <!-- ===== EXCEL ===== -->
-                <div class="grid grid-cols-12 gap-4 items-start">
+                <!-- ===== MỘT VÙNG CHỌN: file Excel + ảnh (file lẻ, thư mục hoặc zip) ===== -->
+                <div class="grid grid-cols-12 items-start gap-4">
 
-                   
-
-                    <!-- DROP ZONE -->
-                    <div class="col-span-7"
-                        @dragover.prevent
-                        @drop.prevent="handleDropExcel"
+                    <div class="col-span-12 min-w-0 md:col-span-7"
+                        @dragover.prevent="dragging = true"
+                        @dragleave.prevent="dragging = false"
+                        @drop.prevent="handleDropAll"
                     >
-
                         <div
-                            class="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-green-400 rounded-xl p-3 bg-white hover:bg-green-50 transition cursor-pointer"
-                            @click="$refs.fileInput.click()"
+                            class="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed p-4 transition"
+                            :class="dragging ? 'border-blue-500 bg-blue-50' : 'border-blue-300 bg-white hover:bg-blue-50'"
+                            @click="$refs.pickInput.click()"
                         >
-                            <span><SquareMousePointer /></span>
+                            <SquareMousePointer />
 
-                            <div class="font-medium">
-                                Kéo & thả hoặc 
-                                <span class="text-green-600 font-semibold">Chọn file</span>
+                            <div class="text-center font-medium">
+                                Kéo & thả vào đây hoặc <span class="font-semibold text-blue-600">chọn file</span>
                             </div>
 
-                            <div class="text-xs text-gray-500">
-                                Hỗ trợ định dạng: .xlsx, .xls, .csv
+                            <div class="text-center text-xs text-gray-500">
+                                File Excel + ảnh sản phẩm — file lẻ, cả thư mục hoặc file zip đều được
                             </div>
 
-                            <input
-                                ref="fileInput"
-                                type="file"
-                                accept=".xlsx,.xls,.csv"
-                                class="hidden"
-                                @change="handleFile"
-                            />
-                        </div>
-
-                        <!-- FILE PREVIEW -->
-                        <div v-if="file" class="mt-2 flex items-center justify-between border rounded-lg p-1 bg-gray-50">
-                            <div class="flex text-center text-sm">
-                                <Sheet class="w-5 h-5 mr-1"/> {{ file.name }}
-                            </div>
-
-                            <button @click="file=null" class="text-gray-400 hover:text-red-500">✕</button>
-                        </div>
-
-                    </div>
-
-                    <!-- RIGHT NOTE -->
-                     <div class="col-span-5 bg-green-50 rounded-xl px-2 py-2.5 text-sm">
-                        <div class="flex items-center font-semibold text-green-700 mb-2"><Check class="flex mr-2" /> Yêu cầu file Excel</div>
-                        <ul class="list-disc ml-4 text-gray-600 space-y-1 text-xs">
-                            <li>Đúng định dạng file mẫu</li>
-                            <li>SKU để trống thì hệ thống tự tạo</li>
-                            <li>Dòng đầu là tiêu đề</li>
-                            <li>Tối đa 10MB, 5.000 sản phẩm mỗi lần</li>
-                        </ul>
-                    </div>
-
-                </div>
-
-                <!-- ===== IMAGE ===== -->
-                <div class="grid grid-cols-12 gap-4 items-start">
-
-                    <div 
-                        class="col-span-7 min-w-0 w-full"
-                        @dragover.prevent
-                        @drop.prevent="handleDropImages"
-                    >
-                        <div class="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-purple-400 rounded-xl p-3 bg-white hover:bg-purple-50 transition">
-                            <div class="mb-1"><SquareMousePointer/></div>
-
-                            <div class="font-medium text-center">
-                                Kéo & thả ảnh / Zip / Folder vào đây
-                            </div>
-
-                            <div class="flex gap-2">
-                                <button 
-                                    type="button"
-                                    @click="$refs.imageFileInput.click()" 
-                                    class="flex items-center justify-center gap-1 p-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium rounded-lg transition"
-                                >
-                                    <Image /> Chọn File / Zip
+                            <div class="mt-1 flex gap-2" @click.stop>
+                                <button type="button" class="flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-200" @click="$refs.pickInput.click()">
+                                    <Image class="h-4 w-4" /> Chọn file / zip
                                 </button>
-
-                                <button 
-                                    type="button"
-                                    @click="$refs.imageFolderInput.click()" 
-                                    class="flex items-center justify-center gap-1 p-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium rounded-lg transition"
-                                >
-                                    <Folder /> Chọn Thư mục
+                                <button type="button" class="flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-200" @click="$refs.folderInput.click()">
+                                    <Folder class="h-4 w-4" /> Chọn thư mục
                                 </button>
                             </div>
 
-                            <div class="text-[11px] text-gray-400 mt-1">
-                                Hỗ trợ jpg, png, webp,... zip hoặc Folder ảnh
+                            <div v-if="ingesting" class="mt-1 flex items-center gap-2 text-xs font-medium text-blue-700">
+                                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
+                                Đang đọc lựa chọn...
                             </div>
 
-                            <input
-                                ref="imageFileInput"
-                                type="file"
-                                multiple
-                                accept="image/*,.zip"
-                                class="hidden"
-                                @change="handleImages"
-                            />
-
-                            <input
-                                ref="imageFolderInput"
-                                type="file"
-                                multiple
-                                webkitdirectory
-                                directory
-                                class="hidden"
-                                @change="handleImages"
-                            />
+                            <input ref="pickInput" type="file" multiple accept=".xlsx,.xls,.csv,.zip,image/*" class="hidden" @click.stop @change="handlePick" />
+                            <input ref="folderInput" type="file" multiple webkitdirectory directory class="hidden" @click.stop @change="handlePick" />
                         </div>
 
-                        <div v-if="images.length" class="mt-2 w-full p-1 space-y-2">
-                            <div 
+                        <!-- File Excel đã nhận -->
+                        <div v-if="file" class="mt-2 flex items-center justify-between rounded-lg border bg-gray-50 p-1.5">
+                            <div class="flex min-w-0 items-center text-sm">
+                                <Sheet class="mr-1 h-5 w-5 shrink-0 text-green-600" /> <span class="truncate">{{ file.name }}</span>
+                            </div>
+                            <button type="button" class="px-1 text-gray-400 hover:text-red-500" title="Bỏ file Excel" @click="file = null; sheetPath = ''">✕</button>
+                        </div>
+
+                        <!-- Ảnh đã nhận -->
+                        <div v-if="images.length" class="mt-2 w-full space-y-2 p-1">
+                            <div
                                 ref="previewContainer"
                                 @wheel.prevent="handleWheel"
                                 class="w-full max-w-full overflow-x-auto overflow-y-hidden"
                             >
-                                <div class="flex gap-2 w-max py-1 px-1">
-
+                                <div class="flex w-max gap-2 px-1 py-1">
                                     <div
                                         v-for="(img, i) in images"
-                                        :key="i"
-                                        class="relative group w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border bg-white shadow-sm"
+                                        :key="img.preview"
+                                        class="group relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border bg-white shadow-sm"
                                     >
-                                        <img
-                                            :src="img.preview"
-                                            class="w-full h-full object-cover transition group-hover:scale-110"
-                                        />
+                                        <img :src="img.preview" :alt="img.file.name" :title="img.file.name" class="h-full w-full object-cover transition group-hover:scale-110" />
 
-                                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                        <div class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
                                             <button
+                                                type="button"
                                                 @click.stop="removeImage(i)"
-                                                class="bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow"
+                                                class="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow hover:bg-red-600"
                                                 title="Xóa ảnh này"
                                             >
                                                 ✕
                                             </button>
                                         </div>
                                     </div>
-                                    
                                 </div>
                             </div>
 
-                            <div class="text-xs text-gray-500 flex justify-between items-center pt-1">
-                                <span>Đã chọn <strong class="text-purple-700">{{ images.length }}</strong> ảnh ({{ totalSize }} MB)</span>
-
-                                <button
-                                    @click="clearImages"
-                                    class="text-red-500 hover:text-red-700 hover:underline font-medium"
-                                >
-                                    Xóa tất cả
-                                </button>
+                            <div class="flex items-center justify-between pt-1 text-xs text-gray-500">
+                                <span>Đã nhận <strong class="text-purple-700">{{ images.length }}</strong> ảnh ({{ totalSize }} MB)</span>
+                                <button type="button" @click="clearImages" class="font-medium text-red-500 hover:text-red-700 hover:underline">Xóa tất cả ảnh</button>
                             </div>
-
                         </div>
-
                     </div>
 
-                    <div class="col-span-5 bg-purple-50 rounded-xl px-2 py-2.5 text-sm">
-                        <div class="flex items-center font-semibold text-purple-700 mb-2"><Lightbulb class="w-4 h-4 mr-2" />Lưu ý</div>
-                        <ul class="list-disc ml-4 text-gray-600 space-y-1 text-xs">
-                            <li>Tên ảnh trùng cột "ảnh"</li>
-                            <li>Không dấu</li>
-                            <li>Có thể chọn folder hoặc file zip</li>
+                    <div class="col-span-12 rounded-xl bg-blue-50 px-3 py-2.5 text-sm md:col-span-5">
+                        <div class="mb-2 flex items-center font-semibold text-blue-700"><Lightbulb class="mr-2 h-4 w-4" /> Cách chọn</div>
+                        <ul class="ml-4 list-disc space-y-1 text-xs text-gray-600">
+                            <li>Chọn <strong>thư mục</strong>, file <strong>zip</strong> hoặc nhiều file lẻ (Excel + ảnh)</li>
+                            <li>Ảnh ở thư mục cha hay con đều nhận; tên ảnh khớp cột "ảnh"</li>
+                            <li>Tối đa 10MB, 5.000 sản phẩm/lần; SKU trống thì tự tạo</li>
                         </ul>
                     </div>
 
                 </div>
-
 
                 <!-- ACTION -->
                 <div class="flex justify-between items-center border-t pt-3">
@@ -721,21 +747,29 @@ const downloadTemplate = () => {
                     <span>{{ notice }}</span>
                 </div>
 
-                <!-- Cách xử lý lỗi / trùng: ẩn, bấm mới hiện -->
-                <div class="rounded-lg border-2 bg-amber-50" :class="blockedByAbort ? 'border-amber-400' : 'border-amber-200'">
-                    <button
-                        type="button"
-                        class="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-                        @click="showOptions = !showOptions"
-                    >
-                        <span class="flex shrink-0 items-center gap-1.5 text-base font-bold text-amber-800"><TriangleAlert :size="18" /> Xử lý lỗi</span>
-                        <span class="truncate text-xs text-slate-600">{{ optionsSummary }}</span>
-                        <span class="shrink-0 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white">{{ showOptions ? 'Ẩn' : 'Chọn cách xử lý' }}</span>
-                    </button>
+                <!-- Hướng xử lý lỗi: một khối duy nhất -->
+                <div v-if="summary.error > 0 || errorMode" class="rounded-lg border-2 bg-amber-50 p-3" :class="blockedByAbort ? 'border-amber-400' : 'border-amber-200'">
+                    <div class="mb-2 flex items-center gap-1.5 text-sm font-bold text-amber-800">
+                        <TriangleAlert :size="18" />
+                        <span v-if="summary.error > 0">Có {{ summary.error }} dòng lỗi<span v-if="blockedByAbort"> - chưa thể nhập, chọn cách xử lý:</span><span v-else> - cách xử lý:</span></span>
+                        <span v-else>Cách xử lý lỗi</span>
+                    </div>
 
-                    <div v-if="showOptions" class="space-y-3 border-t border-amber-200 bg-white px-3 py-3">
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <label
+                            v-for="mode in ERROR_MODES"
+                            :key="mode.value"
+                            class="flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm transition"
+                            :class="errorMode === mode.value ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-slate-300'"
+                        >
+                            <input type="radio" :checked="errorMode === mode.value" @change="setErrorMode(mode.value)" />
+                            <span class="font-semibold text-slate-800">{{ mode.title }}</span>
+                        </label>
+                    </div>
+
+                    <div v-if="errorMode === 'custom'" class="mt-3 space-y-3 rounded-lg bg-white p-3">
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div v-for="group in OPTION_GROUPS" :key="group.key" :title="group.hint">
+                            <div v-for="group in CUSTOM_GROUPS" :key="group.key" :title="group.hint">
                                 <FloatingSelect
                                     v-model="options[group.key]"
                                     :label="group.label"
@@ -743,8 +777,15 @@ const downloadTemplate = () => {
                                     :show-placeholder="false"
                                 />
                             </div>
+                            <div :title="RESIDUAL_GROUP.hint">
+                                <FloatingSelect
+                                    v-model="options.on_error"
+                                    label="Dòng còn lỗi sau khi xử lý (thiếu tên, danh mục, giá bán...)"
+                                    :options="RESIDUAL_GROUP.choices"
+                                    :show-placeholder="false"
+                                />
+                            </div>
                         </div>
-                        <button type="button" class="text-xs text-blue-600 hover:underline" @click="resetOptions">Đặt lại mặc định</button>
                     </div>
                 </div>
 
@@ -821,41 +862,31 @@ const downloadTemplate = () => {
                 </div>
                 <p v-if="hiddenRowCount" class="text-xs text-slate-500">Đang hiển thị {{ MAX_PREVIEW_ROWS }} dòng đầu, còn {{ hiddenRowCount }} dòng nữa (vẫn được xử lý khi nhập).</p>
 
-                <div v-if="blockedByAbort" class="space-y-2 rounded bg-yellow-100 p-3 text-sm">
-                    <div class="flex items-start gap-2">
-                        <TriangleAlert class="shrink-0" :size="18" />
-                        <span>Có <strong>{{ summary.error }}</strong> dòng lỗi nên <strong>chưa cho nhập</strong>. Hãy sửa file, hoặc chọn cách xử lý:</span>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <button type="button" class="rounded border border-amber-400 bg-white px-3 py-1 font-semibold text-amber-800 hover:bg-amber-50" @click="options.on_error = 'skip_row'">Bỏ qua các dòng lỗi, nhập phần còn lại</button>
-                        <button v-if="options.optional_field === 'error'" type="button" class="rounded border border-amber-400 bg-white px-3 py-1 font-semibold text-amber-800 hover:bg-amber-50" @click="options.optional_field = 'ignore'">Bỏ qua giá trị sai ở cột không bắt buộc</button>
-                        <button type="button" class="rounded border bg-white px-3 py-1 text-slate-700 hover:bg-slate-50" @click="showOptions = true">Chọn cách xử lý khác</button>
-                    </div>
-                </div>
-
-                <div class="flex gap-2">
-                    <button
-                        @click="doImport"
-                        :disabled="importing || !canImport"
-                        class="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                        <svg v-if="importing" class="w-4 h-4 animate-spin" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a12 12 0 00-12 12h4z" />
-                        </svg>
-                        <template v-if="importing">Đang nhập...</template>
-                        <template v-else>
-                            <CircleFadingArrowUp />
-                            Nhập {{ importableCount }} sản phẩm<template v-if="summary.error + summary.skip"> (bỏ qua {{ summary.error + summary.skip }})</template>
-                        </template>
-                    </button>
-
-                    <button @click="backToUpload" class="flex items-center gap-1 px-3 py-2 bg-gray-400 text-white rounded">
-                        <Undo2 /> Quay lại
-                    </button>
-                </div>
             </div>
         </div>
+        <template v-if="step === 'preview'" #footer>
+            <div class="flex justify-end gap-2">
+                <button @click="backToUpload" class="flex items-center gap-1 px-3 py-2 bg-gray-400 text-white rounded">
+                    <Undo2 /> Quay lại
+                </button>
+                <button
+                    @click="doImport"
+                    :disabled="importing || !canImport"
+                    class="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                    <svg v-if="importing" class="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a12 12 0 00-12 12h4z" />
+                    </svg>
+                    <template v-if="importing">Đang nhập...</template>
+                    <template v-else>
+                        <CircleFadingArrowUp />
+                        Nhập sản phẩm
+                    </template>
+                </button>
+
+            </div>
+        </template>
     </BaseModal>
 
     <BaseModal v-if="showReport" title="Kết quả nhập sản phẩm" @close="showReport = false">

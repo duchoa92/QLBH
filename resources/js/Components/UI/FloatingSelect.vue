@@ -146,7 +146,9 @@ const handleChange = (event) => {
                 {{ item[optionLabel] }}
             </option>
 
-            <option v-if="createInList && createLabel" :value="CREATE_VALUE">+ {{ createLabel }}</option>
+            <!-- Dòng hành động (không phải giá trị): có vạch ngăn, nền xanh, chữ đậm để không lẫn với danh sách giá trị -->
+            <option v-if="createInList && createLabel" value="" disabled class="fs-create-divider">────────────</option>
+            <option v-if="createInList && createLabel" :value="CREATE_VALUE" class="fs-create-option">＋ {{ createLabel }}…</option>
 
         </select>
 
@@ -160,10 +162,10 @@ const handleChange = (event) => {
         <button
             v-if="createLabel && !createInList"
             type="button"
-            class="mt-1 text-xs font-medium text-blue-700 hover:underline"
+            class="mt-1 inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
             @click="emit('create')"
         >
-            + {{ createLabel }}
+            <span aria-hidden="true">＋</span> {{ createLabel }}
         </button>
 
         <label
@@ -183,3 +185,16 @@ const handleChange = (event) => {
     </div>
 
 </template>
+
+<style scoped>
+/* Trình duyệt máy tính cho phép tô màu từng <option>; trên di động hiển thị theo giao diện hệ thống nhưng vẫn có dấu ＋ và vạch ngăn. */
+.fs-create-option {
+    background-color: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 700;
+}
+.fs-create-divider {
+    color: #94a3b8;
+    font-size: 8px;
+}
+</style>

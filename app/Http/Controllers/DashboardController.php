@@ -9,6 +9,8 @@ use App\Models\Repair;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SaleItemGift;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -122,6 +124,33 @@ class DashboardController extends Controller
                 $todayEnd
             ),
         ]);
+    }
+
+    /**
+     * Biểu đồ doanh thu - lợi nhuận theo từng ngày cho một khoảng ngày tùy chọn (chọn từ bộ lọc ngày).
+     */
+    public function chart(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => ['required', 'date_format:Y-m-d'],
+            'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ], [
+            'from.required' => 'Vui lòng chọn ngày bắt đầu.',
+            'to.required' => 'Vui lòng chọn ngày kết thúc.',
+            'from.date_format' => 'Ngày bắt đầu không hợp lệ.',
+            'to.date_format' => 'Ngày kết thúc không hợp lệ.',
+            'to.after_or_equal' => 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.',
+        ]);
+
+        $from = Carbon::createFromFormat('Y-m-d', $data['from'])->startOfDay();
+        $to = Carbon::createFromFormat('Y-m-d', $data['to'])->endOfDay();
+
+        // Giới hạn 366 ngày để biểu đồ và truy vấn không quá nặng.
+        if ($from->diffInDays($to) > 365) {
+            $from = $to->copy()->subDays(365)->startOfDay();
+        }
+
+        return response()->json($this->dailyChart($from, $to));
     }
 
     /**
@@ -251,6 +280,9 @@ class DashboardController extends Controller
         }
 
         return [
+            // Khoảng ngày thật sự của dữ liệu để giao diện biết bộ lọc đang ở khoảng nào.
+            'from' => $from->format('Y-m-d'),
+            'to' => $to->format('Y-m-d'),
             'labels' => $labels,
             'revenue' => $revenue,
             'profit' => $profit,

@@ -2,6 +2,7 @@ import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useLocalStorage } from '@/Composables/useLocalStorage'
 import { useCartTotals } from '@/Modules/POS/Cart/Composables/useCartTotals'
 import { usePage } from '@inertiajs/vue3'
+import { splitWarrantyDays } from '@/utils/warranty'
 import { toast } from 'vue-sonner'
 
 const attributeText = (attribute) => {
@@ -79,6 +80,19 @@ const normalizeTabs = (raw) => {
     return tabs.length ? tabs : [makeDefaultTab()]
 }
 
+
+// Thời hạn bảo hành cho khách mặc định = thời hạn ghi lúc nhập hàng của lô/IMEI được bán;
+// lô/IMEI không có thì dùng bảo hành khai báo ở sản phẩm. Đổi được từng dòng trong giỏ.
+const customerWarrantyDefaults = (days) => {
+    const total = Math.max(0, Math.round(Number(days) || 0))
+    const { value, unit } = splitWarrantyDays(total)
+
+    return {
+        customer_warranty_days: total,
+        customer_warranty_value: total > 0 ? value : null,
+        customer_warranty_unit: total > 0 ? unit : null,
+    }
+}
 
 export function useCart() {
     const page = usePage()
@@ -648,14 +662,7 @@ export function useCart() {
                 warranty_days:
                     Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
-                customer_warranty_days:
-                    Number(product.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
-
-                customer_warranty_value:
-                    null,
-
-                customer_warranty_unit:
-                    null,
+                ...customerWarrantyDefaults(product.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
 
                 showWarranty:
                     false,
@@ -753,14 +760,7 @@ export function useCart() {
                 warranty_days:
                     Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
-                customer_warranty_days:
-                    0,
-
-                customer_warranty_value:
-                    null,
-
-                customer_warranty_unit:
-                    null,
+                ...customerWarrantyDefaults(batch?.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
 
                 showWarranty:
                     false,
@@ -844,14 +844,7 @@ export function useCart() {
             warranty_days:
                 Number(product.warranty_days ?? product.product?.warranty_days ?? 0),
 
-            customer_warranty_days:
-                0,
-
-            customer_warranty_value:
-                null,
-
-            customer_warranty_unit:
-                null,
+            ...customerWarrantyDefaults(batch?.customer_warranty_days ?? product.warranty_days ?? product.product?.warranty_days ?? 0),
 
             showWarranty:
                 false,

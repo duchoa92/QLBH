@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductImei;
 use App\Models\ProductStockBatch;
 use App\Models\StockImportItem;
+use App\Support\WarrantyDuration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -127,7 +128,8 @@ class ProductController extends Controller
                 'cost_price' => (float) $imei->cost_price,
                 'sell_price' => (float) $imei->sell_price,
                 'effective_sell_price' => $this->effectiveImeiSellPrice($imei, $product),
-                'warranty_days' => (int) ($imei->customer_warranty_days ?? $product->warranty_days ?? 0),
+                // BH khách theo lúc nhập máy này; chưa có thì dùng lần bán gần nhất rồi tới BH của sản phẩm.
+                'warranty_days' => (int) (WarrantyDuration::daysFromImportExtra($extra) ?? $imei->customer_warranty_days ?? $product->warranty_days ?? 0),
                 // Chỉ trả ghi chú; tài khoản/mật khẩu trong extra_info không được lộ ra POS.
                 'extra_info' => (string) ($extra['note'] ?? ''),
             ];
@@ -157,12 +159,20 @@ class ProductController extends Controller
     {
         $ids = $products->pluck('id');
 
-        $batches = ProductStockBatch::query()
+        $batchRows = ProductStockBatch::query()
             ->whereIn('product_id', $ids)
             ->where('remaining_quantity', '>', 0)
             ->orderBy('id')
-            ->get(['id', 'product_id', 'variant_id', 'remaining_quantity', 'cost_price', 'sell_price', 'is_used', 'imported_at'])
-            ->groupBy('product_id');
+            ->get(['id', 'product_id', 'variant_id', 'stock_import_item_id', 'remaining_quantity', 'cost_price', 'sell_price', 'is_used', 'imported_at']);
+
+        // BH khách ghi trên dòng nhập của từng lô: POS dùng đúng thời hạn lúc nhập khi bán lô đó.
+        $importWarranty = StockImportItem::query()
+            ->whereIn('id', $batchRows->pluck('stock_import_item_id')->filter()->unique())
+            ->get(['id', 'extra_info'])
+            ->mapWithKeys(fn (StockImportItem $item): array => [$item->id => WarrantyDuration::daysFromImportExtra($item->extra_info)]);
+        $batchRows->each(fn (ProductStockBatch $batch) => $batch->setAttribute('customer_warranty_days', $importWarranty->get($batch->stock_import_item_id)));
+
+        $batches = $batchRows->groupBy('product_id');
 
         // Phạm vi (biến thể, 0 = cấp sản phẩm) đã từng có lô, kể cả lô đã hết hàng. Backend kiểm
         // tồn theo lô cho các phạm vi này, nên giao diện không được quay về dùng cột tồn khi hết lô.
@@ -174,13 +184,32 @@ class ProductController extends Controller
             ->groupBy('product_id')
             ->map(fn ($rows) => $rows->map(fn ($row) => (int) ($row->variant_id ?? 0))->unique()->values());
 
+        // Giá ngoài danh sách phải khớp giá từng máy trong cửa sổ chọn IMEI: dùng cùng giá hiệu lực
+        // (giá máy -> giá biến thể -> giá sản phẩm) và chỉ tính máy còn trong kho.
+        $productsById = $products->keyBy('id');
         $imeiPrices = ProductImei::query()
+            ->with('variant:id,sell_price')
             ->whereIn('product_id', $ids)
             ->where('status', ProductImei::STATUS_IN_STOCK)
-            ->selectRaw('product_id, MIN(NULLIF(sell_price, 0)) as price_min, MAX(sell_price) as price_max, MIN(NULLIF(cost_price, 0)) as cost_min, MAX(cost_price) as cost_max, COUNT(*) as total_count, SUM(CASE WHEN is_used = 1 THEN 1 ELSE 0 END) as used_count')
+            ->get(['id', 'product_id', 'variant_id', 'sell_price', 'cost_price', 'is_used'])
             ->groupBy('product_id')
-            ->get()
-            ->keyBy('product_id');
+            ->map(function ($rows, $productId) use ($productsById) {
+                $product = $productsById->get($productId);
+                $sell = $rows->map(fn (ProductImei $imei) => $product ? $this->effectiveImeiSellPrice($imei, $product) : (float) $imei->sell_price)
+                    ->filter(fn ($price) => $price > 0);
+                $cost = $rows->map(fn (ProductImei $imei) => (float) $imei->cost_price > 0
+                    ? (float) $imei->cost_price
+                    : (float) ($product?->cost_price ?? 0))->filter(fn ($price) => $price > 0);
+
+                return (object) [
+                    'price_min' => $sell->min() ?? 0,
+                    'price_max' => $sell->max() ?? 0,
+                    'cost_min' => $cost->min() ?? 0,
+                    'cost_max' => $cost->max() ?? 0,
+                    'total_count' => $rows->count(),
+                    'used_count' => $rows->where('is_used', true)->count(),
+                ];
+            });
 
         $vatProductIds = StockImportItem::query()
             ->whereIn('product_id', $ids)
@@ -257,7 +286,7 @@ class ProductController extends Controller
         });
     }
     /**
-     * Gộp các lô cùng biến thể, cùng giá bán và cùng tình trạng (mới/cũ) thành một dòng để POS không
+     * Gộp các lô cùng biến thể, cùng giá bán, cùng tình trạng (mới/cũ) và cùng BH khách thành một dòng để POS không
      * tách nhiều dòng giống hệt nhau. Dòng gộp lấy id và giá vốn của lô cũ nhất, số lượng là tổng.
      * Server vẫn trừ kho theo FIFO từng lô nên việc gộp ở đây chỉ ảnh hưởng cách hiển thị và chọn hàng.
      *
@@ -268,7 +297,7 @@ class ProductController extends Controller
     {
         return $batches
             ->sortBy('id')
-            ->groupBy(fn (ProductStockBatch $batch): string => ((int) $batch->variant_id).'|'.number_format((float) $batch->sell_price, 2, '.', '').'|'.($batch->is_used ? '1' : '0'))
+            ->groupBy(fn (ProductStockBatch $batch): string => ((int) $batch->variant_id).'|'.number_format((float) $batch->sell_price, 2, '.', '').'|'.($batch->is_used ? '1' : '0').'|'.($batch->customer_warranty_days ?? 'p'))
             ->map(function (Collection $group): array {
                 $first = $group->first();
 
@@ -277,9 +306,12 @@ class ProductController extends Controller
                     'product_id' => $first->product_id,
                     'variant_id' => $first->variant_id,
                     'remaining_quantity' => (int) $group->sum('remaining_quantity'),
-                    'cost_price' => (float) $first->cost_price,
+                    'cost_price' => (float) $group->min('cost_price'),
+                    'cost_price_max' => (float) $group->max('cost_price'),
                     'sell_price' => (float) $first->sell_price,
                     'is_used' => (bool) $first->is_used,
+                    // null = lúc nhập không ghi BH riêng → POS dùng BH khai báo ở sản phẩm.
+                    'customer_warranty_days' => $first->customer_warranty_days,
                     'imported_at' => $first->imported_at?->toDateString(),
                     'batch_ids' => $group->pluck('id')->values(),
                 ];

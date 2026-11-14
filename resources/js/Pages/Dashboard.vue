@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 
@@ -16,6 +16,9 @@ import {
     ChevronRight,
     ChevronLeft,
     BellRing,
+    ChevronDown,
+    Check,
+    Layers,
 } from 'lucide-vue-next'
 
 // Chart.js Setup
@@ -33,6 +36,8 @@ import {
 } from 'chart.js'
 import { Line, Doughnut } from 'vue-chartjs'
 import { formatCurrency } from '@/utils/format'
+import axios from 'axios'
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 
 ChartJS.register(
     CategoryScale,
@@ -157,7 +162,6 @@ onBeforeUnmount(() => clearInterval(noticeTimer))
 | Biểu đồ doanh thu: lọc theo kỳ và theo nguồn thu (bán hàng / sửa chữa)
 |--------------------------------------------------------------------------
 */
-const filterPeriod = ref('7days')
 const filterSource = ref('all')
 
 const SOURCE_OPTIONS = [
@@ -166,17 +170,67 @@ const SOURCE_OPTIONS = [
     { value: 'repair', label: 'Sửa chữa' },
 ]
 const SOURCE_TEXT = {
-    all: { revenue: 'Doanh thu', profit: 'Lợi nhuận', hint: 'Doanh thu bán hàng + dịch vụ sửa chữa theo từng ngày' },
-    sales: { revenue: 'Doanh thu bán hàng', profit: 'Lợi nhuận bán hàng', hint: 'Chỉ tính hóa đơn bán hàng POS' },
-    repair: { revenue: 'Doanh thu sửa chữa', profit: 'Lợi nhuận sửa chữa', hint: 'Chỉ tính phiếu sửa đã hoàn tất hoặc đã trả khách' },
+    all: { revenue: 'Doanh thu', profit: 'Lợi nhuận', hint: 'Bán hàng + sửa chữa theo ngày' },
+    sales: { revenue: 'Doanh thu bán hàng', profit: 'Lợi nhuận bán hàng', hint: 'Chỉ hóa đơn bán hàng POS' },
+    repair: { revenue: 'Doanh thu sửa chữa', profit: 'Lợi nhuận sửa chữa', hint: 'Chỉ phiếu sửa đã hoàn tất' },
 }
 
-const activeChart = computed(() => {
+// Menu lọc nguồn thu: thu gọn như bộ lọc danh mục ở POS, bấm ra ngoài hoặc Esc để đóng.
+const sourceMenuOpen = ref(false)
+const sourceMenuRoot = ref(null)
+const pickSource = (value) => { filterSource.value = value; sourceMenuOpen.value = false }
+const onSourceOutside = (event) => { if (sourceMenuOpen.value && sourceMenuRoot.value && !sourceMenuRoot.value.contains(event.target)) sourceMenuOpen.value = false }
+const onSourceKey = (event) => { if (event.key === 'Escape') sourceMenuOpen.value = false }
+onMounted(() => { document.addEventListener('pointerdown', onSourceOutside); document.addEventListener('keydown', onSourceKey) })
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', onSourceOutside); document.removeEventListener('keydown', onSourceKey) })
 
-    return filterPeriod.value === '7days'
-        ? props.revenueChart.week
-        : props.revenueChart.month
+// Khoảng ngày của biểu đồ: mặc định 7 ngày gần nhất. "7 ngày qua" và "Tháng này" đã có sẵn dữ liệu từ server,
+// các khoảng khác được nạp ngầm ngay khi người dùng chọn xong ngày bắt đầu - kết thúc (không cần bấm Áp dụng).
+const EMPTY_CHART = { labels: [], revenue: [], profit: [] }
+const rangeKey = (range) => `${range?.from || ''}|${range?.to || ''}`
+const weekKey = computed(() => rangeKey(props.revenueChart.week))
+const monthKey = computed(() => rangeKey(props.revenueChart.month))
+const chartRange = reactive({ from: props.revenueChart.week?.from || '', to: props.revenueChart.week?.to || '' })
+const fetchedChart = ref(null)
+const chartLoading = ref(false)
+const chartError = ref('')
+
+const activeChart = computed(() => {
+    const key = rangeKey(chartRange)
+    if (key === weekKey.value) return props.revenueChart.week
+    if (key === monthKey.value) return props.revenueChart.month
+    if (fetchedChart.value && rangeKey(fetchedChart.value) === key) return fetchedChart.value
+
+    return EMPTY_CHART
 })
+
+let chartRequest = 0
+const loadChartRange = async ({ from, to }) => {
+    const id = ++chartRequest
+    chartLoading.value = true
+    chartError.value = ''
+    try {
+        const { data } = await axios.get(route('dashboard.chart'), { params: { from, to } })
+        if (id !== chartRequest) return
+        fetchedChart.value = data
+        // Server có thể thu hẹp khoảng quá dài: đồng bộ lại để nhãn bộ lọc đúng với dữ liệu đang xem.
+        chartRange.from = data.from
+        chartRange.to = data.to
+    } catch (error) {
+        if (id !== chartRequest) return
+        chartError.value = error?.response?.data?.errors?.to?.[0] || error?.response?.data?.message || 'Không tải được biểu đồ cho khoảng ngày này.'
+    } finally {
+        if (id === chartRequest) chartLoading.value = false
+    }
+}
+
+const onChartRangeChange = ({ from, to }) => {
+    if (!from || !to) return
+    chartError.value = ''
+    const key = rangeKey({ from, to })
+    if (key === weekKey.value || key === monthKey.value) { chartRequest++; chartLoading.value = false; return }
+    loadChartRange({ from, to })
+}
 
 const seriesFor = (key) => {
     const chart = activeChart.value
@@ -187,12 +241,6 @@ const seriesFor = (key) => {
     }
     return map[filterSource.value][key] || []
 }
-const sumOf = (values) => values.reduce((total, value) => total + Number(value || 0), 0)
-const chartTotals = computed(() => ({
-    revenue: sumOf(seriesFor('revenue')),
-    profit: sumOf(seriesFor('profit')),
-}))
-
 // Rút gọn số tiền trên trục: 1,5 tr · 250 k · 2 tỷ (tránh số lẻ kiểu 6e-7M).
 const trimNumber = (value) => String(Math.round(value * 10) / 10).replace('.', ',')
 const compactMoney = (value) => {
@@ -204,6 +252,10 @@ const compactMoney = (value) => {
     if (abs >= 1e3) return `${sign}${trimNumber(abs / 1e3)} k`
     return `${sign}${Math.round(abs)}`
 }
+
+const sumSeries = (key) => seriesFor(key).reduce((total, value) => total + (Number(value) || 0), 0)
+const totalRevenue = computed(() => sumSeries('revenue'))
+const totalProfit = computed(() => sumSeries('profit'))
 
 const lineChartData = computed(() => {
     const text = SOURCE_TEXT[filterSource.value]
@@ -218,7 +270,7 @@ const lineChartData = computed(() => {
                 fill: true,
                 tension: 0.35,
                 borderWidth: 3,
-                pointRadius: 4,
+                pointRadius: activeChart.value.labels.length > 31 ? 0 : 4,
                 pointHoverRadius: 6,
             },
             {
@@ -228,7 +280,7 @@ const lineChartData = computed(() => {
                 backgroundColor: 'transparent',
                 borderDash: [5, 5],
                 borderWidth: 2,
-                pointRadius: 3,
+                pointRadius: activeChart.value.labels.length > 31 ? 0 : 3,
             }
         ]
     }
@@ -307,22 +359,26 @@ const doughnutChartOptions = {
                 @focusout="noticePaused = false"
             >
                 <Transition name="notice" mode="out-in">
-                    <div :key="currentNotice.key" class="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
-                        <span class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20">
-                            <span class="absolute inset-0 animate-ping rounded-full bg-white/25"></span>
-                            <Wrench v-if="currentNotice.kind === 'todo'" :size="22" class="relative" />
-                            <AlertCircle v-else-if="currentNotice.urgent" :size="22" class="relative notice-shake" />
-                            <BellRing v-else :size="22" class="relative notice-shake" />
-                        </span>
-                        <div class="min-w-0 flex-1">
-                            <div class="text-[11px] font-bold uppercase tracking-wider text-white/80">{{ currentNotice.label }}</div>
-                            <div class="truncate text-base font-extrabold leading-tight sm:text-lg">{{ currentNotice.title }}</div>
-                            <div class="truncate text-sm text-white/90">{{ currentNotice.detail }}</div>
+                    <div :key="currentNotice.key" class="px-4 py-3 sm:flex sm:items-center sm:gap-3">
+                        <div class="flex min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
+                            <span class="relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 sm:mt-0 sm:h-11 sm:w-11">
+                                <span class="absolute inset-0 animate-ping rounded-full bg-white/25"></span>
+                                <Wrench v-if="currentNotice.kind === 'todo'" :size="22" class="relative" />
+                                <AlertCircle v-else-if="currentNotice.urgent" :size="22" class="relative notice-shake" />
+                                <BellRing v-else :size="22" class="relative notice-shake" />
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-[11px] font-bold uppercase tracking-wider text-white/80">{{ currentNotice.label }}</div>
+                                <div class="notice-clamp text-[15px] font-extrabold leading-snug sm:truncate sm:text-lg sm:leading-tight">{{ currentNotice.title }}</div>
+                                <div class="notice-clamp mt-0.5 text-sm leading-snug text-white/90 sm:truncate">{{ currentNotice.detail }}</div>
+                            </div>
                         </div>
-                        <span class="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-extrabold" :class="noticeTone.soft">{{ currentNotice.badge }}</span>
-                        <Link :href="currentNotice.url" class="inline-flex shrink-0 items-center gap-1 rounded-xl bg-white/95 px-3 py-1.5 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-white">
-                            {{ currentNotice.cta }}<ChevronRight :size="16" />
-                        </Link>
+                        <div class="mt-3 flex items-center justify-between gap-2 sm:mt-0 sm:shrink-0 sm:justify-end sm:gap-3">
+                            <span class="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-extrabold" :class="noticeTone.soft">{{ currentNotice.badge }}</span>
+                            <Link :href="currentNotice.url" class="inline-flex shrink-0 items-center gap-1 rounded-xl bg-white/95 px-3 py-1.5 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-white">
+                                {{ currentNotice.cta }}<ChevronRight :size="16" />
+                            </Link>
+                        </div>
                     </div>
                 </Transition>
                 <div v-if="notices.length > 1" class="flex items-center justify-between gap-2 bg-black/10 px-3 py-1">
@@ -332,7 +388,7 @@ const doughnutChartOptions = {
                             v-for="(notice, index) in notices"
                             :key="notice.key"
                             type="button"
-                            class="h-1.5 rounded-full transition-all"
+                            class="hidden h-1.5 rounded-full transition-all sm:block"
                             :class="index === noticeIndex % notices.length ? 'w-5 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80'"
                             :aria-label="`Xem thông báo ${index + 1}`"
                             @click="noticeIndex = index"
@@ -432,52 +488,70 @@ const doughnutChartOptions = {
 
                 <!-- Biểu đồ Doanh thu & Lợi nhuận (Chiếm 2 cột) -->
                 <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                        <div>
-                            <h3 class="text-base font-bold text-slate-900">Tăng trưởng Doanh thu & Lợi nhuận</h3>
+                    <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
+                            <h3 class="text-base font-bold text-slate-900">Doanh thu & Lợi nhuận</h3>
                             <p class="text-xs text-slate-500">{{ SOURCE_TEXT[filterSource].hint }}</p>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <div class="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold" role="group" aria-label="Nguồn thu">
+                        <!-- Lọc nguồn thu và chọn ngày cùng một hàng (tự xuống dòng nếu không đủ chỗ) -->
+                        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                            <div ref="sourceMenuRoot" class="relative">
                                 <button
-                                    v-for="option in SOURCE_OPTIONS"
-                                    :key="option.value"
                                     type="button"
-                                    @click="filterSource = option.value"
-                                    :class="['px-3 py-1 rounded-lg transition', filterSource === option.value ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-600']"
+                                    class="flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors"
+                                    :class="filterSource !== 'all' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50'"
+                                    aria-haspopup="listbox"
+                                    :aria-expanded="sourceMenuOpen"
+                                    title="Lọc theo nguồn thu"
+                                    @click="sourceMenuOpen = !sourceMenuOpen"
                                 >
-                                    {{ option.label }}
+                                    <Layers class="h-3.5 w-3.5 shrink-0" />
+                                    <span>{{ SOURCE_OPTIONS.find(option => option.value === filterSource)?.label }}</span>
+                                    <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform" :class="sourceMenuOpen ? 'rotate-180' : ''" />
                                 </button>
+                                <div v-if="sourceMenuOpen" role="listbox" class="absolute left-0 top-full z-30 mt-1 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg sm:left-auto sm:right-0">
+                                    <button
+                                        v-for="option in SOURCE_OPTIONS"
+                                        :key="option.value"
+                                        type="button"
+                                        role="option"
+                                        class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-blue-50"
+                                        :class="filterSource === option.value ? 'font-bold text-blue-700' : 'text-slate-700'"
+                                        @click="pickSource(option.value)"
+                                    >
+                                        <span>{{ option.label }}</span>
+                                        <Check v-if="filterSource === option.value" class="h-3.5 w-3.5 shrink-0" />
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold" role="group" aria-label="Khoảng thời gian">
-                                <button
-                                    type="button"
-                                    @click="filterPeriod = '7days'"
-                                    :class="['px-3 py-1 rounded-lg transition', filterPeriod === '7days' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-600']"
-                                >
-                                    7 ngày qua
-                                </button>
-                                <button
-                                    type="button"
-                                    @click="filterPeriod = 'month'"
-                                    :class="['px-3 py-1 rounded-lg transition', filterPeriod === 'month' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-600']"
-                                >
-                                    Tháng này
-                                </button>
-                            </div>
+                            <DateRangeFilter
+                                class="!w-auto min-w-[180px] flex-1 sm:flex-none"
+                                v-model:from="chartRange.from"
+                                v-model:to="chartRange.to"
+                                :allow-all="false"
+                                compact
+                                @change="onChartRangeChange"
+                            />
                         </div>
                     </div>
 
-                    <!-- Tổng của kỳ đang xem: nhìn là hiểu, không phải đọc số trên trục -->
-                    <div class="mb-3 grid grid-cols-2 gap-2 text-sm">
-                        <div class="rounded-xl bg-blue-50 px-3 py-2"><div class="text-[11px] font-semibold text-blue-700">{{ SOURCE_TEXT[filterSource].revenue }}</div><div class="font-extrabold text-blue-900">{{ formatMoney(chartTotals.revenue) }}</div></div>
-                        <div class="rounded-xl bg-emerald-50 px-3 py-2"><div class="text-[11px] font-semibold text-emerald-700">{{ SOURCE_TEXT[filterSource].profit }}</div><div class="font-extrabold text-emerald-900">{{ formatMoney(chartTotals.profit) }}</div></div>
+                    <!-- Tổng doanh thu / lợi nhuận của khoảng đang xem -->
+                    <div class="mb-3 grid grid-cols-2 gap-3">
+                        <div class="rounded-xl bg-blue-50 px-4 py-2.5">
+                            <div class="text-xs font-semibold text-blue-700">{{ SOURCE_TEXT[filterSource].revenue }}</div>
+                            <div class="text-lg font-black text-blue-950">{{ formatMoney(totalRevenue) }}</div>
+                        </div>
+                        <div class="rounded-xl bg-emerald-50 px-4 py-2.5">
+                            <div class="text-xs font-semibold text-emerald-700">{{ SOURCE_TEXT[filterSource].profit }}</div>
+                            <div class="text-lg font-black text-emerald-950">{{ formatMoney(totalProfit) }}</div>
+                        </div>
                     </div>
+                    <p v-if="chartError" class="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700" role="alert">{{ chartError }}</p>
 
                     <!-- Line Chart Canvas Container -->
                     <div class="flex-1 min-h-[280px]">
                         <Line
-                            v-if="activeChart.labels.length"
+                            v-if="activeChart.labels.length && !chartLoading"
                             :data="lineChartData"
                             :options="lineChartOptions"
                         />
@@ -485,7 +559,7 @@ const doughnutChartOptions = {
                             v-else
                             class="h-full flex items-center justify-center text-sm text-slate-400"
                         >
-                            Chưa có dữ liệu doanh thu trong khoảng này
+                            {{ chartLoading ? 'Đang tải biểu đồ…' : 'Chưa có dữ liệu doanh thu trong khoảng này' }}
                         </div>
                     </div>
                 </div>
@@ -644,6 +718,8 @@ const doughnutChartOptions = {
 </template>
 
 <style scoped>
+.notice-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (min-width: 640px) { .notice-clamp { display: block; -webkit-line-clamp: unset; } }
 .notice-enter-active,
 .notice-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
 .notice-enter-from { opacity: 0; transform: translateX(16px); }

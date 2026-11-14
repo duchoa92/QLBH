@@ -74,6 +74,10 @@ Route::middleware(['auth'])->group(function () {
         [DashboardController::class, 'index']
     )->middleware(['verified', 'permission:dashboard.view'])->name('dashboard');
 
+    Route::get('/dashboard/chart', [DashboardController::class, 'chart'])
+        ->middleware(['verified', 'permission:dashboard.view'])
+        ->name('dashboard.chart');
+
     // Settings
     Route::get('/settings', [SettingController::class, 'index'])->middleware('permission:settings.view')->name('settings.index');
     Route::post('/settings', [SettingController::class, 'update'])->middleware('permission:settings.edit|payment_accounts.manage|units.manage')->name('settings.update');

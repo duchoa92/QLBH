@@ -59,7 +59,7 @@ class PosController extends Controller
             'items.*.imei_id' => ['nullable', 'integer', 'exists:product_imeis,id'],
             'items.*.warranty_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'items.*.warranty_value' => ['nullable', 'integer', 'min:0', 'max:3650'],
-            'items.*.warranty_unit' => ['nullable', 'in:day,month'],
+            'items.*.warranty_unit' => ['nullable', 'in:day,week,month,year'],
             'items.*.warranty_note' => ['nullable', 'string', 'max:1000'],
             'items.*.note' => ['nullable', 'string', 'max:1000'],
             'items.*.gifts' => ['nullable', 'array'],
@@ -260,7 +260,7 @@ class PosController extends Controller
 
             'items.*.warranty_value' => 'nullable|integer|min:0|max:3650',
 
-            'items.*.warranty_unit' => 'nullable|in:day,month',
+            'items.*.warranty_unit' => 'nullable|in:day,week,month,year',
 
             'items.*.warranty_note' => 'nullable|string|max:1000',
 

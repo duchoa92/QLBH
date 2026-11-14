@@ -54,11 +54,14 @@ export function useProductSearch(emit) {
     |--------------------------------------------------------------------------
     */
 
-    const loadProducts = async () => {
+    // silent: nạp ngầm (không hiện trạng thái đang tải, không quét IMEI, giữ nguyên danh sách nếu lỗi mạng)
+    const loadProducts = async (options = {}) => {
+
+        const silent = options?.silent === true
 
         const requestId = ++latestRequest
 
-        loading.value = true
+        if (!silent) loading.value = true
 
         try {
 
@@ -85,6 +88,7 @@ export function useProductSearch(emit) {
             */
 
             if (
+                !silent &&
                 keyword.value &&
                 response.length === 0
             ) {
@@ -110,13 +114,14 @@ export function useProductSearch(emit) {
             }
 
         } catch (error) {
+            if (silent) return
             const cached = await readOfflineProducts(page.props.auth?.user?.id || 'current', `${keyword.value.trim().toLowerCase()}|${categoryId.value}|${sort.value}`).catch(() => null)
             if (requestId !== latestRequest) return
             products.value = cached?.products || []
 
         } finally {
 
-            if (requestId === latestRequest) loading.value = false
+            if (!silent && requestId === latestRequest) loading.value = false
         }
     }
 
@@ -173,6 +178,37 @@ export function useProductSearch(emit) {
 
     /*
     |--------------------------------------------------------------------------
+    | TỰ CẬP NHẬT NGẦM
+    |--------------------------------------------------------------------------
+    | Danh sách sản phẩm (giá, tồn, lô) tự nạp lại khi:
+    |  - nơi khác vừa lưu dữ liệu (nhập hàng, sửa sản phẩm...) — cùng tab, tab khác, cửa sổ khác;
+    |  - quay lại tab POS;
+    |  - định kỳ khi POS đang mở (phòng trường hợp thay đổi đến từ máy khác).
+    */
+    const SILENT_MIN_INTERVAL = 8000
+    const SILENT_POLL_INTERVAL = 45000
+    let lastSilentLoad = Date.now()
+    let silentTimer = null
+    let silentPoll = null
+    let catalogChannel = null
+
+    const refreshSilently = (force = false) => {
+        if (document.hidden) return
+        if (!force && Date.now() - lastSilentLoad < SILENT_MIN_INTERVAL) return
+        lastSilentLoad = Date.now()
+        loadProducts({ silent: true })
+    }
+
+    // Gộp nhiều tín hiệu liên tiếp (một lần lưu có thể phát vài sự kiện) thành một lần nạp.
+    const scheduleSilentRefresh = () => {
+        clearTimeout(silentTimer)
+        silentTimer = setTimeout(() => refreshSilently(true), 700)
+    }
+    const onVisible = () => { if (!document.hidden) refreshSilently() }
+    const onStorage = (event) => { if (event.key === 'reference-data:version') scheduleSilentRefresh() }
+
+    /*
+    |--------------------------------------------------------------------------
     | MOUNT
     |--------------------------------------------------------------------------
     */
@@ -180,6 +216,16 @@ export function useProductSearch(emit) {
     onMounted(() => {
 
         loadProducts()
+
+        window.addEventListener('reference-data:changed', scheduleSilentRefresh)
+        window.addEventListener('storage', onStorage)
+        document.addEventListener('visibilitychange', onVisible)
+        window.addEventListener('focus', onVisible)
+        if ('BroadcastChannel' in window) {
+            catalogChannel = new BroadcastChannel('reference-data')
+            catalogChannel.addEventListener('message', scheduleSilentRefresh)
+        }
+        silentPoll = setInterval(() => refreshSilently(), SILENT_POLL_INTERVAL)
 
         onEvent(
             'products:refresh',
@@ -202,6 +248,14 @@ export function useProductSearch(emit) {
     onBeforeUnmount(() => {
         // Hủy bỏ timeout khi component bị hủy để tránh gọi API không cần thiết
         clearTimeout(timeout)
+        clearTimeout(silentTimer)
+        clearInterval(silentPoll)
+        window.removeEventListener('reference-data:changed', scheduleSilentRefresh)
+        window.removeEventListener('storage', onStorage)
+        document.removeEventListener('visibilitychange', onVisible)
+        window.removeEventListener('focus', onVisible)
+        catalogChannel?.close()
+        catalogChannel = null
 
        offEvent(
             'products:refresh',

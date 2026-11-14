@@ -150,6 +150,15 @@ const displayedPriceLabel = (product) => isShowingCostPrice(product)
     : priceLabel(product)
 
 const costPriceLabel = (product) => {
+    const batchCosts = availableBatches(product)
+        .flatMap(batch => [Number(batch.cost_price || 0), Number(batch.cost_price_max || 0)])
+        .filter(cost => cost > 0)
+    if (batchCosts.length) {
+        const low = Math.min(...batchCosts)
+        const high = Math.max(...batchCosts)
+        return low === high ? formatPrice(low) : `${formatPrice(low)} - ${formatPrice(high)}`
+    }
+
     const min = Number(product.cost_price_min || 0)
     const max = Number(product.cost_price_max || 0)
     if (min > 0 && max > 0 && min !== max) {
@@ -226,12 +235,11 @@ const priceLabel = (product) => {
         return min === max ? formatPrice(min) : `${formatPrice(min)} - ${formatPrice(max)}`
     }
 
-    if (
-        Number(product.price_min || 0) > 0
-        && Number(product.price_max || 0) > 0
-        && Number(product.price_min) !== Number(product.price_max)
-    ) {
-        return `${formatPrice(product.price_min)} - ${formatPrice(product.price_max)}`
+    // Sản phẩm IMEI: giá theo các máy còn trong kho (một giá nếu bằng nhau), không lấy giá chung của sản phẩm.
+    if (Number(product.price_min || 0) > 0 && Number(product.price_max || 0) > 0) {
+        return Number(product.price_min) === Number(product.price_max)
+            ? formatPrice(product.price_min)
+            : `${formatPrice(product.price_min)} - ${formatPrice(product.price_max)}`
     }
 
     return formatPrice(product.price)

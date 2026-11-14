@@ -4,6 +4,8 @@ import { useForm } from '@inertiajs/vue3'
 import { closeModal } from '@/Stores/modal'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import { WARRANTY_UNIT_OPTIONS, splitWarrantyDays, warrantyUnitDays, warrantyMaxValue, MAX_WARRANTY_DAYS } from '@/utils/warranty'
+import UnitInput from '@/Components/UI/UnitInput.vue'
 import SearchableReferenceSelect from '@/Components/UI/SearchableReferenceSelect.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import TagBadge from '@/Components/UI/TagBadge.vue'
@@ -58,11 +60,8 @@ const pendingValueDrafts = reactive({})
 const pendingAttributeDrafts = reactive({})
 const addingAttributeFor = reactive({})
 const existingWarrantyDays = Number(props.product?.warranty_days ?? 0)
-const initialWarrantyUnit = existingWarrantyDays > 0 && existingWarrantyDays % 30 === 0 ? 'month' : 'day'
-const warrantyUnitOptions = [
-    { value: 'month', label: 'Tháng' },
-    { value: 'day', label: 'Ngày' },
-]
+const initialWarranty = splitWarrantyDays(existingWarrantyDays)
+const warrantyUnitOptions = WARRANTY_UNIT_OPTIONS
 
 const variantDraftKey = (variantIndex) => String(form.variants[variantIndex]?.id ?? variantIndex)
 const valueDraftKey = (variantIndex, attr) => `${variantDraftKey(variantIndex)}:${attr.id ?? attr.name}`
@@ -140,10 +139,8 @@ const form = useForm({
     cost_price: props.product?.cost_price ?? '',
     sell_price: props.product?.sell_price ?? '',
     warranty_days: existingWarrantyDays,
-    warranty_value: existingWarrantyDays > 0
-        ? existingWarrantyDays / (initialWarrantyUnit === 'month' ? 30 : 1)
-        : '',
-    warranty_unit: initialWarrantyUnit,
+    warranty_value: initialWarranty.value,
+    warranty_unit: initialWarranty.unit,
     image: null,
     variants: props.product?.variants ?? [],
     manage_stock_by_serial: props.product?.manage_stock_by_serial ?? false,
@@ -956,8 +953,8 @@ const submit = () => {
         payload.sku_manual = Boolean(payload.sku) && payload.sku !== autoSku.value
 
         const warrantyValue = Math.max(0, Number(payload.warranty_value || 0))
-        payload.warranty_days = Math.min(3650, Math.round(
-            warrantyValue * (payload.warranty_unit === 'month' ? 30 : 1)
+        payload.warranty_days = Math.min(MAX_WARRANTY_DAYS, Math.round(
+            warrantyValue * warrantyUnitDays(payload.warranty_unit)
         ))
         delete payload.warranty_value
         delete payload.warranty_unit
@@ -1197,27 +1194,17 @@ const submit = () => {
                     <!-- Bảo hành -->
                     <div class="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
                         <span class="block text-xs font-bold text-slate-700">Bảo hành cho khách</span>
-                        <div class="grid grid-cols-2 gap-2 sm:max-w-sm">
-                            <FloatingInput
-                                v-model="form.warranty_value"
-                                type="number"
-                                min="0"
-                                :max="form.warranty_unit === 'month' ? 121 : 3650"
-                                step="1"
-                                label="Thời hạn"
-                                input-class="!h-10 !rounded-xl !py-0 !text-sm"
-                            />
-                            <FloatingSelect
-                                v-model="form.warranty_unit"
-                                :options="warrantyUnitOptions"
-                                label="Đơn vị"
-                                name="product-warranty-unit"
-                                :show-placeholder="false"
-                                input-class="!h-10 !rounded-xl !py-0 !text-sm"
-                            />
-                        </div>
+                        <UnitInput
+                            v-model="form.warranty_value"
+                            v-model:unit="form.warranty_unit"
+                            :unit-options="warrantyUnitOptions"
+                            type="number" min="0" :max="warrantyMaxValue(form.warranty_unit)" step="1"
+                            label="Thời hạn" unit-label="Đơn vị bảo hành"
+                            name="product-warranty-value"
+                            class="sm:max-w-sm"
+                        />
                         <p v-if="Number(form.warranty_value || 0) > 0" class="text-xs text-slate-500">
-                            Tương đương {{ Math.min(3650, Number(form.warranty_value) * (form.warranty_unit === 'month' ? 30 : 1)) }} ngày
+                            Tương đương {{ Math.min(MAX_WARRANTY_DAYS, Number(form.warranty_value) * warrantyUnitDays(form.warranty_unit)) }} ngày
                         </p>
                         <p v-else class="text-xs italic text-slate-400">(Để trống nếu không bảo hành)</p>
                         <span v-if="form.errors.warranty_days" class="block text-[11px] text-red-600">{{ form.errors.warranty_days }}</span>

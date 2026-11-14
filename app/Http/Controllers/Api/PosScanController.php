@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImei;
+use App\Support\WarrantyDuration;
 use App\Models\StockImportItem;
 use Illuminate\Http\Request;
 
@@ -64,7 +65,8 @@ class PosScanController extends Controller
                 'data' => [
                     'id' => $imei->product->id,
                     'name' => $imei->product->name,
-                    'warranty_days' => (int) $imei->product->warranty_days,
+                    // BH khách theo lúc nhập máy này; chưa có thì dùng BH của sản phẩm.
+                    'warranty_days' => (int) (WarrantyDuration::daysFromImportExtra($imei->extra_info) ?? $imei->customer_warranty_days ?? $imei->product->warranty_days),
                     'has_vat' => ! $imei->is_used && StockImportItem::query()->where('product_id', $imei->product->id)->where('has_vat', true)->where('is_used', false)->exists(),
                     'is_used' => (bool) $imei->is_used,
                     'tax_percent' => (float) ($imei->product->tax_percent ?? 0),
