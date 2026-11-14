@@ -436,6 +436,8 @@ watch(showVariants, (value) => {
 })
 
 watch(() => form.manage_stock_by_serial, (enabled) => {
+    // Giữ product_type khớp với ô tick, nếu không server sẽ đọc product_type cũ.
+    form.product_type = enabled ? 'imei' : (form.product_type === 'imei' ? 'normal' : form.product_type)
     if (!enabled) return
 
     form.has_unit_conversion = false
@@ -1168,9 +1170,9 @@ const submit = () => {
                     <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">2. Thuộc tính đặc thù &amp; Bảo hành</h3>
                 </div>
 
-                <!-- 2 lựa chọn xếp dọc bên trái | khối Bảo hành bên phải (chật thì khối Bảo hành xuống dưới) -->
-                <div class="flex flex-wrap items-start gap-3">
-                    <div class="flex shrink-0 flex-col gap-3 pt-1">
+                <!-- Trái: 2 lựa chọn | Phải: Bảo hành (cùng chiều cao, căn giữa) -->
+                <div class="grid items-stretch gap-3 md:grid-cols-[auto_minmax(0,1fr)]">
+                    <div class="flex flex-col justify-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
                         <label :class="['group flex items-center gap-2', form.has_unit_conversion ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']">
                             <input
                                 v-model="form.manage_stock_by_serial"
@@ -1178,7 +1180,7 @@ const submit = () => {
                                 :disabled="form.has_unit_conversion"
                                 class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                             />
-                            <span class="text-xs font-semibold">Có Serial / IMEI</span>
+                            <span class="whitespace-nowrap text-xs font-semibold">Có Serial / IMEI</span>
                         </label>
 
                         <label :class="['group flex items-center gap-2', form.manage_stock_by_serial ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700']">
@@ -1188,38 +1190,36 @@ const submit = () => {
                                 :disabled="form.manage_stock_by_serial"
                                 class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                             />
-                            <span class="text-xs font-semibold">Nhập theo cuộn / thùng</span>
+                            <span class="whitespace-nowrap text-xs font-semibold">Nhập theo cuộn / thùng</span>
                         </label>
                     </div>
 
                     <!-- Bảo hành -->
-                    <div class="min-w-[17rem] flex-1 space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                    <div class="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
                         <span class="block text-xs font-bold text-slate-700">Bảo hành cho khách</span>
-                        <div class="flex flex-wrap items-center gap-3">
-                            <div class="grid w-full max-w-[15rem] grid-cols-2 gap-2">
-                                <FloatingInput
-                                    v-model="form.warranty_value"
-                                    type="number"
-                                    min="0"
-                                    :max="form.warranty_unit === 'month' ? 121 : 3650"
-                                    step="1"
-                                    label="Thời hạn"
-                                    input-class="!h-10 !rounded-xl !py-0 !text-sm"
-                                />
-                                <FloatingSelect
-                                    v-model="form.warranty_unit"
-                                    :options="warrantyUnitOptions"
-                                    label="Đơn vị"
-                                    name="product-warranty-unit"
-                                    :show-placeholder="false"
-                                    input-class="!h-10 !rounded-xl !py-0 !text-sm"
-                                />
-                            </div>
-                            <span v-if="Number(form.warranty_value || 0) > 0" class="text-xs text-slate-500">
-                                Tương đương {{ Math.min(3650, Number(form.warranty_value) * (form.warranty_unit === 'month' ? 30 : 1)) }} ngày
-                            </span>
-                            <span v-else class="text-xs italic text-slate-400">(Để trống nếu không bảo hành)</span>
+                        <div class="grid grid-cols-2 gap-2 sm:max-w-sm">
+                            <FloatingInput
+                                v-model="form.warranty_value"
+                                type="number"
+                                min="0"
+                                :max="form.warranty_unit === 'month' ? 121 : 3650"
+                                step="1"
+                                label="Thời hạn"
+                                input-class="!h-10 !rounded-xl !py-0 !text-sm"
+                            />
+                            <FloatingSelect
+                                v-model="form.warranty_unit"
+                                :options="warrantyUnitOptions"
+                                label="Đơn vị"
+                                name="product-warranty-unit"
+                                :show-placeholder="false"
+                                input-class="!h-10 !rounded-xl !py-0 !text-sm"
+                            />
                         </div>
+                        <p v-if="Number(form.warranty_value || 0) > 0" class="text-xs text-slate-500">
+                            Tương đương {{ Math.min(3650, Number(form.warranty_value) * (form.warranty_unit === 'month' ? 30 : 1)) }} ngày
+                        </p>
+                        <p v-else class="text-xs italic text-slate-400">(Để trống nếu không bảo hành)</p>
                         <span v-if="form.errors.warranty_days" class="block text-[11px] text-red-600">{{ form.errors.warranty_days }}</span>
                     </div>
                 </div>

@@ -1,4 +1,5 @@
 <script setup>
+import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router, usePage } from '@inertiajs/vue3'
 import { Plus, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
@@ -127,6 +128,9 @@ const destroy = (user) => {
     })
 }
 
+
+// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
+useSilentRefresh(['users', 'roles', 'permissions', 'can_assign_super_admin', 'can_manage_roles', 'can_create_users', 'can_edit_users', 'can_delete_users'])
 </script>
 
 <template>

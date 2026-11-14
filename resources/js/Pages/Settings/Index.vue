@@ -1,4 +1,5 @@
 <script setup>
+import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router, useForm, usePage } from '@inertiajs/vue3'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -158,7 +159,8 @@ const testSelectedPaymentVoice = () => {
         ? 'Đã phát câu thử. Nếu chưa nghe, hãy kiểm tra âm lượng hoặc thiết bị đầu ra.'
         : 'Không tìm thấy giọng đọc tương ứng trên máy này.'
 }
-watch(() => props.active_section, (section) => {
+// Mở/đóng mục thiết lập hoàn toàn ở phía trình duyệt: không gọi lại server nên không bị tải lại.
+const applySection = (section) => {
     if (section === 'backups' && props.can_manage_backups) activeModal.value = 'backups'
     else if (section === 'cleanup' && props.can_edit_settings) { activeModal.value = section; scanUnusedFiles() }
     else if (section === 'system' && props.can_edit_settings) activeModal.value = section
@@ -167,18 +169,43 @@ watch(() => props.active_section, (section) => {
     else if (section === 'printing' && props.can_edit_settings) activeModal.value = section
     else if (section === 'loyalty' && props.can_edit_settings) activeModal.value = section
     else if (!section) activeModal.value = null
-}, { immediate: true })
+}
+
+// Chỉ đồng bộ địa chỉ trang (để F5 hoặc chia sẻ link vẫn mở đúng mục), giữ nguyên state của Inertia.
+const syncSectionUrl = (section) => {
+    const url = new URL(window.location.href)
+    if (section) url.searchParams.set('section', section)
+    else url.searchParams.delete('section')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+// Chạy khi vào trang bằng link có ?section=... hoặc khi server trả về section mới.
+watch(() => props.active_section, applySection, { immediate: true })
+
+// Nạp ngầm cài đặt mới nhất từ server (không chặn giao diện, không tải lại trang).
+// Chỉ ghi vào form khi chưa có chỉnh sửa dở, tránh đè lên dữ liệu người dùng đang nhập.
+const { refresh: refreshSettingsSilently } = useSilentRefresh({
+    keys: ['settings'],
+    enabled: () => !form.isDirty,
+    apply: (next) => {
+        if (!next.settings || form.isDirty) return
+        liveSettings.value = next.settings
+        form.defaults(buildFormValues())
+        form.reset()
+        form.clearErrors()
+        selectedBankAccountId.value = String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || '')
+    },
+})
 
 const openModal = (section) => {
-    activeModal.value = section
-    // Keep navigation inside the app's install path (for example /qlbh/public).
-    const url = `settings?section=${encodeURIComponent(section)}`
-    router.get(url, {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section', 'settings'] })
+    applySection(section)
+    syncSectionUrl(section)
+    refreshSettingsSilently(true)
 }
 
 const closeModal = () => {
     activeModal.value = null
-    router.get('settings', {}, { preserveState: true, preserveScroll: true, replace: true, only: ['active_section'] })
+    syncSectionUrl(null)
 }
 
 // Mỗi mục chỉ gửi và lưu đúng các trường của mình, tránh ghi đè cài đặt khác bằng dữ liệu cũ của trang.
@@ -203,14 +230,18 @@ const cancelModal = () => {
     closeModal()
 }
 
-const mapBankAccounts = () => (props.settings.bank_accounts?.length
-        ? props.settings.bank_accounts
-        : (props.settings.bank_bin || props.settings.bank_account
+// Nguồn dữ liệu để dựng form: đổi khi server đẩy props mới hoặc khi nạp ngầm xong.
+const liveSettings = ref(props.settings)
+watch(() => props.settings, value => { liveSettings.value = value }, { flush: 'sync' })
+
+const mapBankAccounts = () => (liveSettings.value.bank_accounts?.length
+        ? liveSettings.value.bank_accounts
+        : (liveSettings.value.bank_bin || liveSettings.value.bank_account
             ? [{
                 id: 'legacy-default',
-                bank_bin: props.settings.bank_bin || '',
-                bank_account: props.settings.bank_account || '',
-                bank_account_name: props.settings.bank_account_name || '',
+                bank_bin: liveSettings.value.bank_bin || '',
+                bank_account: liveSettings.value.bank_account || '',
+                bank_account_name: liveSettings.value.bank_account_name || '',
                 is_default: true,
             }]
             : [])).map((account, index) => ({
@@ -232,69 +263,70 @@ const mapBankAccounts = () => (props.settings.bank_accounts?.length
         payment_api_secret_key_configured: Boolean(account.payment_api_secret_key_configured),
         payment_webhook_secret_configured: Boolean(account.payment_webhook_secret_configured),
         payment_auto_enabled: Boolean(account.payment_auto_enabled),
-        is_default: props.settings.bank_accounts?.some(saved => saved.is_default)
+        is_default: liveSettings.value.bank_accounts?.some(saved => saved.is_default)
             ? Boolean(account.is_default)
             : index === 0,
     }))
 
-const form = useForm({
-    shop_name: props.settings.shop_name || '',
-    currency_symbol: props.settings.currency_symbol || '₫',
-    currency_format: props.settings.currency_format || 'vi-VN',
-    app_locale: props.settings.app_locale || 'vi',
-    app_timezone: props.settings.app_timezone || 'Asia/Ho_Chi_Minh',
-    date_format: props.settings.date_format || 'd/m/Y',
-    allow_negative_stock: props.settings.allow_negative_stock || false,
-    inventory_alert_enabled: props.settings.inventory_alert_enabled !== false
-        && props.settings.inventory_alert_enabled !== 0
-        && props.settings.inventory_alert_enabled !== '0',
-    inventory_alert_threshold: Number(props.settings.inventory_alert_threshold ?? 5),
-    stock_import_vat_default: Boolean(props.settings.stock_import_vat_default),
-    stock_import_vat_rate: Number(props.settings.stock_import_vat_rate ?? 10),
-    pos_vat_default_enabled: Boolean(props.settings.pos_vat_default_enabled),
-    pos_vat_default_scope: props.settings.pos_vat_default_scope === 'vat_products' ? 'vat_products' : 'all',
-    pos_vat_rate: Number(props.settings.pos_vat_rate ?? 10),
-    pos_vat_used_enabled: Boolean(props.settings.pos_vat_used_enabled),
-    pos_vat_used_default: Boolean(props.settings.pos_vat_used_default),
-    pos_cost_price_suggestion_enabled: props.settings.pos_cost_price_suggestion_enabled !== false
-        && props.settings.pos_cost_price_suggestion_enabled !== 0
-        && props.settings.pos_cost_price_suggestion_enabled !== '0',
-    work_shift_opening_count_enabled: props.settings.work_shift_opening_count_enabled !== false
-        && props.settings.work_shift_opening_count_enabled !== 0
-        && props.settings.work_shift_opening_count_enabled !== '0',
-    work_shift_auto_open_enabled: props.settings.work_shift_auto_open_enabled !== false
-        && props.settings.work_shift_auto_open_enabled !== 0
-        && props.settings.work_shift_auto_open_enabled !== '0',
-    customer_points_enabled: props.settings.customer_points_enabled !== false
-        && props.settings.customer_points_enabled !== 0
-        && props.settings.customer_points_enabled !== '0',
-    customer_points_amount_per_point: Number(props.settings.customer_points_amount_per_point ?? 10000),
-    customer_points_basis: props.settings.customer_points_basis || 'revenue',
-    customer_points_debt_enabled: props.settings.customer_points_debt_enabled !== false
-        && props.settings.customer_points_debt_enabled !== 0
-        && props.settings.customer_points_debt_enabled !== '0',
-    customer_points_debt_mode: props.settings.customer_points_debt_mode || 'same',
-    customer_points_debt_percent: Number(props.settings.customer_points_debt_percent ?? 50),
-    print_paper_size: props.settings.print_paper_size || 'a4',
-    print_orientation: props.settings.print_orientation || 'portrait',
-    print_template: props.settings.print_template || 'standard',
-    print_shop_subtitle: props.settings.print_shop_subtitle || '',
-    print_shop_address: props.settings.print_shop_address || '',
-    print_shop_phone: props.settings.print_shop_phone || '',
-    label_template: mergeLabelTemplate(props.settings.label_template),
-    purchase_contract_title: props.settings.purchase_contract_title || 'Hợp đồng mua bán điện thoại',
-    purchase_contract_content: props.settings.purchase_contract_content || '',
-    bank_bin: props.settings.bank_bin || '',
-    bank_account: props.settings.bank_account || '',
-    bank_account_name: props.settings.bank_account_name || '',
-    bank_transfer_content: props.settings.bank_transfer_content || 'Thanh toan don hang',
-    bank_qr_theme: props.settings.bank_qr_theme || 'classic',
-    payment_voice_language: props.settings.payment_voice_language || 'vi-VN',
-    payment_voice_enabled: props.settings.payment_voice_enabled !== false
-        && props.settings.payment_voice_enabled !== 0
-        && props.settings.payment_voice_enabled !== '0',
+const buildFormValues = () => ({
+    shop_name: liveSettings.value.shop_name || '',
+    currency_symbol: liveSettings.value.currency_symbol || '₫',
+    currency_format: liveSettings.value.currency_format || 'vi-VN',
+    app_locale: liveSettings.value.app_locale || 'vi',
+    app_timezone: liveSettings.value.app_timezone || 'Asia/Ho_Chi_Minh',
+    date_format: liveSettings.value.date_format || 'd/m/Y',
+    allow_negative_stock: liveSettings.value.allow_negative_stock || false,
+    inventory_alert_enabled: liveSettings.value.inventory_alert_enabled !== false
+        && liveSettings.value.inventory_alert_enabled !== 0
+        && liveSettings.value.inventory_alert_enabled !== '0',
+    inventory_alert_threshold: Number(liveSettings.value.inventory_alert_threshold ?? 5),
+    stock_import_vat_default: Boolean(liveSettings.value.stock_import_vat_default),
+    stock_import_vat_rate: Number(liveSettings.value.stock_import_vat_rate ?? 10),
+    pos_vat_default_enabled: Boolean(liveSettings.value.pos_vat_default_enabled),
+    pos_vat_default_scope: liveSettings.value.pos_vat_default_scope === 'vat_products' ? 'vat_products' : 'all',
+    pos_vat_rate: Number(liveSettings.value.pos_vat_rate ?? 10),
+    pos_vat_used_enabled: Boolean(liveSettings.value.pos_vat_used_enabled),
+    pos_vat_used_default: Boolean(liveSettings.value.pos_vat_used_default),
+    pos_cost_price_suggestion_enabled: liveSettings.value.pos_cost_price_suggestion_enabled !== false
+        && liveSettings.value.pos_cost_price_suggestion_enabled !== 0
+        && liveSettings.value.pos_cost_price_suggestion_enabled !== '0',
+    work_shift_opening_count_enabled: liveSettings.value.work_shift_opening_count_enabled !== false
+        && liveSettings.value.work_shift_opening_count_enabled !== 0
+        && liveSettings.value.work_shift_opening_count_enabled !== '0',
+    work_shift_auto_open_enabled: liveSettings.value.work_shift_auto_open_enabled !== false
+        && liveSettings.value.work_shift_auto_open_enabled !== 0
+        && liveSettings.value.work_shift_auto_open_enabled !== '0',
+    customer_points_enabled: liveSettings.value.customer_points_enabled !== false
+        && liveSettings.value.customer_points_enabled !== 0
+        && liveSettings.value.customer_points_enabled !== '0',
+    customer_points_amount_per_point: Number(liveSettings.value.customer_points_amount_per_point ?? 10000),
+    customer_points_basis: liveSettings.value.customer_points_basis || 'revenue',
+    customer_points_debt_enabled: liveSettings.value.customer_points_debt_enabled !== false
+        && liveSettings.value.customer_points_debt_enabled !== 0
+        && liveSettings.value.customer_points_debt_enabled !== '0',
+    customer_points_debt_mode: liveSettings.value.customer_points_debt_mode || 'same',
+    customer_points_debt_percent: Number(liveSettings.value.customer_points_debt_percent ?? 50),
+    print_paper_size: liveSettings.value.print_paper_size || 'a4',
+    print_orientation: liveSettings.value.print_orientation || 'portrait',
+    print_template: liveSettings.value.print_template || 'standard',
+    print_shop_subtitle: liveSettings.value.print_shop_subtitle || '',
+    print_shop_address: liveSettings.value.print_shop_address || '',
+    print_shop_phone: liveSettings.value.print_shop_phone || '',
+    label_template: mergeLabelTemplate(liveSettings.value.label_template),
+    purchase_contract_title: liveSettings.value.purchase_contract_title || 'Hợp đồng mua bán điện thoại',
+    purchase_contract_content: liveSettings.value.purchase_contract_content || '',
+    bank_bin: liveSettings.value.bank_bin || '',
+    bank_account: liveSettings.value.bank_account || '',
+    bank_account_name: liveSettings.value.bank_account_name || '',
+    bank_transfer_content: liveSettings.value.bank_transfer_content || 'Thanh toan don hang',
+    bank_qr_theme: liveSettings.value.bank_qr_theme || 'classic',
+    payment_voice_language: liveSettings.value.payment_voice_language || 'vi-VN',
+    payment_voice_enabled: liveSettings.value.payment_voice_enabled !== false
+        && liveSettings.value.payment_voice_enabled !== 0
+        && liveSettings.value.payment_voice_enabled !== '0',
     bank_accounts: mapBankAccounts(),
 })
+const form = useForm(buildFormValues())
 
 watch(
     () => [props.settings.purchase_contract_title, props.settings.purchase_contract_content],

@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { History } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { History, ChevronDown } from 'lucide-vue-next'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 
 import CustomerSection from '@/Modules/POS/Customer/Components/CustomerSection.vue'
@@ -33,6 +33,17 @@ const props = defineProps({
 })
 
 const showSaleHistory = ref(false)
+
+// Ô "Phí phụ thu & Chiết khấu đơn": ẩn/hiện, nhớ trạng thái cho lần sau.
+const ADJUST_STORAGE_KEY = 'pos.showFeeDiscount'
+const readAdjustState = () => {
+    try { return localStorage.getItem(ADJUST_STORAGE_KEY) === '1' } catch { return false }
+}
+const showFeeDiscount = ref(readAdjustState())
+watch(showFeeDiscount, (value) => {
+    try { localStorage.setItem(ADJUST_STORAGE_KEY, value ? '1' : '0') } catch { /* bỏ qua */ }
+})
+const hasFeeOrInvoiceDiscount = computed(() => Number(props.extraFee || 0) > 0 || Number(props.invoiceDiscount || 0) > 0)
 const needsCustomerForWarranty = computed(() => !props.selectedCustomer && props.cart.some((item) =>
     (item.imei_id || item.imei || item.serial)
     && Number(item.customer_warranty_days ?? item.warranty_days ?? 0) > 0
@@ -160,15 +171,26 @@ const toggleInvoiceDiscountType = () => {
         <!-- Khối dưới: Thanh toán & Tính tiền -->
         <div class="shrink-0 bg-white px-2 pb-0 pt-1.5">
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <div v-if="cart.length" class="space-y-1 border-b border-slate-100 bg-slate-50 px-2.5 py-2 text-xs">
-                <div class="flex items-center justify-between text-slate-600">
-                    <span>Tạm tính ({{ totalQuantity }} món):</span>
-                    <strong class="text-slate-800">{{ $money(subTotal) }}</strong>
+            <div v-if="cart.length" class="space-y-0.5 border-b border-slate-100 bg-slate-50 px-2.5 py-1.5 text-xs">
+                <div class="flex items-center gap-2 text-slate-600">
+                    <button
+                        type="button"
+                        :class="showFeeDiscount ? 'bg-slate-200 text-slate-600 hover:bg-slate-300' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'"
+                        class="inline-flex min-w-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold transition"
+                        :aria-expanded="showFeeDiscount"
+                        @click="showFeeDiscount = !showFeeDiscount"
+                    >
+                        <span class="truncate">Phụ phí &amp; chiết khấu</span>
+                        <span v-if="!showFeeDiscount && hasFeeOrInvoiceDiscount" class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"></span>
+                        <ChevronDown class="h-2.5 w-2.5 shrink-0 transition-transform" :class="showFeeDiscount ? 'rotate-180' : ''" />
+                    </button>
+                    <span class="whitespace-nowrap">Tạm tính ({{ totalQuantity }} món):</span>
+                    <strong class="ml-auto whitespace-nowrap text-slate-800">{{ $money(subTotal) }}</strong>
                 </div>
                 <div v-if="discount > 0" class="flex items-center justify-between text-rose-600">
                     <span>Chiết khấu sản phẩm:</span><strong>-{{ $money(discount) }}</strong>
                 </div>
-                <div class="grid grid-cols-2 gap-2 pt-1">
+                <div v-show="showFeeDiscount" class="grid grid-cols-2 gap-2 pt-0.5">
                     <div class="relative min-w-0">
                         <FloatingInput :model-value="extraFeeInputValue" label="Phí phụ thu" :format-thousands="extraFeeType !== 'percent'" :inputmode="extraFeeType === 'percent' ? 'decimal' : 'numeric'" input-class="!h-9 !rounded-md !border-slate-200 !py-2 !pl-2 !pr-11 !text-center !text-xs focus:!border-blue-400" label-class="!left-2 !px-0.5 !text-[10px]" @update:model-value="updateExtraFee" />
                         <button type="button" class="absolute right-0.5 top-0.5 flex h-8 w-8 items-center justify-center rounded-md text-xs font-extrabold text-white shadow-sm" :class="extraFeeType === 'percent' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'" :aria-label="extraFeeType === 'percent' ? 'Đang tính phí theo phần trăm, nhấn để chuyển sang số tiền' : 'Đang tính phí theo số tiền, nhấn để chuyển sang phần trăm'" @click="toggleExtraFeeType">{{ extraFeeType === 'percent' ? '%' : $currency() }}</button>

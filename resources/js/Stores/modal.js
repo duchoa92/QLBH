@@ -53,15 +53,22 @@ const clearDeepLink = (modal) => {
     router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true })
 }
 
-export function registerUrlModal(type, component, propsForId) {
+/**
+ * Gắn một loại modal với URL (?detail=<type>&detail_id=<id>).
+ * propsForId(id) trả về props để mở modal, hoặc null nếu chưa dựng lại được (vd. bản ghi không nằm trong trang hiện tại).
+ * options.onUpdated: callback sau khi form lưu xong (giống openModal).
+ */
+export function registerUrlModal(type, component, propsForId, options = {}) {
     const syncFromUrl = () => {
         const url = new URL(window.location.href)
         const active = state.modals.find(modal => modal.deepLink?.type === type)
         const id = url.searchParams.get('detail') === type ? url.searchParams.get('detail_id') : null
 
         if (id && (!active || String(active.deepLink.id) !== id)) {
+            const modalProps = propsForId(id)
+            if (modalProps === null || modalProps === undefined) return
             if (active) closeModal(active.id)
-            openModal(component, { props: propsForId(id), deepLink: { type, id }, fromUrl: true })
+            openModal(component, { props: modalProps, onUpdated: options.onUpdated, deepLink: { type, id }, fromUrl: true })
         } else if (!id && active) {
             state.modals.splice(state.modals.indexOf(active), 1)
         }

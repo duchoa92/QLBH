@@ -104,15 +104,18 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
         <span class="hidden sm:inline">POS bán hàng</span>
       </div>
 
-      <button v-if="openingCountEnabled || shift" type="button" class="min-w-0 flex-1 truncate rounded-lg bg-blue-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] sm:flex-none sm:px-3 sm:text-xs" @click="emit('manage-shift')">
-        <span class="sm:hidden">{{ shift ? `Tiền ${compactMoney(shift.expected_cash)} · Nợ ${compactMoney(shift.customer_debt_amount)}` : 'Mở ca làm' }}</span>
-        <span class="hidden sm:inline">{{ shift ? `Tiền mặt ${Number(shift.expected_cash).toLocaleString('vi-VN')} ₫ · Nợ khách ${Number(shift.customer_debt_amount).toLocaleString('vi-VN')} ₫` : 'Mở ca làm' }}</span>
-      </button>
+      <!-- Cụm giữa: căn giữa thanh trên cùng (từ màn hình lớn), nằm giữa logo và nút đóng ở màn hình nhỏ -->
+      <div class="flex min-w-0 flex-1 items-center justify-center gap-2 lg:absolute lg:left-1/2 lg:top-1/2 lg:w-auto lg:flex-none lg:-translate-x-1/2 lg:-translate-y-1/2">
+        <button v-if="openingCountEnabled || shift" type="button" class="min-w-0 flex-1 truncate rounded-lg bg-blue-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] sm:flex-none sm:px-3 sm:text-xs" @click="emit('manage-shift')">
+          <span class="sm:hidden">{{ shift ? `Tiền ${compactMoney(shift.expected_cash)} · Nợ ${compactMoney(shift.customer_debt_amount)}` : 'Mở ca làm' }}</span>
+          <span class="hidden sm:inline">{{ shift ? `Tiền mặt ${Number(shift.expected_cash).toLocaleString('vi-VN')} ₫ · Nợ khách ${Number(shift.customer_debt_amount).toLocaleString('vi-VN')} ₫` : 'Mở ca làm' }}</span>
+        </button>
 
-      <button v-if="openingCountEnabled" type="button" aria-label="Lịch sử kiểm kê" title="Lịch sử kiểm kê" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-xs sm:font-bold" @click="emit('show-shift-history')">
-        <ClipboardList class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-        <span class="hidden sm:inline">Lịch sử kiểm kê</span>
-      </button>
+        <button v-if="openingCountEnabled" type="button" aria-label="Lịch sử kiểm kê" title="Lịch sử kiểm kê" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-xs sm:font-bold" @click="emit('show-shift-history')">
+          <ClipboardList class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          <span class="hidden sm:inline">Lịch sử kiểm kê</span>
+        </button>
+      </div>
 
       <div class="relative ml-auto flex shrink-0 items-center gap-2 pr-10 sm:static sm:pr-0">
         <OfflineStatus />

@@ -1,6 +1,7 @@
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePage } from '@inertiajs/vue3'
-import api from '@/Services/api'
+import { fetchPartialProps, isCanceled } from '@/Services/partialFetch'
+import { useModal } from '@/Stores/modal'
 
 const isBlank = value => value === '' || value === null || value === undefined
 
@@ -18,8 +19,9 @@ const isBlank = value => value === '' || value === null || value === undefined
  *   })
  *   // list.data / list.filters / list.loading là ref; list.schedule() khi gõ, list.request() khi bấm lọc.
  */
-export function useLiveList({ props, dataKey, filtersKey = 'filters', extraKeys = [], params, path, delay = 180 }) {
+export function useLiveList({ props, dataKey, filtersKey = 'filters', extraKeys = [], params, path, delay = 180, refreshOnFocus = true, focusInterval = 15000 }) {
     const page = usePage()
+    const modals = useModal()
     const data = ref(props[dataKey])
     const filters = ref(props[filtersKey] || {})
     const extras = {}
@@ -34,6 +36,7 @@ export function useLiveList({ props, dataKey, filtersKey = 'filters', extraKeys 
     let timer = null
     let controller = null
     let seq = 0
+    let lastLoaded = Date.now()
 
     const syncUrl = (query) => {
         const url = new URL(window.location.href)
@@ -46,12 +49,14 @@ export function useLiveList({ props, dataKey, filtersKey = 'filters', extraKeys 
         window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
     }
 
-    const request = async (overrides = {}) => {
+    // silent = true: làm mới ngầm (không bật loading, không đổi URL) khi người dùng quay lại tab.
+    const request = async (overrides = {}, { silent = false } = {}) => {
         clearTimeout(timer)
+        timer = null
         controller?.abort()
         const id = ++seq
         controller = new AbortController()
-        loading.value = true
+        if (!silent) loading.value = true
 
         const merged = {
             sort_by: filters.value?.sort_by,
@@ -64,43 +69,55 @@ export function useLiveList({ props, dataKey, filtersKey = 'filters', extraKeys 
         Object.entries(merged).forEach(([key, value]) => { if (!isBlank(value)) query[key] = value })
 
         try {
-            const response = await api.get(path || `${window.location.origin}${window.location.pathname}`, {
+            const next = await fetchPartialProps({
+                keys: [dataKey, filtersKey, ...extraKeys],
                 params: query,
+                path,
                 signal: controller.signal,
-                headers: {
-                    Accept: 'text/html, application/xhtml+xml',
-                    'X-Inertia': 'true',
-                    'X-Inertia-Version': page.version,
-                    'X-Inertia-Partial-Component': page.component,
-                    'X-Inertia-Partial-Data': [dataKey, filtersKey, ...extraKeys].join(','),
-                },
             })
             if (id !== seq) return
-            const next = response.data?.props || {}
             if (dataKey in next) data.value = next[dataKey]
             if (filtersKey in next) filters.value = next[filtersKey] || {}
             extraKeys.forEach(key => { if (key in next) extras[key].value = next[key] })
-            syncUrl(query)
+            if (!silent) syncUrl(query)
+            lastLoaded = Date.now()
         } catch (error) {
-            if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
+            if (isCanceled(error)) return
             if (error?.response?.status === 409) { window.location.reload(); return }
             if (id === seq) console.error(error)
         } finally {
-            if (id === seq) loading.value = false
+            if (id === seq && !silent) loading.value = false
         }
     }
 
     const schedule = () => {
         clearTimeout(timer)
-        timer = setTimeout(() => request(), delay)
+        timer = setTimeout(() => { timer = null; request() }, delay)
     }
 
     const cancel = () => {
         clearTimeout(timer)
+        timer = null
         controller?.abort()
     }
 
-    onBeforeUnmount(cancel)
+    // Quay lại tab/cửa sổ: làm mới ngầm danh sách theo đúng bộ lọc hiện tại.
+    // Bỏ qua khi tab ẩn, đang tải/đang gõ tìm kiếm hoặc đang mở modal để không làm gián đoạn người dùng.
+    const refreshOnReturn = () => {
+        if (document.hidden || loading.value || timer || modals.modals.length) return
+        if (Date.now() - lastLoaded < focusInterval) return
+        request({}, { silent: true })
+    }
+    onMounted(() => {
+        if (!refreshOnFocus) return
+        document.addEventListener('visibilitychange', refreshOnReturn)
+        window.addEventListener('focus', refreshOnReturn)
+    })
+    onBeforeUnmount(() => {
+        document.removeEventListener('visibilitychange', refreshOnReturn)
+        window.removeEventListener('focus', refreshOnReturn)
+        cancel()
+    })
 
     return { data, filters, extras, loading, request, schedule, cancel }
 }

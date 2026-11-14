@@ -227,7 +227,8 @@ class ProductImeiController extends Controller
             ->get(['id', 'party_type', 'customer_id', 'party_name', 'party_phone', 'import_date', 'created_at'])
             ->keyBy('id');
 
-        $latestSale = $saleItems->first()?->sale;
+        // Hóa đơn đã hủy thì thiết bị đã hoàn kho: không tính khách của hóa đơn đó là người mua.
+        $latestSale = $saleItems->first(fn (SaleItem $item) => $item->sale && $item->sale->status !== 'cancelled')?->sale;
         $latestRepair = $repairs->first();
         $customer = $latestSale?->customer
             ? [
@@ -760,7 +761,7 @@ class ProductImeiController extends Controller
                     'product:id,name,sku,warranty_days',
                     'variant:id,product_id,sku,attributes',
                     'saleItems' => fn ($query) => $query->latest('id'),
-                    'saleItems.sale:id,code,customer_id,created_at',
+                    'saleItems.sale:id,code,customer_id,status,created_at',
                     'saleItems.sale.customer:id,full_name,phone',
                 ])
                 ->where(function ($query) use ($tokens, $repairCodes): void {
@@ -840,7 +841,7 @@ class ProductImeiController extends Controller
     {
         return $imeis
             ->map(function (ProductImei $imei) use ($keyword): array {
-                $sale = $imei->saleItems->first()?->sale;
+                $sale = $imei->saleItems->first(fn ($item) => $item->sale && $item->sale->status !== 'cancelled')?->sale;
                 $customer = $sale?->customer;
                 $variant = $this->variantLabel($imei->variant);
 

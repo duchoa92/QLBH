@@ -36,6 +36,10 @@ const paymentOptions = withAll('Mọi thanh toán', [
     { value: 'card', label: 'Thẻ' },
     { value: 'mixed', label: 'Kết hợp' },
 ])
+const sourceOptions = withAll('Tất cả nguồn thu', [
+    { value: 'sales', label: 'Bán hàng' },
+    { value: 'repair', label: 'Sửa chữa' },
+])
 const stockStatusOptions = withAll('Mọi tình trạng tồn', [
     { value: 'in', label: 'Còn hàng' },
     { value: 'low', label: 'Sắp hết hàng' },
@@ -154,7 +158,7 @@ const revenue = reactive({
     by_payment_method: [],
 })
 
-const revenueFilters = reactive({ payment_method: '', user_id: '' })
+const revenueFilters = reactive({ source: '', payment_method: '', user_id: '' })
 
 const loadRevenue = async () => {
     loading.value = true
@@ -164,6 +168,7 @@ const loadRevenue = async () => {
             params: {
                 from: filters.from,
                 to: filters.to,
+                source: revenueFilters.source || undefined,
                 payment_method: revenueFilters.payment_method || undefined,
                 user_id: revenueFilters.user_id || undefined,
             },
@@ -410,7 +415,7 @@ watch(() => debtFilters.level, () => {
     if (activeTab.value === 'debts') loadDebts()
 })
 
-watch(() => [revenueFilters.payment_method, revenueFilters.user_id], () => {
+watch(() => [revenueFilters.source, revenueFilters.payment_method, revenueFilters.user_id], () => {
     if (activeTab.value === 'revenue') loadRevenue()
 })
 
@@ -493,6 +498,7 @@ onMounted(() => {
             >
                 <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" align="left" @change="resetEmptyRange" />
                 <template v-if="activeTab === 'revenue'">
+                    <ListFilterSelect v-model="revenueFilters.source" label="Nguồn thu" :show-placeholder="false" :options="sourceOptions" />
                     <ListFilterSelect v-model="revenueFilters.payment_method" label="Thanh toán" :show-placeholder="false" :options="paymentOptions" />
                     <ListFilterSelect v-model="revenueFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
                 </template>
@@ -520,10 +526,14 @@ onMounted(() => {
                         <div class="mt-2 text-2xl font-black text-blue-600">
                             {{ formatMoney(revenue.summary?.total_revenue) }}
                         </div>
+                        <div v-if="revenueFilters.source === ''" class="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500">
+                            <span>Bán hàng <strong class="text-slate-700">{{ formatMoney(revenue.summary?.sales_revenue) }}</strong></span>
+                            <span>Sửa chữa <strong class="text-slate-700">{{ formatMoney(revenue.summary?.repair_revenue) }}</strong></span>
+                        </div>
                     </div>
 
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Số đơn hàng</div>
+                        <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Số đơn / phiếu</div>
                         <div class="mt-2 text-2xl font-black text-slate-950">
                             {{ revenue.summary?.total_orders ?? 0 }}
                         </div>

@@ -1,4 +1,5 @@
 <script setup>
+import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import { Plus, SquarePen, Trash2 } from 'lucide-vue-next'
@@ -108,6 +109,9 @@ const destroy = (supplier) => {
     })
 }
 
+
+// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
+useSilentRefresh(['suppliers'])
 </script>
 
 <template>

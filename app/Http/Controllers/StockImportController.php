@@ -467,9 +467,16 @@ class StockImportController extends Controller
             $this->service->import($validated);
         }
 
+        // Chỉ một thông báo (app.js hiển thị flash.success); FE không toast thêm nữa.
+        $paid = (float) ($validated['paid_amount'] ?? 0) + (float) ($validated['old_debt_paid'] ?? 0);
+
         return back()->with(
             'success',
-            'Nhập hàng thành công'
+            $replacement instanceof StockImport
+                ? 'Đã cập nhật phiếu nhập thành công.'
+                : ($paid > 0
+                    ? 'Đã lưu phiếu nhập và ghi nhận thanh toán thành công.'
+                    : 'Đã lưu phiếu nhập, công nợ đã được ghi nhận.')
         );
     }
 

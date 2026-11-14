@@ -1,4 +1,5 @@
 <script setup>
+import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { computed, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import { Ban, Plus, RotateCcw, SquarePen, Trash2 } from 'lucide-vue-next'
@@ -160,6 +161,9 @@ const openDetailFromGlobalSearch = () => {
 
 watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
 
+
+// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
+useSilentRefresh(['customers'])
 </script>
 
 <template>

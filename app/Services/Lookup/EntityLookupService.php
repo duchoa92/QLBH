@@ -211,7 +211,10 @@ class EntityLookupService
         $devices = SaleItem::query()
             ->with(['productImei.product:id,name,sku', 'productImei.variant:id,product_id,sku,attributes'])
             ->whereNotNull('product_imei_id')
-            ->whereHas('sale', fn ($sale) => $sale->where('customer_id', $customer->id))
+            // Hóa đơn đã hủy thì thiết bị đã hoàn kho, không còn tính là thiết bị khách đã mua.
+            ->whereHas('sale', fn ($sale) => $sale
+                ->where('customer_id', $customer->id)
+                ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'cancelled')))
             ->latest('id')
             ->limit(50)
             ->get()

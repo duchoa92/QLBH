@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useUrlView } from '@/Composables/useUrlState'
 import { router, useForm, usePage } from '@inertiajs/vue3'
 import { Plus, Pencil, Trash2, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -64,6 +65,28 @@ const { data: expensesData, filters: filtersData, extras, loading } = list
 const summaryData = extras.summary
 watch(search, () => list.schedule())
 watch([month, category], () => list.request())
+// URL: ?view=new | edit:ID | detail:ID | schedule:new | schedule:ID
+useUrlView({
+    key: 'view',
+    current: () => {
+        if (detail.value) return `detail:${detail.value.id}`
+        if (modal.value) return editing.value ? `edit:${editing.value.id}` : 'new'
+        if (scheduleModal.value) return editingSchedule.value ? `schedule:${editingSchedule.value.id}` : 'schedule:new'
+        return null
+    },
+    restore: (value) => {
+        const [kind, id] = String(value || '').split(':')
+        const expense = id ? expensesData.value?.data?.find(item => String(item.id) === id) : null
+        const schedule = id ? props.recurringExpenses?.find(item => String(item.id) === id) : null
+        detail.value = null
+        modal.value = false
+        scheduleModal.value = false
+        if (value === 'new') openCreate()
+        else if (kind === 'detail' && expense) detail.value = expense
+        else if (kind === 'edit' && expense) openEdit(expense)
+        else if (kind === 'schedule') openSchedule(id === 'new' ? null : schedule)
+    },
+})
 const openCreate = () => { editing.value = null; form.reset(); form.category = 'utilities'; form.expense_date = new Date().toISOString().slice(0, 10); form.payment_method = 'cash'; modal.value = true }
 const openEdit = row => { editing.value = row; form.category = row.category; form.description = row.description; form.amount = row.amount; form.expense_date = row.expense_date; form.payment_method = row.payment_method; form.recipient = row.recipient || ''; form.note = row.note || ''; modal.value = true }
 const submit = () => form[editing.value ? 'put' : 'post'](editing.value ? route('expenses.update', editing.value.id) : route('expenses.store'), { preserveScroll: true, onSuccess: () => { modal.value = false } })

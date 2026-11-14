@@ -3,8 +3,7 @@
 import {
     Trash2,
     MessageSquareText,
-    Gift,
-    BadgePercent,
+    Tag,
     ShieldCheck,
     Cpu,
     Layers,
@@ -76,16 +75,15 @@ const emit = defineEmits([
         </div>
 
         <div class="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50 p-0.5">
-            <button type="button" @click="emit('edit-note')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-blue-600" :class="noteCount ? 'text-blue-600' : ''" title="Ghi chú" aria-label="Ghi chú">
+            <button type="button" @click="emit('edit-note')" class="relative flex h-7 w-7 items-center justify-center rounded-md transition" :class="noteCount ? 'text-blue-600 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
                 <MessageSquareText class="h-4 w-4" />
                 <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
             </button>
-            <button type="button" @click="emit('edit-promotion')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-amber-600" :class="giftCount || Number(item.discount_value || 0) ? 'text-amber-600' : ''" title="Quà tặng và giảm giá" aria-label="Quà tặng và giảm giá">
-                <BadgePercent v-if="Number(item.discount_value || 0) > 0 && !(item.gifts || []).length" class="h-4 w-4" />
-                <Gift v-else class="h-4 w-4" />
+            <button type="button" @click="emit('edit-promotion')" class="relative flex h-7 w-7 items-center justify-center rounded-md transition" :class="giftCount ? 'text-amber-500 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-amber-600'" title="Khuyến mãi: giảm giá & quà tặng" aria-label="Khuyến mãi: giảm giá và quà tặng">
+                <Tag class="h-4 w-4" />
                 <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
             </button>
-            <button type="button" @click="emit('edit-warranty')" class="relative flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-emerald-600" :class="warrantyCount ? 'text-emerald-600' : ''" title="Bảo hành" aria-label="Bảo hành">
+            <button type="button" @click="emit('edit-warranty')" class="relative flex h-7 w-7 items-center justify-center rounded-md transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
                 <ShieldCheck class="h-4 w-4" />
                 <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
             </button>

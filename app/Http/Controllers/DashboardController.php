@@ -106,6 +106,8 @@ class DashboardController extends Controller
 
             'expenseReminders' => ExpenseController::dashboardReminders(),
 
+            'todos' => $this->todos(),
+
             'topDebtors' => $topDebtors,
 
             'recentOrders' => $this->recentOrders(),
@@ -228,6 +230,9 @@ class DashboardController extends Controller
         $labels = [];
         $revenue = [];
         $profit = [];
+        $salesRevenue = [];
+        $repairRevenue = [];
+        $salesProfit = [];
 
         for ($cursor = $from->copy(); $cursor->lte($to); $cursor->addDay()) {
 
@@ -240,12 +245,20 @@ class DashboardController extends Controller
             $labels[] = $cursor->format('d/m');
             $revenue[] = $posRevenueDay + $repairRevenueDay;
             $profit[] = ($posRevenueDay - $costDay) + $repairRevenueDay;
+            $salesRevenue[] = $posRevenueDay;
+            $repairRevenue[] = $repairRevenueDay;
+            $salesProfit[] = $posRevenueDay - $costDay;
         }
 
         return [
             'labels' => $labels,
             'revenue' => $revenue,
             'profit' => $profit,
+            // Tách theo nguồn để lọc Bán hàng / Sửa chữa ở biểu đồ (lợi nhuận sửa chữa = doanh thu sửa chữa như KPI).
+            'salesRevenue' => $salesRevenue,
+            'repairRevenue' => $repairRevenue,
+            'salesProfit' => $salesProfit,
+            'repairProfit' => $repairRevenue,
         ];
     }
 
@@ -335,5 +348,45 @@ class DashboardController extends Controller
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Việc cần làm hôm nay (hiển thị cùng các nhắc nhở ở đầu Dashboard).
+     * Chỉ trả về mục có việc và chỉ khi người dùng có quyền xem phần đó.
+     */
+    private function todos(): array
+    {
+        $user = auth()->user();
+        $todos = [];
+
+        if ($user?->can('repairs.view')) {
+            $counts = Repair::query()
+                ->whereIn('status', ['pending', 'repairing', 'done'])
+                ->selectRaw('status, COUNT(*) as total')
+                ->groupBy('status')
+                ->pluck('total', 'status');
+
+            $definitions = [
+                'pending' => ['Đơn sửa đang chờ sửa', 'phiếu mới tiếp nhận, chưa bắt đầu sửa', 'amber'],
+                'repairing' => ['Đơn đang sửa', 'phiếu đang được xử lý', 'blue'],
+                'done' => ['Đơn đã sửa xong, chờ trả khách', 'phiếu hoàn tất, cần liên hệ khách đến lấy', 'emerald'],
+            ];
+
+            foreach ($definitions as $status => [$title, $hint, $tone]) {
+                $count = (int) ($counts[$status] ?? 0);
+                if ($count > 0) {
+                    $todos[] = [
+                        'key' => "repair-{$status}",
+                        'title' => $title,
+                        'hint' => $hint,
+                        'count' => $count,
+                        'tone' => $tone,
+                        'url' => "/repairs?status={$status}",
+                    ];
+                }
+            }
+        }
+
+        return $todos;
     }
 }

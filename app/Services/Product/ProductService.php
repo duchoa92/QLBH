@@ -182,19 +182,21 @@ class ProductService extends BaseService
 
     private function normalizeProductData(array $data): array
     {
-        $data['manage_stock_by_serial'] = filter_var(
-            $data['manage_stock_by_serial'] ?? false,
-            FILTER_VALIDATE_BOOLEAN
-        );
-
-        if (($data['product_type'] ?? null) === 'imei') {
-            $data['manage_stock_by_serial'] = true;
+        // Ô "Có Serial / IMEI" (manage_stock_by_serial) là nguồn quyết định khi form có gửi lên;
+        // chỉ khi client cũ không gửi thì mới suy từ product_type. Trước đây product_type cũ ('imei')
+        // luôn ép bật lại IMEI nên bỏ tick vẫn "lưu thành công" nhưng không đổi.
+        if (array_key_exists('manage_stock_by_serial', $data)) {
+            $data['manage_stock_by_serial'] = filter_var($data['manage_stock_by_serial'], FILTER_VALIDATE_BOOLEAN);
+        } else {
+            $data['manage_stock_by_serial'] = ($data['product_type'] ?? null) === 'imei';
         }
 
         if ($data['manage_stock_by_serial']) {
             $data['product_type'] = 'imei';
         } else {
-            $data['product_type'] = $data['product_type'] ?? 'normal';
+            $data['product_type'] = ($data['product_type'] ?? null) === 'imei'
+                ? 'normal'
+                : ($data['product_type'] ?? 'normal');
         }
 
         $data['has_unit_conversion'] = filter_var(

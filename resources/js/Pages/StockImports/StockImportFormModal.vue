@@ -1283,7 +1283,6 @@ const confirm = (payment = {}) => {
             preserveScroll: true,
             forceFormData: true,
             onSuccess: () => {
-                toast.success('Đã cập nhật phiếu nhập thành công.')
                 emit('created')
             },
             onError: (errors) => {
@@ -1299,9 +1298,6 @@ const confirm = (payment = {}) => {
         forceFormData: true,
 
         onSuccess: () => {
-            toast.success(Number(form.paid_amount || 0) + Number(form.old_debt_paid || 0) > 0
-                ? 'Đã lưu phiếu nhập và ghi nhận thanh toán thành công.'
-                : 'Đã lưu phiếu nhập, công nợ đã được ghi nhận.')
             emit('created')
         },
 

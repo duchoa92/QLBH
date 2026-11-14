@@ -7,6 +7,7 @@ Claude
 
 Index · VUE
 <script setup>
+import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import { canPrintLabels } from '@/utils/printLabels'
@@ -374,6 +375,9 @@ const openImeiList = (row) => {
     })
 }
  
+
+// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
+useSilentRefresh(['products'])
 </script>
  
 <template>

@@ -36,6 +36,7 @@ import DataPanel from '@/Components/UI/DataPanel.vue'
 import api from '@/Services/api'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import { patchQuery, readQuery } from '@/Composables/useUrlState'
 import LookupSuggestionItem from './LookupSuggestionItem.vue'
 
 defineOptions({
@@ -285,6 +286,30 @@ const extraInfoImageUrl = computed(() => {
     return imageUrl(imagePath)
 })
 
+// ---- Đồng bộ URL: ?q=...&scope=...&type=customer&id=5&tab=1&history=sale&event=sale:12
+const clearedView = { type: null, id: null, status: null, repair_id: null, tab: null, history: null, event: null }
+const scopeParam = () => (isAdvanced.value ? scopes.value.join(',') : null)
+const writeUrl = (patch, options) => patchQuery(patch, options)
+let silent = false // true khi đang khôi phục từ URL: bỏ qua watcher xóa kết quả khi đổi từ khóa
+let skipNextPop = false
+
+const selectSection = (index) => {
+    activeSection.value = index
+    writeUrl({ tab: index > 0 ? index : null })
+}
+const setHistoryFilter = (value) => {
+    historyFilter.value = value
+    writeUrl({ history: value === 'all' ? null : value })
+}
+const openEvent = (item) => {
+    selectedEvent.value = item
+    writeUrl({ event: `${item.type}:${item.id}` })
+}
+const closeEvent = () => {
+    selectedEvent.value = null
+    writeUrl({ event: null })
+}
+
 const runLookup = async (params) => {
     const requestId = ++lookupRequest
 
@@ -318,6 +343,7 @@ const lookup = () => {
     clearTimeout(suggestTimer)
     suggestRequest += 1
     suggestLoading.value = false
+    writeUrl({ ...clearedView, q, scope: scopeParam() }, { push: true })
     runLookup({ q, scope: scopes.value.join(',') })
 }
 
@@ -364,7 +390,19 @@ const selectSuggestion = (item) => {
     // Chọn từ bên trong một kết quả (danh sách / hồ sơ) thì nhớ để có nút Quay lại.
     if (result.value && !result.value.no_match) backStack.value.push(result.value)
 
-    runLookup(paramsFor(item))
+    const params = paramsFor(item)
+
+    writeUrl({
+        ...clearedView,
+        q: keyword.value.trim() || null,
+        scope: scopeParam(),
+        type: params.type ?? null,
+        id: params.id ?? null,
+        status: params.status ?? null,
+        repair_id: params.repair_id ?? null,
+    }, { push: true })
+
+    runLookup(params)
 }
 
 const goBack = () => {
@@ -373,6 +411,9 @@ const goBack = () => {
     if (previous) {
         result.value = previous
         selectedEvent.value = null
+        // Lùi đúng một mục lịch sử đã đẩy khi chọn gợi ý; kết quả cũ đã có sẵn nên không cần gọi lại.
+        skipNextPop = true
+        window.history.back()
     }
 }
 
@@ -412,6 +453,8 @@ const lookupScannedCode = async (code) => {
 }
 
 watch([keyword, scopes], () => {
+    if (silent) return
+
     const value = keyword.value
 
     backStack.value = []
@@ -427,6 +470,9 @@ watch([keyword, scopes], () => {
     selectedEvent.value = null
 
     const q = value.trim()
+
+    // Đổi từ khóa / phạm vi thì kết quả đang xem không còn hợp lệ: bỏ nó khỏi URL.
+    writeUrl({ ...clearedView, q: q || null, scope: scopeParam() })
 
     if (q.length < 2) {
         suggestions.value = []
@@ -466,11 +512,82 @@ const closeOnOutside = (event) => {
     if (advancedRef.value && !advancedRef.value.contains(event.target)) advancedOpen.value = false
 }
 
-onMounted(() => window.addEventListener('pointerdown', closeOnOutside))
+// Khôi phục toàn bộ trạng thái trang từ URL (tải lại trang, mở link được chia sẻ, nút Quay lại / Tiến của trình duyệt).
+const validScopes = new Set(scopeOptions.map(option => option.value))
+
+const applyViewState = async (query) => {
+    await nextTick()
+
+    const tab = Number(query.tab)
+
+    if (Number.isInteger(tab) && result.value?.sections?.[tab]) activeSection.value = tab
+    historyFilter.value = historyTypes.some(type => type.value === query.history) ? query.history : 'all'
+
+    if (query.event) {
+        const [type, id] = String(query.event).split(':')
+
+        selectedEvent.value = timeline.value.find(item => item.type === type && String(item.id) === id) || null
+    } else {
+        selectedEvent.value = null
+    }
+}
+
+const restoreFromUrl = async () => {
+    const query = readQuery()
+    const q = (query.q || '').trim()
+    const urlScopes = String(query.scope || '').split(',').filter(value => validScopes.has(value))
+
+    silent = true
+    keyword.value = q
+    scopes.value = urlScopes.length ? urlScopes : ['all']
+    await nextTick()
+    silent = false
+
+    backStack.value = []
+    suggestOpen.value = false
+
+    if (query.repair_id) {
+        await runLookup({ repair_id: query.repair_id })
+    } else if (query.type && query.id) {
+        await runLookup({ type: query.type, id: query.id, ...(query.status ? { status: query.status } : {}) })
+    } else if (q) {
+        await runLookup({ q, scope: scopes.value.join(',') })
+    } else {
+        lookupRequest += 1
+        result.value = null
+        loading.value = false
+        selectedEvent.value = null
+
+        return
+    }
+
+    await applyViewState(query)
+}
+
+const onPopState = () => {
+    if (skipNextPop) {
+        skipNextPop = false
+        applyViewState(readQuery())
+
+        return
+    }
+
+    restoreFromUrl()
+}
+
+onMounted(() => {
+    window.addEventListener('pointerdown', closeOnOutside)
+    window.addEventListener('popstate', onPopState)
+
+    const query = readQuery()
+
+    if (query.q || query.type || query.repair_id) restoreFromUrl()
+})
 onBeforeUnmount(() => {
     clearTimeout(suggestTimer)
     clearTimeout(copyTimer)
     window.removeEventListener('pointerdown', closeOnOutside)
+    window.removeEventListener('popstate', onPopState)
 })
 
 const historyTypes = [
@@ -897,7 +1014,7 @@ const historyCount = type => type === 'all'
                             type="button"
                             class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition"
                             :class="activeSection === index ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800'"
-                            @click="activeSection = index"
+                            @click="selectSection(index)"
                         >
                             {{ section.title }}
                             <span
@@ -1115,7 +1232,7 @@ const historyCount = type => type === 'all'
                                     type="button"
                                     class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition"
                                     :class="historyFilter === type.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
-                                    @click="historyFilter = type.value"
+                                    @click="setHistoryFilter(type.value)"
                                 >
                                     <span v-if="type.value !== 'all'" class="h-2 w-2 rounded-full" :class="eventDotClasses(type.value)"></span>
                                     {{ type.label }}
@@ -1132,7 +1249,7 @@ const historyCount = type => type === 'all'
                                 <button
                                     type="button"
                                     class="group min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-300 hover:bg-slate-50"
-                                    @click="selectedEvent = item"
+                                    @click="openEvent(item)"
                                 >
                                     <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                                         <div class="flex min-w-0 items-center gap-2">
@@ -1163,7 +1280,7 @@ const historyCount = type => type === 'all'
             </div>
         </DataPanel>
 
-        <BaseModal v-if="selectedEvent && eventDetail" :title="`${eventTypeLabel(selectedEvent)} · ${selectedEvent.title}`" size="md" @close="selectedEvent = null">
+        <BaseModal v-if="selectedEvent && eventDetail" :title="`${eventTypeLabel(selectedEvent)} · ${selectedEvent.title}`" size="md" @close="closeEvent">
             <div class="space-y-4 p-4 text-sm">
                 <div class="flex items-center justify-between gap-3 rounded-xl border p-4" :class="eventColorClasses(selectedEvent)">
                     <div>

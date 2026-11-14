@@ -15,6 +15,7 @@ import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
+import { useUrlView } from '@/Composables/useUrlState'
 
 defineOptions({ layout: AdminLayout })
 
@@ -62,6 +63,28 @@ const ordersData = extras.orders
 watch(search, () => list.schedule())
 watch(level, () => list.request())
 
+// URL: ?view=order:ID (xem hóa đơn/phiếu nhập) | pay:ID (ghi nhận thu / thanh toán) | open:ID (mở danh sách đơn nợ)
+useUrlView({
+    key: 'view',
+    current: () => {
+        if (viewOrderId.value) return `order:${viewOrderId.value}`
+        if (selected.value) return `pay:${selected.value.id}`
+        if (supplierModal.value) return `pay:${supplierModal.value.supplier.id}`
+        if (expandedId.value) return `open:${expandedId.value}`
+        return null
+    },
+    restore: (value) => {
+        const [kind, id] = String(value || '').split(':')
+        const row = id ? rowsData.value?.data?.find(item => String(item.id) === id) : null
+        viewOrderId.value = null
+        selected.value = null
+        supplierModal.value = null
+        expandedId.value = null
+        if (kind === 'order' && id) viewOrderId.value = id
+        else if (kind === 'pay' && row) pay(row)
+        else if (kind === 'open' && row) expandedId.value = row.id
+    },
+})
 const nameOf = row => isCustomer.value ? row.full_name : row.name
 const pay = (row, order = null) => {
     // Nhà cung cấp: dùng modal thanh toán riêng (chia tiền cho nhiều phiếu nhập)

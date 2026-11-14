@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useUrlView } from '@/Composables/useUrlState'
 import { Head } from '@inertiajs/vue3'
 import { AlertCircle, Banknote, FileSpreadsheet, FilterX, Landmark, ListFilter, ReceiptText, ShoppingCart, Wallet } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -63,6 +64,11 @@ watch([year, period, vat, receipt, bankAccount], () => list.request())
 
 const filterOpen = ref(false)
 const activeTab = ref('sales')
+useUrlView({
+    key: 'tab',
+    current: () => (activeTab.value === 'sales' ? null : activeTab.value),
+    restore: value => { activeTab.value = value === 'items' ? 'items' : 'sales' },
+})
 const activeFilterCount = computed(() => [vat.value, receipt.value, bankAccount.value].filter(Boolean).length)
 const hasFilter = computed(() => Boolean(search.value || activeFilterCount.value))
 const clearFilters = () => { search.value = ''; vat.value = ''; receipt.value = ''; bankAccount.value = '' }

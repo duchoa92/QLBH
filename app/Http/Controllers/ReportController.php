@@ -6,6 +6,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\Repair;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SaleItemGift;
@@ -90,35 +91,94 @@ class ReportController extends Controller
             ? request('payment_method') : '';
         $staffId = (int) request('user_id');
 
+        // Nguồn thu: all (mặc định) | sales (bán hàng POS) | repair (sửa chữa đã hoàn tất/trả khách).
+        $source = in_array(request('source'), ['sales', 'repair'], true) ? request('source') : 'all';
+        $includeSales = $source !== 'repair';
+        $includeRepair = $source !== 'sales';
+
         $base = Sale::query()
             ->where('status', '!=', 'cancelled')
             ->whereBetween('created_at', [$from, $to])
             ->when($paymentMethod !== '', fn ($query) => $query->where('payment_method', $paymentMethod))
             ->when($staffId > 0, fn ($query) => $query->where('user_id', $staffId));
 
-        $totalRevenue = (clone $base)->sum('grand_total');
-        $totalOrders = (clone $base)->count();
+        // Doanh thu sửa chữa tính theo ngày trả/hoàn tất, giống Dashboard.
+        $repairDate = 'COALESCE(returned_at, completed_at, updated_at)';
+        $repairBase = Repair::query()
+            ->whereIn('status', ['done', 'returned'])
+            ->whereRaw("{$repairDate} BETWEEN ? AND ?", [$from, $to])
+            ->when($paymentMethod !== '', fn ($query) => $query->where('payment_method', $paymentMethod))
+            ->when($staffId > 0, fn ($query) => $query->where('technician_id', $staffId));
+
+        $salesRevenue = $includeSales ? (float) (clone $base)->sum('grand_total') : 0.0;
+        $salesOrders = $includeSales ? (clone $base)->count() : 0;
+        $repairRevenue = $includeRepair
+            ? (float) (clone $repairBase)->selectRaw('COALESCE(SUM(COALESCE(final_cost, estimated_cost, 0)), 0) as total')->value('total')
+            : 0.0;
+        $repairOrders = $includeRepair ? (clone $repairBase)->count() : 0;
+
+        $totalRevenue = $salesRevenue + $repairRevenue;
+        $totalOrders = $salesOrders + $repairOrders;
 
         $summary = [
-            'total_revenue' => (float) $totalRevenue,
+            'total_revenue' => $totalRevenue,
             'total_orders' => $totalOrders,
-            'total_discount' => (float) (clone $base)->sum('discount'),
+            'total_discount' => $includeSales ? (float) (clone $base)->sum('discount') : 0.0,
             'avg_order_value' => $totalOrders > 0
                 ? round($totalRevenue / $totalOrders, 2)
                 : 0,
+            'sales_revenue' => $salesRevenue,
+            'sales_orders' => $salesOrders,
+            'repair_revenue' => $repairRevenue,
+            'repair_orders' => $repairOrders,
         ];
 
-        $daily = (clone $base)
-            ->selectRaw('DATE(created_at) as date, SUM(grand_total) as revenue, COUNT(*) as orders')
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
+        // Gộp theo ngày: mỗi ngày có doanh thu bán hàng, sửa chữa và tổng.
+        $dailyMap = [];
+        if ($includeSales) {
+            foreach ((clone $base)
+                ->selectRaw('DATE(created_at) as date, SUM(grand_total) as revenue, COUNT(*) as orders')
+                ->groupBy('date')->get() as $row) {
+                $dailyMap[$row->date] = [
+                    'date' => $row->date,
+                    'sales_revenue' => (float) $row->revenue,
+                    'repair_revenue' => 0.0,
+                    'orders' => (int) $row->orders,
+                ];
+            }
+        }
+        if ($includeRepair) {
+            foreach ((clone $repairBase)
+                ->selectRaw("DATE({$repairDate}) as date, SUM(COALESCE(final_cost, estimated_cost, 0)) as revenue, COUNT(*) as orders")
+                ->groupBy('date')->get() as $row) {
+                $dailyMap[$row->date] ??= ['date' => $row->date, 'sales_revenue' => 0.0, 'repair_revenue' => 0.0, 'orders' => 0];
+                $dailyMap[$row->date]['repair_revenue'] = (float) $row->revenue;
+                $dailyMap[$row->date]['orders'] += (int) $row->orders;
+            }
+        }
+        ksort($dailyMap);
+        $daily = collect($dailyMap)->map(fn ($row) => $row + ['revenue' => $row['sales_revenue'] + $row['repair_revenue']])->values();
 
-        $byPaymentMethod = (clone $base)
-            ->selectRaw('payment_method, SUM(grand_total) as revenue, COUNT(*) as orders')
-            ->groupBy('payment_method')
-            ->orderByDesc('revenue')
-            ->get();
+        // Theo phương thức thanh toán: gộp hóa đơn bán hàng và phiếu sửa chữa.
+        $paymentMap = [];
+        if ($includeSales) {
+            foreach ((clone $base)
+                ->selectRaw('payment_method, SUM(grand_total) as revenue, COUNT(*) as orders')
+                ->groupBy('payment_method')->get() as $row) {
+                $paymentMap[$row->payment_method] = ['payment_method' => $row->payment_method, 'revenue' => (float) $row->revenue, 'orders' => (int) $row->orders];
+            }
+        }
+        if ($includeRepair) {
+            foreach ((clone $repairBase)
+                ->selectRaw('payment_method, SUM(COALESCE(final_cost, estimated_cost, 0)) as revenue, COUNT(*) as orders')
+                ->groupBy('payment_method')->get() as $row) {
+                $key = $row->payment_method ?: 'cash';
+                $paymentMap[$key] ??= ['payment_method' => $key, 'revenue' => 0.0, 'orders' => 0];
+                $paymentMap[$key]['revenue'] += (float) $row->revenue;
+                $paymentMap[$key]['orders'] += (int) $row->orders;
+            }
+        }
+        $byPaymentMethod = collect($paymentMap)->sortByDesc('revenue')->values();
 
         return response()->json([
             'summary' => $summary,
