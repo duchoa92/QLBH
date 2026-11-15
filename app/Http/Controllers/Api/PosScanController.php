@@ -66,7 +66,7 @@ class PosScanController extends Controller
                     'id' => $imei->product->id,
                     'name' => $imei->product->name,
                     // BH khách theo lúc nhập máy này; chưa có thì dùng BH của sản phẩm.
-                    'warranty_days' => (int) (WarrantyDuration::daysFromImportExtra($imei->extra_info) ?? $imei->customer_warranty_days ?? $imei->product->warranty_days),
+                    'warranty_days' => (int) ($imei->importWarrantyDays() ?? $imei->customer_warranty_days ?? $imei->product->warranty_days),
                     'has_vat' => ! $imei->is_used && StockImportItem::query()->where('product_id', $imei->product->id)->where('has_vat', true)->where('is_used', false)->exists(),
                     'is_used' => (bool) $imei->is_used,
                     'tax_percent' => (float) ($imei->product->tax_percent ?? 0),

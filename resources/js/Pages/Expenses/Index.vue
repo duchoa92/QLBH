@@ -32,7 +32,7 @@ const scheduleModal = ref(false)
 const editingSchedule = ref(null)
 const reminderSchedule = ref(null)
 const form = useForm({ category: 'utilities', description: '', amount: '', expense_date: new Date().toISOString().slice(0, 10), payment_method: 'cash', recipient: '', note: '' })
-const scheduleForm = useForm({ category: 'utilities', description: '', amount: '', due_day: 1, remind_days: 7, payment_method: 'cash', recipient: '', note: '', is_active: true })
+const scheduleForm = useForm({ category: 'utilities', description: '', amount: '', due_day: 1, interval_months: 1, start_month: '', remind_days: 7, payment_method: 'cash', recipient: '', note: '', is_active: true })
 let timer
 const openScheduleReminder = () => {
     const url = new URL(window.location.href)
@@ -91,7 +91,7 @@ const openCreate = () => { editing.value = null; form.reset(); form.category = '
 const openEdit = row => { editing.value = row; form.category = row.category; form.description = row.description; form.amount = row.amount; form.expense_date = row.expense_date; form.payment_method = row.payment_method; form.recipient = row.recipient || ''; form.note = row.note || ''; modal.value = true }
 const submit = () => form[editing.value ? 'put' : 'post'](editing.value ? route('expenses.update', editing.value.id) : route('expenses.store'), { preserveScroll: true, onSuccess: () => { modal.value = false } })
 const remove = row => { if (confirm(`Xóa khoản chi “${row.description}”?`)) router.delete(route('expenses.destroy', row.id), { preserveScroll: true }) }
-const openSchedule = row => { editingSchedule.value = row || null; scheduleForm.reset(); scheduleForm.category = row?.category || 'utilities'; scheduleForm.description = row?.description || ''; scheduleForm.amount = row?.amount || ''; scheduleForm.due_day = row?.due_day || 1; scheduleForm.remind_days = row?.remind_days ?? 7; scheduleForm.payment_method = row?.payment_method || 'cash'; scheduleForm.recipient = row?.recipient || ''; scheduleForm.note = row?.note || ''; scheduleForm.is_active = row?.is_active ?? true; scheduleModal.value = true }
+const openSchedule = row => { editingSchedule.value = row || null; scheduleForm.reset(); scheduleForm.category = row?.category || 'utilities'; scheduleForm.description = row?.description || ''; scheduleForm.amount = row?.amount || ''; scheduleForm.due_day = row?.due_day || 1; scheduleForm.interval_months = row?.interval_months || 1; scheduleForm.start_month = row?.start_month || (row ? '' : new Date().toISOString().slice(0, 7)); scheduleForm.remind_days = row?.remind_days ?? 7; scheduleForm.payment_method = row?.payment_method || 'cash'; scheduleForm.recipient = row?.recipient || ''; scheduleForm.note = row?.note || ''; scheduleForm.is_active = row?.is_active ?? true; scheduleModal.value = true }
 const saveSchedule = () => scheduleForm[editingSchedule.value ? 'put' : 'post'](editingSchedule.value ? route('expenses.recurring.update', editingSchedule.value.id) : route('expenses.recurring.store'), { preserveScroll: true, onSuccess: () => { scheduleModal.value = false } })
 const deleteSchedule = row => { if (confirm(`Xóa lịch nhắc “${row.description}”?`)) router.delete(route('expenses.recurring.destroy', row.id), { preserveScroll: true }) }
 const markPaid = row => {
@@ -101,6 +101,25 @@ const markPaid = row => {
     const amount = Number(entered.replace(/[,.\s]/g, ''))
     if (!Number.isFinite(amount) || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ.')
     router.post(route('expenses.recurring.paid', row.id), { period: month.value, paid_date: new Date().toISOString().slice(0, 10), amount, payment_method: row.payment_method }, { preserveScroll: true })
+}
+watch(() => scheduleForm.interval_months, (value) => {
+    if (Number(value) > 1 && !scheduleForm.start_month) scheduleForm.start_month = new Date().toISOString().slice(0, 7)
+})
+const intervalOptions = [
+    { value: 1, label: 'Hàng tháng' },
+    { value: 2, label: '2 tháng / lần' },
+    { value: 3, label: 'Hàng quý (3 tháng / lần)' },
+    { value: 4, label: '4 tháng / lần' },
+    { value: 6, label: '6 tháng / lần' },
+    { value: 12, label: 'Hàng năm' },
+]
+// Mô tả chu kỳ: "hàng tháng" hoặc "mỗi quý (T1, T4, T7, T10)".
+const scheduleCycleText = (row) => {
+    const interval = Number(row.interval_months || 1)
+    if (interval === 1) return 'hàng tháng'
+    const label = intervalOptions.find(option => option.value === interval)?.label || `${interval} tháng / lần`
+    const months = (row.due_months || []).map(value => `T${value}`).join(', ')
+    return months ? `${label.toLowerCase()} (${months})` : label.toLowerCase()
 }
 const columns = [
     { key: 'expense_date', label: 'Ngày', sortable: true },
@@ -144,8 +163,8 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
             </div>
             <div v-if="recurringExpenses.length" class="divide-y divide-slate-100">
                 <div v-for="row in recurringExpenses" :key="row.id" class="flex flex-wrap items-center justify-between gap-3 p-4" :class="!row.is_active ? 'opacity-60' : ''">
-                    <div class="min-w-48 flex-1"><div class="flex flex-wrap items-center gap-2"><strong class="text-sm text-slate-900">{{ row.description }}</strong><span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ categoryLabels[row.category] || row.category }}</span><span v-if="!row.is_active" class="text-xs text-slate-500">Đã tạm dừng</span></div><div class="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500"><span class="inline-flex items-center gap-1"><CalendarClock :size="13" />Ngày {{ row.due_day }} hàng tháng · nhắc trước {{ row.remind_days }} ngày</span><span>{{ formatMoney(row.amount) }}</span><span v-if="row.recipient">{{ row.recipient }}</span></div></div>
-                    <div v-if="canManage" class="flex items-center gap-2"><span v-if="row.payments?.length" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Đã thanh toán tháng {{ month }}</span><ActionButton v-else-if="row.is_active" variant="info" @click="markPaid(row)">Đã thanh toán</ActionButton><button class="rounded-lg p-2 text-blue-700 hover:bg-blue-50" aria-label="Sửa lịch" @click="openSchedule(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa lịch" @click="deleteSchedule(row)"><Trash2 :size="15" /></button></div>
+                    <div class="min-w-48 flex-1"><div class="flex flex-wrap items-center gap-2"><strong class="text-sm text-slate-900">{{ row.description }}</strong><span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ categoryLabels[row.category] || row.category }}</span><span v-if="!row.is_active" class="text-xs text-slate-500">Đã tạm dừng</span></div><div class="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500"><span class="inline-flex items-center gap-1"><CalendarClock :size="13" />Ngày {{ row.due_day }} {{ scheduleCycleText(row) }} · nhắc trước {{ row.remind_days }} ngày</span><span>{{ formatMoney(row.amount) }}</span><span v-if="row.recipient">{{ row.recipient }}</span></div></div>
+                    <div v-if="canManage" class="flex items-center gap-2"><span v-if="row.is_due_in_period === false" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">Không đến hạn tháng {{ month }}</span><span v-else-if="row.payments?.length" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Đã thanh toán tháng {{ month }}</span><ActionButton v-else-if="row.is_active" variant="info" @click="markPaid(row)">Đã thanh toán</ActionButton><button class="rounded-lg p-2 text-blue-700 hover:bg-blue-50" aria-label="Sửa lịch" @click="openSchedule(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa lịch" @click="deleteSchedule(row)"><Trash2 :size="15" /></button></div>
                 </div>
             </div>
             <div v-else class="p-8 text-center text-sm text-slate-500">Chưa có lịch chi phí định kỳ.</div>
@@ -173,6 +192,7 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
         <BaseModal v-if="scheduleModal" :title="editingSchedule ? 'Cập nhật lịch chi phí' : 'Tạo lịch chi phí định kỳ'" size="md" @close="scheduleModal = false">
             <form class="space-y-3" @submit.prevent="saveSchedule">
                 <div class="grid gap-3 sm:grid-cols-2"><label class="text-xs font-semibold text-slate-600">Loại chi<select v-model="scheduleForm.category" class="mt-1 w-full rounded-xl border-slate-200 text-sm"><option v-for="item in categories" :key="item" :value="item">{{ categoryLabels[item] || item }}</option></select></label><label class="text-xs font-semibold text-slate-600">Tên khoản chi<input v-model="scheduleForm.description" placeholder="Ví dụ: Tiền thuê nhà" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /><small class="text-rose-600">{{ scheduleForm.errors.description }}</small></label></div>
+                <div class="grid gap-3 sm:grid-cols-2"><label class="text-xs font-semibold text-slate-600">Chu kỳ đóng<select v-model.number="scheduleForm.interval_months" class="mt-1 w-full rounded-xl border-slate-200 text-sm"><option v-for="option in intervalOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select><small class="text-rose-600">{{ scheduleForm.errors.interval_months }}</small></label><label v-if="scheduleForm.interval_months > 1" class="text-xs font-semibold text-slate-600">Tính chu kỳ từ tháng<input v-model="scheduleForm.start_month" type="month" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /><small class="text-slate-400">Ví dụ chọn tháng 1 + hàng quý → đóng vào T1, T4, T7, T10.</small><small class="block text-rose-600">{{ scheduleForm.errors.start_month }}</small></label></div>
                 <div class="grid gap-3 sm:grid-cols-3"><label class="text-xs font-semibold text-slate-600">Số tiền dự kiến<FormattedNumberInput v-model="scheduleForm.amount" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /><small class="text-rose-600">{{ scheduleForm.errors.amount }}</small></label><label class="text-xs font-semibold text-slate-600">Ngày đến hạn<input v-model.number="scheduleForm.due_day" type="number" min="1" max="31" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /><small class="text-rose-600">{{ scheduleForm.errors.due_day }}</small></label><label class="text-xs font-semibold text-slate-600">Nhắc trước (ngày)<input v-model.number="scheduleForm.remind_days" type="number" min="0" max="30" class="mt-1 w-full rounded-xl border-slate-200 text-sm" /><small class="text-rose-600">{{ scheduleForm.errors.remind_days }}</small></label></div>
                 <div class="grid gap-3 sm:grid-cols-2"><label class="text-xs font-semibold text-slate-600">Người nhận / đơn vị<input v-model="scheduleForm.recipient" placeholder="Điện lực, chủ nhà..." class="mt-1 w-full rounded-xl border-slate-200 text-sm" /></label><label class="text-xs font-semibold text-slate-600">Hình thức thanh toán<select v-model="scheduleForm.payment_method" class="mt-1 w-full rounded-xl border-slate-200 text-sm"><option value="cash">Tiền mặt</option><option value="bank">Chuyển khoản</option><option value="card">Thẻ</option></select></label></div>
                 <label class="flex items-center gap-2 text-sm text-slate-700"><input v-model="scheduleForm.is_active" type="checkbox" class="rounded border-slate-300" />Bật nhắc lịch này</label>

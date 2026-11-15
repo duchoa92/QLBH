@@ -414,7 +414,12 @@ const handleConfirmSelect = ({ variant, imei }) => {
         storage: imei?.storage ?? null,
         cost_price: imei?.cost_price ?? null,
         imei_sell_price: imei?.sell_price ?? null,
-        warranty_days: selectedProduct.value?.warranty_days ?? 0,
+        // BH theo IMEI (đã ưu tiên BH ghi ở phiếu nhập); chỉ khi API không trả mới dùng BH của sản phẩm.
+        warranty_days: Number(imei?.warranty_days ?? selectedProduct.value?.warranty_days ?? 0),
+        // Ghi đè BH theo lô của sản phẩm (nếu có) để dòng IMEI không lấy nhầm giá trị đó.
+        customer_warranty_days: imei
+            ? Number(imei.warranty_days ?? selectedProduct.value?.warranty_days ?? 0)
+            : (selectedProduct.value?.customer_warranty_days ?? undefined),
         price_source: imei?.price_source ?? null,
 
         // Cờ hàng cũ thuộc về từng IMEI, không phải cả sản phẩm.

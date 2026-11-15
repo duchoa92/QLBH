@@ -81,6 +81,12 @@ class SettingController extends Controller
                 'work_shift_opening_count_enabled' => filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'customer_points_enabled' => filter_var(setting('customer_points_enabled', true), FILTER_VALIDATE_BOOLEAN),
+                'face_recognition_enabled' => filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'face_cctv_snapshot_url' => setting('face_cctv_snapshot_url', ''),
+                'face_cctv_auth' => in_array(setting('face_cctv_auth', 'none'), ['none', 'basic', 'digest'], true) ? setting('face_cctv_auth', 'none') : 'none',
+                'face_cctv_username' => setting('face_cctv_username', ''),
+                // Không trả mật khẩu về trình duyệt, chỉ cho biết đã lưu hay chưa.
+                'face_cctv_has_password' => filled(setting('face_cctv_password')),
                 'customer_points_amount_per_point' => max(1, (int) setting('customer_points_amount_per_point', 10000)),
                 'customer_points_basis' => in_array(setting('customer_points_basis', 'revenue'), ['revenue', 'profit'], true) ? setting('customer_points_basis', 'revenue') : 'revenue',
                 'customer_points_debt_enabled' => filter_var(setting('customer_points_debt_enabled', true), FILTER_VALIDATE_BOOLEAN),
@@ -140,6 +146,11 @@ class SettingController extends Controller
             'work_shift_opening_count_enabled' => ['sometimes', 'boolean'],
             'work_shift_auto_open_enabled' => ['sometimes', 'boolean'],
             'customer_points_enabled' => ['sometimes', 'boolean'],
+            'face_recognition_enabled' => ['sometimes', 'boolean'],
+            'face_cctv_snapshot_url' => ['sometimes', 'nullable', 'url:http,https', 'max:500'],
+            'face_cctv_auth' => ['sometimes', 'in:none,basic,digest'],
+            'face_cctv_username' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'face_cctv_password' => ['sometimes', 'nullable', 'string', 'max:200'],
             'customer_points_amount_per_point' => ['sometimes', 'integer', 'min:1', 'max:1000000000'],
             'customer_points_basis' => ['sometimes', 'in:revenue,profit'],
             'customer_points_debt_enabled' => ['sometimes', 'boolean'],
@@ -215,9 +226,20 @@ class SettingController extends Controller
             } elseif (in_array($key, ['purchase_contract_title', 'purchase_contract_content'], true) && trim((string) $value) === '') {
                 // Để trống nghĩa là dùng lại nội dung hợp đồng mặc định.
                 Setting::forget($key);
+            } elseif ($key === 'face_cctv_password') {
+                // Mật khẩu camera được mã hóa; để trống nghĩa là giữ nguyên mật khẩu đã lưu.
+                if (filled($value)) {
+                    Setting::set($key, Crypt::encryptString((string) $value));
+                }
             } elseif ($key !== 'bank_accounts') {
                 Setting::set($key, $value);
             }
+        }
+
+        // Xóa địa chỉ camera thì xóa luôn tài khoản/mật khẩu đã lưu.
+        if (array_key_exists('face_cctv_snapshot_url', $data) && blank($data['face_cctv_snapshot_url'])) {
+            Setting::forget('face_cctv_username');
+            Setting::forget('face_cctv_password');
         }
 
         if (array_key_exists('bank_accounts', $data)) {

@@ -216,11 +216,17 @@ const closeModal = () => {
 }
 
 // Mỗi mục chỉ gửi và lưu đúng các trường của mình, tránh ghi đè cài đặt khác bằng dữ liệu cũ của trang.
+const faceCctvAuthOptions = [
+    { value: 'none', label: 'Không cần đăng nhập' },
+    { value: 'basic', label: 'Tài khoản (Basic)' },
+    { value: 'digest', label: 'Tài khoản (Digest, Hikvision/Dahua…)' },
+]
+
 const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -328,6 +334,13 @@ const buildFormValues = () => ({
     bank_transfer_content: liveSettings.value.bank_transfer_content || 'Thanh toan don hang',
     bank_qr_theme: liveSettings.value.bank_qr_theme || 'classic',
     payment_voice_language: liveSettings.value.payment_voice_language || 'vi-VN',
+    face_recognition_enabled: liveSettings.value.face_recognition_enabled === true
+        || liveSettings.value.face_recognition_enabled === 1
+        || liveSettings.value.face_recognition_enabled === '1',
+    face_cctv_snapshot_url: liveSettings.value.face_cctv_snapshot_url || '',
+    face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
+    face_cctv_username: liveSettings.value.face_cctv_username || '',
+    face_cctv_password: '', // không bao giờ nhận lại từ máy chủ; để trống = giữ mật khẩu đã lưu
     payment_voice_enabled: liveSettings.value.payment_voice_enabled !== false
         && liveSettings.value.payment_voice_enabled !== 0
         && liveSettings.value.payment_voice_enabled !== '0',
@@ -357,7 +370,7 @@ const settingGroups = computed(() => [
         cards: [
             { key: 'inventory', title: 'Bán hàng và kho hàng', description: 'Tồn kho âm, cảnh báo hàng sắp hết, VAT, kiểm kê đầu ca và đơn vị tính.', icon: Boxes, tone: 'bg-amber-50 text-amber-700', hover: 'hover:border-amber-300', visible: props.can_manage_inventory_settings },
             { key: 'payments', title: 'Tài khoản thanh toán', description: 'Tài khoản nhận chuyển khoản, VietQR và tự đối soát giao dịch.', icon: CreditCard, tone: 'bg-violet-50 text-violet-700', hover: 'hover:border-violet-300', visible: props.can_manage_payment_accounts },
-            { key: 'loyalty', title: 'Điểm khách hàng', description: 'Cách tích điểm theo doanh thu hoặc lợi nhuận.', icon: Award, tone: 'bg-emerald-50 text-emerald-700', hover: 'hover:border-emerald-300', visible: props.can_edit_settings },
+            { key: 'loyalty', title: 'Khách hàng', description: 'Tích điểm theo doanh thu/lợi nhuận và bật nhận diện khách bằng khuôn mặt.', icon: Award, tone: 'bg-emerald-50 text-emerald-700', hover: 'hover:border-emerald-300', visible: props.can_edit_settings },
         ],
     },
     {
@@ -691,7 +704,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
 
         <BaseModal
             v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings) || (activeModal === 'loyalty' && can_edit_settings)"
-            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : activeModal === 'loyalty' ? 'Điểm khách hàng' : 'Bán hàng và kho hàng'"
+            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : activeModal === 'loyalty' ? 'Khách hàng' : 'Bán hàng và kho hàng'"
             :size="'lg'"
             :body-class="activeModal === 'payments' ? 'max-h-[70vh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70vh] overflow-y-auto p-3 sm:p-4'"
             @close="cancelModal"
@@ -703,6 +716,38 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
             </div>
             <div class="space-y-5">
                 <DataPanel v-if="activeModal === 'loyalty'">
+                    <template #header><h2 class="text-sm font-bold text-slate-900">Nhận diện khách bằng khuôn mặt</h2></template>
+                    <div class="space-y-3 p-3">
+                        <SettingSwitch
+                            v-model="form.face_recognition_enabled"
+                            title="Bật nhận diện khuôn mặt"
+                            description="Cho phép đăng ký khuôn mặt ở trang Khách hàng và tự gợi ý khách khi đến quầy POS."
+                        />
+                        <div v-if="form.face_recognition_enabled" class="space-y-3 rounded-lg bg-slate-50 p-3">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800">Camera an ninh (tùy chọn)</h3>
+                                <p class="mt-0.5 text-xs text-slate-500">
+                                    Nhập địa chỉ <strong>ảnh chụp tĩnh</strong> của camera để lấy ảnh khách khi đăng ký khuôn mặt.
+                                    Ví dụ (tùy hãng/model): Hikvision <code>http://IP/ISAPI/Streaming/channels/101/picture</code>,
+                                    Dahua <code>http://IP/cgi-bin/snapshot.cgi</code>. Máy chủ gọi camera trong mạng nội bộ nên máy chủ phải truy cập được camera.
+                                </p>
+                            </div>
+                            <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Địa chỉ ảnh chụp (http/https)" placeholder-text="http://192.168.1.50/..." />
+                            <p v-if="form.errors.face_cctv_snapshot_url" class="text-xs text-rose-600">{{ form.errors.face_cctv_snapshot_url }}</p>
+                            <div v-if="form.face_cctv_snapshot_url" class="grid gap-2 sm:grid-cols-3">
+                                <FloatingSelect v-model="form.face_cctv_auth" name="face_cctv_auth" label="Đăng nhập camera" :options="faceCctvAuthOptions" :show-placeholder="false" />
+                                <FloatingInput v-if="form.face_cctv_auth !== 'none'" v-model="form.face_cctv_username" name="face_cctv_username" label="Tài khoản" autocomplete="off" />
+                                <FloatingInput v-if="form.face_cctv_auth !== 'none'" v-model="form.face_cctv_password" name="face_cctv_password" type="password" autocomplete="new-password" :label="liveSettings.face_cctv_has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
+                            </div>
+                        </div>
+                        <p class="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                            Khuôn mặt là dữ liệu sinh trắc học. Chỉ đăng ký khi khách <strong>đồng ý</strong> và đã được thông báo mục đích.
+                            Hệ thống chỉ lưu dữ liệu đặc trưng, không lưu ảnh. Khi tắt tính năng, POS ngừng nhận diện;
+                            dữ liệu đã đăng ký vẫn được giữ và có thể xóa ở trang Khách hàng.
+                        </p>
+                    </div>
+                </DataPanel>
+                                <DataPanel v-if="activeModal === 'loyalty'">
                     <template #header>
                         <label class="relative flex cursor-pointer items-center justify-between gap-3">
                             <h2 class="text-sm font-bold text-slate-900">Tích điểm khách hàng</h2>

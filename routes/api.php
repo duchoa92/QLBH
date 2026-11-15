@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\CustomerFaceController;
 use App\Http\Controllers\Api\PosScanController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
@@ -61,6 +62,20 @@ Route::middleware(['web', 'auth'])->group(function ()
         ->middleware('permission:customers.create|customers.edit|customers.view|pos.access|stock_imports.create');
     Route::get('/customers/check-phone', [CustomerController::class, 'checkPhone'])
         ->middleware('permission:customers.create|customers.edit|customers.view|pos.access|stock_imports.create');
+    // Nhận diện khách bằng khuôn mặt (chỉ khách đã đồng ý): so khớp ở POS, đăng ký/xóa ở trang Khách hàng.
+    Route::post('/customers/face-match', [CustomerFaceController::class, 'match'])
+        ->middleware(['permission:pos.access', 'throttle:60,1']);
+    Route::post('/customers/{customer}/face-feedback', [CustomerFaceController::class, 'feedback'])
+        ->middleware(['permission:pos.access', 'throttle:30,1']);
+    Route::get('/customers/face-cctv-snapshot', [CustomerFaceController::class, 'cctvSnapshot'])
+        ->middleware(['permission:customers.edit', 'throttle:20,1']);
+    Route::get('/customers/{customer}/face', [CustomerFaceController::class, 'status'])
+        ->middleware('permission:customers.view|customers.edit');
+    Route::post('/customers/{customer}/face', [CustomerFaceController::class, 'store'])
+        ->middleware('permission:customers.edit');
+    Route::delete('/customers/{customer}/face', [CustomerFaceController::class, 'destroy'])
+        ->middleware('permission:customers.edit');
+
     // Thêm khách hàng mới
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('permission:customers.create|pos.access|stock_imports.create');
 

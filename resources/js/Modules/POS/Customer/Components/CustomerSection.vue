@@ -15,6 +15,7 @@ import { customerService } from '../Services/customerService'
 import { openModal } from '@/Stores/modal'
 import CustomerFormModal from '@/Pages/Customers/CustomerFormModal.vue'
 import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
+import FaceCheckIn from './FaceCheckIn.vue'
 
 const emit = defineEmits([
     'selected',
@@ -306,6 +307,9 @@ onBeforeUnmount(() => {
                 </div>
             </div>            
         </div>
+
+        <!-- Tự nhận ra khách đã đăng ký khuôn mặt (gợi ý, nhân viên xác nhận) -->
+        <FaceCheckIn :paused="!!props.customer" @confirm="selectCustomer" />
     </div>
 
 <CustomerDebtModal

@@ -419,7 +419,10 @@ class StockImportService
                 $sellPrice = array_key_exists('sell_price', $item) && $item['sell_price'] !== null
                     ? round((float) $item['sell_price'] / $conversionFactor, 2)
                     : null;
-                $imeis = $this->normalizeImeis($item['imeis'] ?? [], $data['import_date'] ?? null);
+                $imeis = $this->inheritItemCustomerWarranty(
+                    $this->normalizeImeis($item['imeis'] ?? [], $data['import_date'] ?? null),
+                    $item['extra_info'] ?? null
+                );
 
                 if ($product->manage_stock_by_serial && $conversionFactor > 1) {
                     throw ValidationException::withMessages([
@@ -809,6 +812,36 @@ class StockImportService
                 'import' => "Không thể {$action} phiếu nhập vì đã có khoản thanh toán công nợ phát sinh sau khi lập phiếu. Hủy hoặc sửa sẽ làm mất lịch sử chi tiền cho nhà cung cấp.",
             ]);
         }
+    }
+
+    /**
+     * BH khách ghi ở dòng nhập áp cho mọi IMEI của dòng đó. IMEI nhập hàng loạt (dán/quét/Excel) chỉ có mã,
+     * không mang BH riêng, nên nếu thiếu thì lấy BH của dòng nhập; IMEI có BH riêng thì giữ nguyên.
+     *
+     * @param  array<int, array<string, mixed>>  $imeis
+     * @return array<int, array<string, mixed>>
+     */
+    private function inheritItemCustomerWarranty(array $imeis, mixed $itemExtraInfo): array
+    {
+        $value = is_array($itemExtraInfo) ? (float) ($itemExtraInfo['customer_warranty_duration_value'] ?? 0) : 0;
+        if ($value <= 0) {
+            return $imeis;
+        }
+
+        $unit = $itemExtraInfo['customer_warranty_duration_unit'] ?? 'months';
+
+        return array_map(function (array $imei) use ($itemExtraInfo, $unit): array {
+            $extra = is_array($imei['extra_info'] ?? null) ? $imei['extra_info'] : [];
+            if ((float) ($extra['customer_warranty_duration_value'] ?? 0) > 0) {
+                return $imei;
+            }
+
+            $extra['customer_warranty_duration_value'] = (string) $itemExtraInfo['customer_warranty_duration_value'];
+            $extra['customer_warranty_duration_unit'] = (string) $unit;
+            $imei['extra_info'] = $extra;
+
+            return $imei;
+        }, $imeis);
     }
 
     private function normalizeImeis(array $rawImeis, ?string $importDate = null): array

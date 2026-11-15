@@ -42,7 +42,11 @@ class ExpenseController extends Controller
             'categories' => self::CATEGORIES,
             'canManage' => $request->user()->can('expenses.manage'),
             'recurringExpenses' => RecurringExpense::query()->with(['payments' => fn ($query) => $query->where('period', $month)])
-                ->orderBy('due_day')->orderBy('description')->get(),
+                ->orderBy('due_day')->orderBy('description')->get()
+                ->each(function (RecurringExpense $schedule) use ($month): void {
+                    $schedule->setAttribute('is_due_in_period', $schedule->isDueInPeriod($month));
+                    $schedule->setAttribute('due_months', $schedule->dueMonths());
+                }),
         ]);
     }
 
@@ -95,6 +99,10 @@ class ExpenseController extends Controller
             'payment_method' => ['required', 'in:cash,bank,card'],
         ]);
 
+        if (! $recurringExpense->isDueInPeriod($data['period'])) {
+            return back()->withErrors(['period' => 'Tháng này không nằm trong chu kỳ đóng của khoản chi này.']);
+        }
+
         DB::transaction(function () use ($request, $recurringExpense, $data): void {
             $expense = Expense::create([
                 'category' => $recurringExpense->category,
@@ -127,6 +135,7 @@ class ExpenseController extends Controller
         foreach (RecurringExpense::query()->where('is_active', true)->with('payments')->get() as $schedule) {
             foreach ([$today->copy(), $today->copy()->addMonthNoOverflow()->startOfMonth()] as $monthStart) {
                 $period = $monthStart->format('Y-m');
+                if (! $schedule->isDueInPeriod($period)) continue; // chu kỳ quý/năm: tháng không đến hạn thì không nhắc
                 if ($schedule->payments->contains('period', $period)) continue;
                 $due = $monthStart->copy()->day(min((int) $schedule->due_day, $monthStart->daysInMonth));
                 $daysUntil = (int) $today->diffInDays($due, false);
@@ -141,17 +150,26 @@ class ExpenseController extends Controller
 
     private function validatedRecurring(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'category' => ['required', 'in:' . implode(',', self::CATEGORIES)],
             'description' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0', 'max:9999999999999'],
             'due_day' => ['required', 'integer', 'between:1,31'],
+            'interval_months' => ['required', 'integer', 'in:1,2,3,4,6,12'],
+            'start_month' => ['nullable', 'date_format:Y-m'],
             'remind_days' => ['required', 'integer', 'between:0,30'],
             'payment_method' => ['required', 'in:cash,bank,card'],
             'recipient' => ['nullable', 'string', 'max:150'],
             'note' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
+
+        // Hàng tháng không cần tháng bắt đầu; chu kỳ dài mà chưa chọn thì tính từ tháng hiện tại.
+        $data['start_month'] = (int) $data['interval_months'] === 1
+            ? null
+            : ($data['start_month'] ?? now()->format('Y-m'));
+
+        return $data;
     }
 
     private function validated(Request $request): array

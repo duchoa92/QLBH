@@ -363,10 +363,26 @@ const selectEntryVariant = () => {
         ? Number(savedPrice.sell_price)
         : sell
 
-    // Biến thể có thể có BH mặc định riêng từ lần nhập gần nhất.
-    if (!savedPrice && variant.last_customer_warranty?.value > 0) {
-        entryModal.value.customer_warranty_duration_value_input = variant.last_customer_warranty.value
-        entryModal.value.customer_warranty_duration_unit_input = variant.last_customer_warranty.unit || 'months'
+    // BH khách: ưu tiên giá trị đã ghi ở phiếu nhập cho biến thể này (dòng/IMEI đã lưu);
+    // chưa có thì tự điền từ BH khai báo ở sản phẩm (hoặc lần nhập gần nhất), kể cả khi biến thể đã có giá lưu sẵn.
+    const savedWarrantyValue = Number(
+        existingRow?.customer_warranty_value
+        ?? existingImeiRow?.extra_info?.customer_warranty_duration_value
+        ?? 0
+    )
+    if (savedWarrantyValue > 0) {
+        entryModal.value.customer_warranty_duration_value_input = savedWarrantyValue
+        entryModal.value.customer_warranty_duration_unit_input = existingRow?.customer_warranty_unit
+            || existingImeiRow?.extra_info?.customer_warranty_duration_unit
+            || 'months'
+    } else {
+        const defaultWarranty = variant.last_customer_warranty?.value > 0
+            ? variant.last_customer_warranty
+            : entryModal.value.item?.last_customer_warranty
+        if (defaultWarranty?.value > 0) {
+            entryModal.value.customer_warranty_duration_value_input = defaultWarranty.value
+            entryModal.value.customer_warranty_duration_unit_input = defaultWarranty.unit || 'months'
+        }
     }
 }
 
@@ -505,8 +521,11 @@ const resetEntryInputs = (keepPrices = false, keepVariant = false) => {
     modal.password_input = ''
     modal.warranty_duration_value_input = item.supplier_warranty_value ?? null
     modal.warranty_duration_unit_input = item.supplier_warranty_unit || 'months'
-    modal.customer_warranty_duration_value_input = item.extra_info?.customer_warranty_duration_value ?? null
-    modal.customer_warranty_duration_unit_input = item.extra_info?.customer_warranty_duration_unit || 'months'
+    // Nhập liên tiếp nhiều IMEI (keepPrices): giữ BH vừa chọn thay vì quay về mặc định của dòng.
+    if (!keepPrices) {
+        modal.customer_warranty_duration_value_input = item.extra_info?.customer_warranty_duration_value ?? null
+        modal.customer_warranty_duration_unit_input = item.extra_info?.customer_warranty_duration_unit || 'months'
+    }
     editingEntryIndex.value = null
     imeiLookup.value = null
     variantSearch.value = selectedVariant

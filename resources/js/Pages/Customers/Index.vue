@@ -2,7 +2,7 @@
 import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { computed, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
-import { Ban, Plus, RotateCcw, SquarePen, Trash2 } from 'lucide-vue-next'
+import { Ban, Plus, RotateCcw, ScanFace, SquarePen, Trash2 } from 'lucide-vue-next'
 import { openModal, registerUrlModal } from '@/Stores/modal'
 import { formatMoney } from '@/utils/format'
 import PageHeader from '@/Components/UI/PageHeader.vue'
@@ -14,6 +14,7 @@ import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
 import { useLiveList } from '@/Composables/useLiveList'
 import CustomerFormModal from './CustomerFormModal.vue'
+import CustomerFaceModal from './CustomerFaceModal.vue'
 import BaseTable from '@/Components/UI/BaseTable.vue'
 import CustomerDetailModal from './CustomerDetailModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -101,6 +102,10 @@ const openEdit = (customer) => {
         },
         onUpdated: reload,
     })
+}
+
+const openFace = (customer) => {
+    openModal(CustomerFaceModal, { props: { customer } })
 }
 
 const firstError = (errors) => Object.values(errors || {}).flat()[0] || 'Không thể thực hiện thao tác.'
@@ -203,6 +208,7 @@ useSilentRefresh(['customers'])
                     <td class="px-3.5 py-2.5 text-center" @click.stop>
                         <div class="app-row-actions">
                             <button type="button" title="Sửa" @click="openEdit(row)" class="app-row-action app-row-action--edit"><SquarePen class="h-4 w-4" /></button>
+                            <button type="button" title="Đăng ký khuôn mặt" @click="openFace(row)" class="app-row-action app-row-action--view"><ScanFace class="h-4 w-4" /></button>
                             <template v-if="canManageCustomers">
                                 <button type="button" class="app-row-action" :class="row.is_active === false ? 'app-row-action--view' : 'app-row-action--edit'" :title="row.is_active === false ? 'Bỏ chặn' : 'Chặn giao dịch'" @click="toggleBlock(row)">
                                     <RotateCcw v-if="row.is_active === false" class="h-4 w-4" />
@@ -219,6 +225,37 @@ useSilentRefresh(['customers'])
                         </div>
                     </td>
                 </template>
+
+            <!-- Thẻ trên điện thoại: tên + trạng thái, số liệu chính, nút thao tác có chữ -->
+            <template #mobile-title="{ row }">
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="break-words text-sm font-bold" :class="row.is_active === false ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'"><HighlightText :text="row.full_name" :keyword="search" /></span>
+                    <span v-if="row.is_active === false" class="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700"><Ban class="h-3 w-3" />Đã chặn</span>
+                </div>
+                <div class="mt-0.5 text-xs text-slate-500"><HighlightText :text="row.code" :keyword="search" /> · <HighlightText v-if="row.phone" :text="row.phone" :keyword="search" /><template v-else>Chưa có SĐT</template></div>
+            </template>
+
+            <template #mobile-body="{ row }">
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                    <div class="rounded-xl bg-emerald-50 px-2.5 py-1.5"><div class="text-[10px] font-semibold uppercase tracking-wide text-emerald-700/70">Điểm</div><div class="mt-0.5 font-bold text-emerald-700">{{ row.point_balance }}</div></div>
+                    <button type="button" class="rounded-xl px-2.5 py-1.5 text-left" :class="row.debt_balance > 0 ? 'bg-rose-50' : 'bg-slate-50'" @click.stop="openDebtDetails(row)"><div class="text-[10px] font-semibold uppercase tracking-wide" :class="row.debt_balance > 0 ? 'text-rose-700/70' : 'text-slate-400'">Công nợ</div><div class="mt-0.5 font-bold" :class="row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-500'">{{ formatMoney(row.debt_balance) }}</div></button>
+                    <div class="rounded-xl bg-slate-50 px-2.5 py-1.5"><div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Loại</div><div class="mt-0.5 font-bold text-slate-700">{{ row.customer_type === 'retail' ? 'Khách lẻ' : row.customer_type }}</div></div>
+                </div>
+            </template>
+
+            <template #mobile-actions="{ row }">
+                <div class="flex flex-wrap gap-2" @click.stop>
+                    <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 active:bg-blue-100" @click="openEdit(row)"><SquarePen class="h-4 w-4" />Sửa</button>
+                    <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 active:bg-indigo-100" @click="openFace(row)"><ScanFace class="h-4 w-4" />Khuôn mặt</button>
+                    <template v-if="canManageCustomers">
+                        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold" :class="row.is_active === false ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-amber-50 text-amber-700 active:bg-amber-100'" @click="toggleBlock(row)">
+                            <RotateCcw v-if="row.is_active === false" class="h-4 w-4" /><Ban v-else class="h-4 w-4" />{{ row.is_active === false ? 'Bỏ chặn' : 'Chặn' }}
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 active:bg-rose-100" :class="row.has_transactions ? 'cursor-not-allowed opacity-40' : ''" :disabled="row.has_transactions" @click="removeCustomer(row)"><Trash2 class="h-4 w-4" />Xóa</button>
+                    </template>
+                </div>
+                <p v-if="canManageCustomers && row.has_transactions" class="text-[11px] text-slate-400">Khách đã có phát sinh nên không xóa được, hãy dùng Chặn.</p>
+            </template>
             </BaseTable>
         </DataPanel>
 

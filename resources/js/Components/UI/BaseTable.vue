@@ -132,6 +132,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                     <div v-if="rowClickable" class="mt-0.5 text-[11px] font-semibold text-emerald-600">Xem chi tiết ›</div>
                 </div>
             </div>
+            <slot name="mobile-body" :row="row">
             <div class="grid grid-cols-2 gap-x-3 gap-y-2 pl-6 text-xs">
                 <template v-for="col in columns.slice(1)" :key="col.key">
                     <div class="min-w-0">
@@ -140,6 +141,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                     </div>
                 </template>
             </div>
+            </slot>
             <slot name="mobile-actions" :row="row" />
         </article>
         <div v-if="rows.length === 0" class="p-10 text-center">

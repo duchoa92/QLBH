@@ -1193,7 +1193,7 @@ const submit = () => {
 
                     <!-- Bảo hành -->
                     <div class="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-                        <span class="block text-xs font-bold text-slate-700">Bảo hành cho khách</span>
+                        <span class="block text-xs font-bold text-slate-700">Bảo hành mặc định cho khách</span>
                         <UnitInput
                             v-model="form.warranty_value"
                             v-model:unit="form.warranty_unit"
@@ -1207,6 +1207,7 @@ const submit = () => {
                             Tương đương {{ Math.min(MAX_WARRANTY_DAYS, Number(form.warranty_value) * warrantyUnitDays(form.warranty_unit)) }} ngày
                         </p>
                         <p v-else class="text-xs italic text-slate-400">(Để trống nếu không bảo hành)</p>
+                        <p class="text-[11px] leading-snug text-slate-400">Chỉ là giá trị gợi ý, tự điền khi nhập hàng. Khi bán, bảo hành ghi ở phiếu nhập được ưu tiên.</p>
                         <span v-if="form.errors.warranty_days" class="block text-[11px] text-red-600">{{ form.errors.warranty_days }}</span>
                     </div>
                 </div>

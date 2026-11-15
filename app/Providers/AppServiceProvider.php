@@ -61,6 +61,8 @@ class AppServiceProvider extends ServiceProvider
                 'pos_cost_price_suggestion_enabled' => filter_var(setting('pos_cost_price_suggestion_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_opening_count_enabled' => filter_var(setting('work_shift_opening_count_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
+                // Nhận diện khuôn mặt khách: mặc định TẮT, chủ cửa hàng bật ở Thiết lập → Khách hàng.
+                'face_recognition_enabled' => filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),

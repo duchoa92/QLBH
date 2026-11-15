@@ -1,6 +1,9 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { useForm } from '@inertiajs/vue3'
+import { useForm, usePage } from '@inertiajs/vue3'
+import { ScanFace } from 'lucide-vue-next'
+import { openModal } from '@/Stores/modal'
+import CustomerFaceModal from './CustomerFaceModal.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -28,6 +31,22 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'updated'])
+
+// Khuôn mặt khách (chỉ hiện khi chủ cửa hàng bật trong Cài đặt và không phải form tạo nhanh ở POS).
+const faceFeatureOn = computed(() => !!usePage().props.settings?.face_recognition_enabled)
+const faceEnabled = computed(() => !props.apiMode)
+const faceRegistered = ref(false)
+const loadFaceStatus = async () => {
+    if (!faceEnabled.value || !faceFeatureOn.value || !props.customer?.id) return
+    try {
+        const { data } = await api.get(`/api/customers/${props.customer.id}/face`)
+        faceRegistered.value = !!data.registered
+    } catch { /* bỏ qua */ }
+}
+const openFaceModal = () => {
+    openModal(CustomerFaceModal, { props: { customer: props.customer }, onUpdated: loadFaceStatus })
+}
+onMounted(loadFaceStatus)
 const provinces = ref([])
 const wards = ref([])
 const selectedProvinceCode = ref('')
@@ -498,6 +517,22 @@ const submit = async () => {
                 </p>
             </div>
         </div>
+
+        <section v-if="faceEnabled" class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div class="flex min-w-0 items-center gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600"><ScanFace class="h-5 w-5" /></span>
+                <div class="min-w-0">
+                    <div class="text-sm font-bold text-slate-900">Nhận diện khuôn mặt</div>
+                    <div v-if="!customer?.id" class="text-xs text-slate-500">Lưu khách hàng trước, rồi mở lại để đăng ký khuôn mặt.</div>
+                    <div v-else-if="!faceFeatureOn" class="text-xs text-amber-600">Tính năng đang tắt. Bật tại Thiết lập → Khách hàng.</div>
+                    <div v-else-if="faceRegistered" class="text-xs font-semibold text-emerald-600">Đã đăng ký, POS sẽ gợi ý khách khi đến quầy.</div>
+                    <div v-else class="text-xs text-slate-500">Chưa đăng ký. Cần khách đồng ý trước khi lưu dữ liệu khuôn mặt.</div>
+                </div>
+            </div>
+            <button v-if="customer?.id" type="button" class="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700" @click="openFaceModal">
+                {{ faceRegistered ? 'Cập nhật / xóa khuôn mặt' : 'Đăng ký khuôn mặt' }}
+            </button>
+        </section>
 
         <template #footer>
             <div class="flex justify-end gap-2">

@@ -11,6 +11,7 @@ use App\Models\ProductVariant;
 use App\Models\Sale;
 use Illuminate\Support\Facades\DB;
 use App\Models\Customer;
+use App\Models\CustomerDevice;
 use App\Models\CustomerDebt;
 use App\Models\SaleItemGift;
 use App\Models\StockImportItem;
@@ -435,6 +436,22 @@ class PosCheckoutService
                         'customer_warranty_void_reason' => null,
                         'customer_warranty_voided_by' => null,
                     ]);
+
+                    // Gán thiết bị cho khách vừa mua (khách lẻ thì bỏ qua). Một máy chỉ thuộc một chủ:
+                    // nếu máy đang gán cho khách khác (bán lại) thì chuyển sang chủ mới.
+                    if ($sale->customer_id && ($imei->imei || $imei->serial)) {
+                        $deviceKey = $imei->imei
+                            ? ['imei' => $imei->imei]
+                            : ['serial' => $imei->serial];
+
+                        CustomerDevice::query()->updateOrCreate($deviceKey, [
+                            'customer_id' => $sale->customer_id,
+                            'brand' => $product->brand?->name,
+                            'model' => $product->name,
+                            'serial' => $imei->serial,
+                            'color' => $imei->color,
+                        ]);
+                    }
 
                     app(ImeiStockSynchronizer::class)->sync($product);
 

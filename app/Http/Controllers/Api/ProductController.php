@@ -129,7 +129,7 @@ class ProductController extends Controller
                 'sell_price' => (float) $imei->sell_price,
                 'effective_sell_price' => $this->effectiveImeiSellPrice($imei, $product),
                 // BH khách theo lúc nhập máy này; chưa có thì dùng lần bán gần nhất rồi tới BH của sản phẩm.
-                'warranty_days' => (int) (WarrantyDuration::daysFromImportExtra($extra) ?? $imei->customer_warranty_days ?? $product->warranty_days ?? 0),
+                'warranty_days' => (int) ($imei->importWarrantyDays() ?? $imei->customer_warranty_days ?? $product->warranty_days ?? 0),
                 // Chỉ trả ghi chú; tài khoản/mật khẩu trong extra_info không được lộ ra POS.
                 'extra_info' => (string) ($extra['note'] ?? ''),
             ];

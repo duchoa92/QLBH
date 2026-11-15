@@ -89,7 +89,7 @@ class ProductApiController extends Controller
             'name' => $product->name,
 
             // Quét IMEI: BH khách theo lúc nhập máy đó; không có thì dùng BH của sản phẩm.
-            'warranty_days' => (int) (($imei ? WarrantyDuration::daysFromImportExtra($imei->extra_info) : null) ?? $imei?->customer_warranty_days ?? $product->warranty_days),
+            'warranty_days' => (int) ($imei?->importWarrantyDays() ?? $imei?->customer_warranty_days ?? $product->warranty_days),
 
             // Máy cũ (IMEI nhập là hàng cũ) không chịu VAT dù sản phẩm có lô nhập mới có VAT.
             'has_vat' => ! ($imei?->is_used) && StockImportItem::query()->where('product_id', $product->id)->where('has_vat', true)->where('is_used', false)->exists(),

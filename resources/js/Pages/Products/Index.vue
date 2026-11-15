@@ -78,6 +78,19 @@ const list = useLiveList({
 })
 const { data: productsData, filters: filtersData, loading } = list
 watch(search, () => list.schedule())
+// Thương hiệu lọc theo danh mục đã chọn (thương hiệu gắn với danh mục qua category_ids).
+// Chưa chọn danh mục thì hiện tất cả thương hiệu.
+const brandFilterOptions = computed(() => {
+    const categoryId = Number(category_id.value || 0)
+    if (!categoryId) return brands.value
+    return brands.value.filter(brand => (brand.category_ids || []).map(Number).includes(categoryId))
+})
+// Đổi danh mục mà thương hiệu đang chọn không thuộc danh mục đó thì bỏ chọn thương hiệu (gộp chung một lần tải).
+watch(category_id, () => {
+    if (brand_id.value && !brandFilterOptions.value.some(brand => Number(brand.id) === Number(brand_id.value))) {
+        brand_id.value = ''
+    }
+})
 watch([category_id, brand_id], () => list.request())
 watch(() => filtersData.value?.per_page, (value) => {
     if (value && Number(value) !== Number(per_page.value)) per_page.value = Number(value)
@@ -396,7 +409,7 @@ useSilentRefresh(['products'])
         /><ListFilterSelect
             v-model="brand_id"
             label="Thương hiệu"
-            :options="brands"
+            :options="brandFilterOptions"
             option-label="name"
             option-value="id"
             placeholder-text="Tất cả thương hiệu"
