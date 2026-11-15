@@ -46,7 +46,7 @@ const emit = defineEmits([
     <div class="flex min-w-0 items-start gap-2">
         <div class="min-w-0 flex-1">
             <div class="flex min-w-0 items-center gap-1.5">
-                <div class="flex min-w-0 items-center gap-1"><span class="truncate text-xs font-semibold leading-tight text-slate-900" :title="item.name">{{ item.name }}</span><span v-if="item.is_used" class="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-100 px-1 py-0.5 text-[9px] font-bold leading-none text-amber-800">CŨ</span></div>
+                <div class="flex min-w-0 items-center gap-1"><span class="line-clamp-2 break-words text-xs font-semibold leading-tight text-slate-900 sm:truncate" :title="item.name">{{ item.name }}</span><span v-if="item.is_used" class="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-100 px-1 py-0.5 text-[9px] font-bold leading-none text-amber-800">CŨ</span></div>
                 <span v-if="item.has_vat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Mặt hàng được đánh dấu có VAT khi nhập hàng"><Receipt class="h-3 w-3" />Có VAT</span>
             </div>
             <div v-if="showUnit" class="mt-0.5 text-[11px] leading-tight text-slate-500">{{ item.unit_name ?? 'Cái' }}</div>
@@ -75,19 +75,19 @@ const emit = defineEmits([
         </div>
 
         <div class="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50 p-0.5">
-            <button type="button" @click="emit('edit-note')" class="relative flex h-7 w-7 items-center justify-center rounded-md transition" :class="noteCount ? 'text-blue-600 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
+            <button type="button" @click="emit('edit-note')" class="relative flex h-9 w-9 items-center sm:h-7 sm:w-7 justify-center rounded-md transition" :class="noteCount ? 'text-blue-600 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-blue-600'" title="Ghi chú" aria-label="Ghi chú">
                 <MessageSquareText class="h-4 w-4" />
                 <span v-if="noteCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ noteCount }}</span>
             </button>
-            <button type="button" @click="emit('edit-promotion')" class="relative flex h-7 w-7 items-center justify-center rounded-md transition" :class="giftCount ? 'text-amber-500 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-amber-600'" title="Khuyến mãi: giảm giá & quà tặng" aria-label="Khuyến mãi: giảm giá và quà tặng">
+            <button type="button" @click="emit('edit-promotion')" class="relative flex h-9 w-9 items-center sm:h-7 sm:w-7 justify-center rounded-md transition" :class="giftCount ? 'text-amber-500 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-amber-600'" title="Khuyến mãi: giảm giá & quà tặng" aria-label="Khuyến mãi: giảm giá và quà tặng">
                 <Tag class="h-4 w-4" />
                 <span v-if="giftCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ giftCount }}</span>
             </button>
-            <button type="button" @click="emit('edit-warranty')" class="relative flex h-7 w-7 items-center justify-center rounded-md transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
+            <button type="button" @click="emit('edit-warranty')" class="relative flex h-9 w-9 items-center sm:h-7 sm:w-7 justify-center rounded-md transition" :class="warrantyCount ? 'text-emerald-600 hover:bg-white' : 'text-slate-400 hover:bg-white hover:text-emerald-600'" title="Bảo hành" aria-label="Bảo hành">
                 <ShieldCheck class="h-4 w-4" />
                 <span v-if="warrantyCount" class="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-rose-600 px-0.5 text-[8px] font-bold text-white ring-2 ring-white">{{ warrantyCount }}</span>
             </button>
-            <button v-if="showRemove" type="button" @click="emit('remove')" class="flex h-7 w-7 items-center justify-center rounded-md bg-rose-50 text-rose-500 transition hover:bg-rose-100 hover:text-rose-700" title="Xóa sản phẩm" aria-label="Xóa sản phẩm khỏi giỏ hàng">
+            <button v-if="showRemove" type="button" @click="emit('remove')" class="flex h-9 w-9 items-center sm:h-7 sm:w-7 justify-center rounded-md bg-rose-50 text-rose-500 transition hover:bg-rose-100 hover:text-rose-700" title="Xóa sản phẩm" aria-label="Xóa sản phẩm khỏi giỏ hàng">
                 <Trash2 class="h-4 w-4" />
             </button>
         </div>

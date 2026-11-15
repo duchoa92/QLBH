@@ -46,7 +46,7 @@ const startShift = async () => {
 
 <template>
     <div class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-4">
-        <section class="flex max-h-[84vh] w-full max-w-4xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
+        <section class="flex max-h-[84dvh] w-full max-w-4xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <div class="flex items-start justify-between gap-3">
                 <div><h2 class="text-lg font-bold text-slate-900">{{ countEnabled ? 'Bảng kê tiền đầu ca' : 'Mở ca làm' }}</h2><p class="mt-0.5 text-xs text-slate-500">{{ countEnabled ? 'Nhập tiền mặt đầu ca và số dư tài khoản.' : 'Kiểm kê đầu ca đang tắt; có thể bắt đầu ca ngay.' }}</p></div>
                 <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100" @click="dismiss">Đóng</button>

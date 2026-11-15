@@ -63,6 +63,8 @@ class AppServiceProvider extends ServiceProvider
                 'work_shift_auto_open_enabled' => filter_var(setting('work_shift_auto_open_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 // Nhận diện khuôn mặt khách: mặc định TẮT, chủ cửa hàng bật ở Thiết lập → Khách hàng.
                 'face_recognition_enabled' => filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                // Khi nhận ra khách bằng khuôn mặt: hiện thêm hộp thông báo chi tiết (mặc định TẮT, giữ cách hỏi ngay trong ô khách).
+                'face_notify_modal_enabled' => filter_var(setting('face_notify_modal_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),

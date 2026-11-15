@@ -1078,7 +1078,7 @@ onBeforeUnmount(() => {
                     <span class="text-[10px] text-slate-500">Bấm dòng để sao chép, bấm ✎ để sửa</span>
                 </div>
                 <div v-if="entryModal.item?.imeis?.length" class="hidden max-h-60 overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white md:block">
-                    <table class="w-full table-fixed text-xs">
+                    <table class="m-cards w-full table-fixed text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
                                 <th class="px-3 py-2.5 text-left">IMEI / Serial</th>
@@ -1230,7 +1230,7 @@ onBeforeUnmount(() => {
                     <span class="text-[10px] text-slate-500">Bấm dòng để sao chép, bấm ✎ để sửa</span>
                 </div>
                 <div v-if="entryModal.item?.rows?.length" class="hidden max-h-60 overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white md:block">
-                    <table class="w-full text-xs">
+                    <table class="m-cards w-full text-xs">
                         <thead class="bg-slate-50 font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
                                 <th class="px-3 py-2.5 text-left">Biến thể</th>

@@ -471,7 +471,7 @@ const downloadTemplate = () => {
                    
 
                     <!-- DROP ZONE -->
-                    <div class="col-span-7"
+                    <div class="col-span-12 md:col-span-7"
                         @dragover.prevent
                         @drop.prevent="handleDropExcel"
                     >
@@ -512,7 +512,7 @@ const downloadTemplate = () => {
                     </div>
 
                     <!-- RIGHT NOTE -->
-                     <div class="col-span-5 bg-green-50 rounded-xl px-2 py-2.5 text-sm">
+                     <div class="col-span-12 md:col-span-5 bg-green-50 rounded-xl px-2 py-2.5 text-sm">
                         <div class="flex items-center font-semibold text-green-700 mb-2"><Check class="flex mr-2" /> Yêu cầu file Excel</div>
                         <ul class="list-disc ml-4 text-gray-600 space-y-1 text-xs">
                             <li>Đúng định dạng file mẫu</li>
@@ -527,7 +527,7 @@ const downloadTemplate = () => {
                 <div class="grid grid-cols-12 gap-4 items-start">
 
                     <div 
-                        class="col-span-7 min-w-0 w-full"
+                        class="col-span-12 md:col-span-7 min-w-0 w-full"
                         @dragover.prevent
                         @drop.prevent="handleDropImages"
                     >
@@ -627,7 +627,7 @@ const downloadTemplate = () => {
 
                     </div>
 
-                    <div class="col-span-5 bg-purple-50 rounded-xl px-2 py-2.5 text-sm">
+                    <div class="col-span-12 md:col-span-5 bg-purple-50 rounded-xl px-2 py-2.5 text-sm">
                         <div class="flex items-center font-semibold text-purple-700 mb-2"><Lightbulb class="w-4 h-4 mr-2" />Lưu ý</div>
                         <ul class="list-disc ml-4 text-gray-600 space-y-1 text-xs">
                             <li>Tên ảnh trùng cột "ảnh"</li>
@@ -759,7 +759,7 @@ const downloadTemplate = () => {
 
                 <!-- PREVIEW -->
                 <div class="max-h-[300px] overflow-auto border">
-                    <table class="w-full text-sm text-center items-center">
+                    <table class="m-cards w-full text-sm text-center items-center">
                         <tr>
                             <th class="border p-2">#</th>
                             <th class="border p-2">Tên</th>

@@ -113,7 +113,7 @@ const saleCustomerName = (saleItem) =>
                     Lịch sử giá và nhập hàng
                 </h2>
 
-                <table class="app-data-table w-full text-sm">
+                <div class="overflow-x-auto"><table class="m-cards app-data-table w-full text-sm">
                     <thead>
                         <tr>
                             <th class="text-left">
@@ -165,7 +165,7 @@ const saleCustomerName = (saleItem) =>
                             </td>
                         </tr>
                     </tbody>
-                </table>
+                </table></div>
             </div>
 
             <div
@@ -182,7 +182,7 @@ const saleCustomerName = (saleItem) =>
 
                 </h2>
 
-                <table class="app-data-table w-full text-sm">
+                <div class="overflow-x-auto"><table class="m-cards app-data-table w-full text-sm">
 
                     <thead>
 
@@ -245,7 +245,7 @@ const saleCustomerName = (saleItem) =>
 
                     </tbody>
 
-                </table>
+                </table></div>
 
             </div>
 
@@ -257,7 +257,7 @@ const saleCustomerName = (saleItem) =>
                     Lịch sử sửa chữa
                 </h2>
 
-                <table class="app-data-table w-full text-sm">
+                <div class="overflow-x-auto"><table class="m-cards app-data-table w-full text-sm">
                     <thead>
                         <tr>
                             <th class="text-left">
@@ -309,7 +309,7 @@ const saleCustomerName = (saleItem) =>
                             </td>
                         </tr>
                     </tbody>
-                </table>
+                </table></div>
             </div>
 
         </div>

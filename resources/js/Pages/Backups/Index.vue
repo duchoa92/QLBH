@@ -862,7 +862,7 @@ const conflictPolicyOptions = [
         <!-- Modal Đối chiếu & Khôi phục -->
         <Teleport to="body">
         <div v-if="showRestorePreview && restorePreview" class="fixed inset-0 z-[9990] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6">
-            <section class="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
+            <section class="flex max-h-[86dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
                 <!-- Modal Header -->
                 <header class="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50 px-4 py-3 sm:px-6">
                     <div class="flex items-center gap-3">
@@ -937,8 +937,8 @@ const conflictPolicyOptions = [
                             <span v-if="inspectionInProgress" class="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-800">ĐANG CHẠY</span>
                             <span v-else-if="!comparisonError" class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800">ĐÃ ĐỐI CHIẾU</span>
                         </div>
-                        <div class="max-h-[38vh] overflow-auto">
-                            <table class="app-data-table w-full min-w-[720px] table-fixed border-collapse text-left text-xs">
+                        <div class="max-h-[38dvh] overflow-auto">
+                            <table class="m-cards app-data-table w-full min-w-[720px] table-fixed border-collapse text-left text-xs">
                                 <thead class="sticky top-0 z-10 bg-slate-50 text-[10px] font-bold tracking-wide text-slate-600">
                                     <tr>
                                         <th class="w-[24%] border border-slate-200 px-1.5 py-2"><button type="button" class="flex items-center gap-1 text-left" @click="sortRestoreTablesBy('name')">Tên tiếng Việt / bảng <span class="text-slate-400">{{ restoreSortBy === 'name' ? (restoreSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th>

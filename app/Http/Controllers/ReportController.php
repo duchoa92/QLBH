@@ -28,7 +28,7 @@ class ReportController extends Controller
         return Inertia::render('Reports/Index', [
             // Dữ liệu cho các ô lọc (danh mục, thương hiệu, nhân viên bán hàng).
             'categories' => Category::query()->orderBy('name')->get(['id', 'name']),
-            'brands' => Brand::query()->orderBy('name')->get(['id', 'name']),
+            'brands' => Brand::optionsWithCategories(),
             'staff' => User::query()->orderBy('name')->get(['id', 'name']),
         ]);
     }

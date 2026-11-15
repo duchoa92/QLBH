@@ -293,9 +293,14 @@ useSilentRefresh(['brands'])
                             :class="row.is_active ? 'translate-x-6' : 'translate-x-1'"
                         />
                     </button>
-                    <button type="button" @click="destroy(row.id)" class="app-row-action app-row-action--danger" aria-label="Chuyển vào thùng rác">
-                        <Trash2 class="h-4 w-4" />
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button type="button" @click="openEdit(row)" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa">
+                            <SquarePen class="h-5 w-5" />
+                        </button>
+                        <button type="button" @click="destroy(row.id)" class="app-row-action app-row-action--danger" title="Chuyển vào thùng rác" aria-label="Chuyển vào thùng rác">
+                            <Trash2 class="h-5 w-5" />
+                        </button>
+                    </div>
                 </div>
             </template>
         </BaseTable>

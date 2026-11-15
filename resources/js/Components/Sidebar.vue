@@ -304,7 +304,7 @@ watch(() => props.collapsed, (val) => {
 
 <template>
     <aside
-        class="flex h-screen w-full flex-col bg-cyan-950 text-white border-r border-white/10 select-none overflow-hidden shadow-2xl lg:shadow-none"
+        class="flex h-full min-h-0 w-full flex-col bg-cyan-950 text-white border-r border-white/10 select-none overflow-hidden shadow-2xl lg:shadow-none"
     >
         <!-- 1. HEADER (CỐ ĐỊNH ĐỈNH) -->
         <div
@@ -350,7 +350,7 @@ watch(() => props.collapsed, (val) => {
         </div>
 
         <!-- 2. NAV (TỰ CUỘN ĐỘC LẬP KHI XỔ MENU DÀI) -->
-        <nav class="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1.5">
+        <nav class="sidebar-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 space-y-1.5">
             <!-- TRANG CHỦ -->
             <button
                 type="button"
@@ -414,7 +414,7 @@ watch(() => props.collapsed, (val) => {
                             :key="item.href"
                             type="button"
                             @click="visitMenu(item.href, item.paths)"
-                            class="flex h-9 w-full items-center gap-3 rounded-xl px-3 transition-all duration-150"
+                            class="flex h-11 w-full items-center gap-3 rounded-xl px-3 transition-all duration-150 lg:h-9"
                             :class="[
                                 isActive(item.paths)
                                     ? 'bg-blue-600 text-white font-bold shadow-sm shadow-blue-600/30'

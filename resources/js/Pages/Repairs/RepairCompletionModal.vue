@@ -98,7 +98,7 @@ defineExpose({ submit, saving: computed(() => saving.value) })
             <div class="rounded-xl border border-slate-200 bg-white p-3">
                 <div class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Linh kiện đã chọn ở bước sửa ngay</div>
                 <div v-if="parts.length" class="overflow-x-auto rounded-lg border border-slate-100">
-                    <table class="w-full text-sm">
+                    <table class="m-cards w-full text-sm">
                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th class="p-2 text-left">Linh kiện</th><th class="p-2 text-center">SL</th><th class="p-2 text-right">Giá bán</th><th class="p-2 text-right font-normal text-slate-400">Giá nhập</th><th class="p-2 text-right">Thành tiền</th></tr></thead>
                         <tbody class="divide-y divide-slate-100">
                             <tr v-for="part in parts" :key="`${part.product_id}-${part.variant_id}`">

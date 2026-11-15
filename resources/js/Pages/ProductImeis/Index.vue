@@ -115,7 +115,7 @@ const openPriceEditor = (imei) => {
 
         <div class="border rounded overflow-hidden">
 
-            <table class="app-data-table hidden w-full md:table">
+            <table class="m-cards app-data-table hidden w-full md:table">
 
                 <thead class="bg-gray-100">
 

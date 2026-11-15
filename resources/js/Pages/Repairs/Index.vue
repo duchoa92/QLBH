@@ -361,7 +361,7 @@ const confirmPayment = async (payment) => {
 
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div class="hidden overflow-x-auto md:block">
-                    <table class="app-data-table w-full min-w-[900px] border-collapse text-left text-xs">
+                    <table class="m-cards app-data-table w-full min-w-[900px] border-collapse text-left text-xs">
                         <thead><tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                             <th v-for="column in [{ key: 'code', label: 'Mã phiếu' }, { key: 'customer', label: 'Khách hàng' }, { key: 'device_name', label: 'Thiết bị / IMEI' }, { key: 'issue', label: 'Lỗi máy' }, { key: 'created_at', label: 'Ngày nhận' }, { key: 'status', label: 'Trạng thái & thao tác' }]" :key="column.key" class="cursor-pointer px-3.5 py-2.5 transition hover:bg-slate-100" :class="column.key === 'status' ? 'text-center' : ''" @click="!['customer', 'issue'].includes(column.key) && toggleSort(column.key)"><div class="flex items-center gap-1" :class="column.key === 'status' ? 'justify-center' : ''"><span>{{ column.label }}</span><span v-if="sortBy === column.key" class="text-emerald-700">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></div></th>
                         </tr></thead>

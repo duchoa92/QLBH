@@ -130,6 +130,8 @@ export function useCustomerSearch(
 
         keyword.value = ''
 
+        identityPrefill.value = null
+
         customers.value = []
 
         activeIndex.value = -1
@@ -184,6 +186,8 @@ export function useCustomerSearch(
         keyword,
 
         customers,
+
+        identityPrefill,
 
         search,
 

@@ -245,13 +245,13 @@ useSilentRefresh(['customers'])
 
             <template #mobile-actions="{ row }">
                 <div class="flex flex-wrap gap-2" @click.stop>
-                    <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 active:bg-blue-100" @click="openEdit(row)"><SquarePen class="h-4 w-4" />Sửa</button>
-                    <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 active:bg-indigo-100" @click="openFace(row)"><ScanFace class="h-4 w-4" />Khuôn mặt</button>
+                    <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 active:bg-blue-100" @click="openEdit(row)"><SquarePen class="h-5 w-5" /></button>
+                    <button type="button" title="Khuôn mặt" aria-label="Khuôn mặt" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 active:bg-indigo-100" @click="openFace(row)"><ScanFace class="h-5 w-5" /></button>
                     <template v-if="canManageCustomers">
-                        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold" :class="row.is_active === false ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-amber-50 text-amber-700 active:bg-amber-100'" @click="toggleBlock(row)">
-                            <RotateCcw v-if="row.is_active === false" class="h-4 w-4" /><Ban v-else class="h-4 w-4" />{{ row.is_active === false ? 'Bỏ chặn' : 'Chặn' }}
+                        <button type="button" :title="row.is_active === false ? 'Bỏ chặn' : 'Chặn'" :aria-label="row.is_active === false ? 'Bỏ chặn' : 'Chặn'" class="inline-flex h-10 w-10 items-center justify-center rounded-xl" :class="row.is_active === false ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-amber-50 text-amber-700 active:bg-amber-100'" @click="toggleBlock(row)">
+                            <RotateCcw v-if="row.is_active === false" class="h-5 w-5" /><Ban v-else class="h-5 w-5" />
                         </button>
-                        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 active:bg-rose-100" :class="row.has_transactions ? 'cursor-not-allowed opacity-40' : ''" :disabled="row.has_transactions" @click="removeCustomer(row)"><Trash2 class="h-4 w-4" />Xóa</button>
+                        <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" :class="row.has_transactions ? 'cursor-not-allowed opacity-40' : ''" :disabled="row.has_transactions" @click="removeCustomer(row)"><Trash2 class="h-5 w-5" /></button>
                     </template>
                 </div>
                 <p v-if="canManageCustomers && row.has_transactions" class="text-[11px] text-slate-400">Khách đã có phát sinh nên không xóa được, hãy dùng Chặn.</p>

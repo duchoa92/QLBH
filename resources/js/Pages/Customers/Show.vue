@@ -159,7 +159,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
             class="bg-white rounded shadow p-4"
         >
 
-            <table class="app-data-table w-full">
+            <div class="overflow-x-auto"><table class="m-cards app-data-table w-full">
 
                 <thead>
 
@@ -205,7 +205,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
 
                 </tbody>
 
-            </table>
+            </table></div>
 
         </div>
 
@@ -215,7 +215,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
             class="bg-white rounded shadow p-4"
         >
 
-            <table class="app-data-table w-full">
+            <div class="overflow-x-auto"><table class="m-cards app-data-table w-full">
 
                 <thead>
 
@@ -261,7 +261,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
 
                 </tbody>
 
-            </table>
+            </table></div>
 
         </div>
 

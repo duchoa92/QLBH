@@ -302,7 +302,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                 <!-- Ảnh tiếp nhận -->
                 <div v-if="repair.images?.length" class="space-y-2">
                     <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Ảnh tiếp nhận ({{ repair.images.length }} ảnh)</span>
-                    <div class="grid grid-cols-4 gap-2.5">
+                    <div class="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
                         <button
                             v-for="image in repair.images"
                             :key="image.id"
@@ -509,8 +509,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
             class="fixed inset-0 z-[1100] flex cursor-zoom-out items-center justify-center bg-black/80 p-4 backdrop-blur-md"
             @click="closeLightbox"
         >
-            <div class="relative max-h-[85vh] max-w-3xl">
-                <img :src="lightboxUrl" alt="Ảnh phóng to" class="max-h-[85vh] w-auto rounded-xl object-contain shadow-2xl" />
+            <div class="relative max-h-[85dvh] max-w-3xl">
+                <img :src="lightboxUrl" alt="Ảnh phóng to" class="max-h-[85dvh] w-auto rounded-xl object-contain shadow-2xl" />
                 <button
                     type="button"
                     class="absolute -right-4 -top-4 rounded-full bg-white p-2 text-slate-900 shadow-lg transition hover:bg-slate-200"

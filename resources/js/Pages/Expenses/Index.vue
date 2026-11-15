@@ -154,6 +154,26 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
                     <td class="px-3.5 py-2.5 text-right font-bold text-emerald-700">{{ formatMoney(row.amount) }}</td>
                     <td class="px-3.5 py-2.5 text-center" @click.stop><div v-if="canManage" class="app-row-actions"><button type="button" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa" @click="openEdit(row)"><Pencil class="h-4 w-4" /></button><button type="button" class="app-row-action app-row-action--danger" title="Xóa" aria-label="Xóa" @click="remove(row)"><Trash2 class="h-4 w-4" /></button></div></td>
                 </template>
+                <template #mobile-title="{ row }">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0 break-words text-sm font-bold text-slate-900">{{ row.description }}</div>
+                        <div class="shrink-0 text-sm font-bold text-emerald-700">{{ formatMoney(row.amount) }}</div>
+                    </div>
+                </template>
+                <template #mobile-body="{ row }">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs text-slate-500">
+                        <span class="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-800">{{ categoryLabels[row.category] || row.category }}</span>
+                        <span>{{ row.expense_date }}</span>
+                        <span>· {{ paymentLabels[row.payment_method] || row.payment_method }}</span>
+                        <span v-if="row.recipient">· {{ row.recipient }}</span>
+                    </div>
+                </template>
+                <template #mobile-actions="{ row }">
+                    <div v-if="canManage" class="flex flex-wrap gap-2" @click.stop>
+                        <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100" @click="openEdit(row)"><Pencil class="h-5 w-5" /></button>
+                        <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" @click="remove(row)"><Trash2 class="h-5 w-5" /></button>
+                    </div>
+                </template>
             </BaseTable>
         </div>
         <section class="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">

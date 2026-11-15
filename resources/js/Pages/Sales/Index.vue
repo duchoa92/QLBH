@@ -568,7 +568,7 @@ const highlightedSearchSegments = (value) => {
             <!-- DANH SÁCH BẢNG DỮ LIỆU CÓ SORT & CLICK LỌC -->
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div class="hidden overflow-x-auto md:block">
-                <table class="app-data-table w-full min-w-[850px] border-collapse text-left text-xs">
+                <table class="m-cards app-data-table w-full min-w-[850px] border-collapse text-left text-xs">
                     <thead>
                         <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                             
@@ -856,9 +856,14 @@ const highlightedSearchSegments = (value) => {
                             </div>
                         </div>
 
-                        <div class="flex items-center justify-between pt-1 text-[11px] text-slate-400">
-                            <span>{{ formatDateTime(sale.created_at) }}</span>
-                            <span class="inline-flex items-center gap-0.5 font-semibold text-emerald-600">Xem chi tiết <ChevronRight class="h-3 w-3" /></span>
+                        <div class="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
+                            <span class="min-w-0 truncate">{{ formatDateTime(sale.created_at) }}</span>
+                            <div class="flex shrink-0 items-center gap-1" @click.stop>
+                                <button v-if="canEditSales" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-40" :disabled="sale.status === 'cancelled'" title="Sửa hóa đơn" aria-label="Sửa hóa đơn" @click="editSale = sale"><Pencil class="h-5 w-5" /></button>
+                                <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 active:bg-emerald-100" title="In hóa đơn" aria-label="In hóa đơn" @click="openPrintWindow(sale.id)"><Printer class="h-5 w-5" /></button>
+                                <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100 disabled:opacity-40" :disabled="!canCancelSales || sale.status === 'cancelled'" title="Trả hàng / Hủy hóa đơn" aria-label="Trả hàng / Hủy hóa đơn" @click="confirmCancel(sale)"><Undo2 class="h-5 w-5" /></button>
+                                <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 active:bg-slate-200" title="Xem chi tiết" aria-label="Xem chi tiết" @click="openSaleDetail(sale)"><ChevronRight class="h-5 w-5" /></button>
+                            </div>
                         </div>
                     </article>
 

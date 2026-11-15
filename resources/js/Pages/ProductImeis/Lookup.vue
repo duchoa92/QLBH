@@ -858,7 +858,7 @@ const historyCount = type => type === 'all'
                             v-if="advancedOpen"
                             class="absolute right-0 top-full z-40 mt-1.5 w-[min(26rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
                         >
-                            <div class="max-h-[min(55vh,320px)] space-y-2.5 overflow-y-auto p-3">
+                            <div class="max-h-[min(55dvh,320px)] space-y-2.5 overflow-y-auto p-3">
                                 <div v-for="group in scopeGroups" :key="group.title">
                                     <div class="mb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{{ group.title }}</div>
                                     <div class="flex flex-wrap gap-1.5">

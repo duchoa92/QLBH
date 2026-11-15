@@ -87,7 +87,8 @@ const quantity = computed({
             border
             rounded-lg
             overflow-hidden
-            h-7
+            h-9
+            sm:h-7
             shrink-0
             bg-white
         "
@@ -100,12 +101,14 @@ const quantity = computed({
         <button
             :disabled="item.imei_id"
             class="
-                w-6
+                w-10
+                sm:w-6
                 h-full
+                text-base
+                sm:text-xs
                 self-stretch
                 bg-slate-50
                 border-r
-                text-xs
                 font-bold
                 text-slate-600
                 transition-colors
@@ -144,12 +147,14 @@ const quantity = computed({
         <button
             :disabled="item.imei_id || !canIncrease"
             class="
-                w-6
+                w-10
+                sm:w-6
                 h-full
+                text-base
+                sm:text-xs
                 self-stretch
                 bg-slate-50
                 border-l
-                text-xs
                 font-bold
                 text-slate-600
                 transition-colors

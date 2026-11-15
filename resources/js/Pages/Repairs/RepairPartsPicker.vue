@@ -189,7 +189,7 @@ const removePart = (index) => {
         </div>
 
         <div v-if="parts.length" class="overflow-x-auto rounded-lg border border-blue-100 bg-white">
-            <table class="w-full text-xs">
+            <table class="m-cards w-full text-xs">
                 <thead class="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th class="p-2 text-left">Linh kiện</th><th class="w-20 p-2">SL</th><th class="w-8"></th></tr></thead>
                 <tbody class="divide-y divide-slate-100">
                     <tr v-for="(part, index) in parts" :key="`${part.product_id}-${part.variant_id}`">

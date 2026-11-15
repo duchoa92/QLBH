@@ -321,7 +321,7 @@ const submit = () => {
                     <FloatingSelect v-model="imeiStateFilter" :options="imeiStateOptions" label="Tình trạng hàng" placeholder-text="Tình trạng hàng" compact hide-label input-class="!h-9 !w-full" />
                 </div>
                 <div class="overflow-x-auto rounded-xl border border-slate-200">
-                    <table class="w-full min-w-[760px] border-collapse text-left">
+                    <table class="m-cards w-full min-w-[760px] border-collapse text-left">
                         <thead class="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-3">Mã IMEI / trạng thái</th><th class="px-3 py-3 text-right">Giá nhập</th><th class="px-3 py-3 text-right">Giá bán hiện tại</th><th class="px-3 py-3 text-right">Giá bán mới</th><th class="px-3 py-3 text-right">Lợi nhuận</th></tr></thead>
                         <tbody class="divide-y divide-slate-100 text-xs">
                             <tr v-if="!filteredImeis.length"><td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">Không tìm thấy IMEI phù hợp.</td></tr>
@@ -362,8 +362,8 @@ const submit = () => {
                     <FloatingSelect v-model="variantStockFilter" :options="variantStockOptions" label="Tình trạng kho" placeholder-text="Tình trạng kho" compact hide-label input-class="!h-9 !w-full" />
                 </div>
             </div>
-            <div class="max-h-[55vh] overflow-auto px-4 pb-4 pt-2 sm:px-5">
-                <div class="overflow-x-auto rounded-xl border border-slate-200"><table class="w-full min-w-[760px] border-collapse text-left">
+            <div class="max-h-[55dvh] overflow-auto px-4 pb-4 pt-2 sm:px-5">
+                <div class="overflow-x-auto rounded-xl border border-slate-200"><table class="m-cards w-full min-w-[760px] border-collapse text-left">
                     <thead class="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-3">Biến thể</th><th class="px-3 py-3 text-right">Giá nhập</th><th class="px-3 py-3 text-right">Giá cũ</th><th class="px-3 py-3 text-right">Giá bán mới (VNĐ)</th><th class="px-3 py-3 text-right">Lợi nhuận dự kiến</th></tr></thead>
                     <tbody class="divide-y divide-slate-100 text-xs"><tr v-if="!filteredVariants.length"><td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">Không có biến thể phù hợp với bộ lọc.</td></tr><tr v-for="update in filteredVariants" :key="update.key" class="hover:bg-slate-50">
                         <td class="px-3 py-3"><div class="font-bold text-slate-800" :title="attributeText(update.attributes)">{{ update.label }}</div><span class="font-mono text-[10px] text-slate-400">SKU: {{ update.detail || '—' }}</span><span class="ml-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold" :class="update.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ update.stock > 0 ? `Còn hàng (${update.stock})` : 'Hết hàng' }}</span></td>

@@ -69,9 +69,9 @@ class ProductController extends Controller
                         })
                     ];
                 }),
-            'brands'     => Brand::optionsWithCategories(
-                $request->filled('category_id') ? (int) $request->category_id : null
-            ),
+            // Luôn trả đủ thương hiệu kèm category_ids; ô lọc Thương hiệu tự thu hẹp theo danh mục đang chọn ở giao diện.
+            // (Không cắt theo category_id ở đây: nếu trang được mở với sẵn một danh mục thì đổi sang danh mục khác sẽ thiếu thương hiệu.)
+            'brands'     => Brand::optionsWithCategories(),
             'units'      => Unit::query()
                 ->select('id', 'name', 'short_name')
                 ->where('is_active', true)

@@ -737,7 +737,7 @@ useBarcodeScanner(
     <WorkShiftOpenModal v-if="shiftModal && shiftMode === 'open' && !shiftResult" :denominations="denominationValues" :counts="shiftDenominations" :balances="shiftBankBalances" :accounts="bankAccounts" :money="formatMoney" :count-enabled="openingCountEnabled" @close="shiftModal = false" @opened="handleShiftOpened" />
 
     <div v-if="shiftModal && (shiftMode === 'close' || shiftResult)" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
-        <section class="flex h-[92vh] max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
+        <section class="flex h-[92dvh] max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <template v-if="!shiftResult">
                 <header class="-mx-4 -mt-4 shrink-0 border-b border-slate-200 bg-slate-50 px-4 pb-3 pt-4 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
                     <h2 class="text-lg font-bold text-slate-900">{{ shiftMode === 'open' ? 'Mở ca làm' : 'Kết thúc ca làm' }}</h2>
@@ -816,7 +816,7 @@ useBarcodeScanner(
     </div>
 
     <div v-if="shiftHistoryModal" class="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/50 p-4">
-        <section class="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
+        <section class="flex max-h-[88dvh] w-full max-w-4xl flex-col rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
             <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
                 <div><h2 class="text-lg font-bold text-slate-900">Lịch sử kiểm kê</h2><p class="mt-0.5 text-xs text-slate-500">Các ca đã kết thúc trong 30 ngày gần nhất.</p></div>
                 <button type="button" class="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" @click="shiftHistoryModal = false">Đóng</button>

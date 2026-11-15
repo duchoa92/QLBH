@@ -58,8 +58,8 @@ onMounted(async () => {
                     {{ product.imeis.filter(item => item.status === 'in_stock' || item.status === 0).length }} còn hàng
                 </div>
             </div>
-            <div class="max-h-[min(62vh,38rem)] overflow-auto rounded-lg border border-slate-200 shadow-sm">
-                <table class="w-full min-w-[480px] border-collapse text-sm">
+            <div class="max-h-[min(62dvh,38rem)] overflow-auto rounded-lg border border-slate-200 shadow-sm">
+                <table class="m-cards w-full min-w-[480px] border-collapse text-sm">
                     <thead class="sticky top-0 z-10 bg-slate-100 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_#cbd5e1]">
                         <tr>
                             <th class="w-[40%] px-4 py-3">IMEI</th>

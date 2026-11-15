@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { enterPosImmersive, leavePosImmersive } from '@/utils/pos'
 import { ClipboardList, PackageSearch, ShoppingCart, Wallet, X, Store } from 'lucide-vue-next'
 import OfflineStatus from '@/Components/OfflineStatus.vue'
 
@@ -88,7 +89,11 @@ const animateProductToCart = (originRect, productName = 'Sản phẩm') => {
 }
 
 defineExpose({ animateProductToCart })
-onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
+onMounted(enterPosImmersive)
+onBeforeUnmount(() => {
+  window.clearTimeout(cartPulseTimer)
+  leavePosImmersive()
+})
 </script>
 
 <template>
@@ -111,18 +116,18 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
           <span class="hidden sm:inline">{{ shift ? `Tiền mặt ${Number(shift.expected_cash).toLocaleString('vi-VN')} ₫ · Nợ khách ${Number(shift.customer_debt_amount).toLocaleString('vi-VN')} ₫` : 'Mở ca làm' }}</span>
         </button>
 
-        <button v-if="openingCountEnabled" type="button" aria-label="Lịch sử kiểm kê" title="Lịch sử kiểm kê" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-xs sm:font-bold" @click="emit('show-shift-history')">
+        <button v-if="openingCountEnabled" type="button" aria-label="Lịch sử kiểm kê" title="Lịch sử kiểm kê" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 sm:h-8 sm:w-8 text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-xs sm:font-bold" @click="emit('show-shift-history')">
           <ClipboardList class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
           <span class="hidden sm:inline">Lịch sử kiểm kê</span>
         </button>
       </div>
 
-      <div class="relative ml-auto flex shrink-0 items-center gap-2 pr-10 sm:static sm:pr-0">
+      <div class="relative ml-auto flex shrink-0 items-center gap-2 pr-11 sm:static sm:pr-0">
         <OfflineStatus />
         <button
           type="button"
           title="Đóng POS (dữ liệu đang làm được lưu lại)"
-          class="absolute right-0 top-1/2 flex h-8 w-8 -translate-y-1/2 shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-rose-100 hover:bg-rose-50 hover:text-rose-600 active:scale-90 sm:static sm:translate-y-0"
+          class="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 shrink-0 sm:h-8 sm:w-8 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-rose-100 hover:bg-rose-50 hover:text-rose-600 active:scale-90 sm:static sm:translate-y-0"
           @click="emit('close')"
         >
           <X class="h-5 w-5" />
@@ -145,7 +150,7 @@ onBeforeUnmount(() => window.clearTimeout(cartPulseTimer))
       </div>
     </div>
 
-    <nav class="flex h-[52px] shrink-0 items-stretch gap-2 border-t border-slate-200 bg-white px-2 py-1 shadow-[0_-4px_12px_rgba(15,23,42,0.06)] lg:hidden" aria-label="Chuyển khu vực POS">
+    <nav class="flex min-h-[56px] shrink-0 items-stretch gap-2 border-t border-slate-200 bg-white px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(15,23,42,0.06)] lg:hidden" aria-label="Chuyển khu vực POS">
       <button type="button" class="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition" :class="mobilePanel === 'products' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" @click="mobilePanel = 'products'">
         <PackageSearch class="h-4 w-4 shrink-0" />
         <span>Sản phẩm</span>

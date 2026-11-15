@@ -142,6 +142,19 @@ useSilentRefresh(['suppliers'])
                         </div>
                     </td>
                 </template>
+                <template #mobile-title="{ row }">
+                    <div class="break-words text-sm font-bold text-slate-900">{{ row.name }}</div>
+                    <div class="text-xs text-slate-500">{{ row.code }}<template v-if="row.phone"> · {{ row.phone }}</template></div>
+                </template>
+                <template #mobile-body="{ row }">
+                    <div class="pl-6 text-xs text-slate-500">Công nợ: <span class="font-bold" :class="row.debt_balance > 0 ? 'text-rose-600' : 'text-slate-600'">{{ formatMoney(row.debt_balance) }}</span></div>
+                </template>
+                <template #mobile-actions="{ row }">
+                    <div class="flex flex-wrap gap-2" @click.stop>
+                        <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100" @click="openEdit(row)"><SquarePen class="h-5 w-5" /></button>
+                        <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" @click="destroy(row)"><Trash2 class="h-5 w-5" /></button>
+                    </div>
+                </template>
             </BaseTable>
         </DataPanel>
 

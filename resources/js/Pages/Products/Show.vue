@@ -87,7 +87,7 @@ defineProps({
                 Danh sách IMEI
             </h2>
 
-            <table class="app-data-table w-full border">
+            <div class="overflow-x-auto"><table class="m-cards app-data-table w-full border">
 
                 <thead>
 
@@ -158,7 +158,7 @@ defineProps({
 
                 </tbody>
 
-            </table>
+            </table></div>
 
         </div>
 

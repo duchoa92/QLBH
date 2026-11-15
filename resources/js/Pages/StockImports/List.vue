@@ -666,7 +666,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="hidden overflow-x-auto md:block">
 
-                <table class="app-data-table w-full min-w-[850px] border-collapse text-left text-xs">
+                <table class="m-cards app-data-table w-full min-w-[850px] border-collapse text-left text-xs">
                     <thead>
                         <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                             <th v-for="col in importColumns" :key="col.key" class="px-3.5 py-2.5 transition" :class="[col.class, col.sortable === false ? '' : 'cursor-pointer hover:bg-slate-100']" @click="col.sortable === false || sortImports(col.key)">
@@ -947,7 +947,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                     <!-- Bảng hàng hóa -->
                     <div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
                         <div class="overflow-x-auto">
-                        <table class="w-full min-w-[700px] border-collapse text-left text-xs">
+                        <table class="m-cards w-full min-w-[700px] border-collapse text-left text-xs">
                             <thead>
                                 <tr class="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                                     <th class="w-10 px-3 py-2 text-center">STT</th>
@@ -1082,7 +1082,7 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
         <div class="overflow-hidden rounded-xl border border-slate-200">
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[680px] text-left text-xs">
+                <table class="m-cards w-full min-w-[680px] text-left text-xs">
                     <thead class="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                         <tr>
                             <th class="px-3 py-2">IMEI / Serial</th>

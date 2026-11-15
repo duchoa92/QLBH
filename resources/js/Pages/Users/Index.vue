@@ -177,6 +177,21 @@ useSilentRefresh(['users', 'roles', 'permissions', 'can_assign_super_admin', 'ca
                             </div>
                         </td>
                     </template>
+                    <template #mobile-title="{ row }">
+                        <div class="break-words text-sm font-bold text-slate-900">{{ row.name }}</div>
+                        <div class="text-xs text-slate-500">{{ row.username }}<template v-if="row.phone"> · {{ row.phone }}</template></div>
+                    </template>
+                    <template #mobile-body="{ row }">
+                        <div v-if="row.roles?.length" class="flex flex-wrap gap-1 pl-6">
+                            <span v-for="role in row.roles" :key="role.id || role" class="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{{ role.name || role }}</span>
+                        </div>
+                    </template>
+                    <template #mobile-actions="{ row }">
+                        <div v-if="row.username !== 'admin' && (can_edit_users || can_delete_users)" class="flex flex-wrap gap-2" @click.stop>
+                            <button v-if="can_edit_users" type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100" @click="openEdit(row)"><SquarePen class="h-5 w-5" /></button>
+                            <button v-if="can_delete_users" type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" @click="destroy(row)"><Trash2 class="h-5 w-5" /></button>
+                        </div>
+                    </template>
                 </BaseTable>
             </DataPanel>
 

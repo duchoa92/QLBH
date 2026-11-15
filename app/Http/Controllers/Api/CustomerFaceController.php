@@ -26,6 +26,10 @@ class CustomerFaceController extends Controller
     /** Tối đa 5 ảnh/mẫu đăng ký, mỗi ảnh có thể kèm bản lật gương nên tối đa 10 vector. */
     private const MAX_SAMPLES = 10;
 
+    /** Số người tối đa so khớp trong một lần gọi (nhiều khách cùng đứng trước camera) và số vector tối đa cho mỗi người. */
+    private const MAX_FACES = 6;
+    private const MAX_PROBES = 3;
+
     /** Số mẫu tự học (sau khi nhân viên xác nhận ở POS) giữ lại tối đa cho mỗi khách. */
     private const MAX_AUTO_SAMPLES = 5;
 
@@ -191,7 +195,13 @@ class CustomerFaceController extends Controller
         return response()->json(['registered' => false, 'samples' => 0]);
     }
 
-    /** POS gửi vector của người đang đứng trước camera, nhận lại khách khớp nhất (nếu đủ chắc chắn). */
+    /**
+     * POS gửi vector của những người đang đứng trước camera, nhận lại khách khớp nhất cho từng người (nếu đủ chắc chắn).
+     *
+     * Định dạng mới: { faces: [{ key, descriptors: [vector, ...] }] }, tối đa 6 người, mỗi người 1-3 vector lấy từ các khung hình
+     * khác nhau. Dùng nhiều khung hình giúp vẫn nhận đúng khi một khung bị mờ. Trả về { results: [{ key, matched, customer, ... }] }.
+     * Định dạng cũ { descriptor } vẫn dùng được và trả về một kết quả duy nhất như trước.
+     */
     public function match(Request $request): JsonResponse
     {
         if ($disabled = $this->ensureEnabled()) {
@@ -199,44 +209,118 @@ class CustomerFaceController extends Controller
         }
 
         $data = $request->validate([
-            'descriptor' => ['required', 'array', 'size:'.self::DESCRIPTOR_SIZE],
+            'descriptor' => ['required_without:faces', 'array', 'size:'.self::DESCRIPTOR_SIZE],
             'descriptor.*' => ['required', 'numeric', 'between:-5,5'],
+            'faces' => ['required_without:descriptor', 'array', 'min:1', 'max:'.self::MAX_FACES],
+            'faces.*.key' => ['required'],
+            'faces.*.descriptors' => ['required', 'array', 'min:1', 'max:'.self::MAX_PROBES],
+            'faces.*.descriptors.*' => ['required', 'array', 'size:'.self::DESCRIPTOR_SIZE],
+            'faces.*.descriptors.*.*' => ['required', 'numeric', 'between:-5,5'],
         ]);
 
-        $probe = array_map('floatval', $data['descriptor']);
+        $legacy = isset($data['descriptor']);
+        $faces = $legacy
+            ? [['key' => 0, 'descriptors' => [$data['descriptor']]]]
+            : $data['faces'];
 
-        // Khoảng cách nhỏ nhất theo từng khách (mỗi khách có nhiều mẫu).
-        $best = [];
-        CustomerFaceProfile::query()->select(['id', 'customer_id', 'descriptor'])->chunkById(500, function ($profiles) use ($probe, &$best): void {
+        // Các mẫu đã đăng ký, gom theo khách: [customer_id => [vector, ...]]. Chỉ đọc 1 lần cho cả lô.
+        $bank = [];
+        CustomerFaceProfile::query()->select(['id', 'customer_id', 'descriptor'])->chunkById(500, function ($profiles) use (&$bank): void {
             foreach ($profiles as $profile) {
-                $distance = $this->distance($probe, $profile->descriptor);
-                $id = (int) $profile->customer_id;
-                if (! isset($best[$id]) || $distance < $best[$id]) {
-                    $best[$id] = $distance;
-                }
+                $bank[(int) $profile->customer_id][] = $profile->descriptor;
             }
         });
 
-        asort($best);
-        $ids = array_keys($best);
-        $distances = array_values($best);
+        $outcomes = [];
+        $customerIds = [];
+        foreach ($faces as $face) {
+            $probes = array_map(
+                fn ($descriptor) => array_map('floatval', $descriptor),
+                $face['descriptors'] ?? [$face]
+            );
+            $outcome = $this->matchFace($probes, $bank);
+            $outcome['key'] = $face['key'];
+            $outcomes[] = $outcome;
+            if (isset($outcome['customer_id'])) {
+                $customerIds[] = $outcome['customer_id'];
+            }
+        }
+
+        $customers = Customer::query()
+            ->whereIn('id', array_unique($customerIds))
+            ->get(['id', 'full_name', 'phone', 'cccd', 'debt_balance'])
+            ->keyBy('id');
+
+        $results = array_map(function (array $outcome) use ($customers): array {
+            $customer = isset($outcome['customer_id']) ? $customers->get($outcome['customer_id']) : null;
+            $result = ['key' => $outcome['key'], 'matched' => $customer !== null];
+            if ($customer !== null) {
+                $result['customer'] = $customer;
+                $result['confidence'] = $outcome['confidence'];
+            }
+            if (! empty($outcome['ambiguous'])) {
+                $result['ambiguous'] = true;
+            }
+
+            return $result;
+        }, $outcomes);
+
+        if ($legacy) {
+            unset($results[0]['key']);
+
+            return response()->json($results[0]);
+        }
+
+        return response()->json(['results' => $results]);
+    }
+
+    /**
+     * So khớp 1 người (nhiều vector từ nhiều khung hình) với toàn bộ khách đã đăng ký.
+     * Điểm của mỗi khách = trung bình các khoảng cách tốt nhất (nửa số vector, làm tròn lên): một khung hình mờ
+     * không làm hỏng kết quả, còn kết quả đúng thì phải ổn định qua nhiều khung hình.
+     *
+     * @param  array<int, array<int, float>>  $probes
+     * @param  array<int, array<int, array<int, float>>>  $bank
+     * @return array{customer_id?: int, confidence?: float, ambiguous?: bool}
+     */
+    private function matchFace(array $probes, array $bank): array
+    {
+        $keep = (int) ceil(count($probes) / 2);
+        $scores = [];
+
+        foreach ($bank as $customerId => $samples) {
+            $nearestPerProbe = [];
+            foreach ($probes as $probe) {
+                $nearest = INF;
+                foreach ($samples as $sample) {
+                    $distance = $this->distance($probe, $sample);
+                    if ($distance < $nearest) {
+                        $nearest = $distance;
+                    }
+                }
+                $nearestPerProbe[] = $nearest;
+            }
+            sort($nearestPerProbe);
+            $scores[$customerId] = array_sum(array_slice($nearestPerProbe, 0, $keep)) / $keep;
+        }
+
+        asort($scores);
+        $ids = array_keys($scores);
+        $distances = array_values($scores);
 
         if ($ids === [] || $distances[0] > self::MATCH_THRESHOLD) {
-            return response()->json(['matched' => false]);
+            return [];
         }
 
         if (isset($distances[1]) && ($distances[1] - $distances[0]) < self::MIN_MARGIN) {
-            return response()->json(['matched' => false, 'ambiguous' => true]);
+            return ['ambiguous' => true];
         }
 
-        $customer = Customer::query()->find($ids[0], ['id', 'full_name', 'phone', 'cccd', 'debt_balance']);
-
-        return response()->json([
-            'matched' => $customer !== null,
-            'customer' => $customer,
+        return [
+            'customer_id' => (int) $ids[0],
             // Độ tin cậy gần đúng để hiển thị gợi ý (1 = rất giống).
             'confidence' => round(max(0, 1 - $distances[0] / self::MATCH_THRESHOLD), 2),
-        ]);
+        ];
     }
 
     /** Tính năng tắt trong Cài đặt thì không đăng ký/so khớp (vẫn cho xem trạng thái và xóa dữ liệu). */

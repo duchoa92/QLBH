@@ -449,7 +449,7 @@ const submit = () => {
         v-if="show"
         class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in"
     >
-        <div class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
+        <div class="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
 
             <!-- HEADER -->
             <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">

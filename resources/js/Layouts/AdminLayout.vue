@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
 
         <!-- SIDEBAR WRAPPER -->
         <div
-            class="fixed inset-y-0 left-0 z-50 h-screen transition-all duration-300 lg:static shrink-0 shadow-xl lg:shadow-none"
+            class="fixed inset-y-0 left-0 z-50 h-dvh max-w-[85vw] transition-all duration-300 lg:static lg:h-screen lg:max-w-none shrink-0 shadow-xl lg:shadow-none"
             :class="[
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                 effectiveSidebarCollapsed ? 'lg:w-[70px]' : 'w-[280px] lg:w-[240px]'
@@ -187,13 +187,13 @@ onBeforeUnmount(() => {
 
             <!-- HEADER HOÀN CHỈNH ĐÃ THÊM NÚT SỬA CHỮA & TỐI ƯU MOBILE -->
             <header class="shrink-0 border-b border-slate-200/80 bg-white z-30 shadow-2xs relative">
-                <div class="flex h-16 items-center justify-between px-3 sm:px-6 gap-2 sm:gap-4">
+                <div class="flex h-14 items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:px-6 sm:gap-4">
 
                     <!-- GÓC TRÁI: MOBILE MENU TOGGLE & TIÊU ĐỀ -->
                     <div class="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
                         <button
                             type="button"
-                            class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 lg:hidden transition active:scale-95 shrink-0"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 lg:hidden transition active:scale-95 shrink-0"
                             @click="sidebarOpen = !sidebarOpen"
                             aria-label="Mở menu"
                         >
@@ -205,14 +205,14 @@ onBeforeUnmount(() => {
                             <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate hidden sm:block">
                                 Hệ thống quản lý
                             </div>
-                            <h1 class="text-base sm:text-lg font-black text-slate-900 truncate leading-tight">
+                            <h1 class="text-[15px] sm:text-lg font-black text-slate-900 truncate leading-tight">
                                 {{ currentTitle }}
                             </h1>
                         </div>
                     </div>
 
                     <!-- GÓC PHẢI: TÌM KIẾM, NÚT TÁC VỤ & USER -->
-                    <div class="flex items-center justify-end gap-2 sm:gap-3 min-w-0 flex-1">
+                    <div class="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0 flex-1">
 
                         <!-- TÌM KIẾM GLOBAL (DESKTOP: co giãn theo độ rộng màn hình) -->
                         <div class="hidden md:block min-w-0 flex-1 md:max-w-[15rem] lg:max-w-[24rem] xl:max-w-[32rem] 2xl:max-w-[40rem]">
@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             @click="showMobileSearch = !showMobileSearch"
-                            class="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition active:scale-95 shrink-0"
+                            class="md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition active:scale-95 shrink-0"
                             title="Tìm kiếm"
                         >
                             <Search :size="18" />
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
                             v-if="can('repairs.create')"
                             type="button"
                             @click="openRepairReceipt"
-                            class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all shrink-0"
+                            class="hidden shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all shrink-0 sm:inline-flex"
                             title="Tiếp nhận sửa chữa"
                         >
                             <Wrench :size="15" />
@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
                             v-if="can('pos.access')"
                             href="/pos"
                             @click="prepareOpenPos"
-                            class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0"
+                            class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0 sm:h-auto"
                             title="Mở POS bán hàng"
                         >
                             <Store :size="15" />
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
                                 @click="userDropdownOpen = !userDropdownOpen"
                                 class="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-50 active:bg-slate-100 transition"
                             >
-                                <div class="h-8 w-8 overflow-hidden rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                                <div class="h-8 w-8 sm:h-8 sm:w-8 overflow-hidden rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
                                     <img v-if="user.avatar" :src="imageUrl(user.avatar)" alt="Ảnh đại diện" class="h-full w-full object-cover">
                                     <span v-else>{{ (user.name || 'A').charAt(0).toUpperCase() }}</span>
                                 </div>
@@ -284,16 +284,26 @@ onBeforeUnmount(() => {
                             <div
                                 v-if="userDropdownOpen"
                                 @click="userDropdownOpen = false"
-                                class="absolute right-0 mt-2 w-52 rounded-2xl bg-white p-1.5 shadow-xl border border-slate-100 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-150"
+                                class="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1rem)] sm:w-52 rounded-2xl bg-white p-1.5 shadow-xl border border-slate-100 z-50 text-sm sm:text-xs animate-in fade-in slide-in-from-top-2 duration-150"
                             >
                                 <div class="px-3 py-2 border-b border-slate-100 mb-1">
                                     <p class="font-bold text-slate-900 truncate">{{ user.name }}</p>
                                     <p class="text-[11px] text-slate-400 truncate">{{ user.email || user.username }}</p>
                                 </div>
 
+                                <button
+                                    v-if="can('repairs.create')"
+                                    type="button"
+                                    @click="openRepairReceipt"
+                                    class="flex w-full items-center gap-2 px-3 py-2.5 rounded-xl text-amber-700 hover:bg-amber-50 font-bold text-left transition sm:hidden"
+                                >
+                                    <Wrench :size="15" />
+                                    <span>Nhận máy sửa</span>
+                                </button>
+
                                 <Link
                                     href="/profile"
-                                    class="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
+                                    class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
                                 >
                                     <User :size="15" class="text-slate-400" />
                                     <span>Tài khoản cá nhân</span>
@@ -302,7 +312,7 @@ onBeforeUnmount(() => {
                                 <Link
                                     v-if="can('settings.view')"
                                     href="settings"
-                                    class="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
+                                    class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
                                 >
                                     <Shield :size="15" class="text-slate-400" />
                                     <span>Thiết lập hệ thống</span>
@@ -313,7 +323,7 @@ onBeforeUnmount(() => {
                                 <button
                                     type="button"
                                     @click="handleLogout"
-                                    class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-left transition"
+                                    class="w-full flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-left transition"
                                 >
                                     <LogOut :size="15" />
                                     <span>Đăng xuất</span>
@@ -331,7 +341,7 @@ onBeforeUnmount(() => {
             </header>
 
             <!-- MAIN CONTENT AREA -->
-            <main class="flex-1 overflow-y-auto px-2 pb-2 pt-1 sm:px-3 sm:pb-3 sm:pt-1.5">
+            <main class="flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3 sm:pb-3 sm:pt-1.5">
                 <div class="mx-auto w-full max-w-[1760px] space-y-3">
                     <slot :key="page.url" />
                 </div>

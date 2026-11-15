@@ -219,7 +219,7 @@ const cancelReason = computed(() =>
         @click.self="emit('close')"
     >
         <!-- NỀN MODAL DÙNG BG-SLATE-50 ĐỒNG BỘ VỚI HEADER VÀ DÙNG RING BẢO VỆ MÉP -->
-        <div class="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-black/5">
+        <div class="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-black/5">
             
             <!-- 1. HEADER CỐ ĐỊNH (MÀU NỀN ĐẶC BG-SLATE-50 VÀ KHÔNG BỊ HỞ VIỀN SÁNG) -->
             <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 shrink-0">
@@ -315,7 +315,7 @@ const cancelReason = computed(() =>
                 <!-- BẢNG SẢN PHẨM -->
                 <div class="overflow-hidden rounded-xl border border-slate-200/80 shadow-2xs bg-white">
                     <div class="overflow-x-auto">
-                        <table class="w-full min-w-[700px] text-left text-xs border-collapse">
+                        <table class="m-cards w-full min-w-[700px] text-left text-xs border-collapse">
                             <thead>
                                 <tr class="bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                                     <th class="w-10 px-3 py-2 text-center">STT</th>

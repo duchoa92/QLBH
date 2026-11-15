@@ -1549,7 +1549,7 @@ const confirm = (payment = {}) => {
 
                 <div class="hidden overflow-x-auto sm:block">
                     <table
-                        class="w-full min-w-[750px] text-sm"
+                        class="m-cards w-full min-w-[750px] text-sm"
                     >
                         <thead>
                             <tr

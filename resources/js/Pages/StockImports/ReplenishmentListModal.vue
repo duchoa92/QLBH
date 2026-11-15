@@ -451,7 +451,7 @@ onMounted(() => {
                 <button type="button" class="col-span-2 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700 sm:col-span-1 sm:gap-2 sm:px-3 sm:text-sm" @click="applyToStockImport(previewOrder)"><Check class="h-4 w-4 shrink-0" /> Áp dụng vào phiếu nhập</button>
             </div>
             <div class="max-h-[calc(100dvh-14rem)] overflow-auto rounded-lg border border-slate-200">
-                <table class="w-full table-fixed border-collapse text-xs sm:text-sm">
+                <table class="m-cards w-full table-fixed border-collapse text-xs sm:text-sm">
                     <thead class="sticky top-0 z-10 bg-slate-50 text-left text-xs font-semibold text-slate-600">
                         <tr>
                             <th class="w-[12%] px-2 py-2 text-center sm:px-3 sm:py-3">STT</th>
@@ -611,7 +611,7 @@ onMounted(() => {
                         <p class="mt-2 text-xs">Chọn sản phẩm bên trái để lên danh sách.</p>
                     </div>
                     <div v-else class="overflow-x-auto">
-                        <table class="w-full min-w-[500px] table-fixed border-collapse text-xs">
+                        <table class="m-cards w-full min-w-[500px] table-fixed border-collapse text-xs">
                             <thead class="border-b border-slate-200 bg-slate-50 text-left font-semibold text-slate-600">
                                 <tr>
                                     <th class="w-[30%] px-2 py-2">Sản phẩm</th>

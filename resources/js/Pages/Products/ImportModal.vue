@@ -805,7 +805,7 @@ const downloadTemplate = () => {
 
                 <!-- Bảng -->
                 <div class="max-h-[340px] overflow-auto border" :class="checking ? 'opacity-60' : ''">
-                    <table class="w-full text-sm text-center items-center">
+                    <table class="m-cards w-full text-sm text-center items-center">
                         <thead class="sticky top-0 bg-white">
                             <tr>
                                 <th class="border p-2" title="Tích để bỏ qua dòng này">Bỏ qua</th>

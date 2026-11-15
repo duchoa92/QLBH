@@ -226,7 +226,7 @@ const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -337,6 +337,9 @@ const buildFormValues = () => ({
     face_recognition_enabled: liveSettings.value.face_recognition_enabled === true
         || liveSettings.value.face_recognition_enabled === 1
         || liveSettings.value.face_recognition_enabled === '1',
+    face_notify_modal_enabled: liveSettings.value.face_notify_modal_enabled === true
+        || liveSettings.value.face_notify_modal_enabled === 1
+        || liveSettings.value.face_notify_modal_enabled === '1',
     face_cctv_snapshot_url: liveSettings.value.face_cctv_snapshot_url || '',
     face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
     face_cctv_username: liveSettings.value.face_cctv_username || '',
@@ -706,7 +709,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
             v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings) || (activeModal === 'loyalty' && can_edit_settings)"
             :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : activeModal === 'loyalty' ? 'Khách hàng' : 'Bán hàng và kho hàng'"
             :size="'lg'"
-            :body-class="activeModal === 'payments' ? 'max-h-[70vh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70vh] overflow-y-auto p-3 sm:p-4'"
+            :body-class="activeModal === 'payments' ? 'max-h-[70dvh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70dvh] overflow-y-auto p-3 sm:p-4'"
             @close="cancelModal"
         >
        
@@ -722,6 +725,12 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             v-model="form.face_recognition_enabled"
                             title="Bật nhận diện khuôn mặt"
                             description="Cho phép đăng ký khuôn mặt ở trang Khách hàng và tự gợi ý khách khi đến quầy POS."
+                        />
+                        <SettingSwitch
+                            v-if="form.face_recognition_enabled"
+                            v-model="form.face_notify_modal_enabled"
+                            title="Hiện hộp thông báo chi tiết khi nhận ra khách"
+                            description="Khi POS nhận ra khách, mở thêm một hộp thoại cho biết tên, số điện thoại, CCCD và tình trạng công nợ để nhân viên xác nhận. Tắt thì chỉ hỏi ngay trong ô khách hàng."
                         />
                         <div v-if="form.face_recognition_enabled" class="space-y-3 rounded-lg bg-slate-50 p-3">
                             <div>
@@ -1064,7 +1073,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                       </div>
                       <div>
                         <div class="max-h-96 overflow-auto rounded-lg border border-slate-200">
-                            <table class="app-data-table w-full text-sm">
+                            <table class="m-cards app-data-table w-full text-sm">
                                 <thead>
                                     <tr class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                                         <th class="px-3 py-2 text-left">
@@ -1414,7 +1423,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                 <p v-if="cleanupResult?.deleted" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">Đã xóa {{ cleanupResult.deleted }} file, giải phóng {{ formatBytes(cleanupResult.deleted_bytes) }}.</p>
                 <div v-if="cleanupResult?.files?.length" class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                     <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-xs text-slate-600"><input type="checkbox" :checked="selectedCleanupPaths.length === cleanupResult.files.length" @change="selectedCleanupPaths = $event.target.checked ? cleanupResult.files.map(file => file.path) : []" /><span>Chọn tất cả</span></div>
-                    <div class="max-h-[48vh] divide-y divide-slate-100 overflow-y-auto">
+                    <div class="max-h-[48dvh] divide-y divide-slate-100 overflow-y-auto">
                         <label v-for="file in cleanupResult.files" :key="file.path" class="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-slate-50"><input v-model="selectedCleanupPaths" type="checkbox" :value="file.path" class="mt-1" /><span class="min-w-0 flex-1"><span class="block break-all font-mono text-xs text-slate-700">{{ file.path }}</span><span class="mt-1 block text-[11px] text-slate-400">{{ formatBytes(file.size) }} · {{ new Date(file.last_modified * 1000).toLocaleString() }}</span></span></label>
                     </div>
                 </div>

@@ -611,7 +611,7 @@ onMounted(() => {
                         Lợi nhuận theo sản phẩm (top 15)
                     </h3>
 
-                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                    <div class="overflow-x-auto"><table class="m-cards app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
                         <thead>
                             <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                                 <th class="px-3.5 py-2.5 text-left">Sản phẩm</th>
@@ -662,7 +662,7 @@ onMounted(() => {
                 </ListToolbar>
 
                 <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                    <div class="overflow-x-auto"><table class="m-cards app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
                         <thead>
                             <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                                 <th class="px-3.5 py-2.5 text-left">#</th>
@@ -739,7 +739,7 @@ onMounted(() => {
                 </ListToolbar>
 
                 <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                    <div class="overflow-x-auto"><table class="m-cards app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
                         <thead>
                             <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                                 <th class="px-3.5 py-2.5 text-left">Sản phẩm</th>
@@ -855,7 +855,7 @@ onMounted(() => {
                 </ListToolbar>
 
                 <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div class="overflow-x-auto"><table class="app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
+                    <div class="overflow-x-auto"><table class="m-cards app-data-table w-full min-w-[640px] border-collapse text-left text-xs">
                         <thead>
                             <tr class="select-none border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                                 <th class="px-3.5 py-2.5 text-left">Mã</th>

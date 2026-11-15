@@ -9,8 +9,8 @@ const { state, confirm, cancel } = useConfirm()
 
 <template>
 <div v-if="state.show"
-     class="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">
-    <div class="bg-white p-6 rounded shadow w-[400px] pointer-events-auto">
+     class="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4">
+    <div class="bg-white p-5 sm:p-6 rounded-xl shadow w-[400px] max-w-full max-h-[calc(100dvh-2rem)] overflow-y-auto pointer-events-auto">
 
         <h2 class="font-bold text-lg mb-2">
             {{ state.title }}
@@ -24,12 +24,12 @@ const { state, confirm, cancel } = useConfirm()
             {{ state.error }}
         </p>
 
-        <div class="flex justify-end gap-2">
-            <button :disabled="state.confirming" @click="cancel" class="px-4 py-2 bg-gray-200 rounded disabled:cursor-not-allowed disabled:opacity-50">
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button :disabled="state.confirming" @click="cancel" class="min-h-11 px-4 py-2 bg-gray-200 rounded sm:min-h-0 disabled:cursor-not-allowed disabled:opacity-50">
                 {{ state.cancelText }}
             </button>
 
-            <button :disabled="state.confirming" @click="confirm" class="px-4 py-2 bg-red-600 text-white rounded disabled:cursor-wait disabled:opacity-60">
+            <button :disabled="state.confirming" @click="confirm" class="min-h-11 px-4 py-2 bg-red-600 text-white rounded sm:min-h-0 disabled:cursor-wait disabled:opacity-60">
                 {{ state.confirming ? 'Đang xử lý...' : state.confirmText }}
             </button>
         </div>

@@ -1376,7 +1376,7 @@ const submit = () => {
 
                         <div v-if="variantPreviewRows.length" class="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
                             <div class="max-h-72 overflow-auto">
-                                <table class="w-full min-w-[760px] text-left text-xs">
+                                <table class="m-cards w-full min-w-[760px] text-left text-xs">
                                     <thead class="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">
                                         <tr>
                                             <th class="p-3">Biến thể</th>

@@ -48,12 +48,108 @@ export const detectFace = async (video, { minFaceRatio = 0.2 } = {}) => {
     return { status: 'ok', ratio, descriptor: Array.from(face.descriptor, value => Math.round(value * 1e5) / 1e5) }
 }
 
-export const startCamera = async (video) => {
+/**
+ * Nhận diện NHIỀU khuôn mặt trong khung hình video (nhiều khách cùng đứng trước camera).
+ * Trả { faces, tooSmall }: faces đã sắp theo kích thước giảm dần (người gần camera nhất đứng đầu), mỗi mặt gồm
+ * box, ratio, sharpness (độ nét, càng cao càng nét) và descriptor; tooSmall là số mặt bị bỏ vì quá nhỏ/quá xa.
+ */
+export const detectFaces = async (video, { maxFaces = 6 } = {}) => {
+    const faceapi = await loadFaceApi()
+    // inputSize 416 + ngưỡng thấp hơn: dò được cả mặt nhỏ hoặc hơi mờ; các mặt kém chất lượng vẫn bị loại ở bước kích thước.
+    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 })
+    const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks(true).withFaceDescriptors()
+
+    const mediaWidth = video.videoWidth || video.naturalWidth || video.width || 640
+    const minWidth = Math.max(56, mediaWidth * 0.07)
+    const faces = []
+    let tooSmall = 0
+
+    for (const result of results) {
+        const box = result.detection.box
+        if (box.width < minWidth) { tooSmall += 1; continue }
+        faces.push({
+            box: { x: box.x, y: box.y, width: box.width, height: box.height },
+            ratio: box.width / mediaWidth,
+            sharpness: faceSharpness(video, box),
+            descriptor: Array.from(result.descriptor, value => Math.round(value * 1e5) / 1e5),
+        })
+    }
+
+    faces.sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height)
+
+    return { faces: faces.slice(0, maxFaces), tooSmall }
+}
+
+const sharpnessCanvas = typeof document === 'undefined' ? null : document.createElement('canvas')
+
+/**
+ * Độ nét của vùng mặt (phương sai Laplacian trên ảnh xám thu về 64x64). Ảnh mờ/rung cho giá trị thấp.
+ * Dùng để chọn khung hình nét nhất khi nhận diện, không dùng để từ chối khách.
+ */
+export const faceSharpness = (source, box, size = 64) => {
+    if (!sharpnessCanvas) return 0
+    const sourceWidth = source.videoWidth || source.naturalWidth || source.width
+    const sourceHeight = source.videoHeight || source.naturalHeight || source.height
+    const x = Math.max(0, Math.min(box.x, sourceWidth - 1))
+    const y = Math.max(0, Math.min(box.y, sourceHeight - 1))
+    const width = Math.max(1, Math.min(box.width, sourceWidth - x))
+    const height = Math.max(1, Math.min(box.height, sourceHeight - y))
+
+    sharpnessCanvas.width = size
+    sharpnessCanvas.height = size
+    const context = sharpnessCanvas.getContext('2d', { willReadFrequently: true })
+    context.drawImage(source, x, y, width, height, 0, 0, size, size)
+    const { data } = context.getImageData(0, 0, size, size)
+
+    const gray = new Float32Array(size * size)
+    for (let i = 0; i < gray.length; i += 1) {
+        const p = i * 4
+        gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]
+    }
+
+    let sum = 0
+    let sumSquares = 0
+    let count = 0
+    for (let row = 1; row < size - 1; row += 1) {
+        for (let column = 1; column < size - 1; column += 1) {
+            const i = row * size + column
+            const laplacian = gray[i - 1] + gray[i + 1] + gray[i - size] + gray[i + size] - 4 * gray[i]
+            sum += laplacian
+            sumSquares += laplacian * laplacian
+            count += 1
+        }
+    }
+    const mean = sum / count
+
+    return sumSquares / count - mean * mean
+}
+
+/** Ảnh nhỏ của một khuôn mặt (có chừa viền) để nhân viên biết gợi ý ứng với người nào. Chỉ giữ trong bộ nhớ, không lưu. */
+export const cropThumbnail = (source, box, size = 72) => {
+    const sourceWidth = source.videoWidth || source.naturalWidth || source.width
+    const sourceHeight = source.videoHeight || source.naturalHeight || source.height
+    const pad = Math.max(box.width, box.height) * 0.25
+    const x = Math.max(0, box.x - pad)
+    const y = Math.max(0, box.y - pad)
+    const width = Math.min(sourceWidth - x, box.width + pad * 2)
+    const height = Math.min(sourceHeight - y, box.height + pad * 2)
+    const side = Math.min(width, height)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    canvas.getContext('2d').drawImage(source, x + (width - side) / 2, y + (height - side) / 2, side, side, 0, 0, size, size)
+
+    return canvas.toDataURL('image/jpeg', 0.7)
+}
+
+export const startCamera = async (video, facingMode = 'user') => {
     if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Trình duyệt không cho dùng camera. Camera chỉ hoạt động khi mở bằng HTTPS hoặc localhost.')
     }
     const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        // 1280x720: mặt ở xa hoặc nhiều người cùng đứng trước camera vẫn đủ điểm ảnh để nhận ra (mô hình tự thu nhỏ khi dò).
+        video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
         audio: false,
     })
     video.srcObject = stream

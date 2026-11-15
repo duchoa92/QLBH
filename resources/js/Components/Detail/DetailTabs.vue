@@ -14,7 +14,7 @@ defineEmits(['update:modelValue'])
             type="button"
             role="tab"
             :aria-selected="modelValue === tab.key"
-            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition"
+            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-bold transition sm:py-1.5"
             :class="modelValue === tab.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
             @click="$emit('update:modelValue', tab.key)"
         >

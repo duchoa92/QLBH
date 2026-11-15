@@ -23,19 +23,61 @@ export const getPosReturnUrl = () => {
     }
 }
 
-// Phải gọi trong sự kiện click của người dùng thì trình duyệt mới cho phép
+const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null
+
+// Đã chạy như ứng dụng (thêm vào Màn hình chính) hoặc đang toàn màn hình → không còn thanh địa chỉ.
+export const isStandaloneDisplay = () => {
+    try {
+        return Boolean(
+            window.navigator.standalone
+            || window.matchMedia('(display-mode: standalone)').matches
+            || window.matchMedia('(display-mode: fullscreen)').matches
+        )
+    } catch {
+        return false
+    }
+}
+
+// Phải gọi trong sự kiện click của người dùng thì trình duyệt mới cho phép.
+// iPhone (Safari) KHÔNG hỗ trợ Fullscreen API cho trang web: ở đó chỉ toàn màn hình thật khi
+// thêm vào Màn hình chính, nên hàm này im lặng bỏ qua thay vì báo lỗi.
 export const requestPosFullscreen = () => {
     const el = document.documentElement
 
-    if (!document.fullscreenElement && el.requestFullscreen) {
-        el.requestFullscreen().catch(() => {})
+    if (fullscreenElement()) return
+
+    try {
+        const request = el.requestFullscreen || el.webkitRequestFullscreen
+        if (!request) return
+        const result = request.call(el, { navigationUI: 'hide' })
+        if (result?.catch) result.catch(() => {})
+    } catch {
+        // trình duyệt từ chối: bỏ qua
     }
 }
 
 export const exitPosFullscreen = () => {
-    if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {})
+    if (!fullscreenElement()) return
+
+    try {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen
+        const result = exit?.call(document)
+        if (result?.catch) result.catch(() => {})
+    } catch {
+        // bỏ qua
     }
+}
+
+// Vào/ra chế độ POS "nhập vai": khóa cuộn trang nền (hết nảy/kéo làm lộ thanh trình duyệt),
+// ẩn thanh cảnh báo http, và (nếu có thể) vào toàn màn hình.
+export const enterPosImmersive = () => {
+    document.documentElement.classList.add('pos-fullscreen')
+    document.getElementById('insecure-http-notice')?.remove()
+    window.scrollTo(0, 1)
+}
+
+export const leavePosImmersive = () => {
+    document.documentElement.classList.remove('pos-fullscreen')
 }
 
 // Gọi khi bấm menu "Mở POS"

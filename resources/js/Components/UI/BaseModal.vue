@@ -57,7 +57,7 @@ onBeforeUnmount(() => {
         <div :class="bodyClass"><slot /></div>
     </template>
     <Teleport v-else to="body">
-    <div class="fixed inset-0 flex items-center justify-center overflow-y-auto p-3 sm:p-5 modal-scrollbar" :class="layerClass">
+    <div class="fixed inset-0 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-5 modal-scrollbar" :class="layerClass">
         <div
             class="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
             @click="$emit('close')"
@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
         <section
             role="dialog"
             aria-modal="true"
-            class="relative flex min-h-0 max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:max-h-[calc(100dvh-2.5rem)]"
+            class="base-modal-sheet relative flex min-h-0 max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-xl"
             :class="[modalClass, {
                 'max-w-md': size === 'sm',
                 'max-w-xl': size === 'md',
@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
                     <button
                         type="button"
                         @click="$emit('close')"
-                        class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-500"
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-500 active:bg-white sm:h-8 sm:w-8"
                         aria-label="Đóng"
                     >
                         ✕
@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- FOOTER -->
-            <div v-if="$slots.footer" class="shrink-0 border-t border-slate-200 bg-slate-50 px-4" :class="footerClass">
+            <div v-if="$slots.footer" class="base-modal-footer shrink-0 border-t border-slate-200 bg-slate-50 px-4" :class="footerClass">
                 <slot name="footer" />
             </div>
 
@@ -106,6 +106,22 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Mobile: hộp thoại dạng "bottom sheet" trượt từ dưới lên, chừa vùng an toàn của tai thỏ/thanh Home. */
+@media (max-width: 639px) {
+    .base-modal-sheet {
+        animation: base-modal-sheet-in 180ms ease-out;
+    }
+
+    .base-modal-footer {
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+}
+
+@keyframes base-modal-sheet-in {
+    from { transform: translateY(24px); opacity: 0.6; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
 .modal-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;

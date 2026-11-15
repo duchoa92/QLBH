@@ -28,7 +28,7 @@ const viewSaleId = ref(null)
     <BaseModal v-if="show" title="Chi tiết nợ" size="lg" body-class="flex min-h-0 flex-1 flex-col p-4" @close="emit('close')">
             <div class="min-h-0 flex-1 overflow-auto rounded border">
                 <table
-                    class="w-full text-sm"
+                    class="m-cards w-full min-w-[520px] text-sm"
                 >
                     <thead class="sticky top-0 bg-white z-10 border-b-2 border-gray-300">
                          <tr>

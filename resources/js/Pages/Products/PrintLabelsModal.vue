@@ -63,7 +63,7 @@ const print = () => {
                 </div>
             </div>
 
-            <div class="max-h-[55vh] overflow-y-auto rounded-xl border border-slate-200">
+            <div class="max-h-[55dvh] overflow-y-auto rounded-xl border border-slate-200">
                 <div v-if="!groups.length" class="px-4 py-10 text-center text-sm text-slate-400">Không có tem nào để in.</div>
                 <section v-for="group in groups" :key="group.id" class="border-b border-slate-100 last:border-b-0">
                     <label class="flex cursor-pointer items-center gap-2 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">

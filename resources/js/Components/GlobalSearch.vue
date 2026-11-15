@@ -162,7 +162,7 @@ onMounted(() => document.addEventListener('mousedown', closeIfOutside))
         <!-- Popup kết quả tìm kiếm -->
         <div
             v-if="open && query.trim().length >= 2"
-            class="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[70vh] w-full max-w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150"
+            class="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[70dvh] w-full max-w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150"
         >
             <div v-if="loading && !results.length" class="px-4 py-4 text-center text-xs font-medium text-slate-500">
                 Đang tìm trong dữ liệu...

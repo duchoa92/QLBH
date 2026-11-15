@@ -405,7 +405,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                     <!-- Bảng hàng hóa -->
                     <div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
                         <div class="overflow-x-auto">
-                        <table class="w-full min-w-[700px] border-collapse text-left text-xs">
+                        <table class="m-cards w-full min-w-[700px] border-collapse text-left text-xs">
                             <thead>
                                 <tr class="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                                     <th class="w-10 px-3 py-2 text-center">STT</th>
@@ -541,7 +541,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
 
         <div class="overflow-hidden rounded-xl border border-slate-200">
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[680px] text-left text-xs">
+                <table class="m-cards w-full min-w-[680px] text-left text-xs">
                     <thead class="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                         <tr>
                             <th class="px-3 py-2">IMEI / Serial</th>

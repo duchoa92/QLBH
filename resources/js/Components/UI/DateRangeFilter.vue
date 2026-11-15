@@ -138,7 +138,7 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
             <span class="min-w-0 flex-1 truncate">{{ selectedLabel }}</span>
             <ChevronRight class="h-4 w-4 shrink-0 rotate-90 text-slate-400" />
         </button>
-        <div v-if="open" class="absolute top-full z-50 mt-2 w-[min(470px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl" :class="align === 'left' ? 'left-0' : 'right-0'">
+        <div v-if="open" class="absolute top-full z-50 mt-2 w-[min(470px,calc(100vw-2rem))] overflow-hidden rounded-2xl border max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:mt-0 max-sm:max-h-[85dvh] max-sm:w-auto max-sm:overflow-y-auto max-sm:shadow-2xl border-slate-200 bg-white shadow-xl" :class="align === 'left' ? 'left-0' : 'right-0'">
             <div class="flex flex-col sm:flex-row">
                 <aside class="border-b border-slate-200 bg-slate-50/70 p-2 sm:w-40 sm:shrink-0 sm:border-b-0 sm:border-r">
                     <p class="mb-1 px-2 pt-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Khoảng có sẵn</p>
@@ -148,13 +148,13 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
                 </aside>
                 <section class="min-w-0 flex-1 p-2.5 sm:p-3">
                     <header class="mb-2 flex items-center justify-between gap-2">
-                        <button type="button" class="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100" aria-label="Tháng trước" @click="moveMonth(-1)"><ChevronLeft class="h-4 w-4" /></button>
+                        <button type="button" class="grid h-10 w-10 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:h-8 sm:w-8" aria-label="Tháng trước" @click="moveMonth(-1)"><ChevronLeft class="h-4 w-4" /></button>
                         <div class="min-w-0 flex-1 text-center text-xs font-bold capitalize text-slate-800">{{ monthLabel(calendarMonth) }}</div>
-                        <button type="button" class="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100" aria-label="Tháng sau" @click="moveMonth(1)"><ChevronRight class="h-4 w-4" /></button>
+                        <button type="button" class="grid h-10 w-10 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:h-8 sm:w-8" aria-label="Tháng sau" @click="moveMonth(1)"><ChevronRight class="h-4 w-4" /></button>
                     </header>
                     <div class="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1">{{ day }}</span></div>
                     <div class="grid grid-cols-7">
-                        <button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectDate(cell.key)">{{ cell.day }}</button>
+                        <button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-9 w-9 place-items-center sm:h-8 sm:w-8 rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectDate(cell.key)">{{ cell.day }}</button>
                     </div>
                 </section>
             </div>

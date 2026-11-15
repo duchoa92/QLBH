@@ -83,7 +83,7 @@ onBeforeUnmount(() => {
     <div class="absolute inset-0 bg-black/40" @click="closeModal(props.modalId)"></div>
 
     <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div class="bg-white w-[900px] h-[80vh] rounded-xl shadow-xl flex flex-col overflow-hidden pointer-events-auto" @click.stop>
+        <div class="bg-white w-[900px] max-w-[calc(100vw-1rem)] h-[85dvh] sm:h-[80dvh] rounded-xl shadow-xl flex flex-col overflow-hidden pointer-events-auto" @click.stop>
 
             <div class="p-4 border-b flex justify-between items-center bg-gray-50">
                 <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
                 <button @click="closeModal(props.modalId)" class="text-gray-500 hover:text-red-500 text-xl">✕</button>
             </div>
 
-            <div class="p-4 flex-1 overflow-y-auto">
+            <div class="p-3 sm:p-4 flex-1 overflow-auto">
                 <div v-if="loading" class="text-center py-10 text-gray-500">
                     Đang tải dữ liệu...
                 </div>
@@ -101,7 +101,7 @@ onBeforeUnmount(() => {
                     Không có dữ liệu trong thùng rác
                 </div>
 
-                <table v-else class="w-full border border-gray-200 rounded-lg overflow-hidden text-sm">
+                <table v-else class="m-cards w-full min-w-[420px] border border-gray-200 rounded-lg overflow-hidden text-sm">
                     <thead>
                         <tr class="bg-gray-100 text-left">
                             <th class="p-2 border">ID</th>

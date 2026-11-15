@@ -3,6 +3,28 @@ import { appBaseUrl } from '@/utils/appPaths'
 const DISMISS_KEY = 'insecure-http-notice-dismissed'
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 
+// Không hiện cảnh báo khi đang ở POS hoặc chế độ toàn màn hình / ứng dụng đã cài.
+const isImmersive = () => {
+    try {
+        return Boolean(
+            document.fullscreenElement
+            || document.webkitFullscreenElement
+            || window.navigator.standalone
+            || window.matchMedia('(display-mode: standalone)').matches
+            || window.matchMedia('(display-mode: fullscreen)').matches
+            || /(^|\/)pos(\/|$)/.test(location.pathname)
+        )
+    } catch {
+        return false
+    }
+}
+
+// Gỡ thanh cảnh báo nếu đang hiện mà người dùng vừa vào POS / toàn màn hình (gọi sau mỗi lần chuyển trang).
+export function syncInsecureNotice() {
+    if (typeof document === 'undefined') return
+    if (isImmersive()) document.getElementById('insecure-http-notice')?.remove()
+}
+
 // Truy cập bằng http:// (không phải máy chủ nội bộ) thì hiện thanh báo dẫn tới trang cài chứng chỉ để dùng https://.
 export function installInsecureNotice() {
     if (typeof document === 'undefined') return
@@ -17,6 +39,7 @@ export function installInsecureNotice() {
 
     const show = () => {
         if (document.getElementById('insecure-http-notice')) return
+        if (isImmersive()) return
 
         const bar = document.createElement('div')
         bar.id = 'insecure-http-notice'
@@ -50,6 +73,9 @@ export function installInsecureNotice() {
         bar.append(text, mkLink('Cài chứng chỉ để dùng https', guideUrl, true), mkLink('Mở bản https', httpsUrl, false), close)
         document.body.appendChild(bar)
     }
+
+    document.addEventListener('fullscreenchange', syncInsecureNotice)
+    document.addEventListener('webkitfullscreenchange', syncInsecureNotice)
 
     if (document.body) show()
     else document.addEventListener('DOMContentLoaded', show)

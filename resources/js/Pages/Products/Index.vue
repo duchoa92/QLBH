@@ -553,6 +553,33 @@ useSilentRefresh(['products'])
             </td>
  
         </template>
+        <template #mobile-title="{ row }">
+            <div class="flex items-center gap-2.5">
+                <img v-if="imageUrl(row.image_url ?? row.image)" :src="imageUrl(row.image_url ?? row.image)" class="h-11 w-11 shrink-0 rounded-lg object-cover" />
+                <div v-else class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-400">SP</div>
+                <div class="min-w-0">
+                    <div class="break-words text-sm font-bold text-slate-900">{{ row.name }}</div>
+                    <div v-if="row.sku" class="text-[11px] font-medium text-slate-400">{{ row.sku }}</div>
+                </div>
+            </div>
+        </template>
+        <template #mobile-body="{ row }">
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                <div><div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Giá bán</div><div class="mt-0.5 font-bold text-slate-800">{{ productSellPriceLabel(row) }}</div></div>
+                <div><div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tồn kho</div><div class="mt-0.5 font-bold text-slate-800">{{ productStockDisplay(row) }} <span class="font-medium text-slate-400">{{ productUnitName(row) }}</span></div></div>
+            </div>
+        </template>
+        <template #mobile-actions="{ row }">
+            <div class="flex flex-wrap items-center gap-2" @click.stop>
+                <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100" @click="openEdit(row)"><SquarePen class="h-5 w-5" /></button>
+                <button type="button" title="Giá" aria-label="Giá" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 active:bg-emerald-100" @click="openPriceUpdate([row])"><DollarSign class="h-5 w-5" /></button>
+                <button type="button" :disabled="!canPrintLabels(row)" title="In tem" aria-label="In tem" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 active:bg-slate-200 disabled:opacity-40" @click="printOne(row)"><Printer class="h-5 w-5" /></button>
+                <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" @click="destroy(row.id)"><Trash2 class="h-5 w-5" /></button>
+                <button type="button" role="switch" :aria-checked="!!row.is_active" aria-label="Bật/tắt trạng thái" :disabled="loadingStatus === row.id" class="relative ml-auto inline-flex h-7 w-12 shrink-0 items-center rounded-full transition" :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'" @click="toggleStatus(row.id)">
+                    <span class="inline-block h-5 w-5 transform rounded-full bg-white transition" :class="row.is_active ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
+            </div>
+        </template>
     </BaseTable>
  
 </div>

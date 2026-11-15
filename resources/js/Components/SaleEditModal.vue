@@ -619,7 +619,7 @@ const confirmItemOptions = ({ variant, imei }) => {
                 </div>
 
                 <section class="overflow-x-auto rounded-lg border border-slate-200">
-                    <table class="w-full min-w-[760px] table-fixed text-sm">
+                    <table class="m-cards w-full min-w-[760px] table-fixed text-sm">
                         <colgroup><col/><col class="w-16"/><col class="w-36"/><col class="w-36"/><col class="w-10"/></colgroup>
                         <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="p-2.5 text-left">Mặt hàng</th><th class="p-2 text-center">SL</th><th class="p-2 text-right">Đơn giá</th><th class="p-2 text-right">Thành tiền</th><th></th></tr></thead>
                         <tbody>

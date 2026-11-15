@@ -29,7 +29,7 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 /* iOS zooms the page when a focused form control is smaller than 16px. */
-@media (max-width: 767px) and (pointer: coarse) {
+@media (max-width: 1024px) and (pointer: coarse) {
     input,
     select,
     textarea {
@@ -325,4 +325,217 @@ mark {
     font-weight: 700 !important;
     padding: 0 2px !important;
     border-radius: 2px !important;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| MOBILE / CẢM ỨNG
+| Chỉ tác động trên màn hình nhỏ hoặc thiết bị cảm ứng; desktop giữ nguyên.
+|--------------------------------------------------------------------------
+*/
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Cảm ứng: chặn phóng to khi chạm đúp, nhưng VẪN cho chụm hai ngón để zoom khi cần. */
+@media (pointer: coarse) {
+    html,
+    body,
+    * {
+        touch-action: manipulation;
+    }
+}
+
+/* POS toàn màn hình: khóa cuộn trang nền, không kéo giãn/nảy làm lộ thanh trình duyệt. */
+html.pos-fullscreen,
+html.pos-fullscreen body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+/* Cảm ứng: bỏ độ trễ chạm đúp-để-zoom trên nút/liên kết. */
+button,
+a,
+select,
+summary,
+[role="button"] {
+    touch-action: manipulation;
+}
+
+/* Vùng chạm tối thiểu ~40px cho nút thao tác trong dòng bảng và ô lọc. */
+@media (pointer: coarse) {
+    .app-row-action {
+        min-width: 2.5rem;
+        min-height: 2.5rem;
+    }
+
+    .app-row-actions {
+        gap: 0.25rem;
+    }
+
+    .app-filter-control {
+        height: 44px;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+        width: 1.125rem;
+        height: 1.125rem;
+    }
+}
+
+@media (max-width: 767px) {
+    /* Bảng cuộn ngang: gọn hơn một chút để thấy được nhiều cột hơn. */
+    table.app-data-table thead th {
+        padding: 0.625rem 0.625rem !important;
+    }
+
+    table.app-data-table tbody td {
+        padding: 0.625rem 0.625rem !important;
+    }
+
+    /* Bảng nằm trong vùng cuộn ngang: gợi ý còn nội dung bên phải bằng bóng mờ. */
+    .overflow-x-auto {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    /* Hộp thông báo (sonner) không tràn mép màn hình nhỏ. */
+    [data-sonner-toaster] {
+        width: calc(100vw - 1.5rem) !important;
+        max-width: 26rem;
+    }
+
+    [data-sonner-toast] {
+        width: 100% !important;
+    }
+
+    /* Menu tự định vị (dropdown/popover) không vượt quá chiều ngang màn hình. */
+    [role="listbox"],
+    [role="menu"] {
+        max-width: calc(100vw - 1rem);
+    }
+}
+
+/* Chừa vùng an toàn cho thiết bị có tai thỏ / thanh Home. */
+@supports (padding: max(0px)) {
+    .pb-safe {
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| MOBILE: BẢNG → THẺ
+| Bảng có class "m-cards" hiển thị dạng danh sách thẻ "Nhãn: giá trị" trên màn hình nhỏ.
+| Nhãn lấy từ tiêu đề cột (utils/mobileTables.js). Ô thao tác (nút biểu tượng) nằm cuối thẻ.
+|--------------------------------------------------------------------------
+*/
+@media screen and (max-width: 767px) {
+    table.m-cards,
+    table.m-cards tbody,
+    table.m-cards tfoot {
+        display: block;
+        width: 100% !important;
+        min-width: 0 !important;
+        background: transparent !important;
+    }
+
+    table.m-cards thead {
+        display: none !important;
+    }
+
+    table.m-cards tr {
+        display: block;
+        margin: 0.5rem;
+        padding: 0.375rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        background: #fff !important;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+    }
+
+    table.m-cards tbody tr:hover,
+    table.m-cards tbody tr:nth-child(even) {
+        background: #fff !important;
+    }
+
+    table.m-cards tfoot tr {
+        background: #f8fafc !important;
+        font-weight: 700;
+    }
+
+    table.m-cards td {
+        display: flex !important;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        width: auto !important;
+        padding: 0.3125rem 0 !important;
+        border: 0 !important;
+        border-bottom: 1px dashed #eef2f7 !important;
+        text-align: right !important;
+        white-space: normal !important;
+        word-break: break-word;
+    }
+
+    table.m-cards td:last-child {
+        border-bottom: 0 !important;
+    }
+
+    table.m-cards td::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        max-width: 42%;
+        padding-top: 0.0625rem;
+        color: #64748b;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-align: left;
+        text-transform: uppercase;
+    }
+
+    /* Ô không có tiêu đề / gộp cột: chiếm cả hàng, không nhãn. */
+    table.m-cards td.m-cell-wide {
+        justify-content: flex-start;
+        text-align: left !important;
+    }
+
+    table.m-cards td.m-cell-wide::before {
+        display: none;
+    }
+
+    /* Ô thao tác: nút biểu tượng nằm gọn một hàng ở cuối thẻ. */
+    table.m-cards td.m-cell-actions {
+        justify-content: flex-end;
+        margin-top: 0.125rem;
+        padding-top: 0.5rem !important;
+        border-top: 1px solid #e2e8f0 !important;
+        border-bottom: 0 !important;
+    }
+
+    table.m-cards td.m-cell-actions::before {
+        display: none;
+    }
+
+    table.m-cards td > * {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* Bảng nằm trong khung cuộn ngang: khi đã là thẻ thì không cần cuộn ngang nữa. */
+    .overflow-x-auto:has(> table.m-cards) {
+        overflow-x: visible;
+    }
 }

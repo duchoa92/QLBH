@@ -12,7 +12,8 @@ import ModalRoot from '@/Components/ModalRoot.vue'
 import { formatMoney, formatCurrency, formatDate, formatDateTime, getCurrencySymbol, setFormatSettings } from '@/utils/format'
 import { notifyReferenceDataChanged } from '@/Stores/referenceData'
 import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
-import { installInsecureNotice } from '@/utils/insecureNotice'
+import { installInsecureNotice, syncInsecureNotice } from '@/utils/insecureNotice'
+import { installMobileTables } from '@/utils/mobileTables'
 
 const AdminLayout = defineAsyncComponent(() => import('@/Layouts/AdminLayout.vue'))
 const pageComponents = import.meta.glob([
@@ -38,6 +39,7 @@ const pageComponents = import.meta.glob([
 
 installAppPathSupport(router)
 installInsecureNotice()
+installMobileTables()
 
 if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname === 'localhost')) {
     navigator.serviceWorker.register(new URL('service-worker.js', appBaseUrl), {
@@ -307,6 +309,7 @@ createInertiaApp({
         router.on('navigate', (event) => {
             const currentPage = event.detail.page
             applyPageSettings(currentPage)
+            syncInsecureNotice()
             resolvedDocumentTitle = pageTitleFor(currentPage)
             document.title = resolvedDocumentTitle
             navigator.serviceWorker?.controller?.postMessage({

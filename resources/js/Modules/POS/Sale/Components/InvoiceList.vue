@@ -185,7 +185,7 @@ const refreshInvoices = () => {
 
         <div class="min-h-0 flex-1 overflow-auto px-3 sm:px-4">
         <div class="overflow-x-auto">
-        <table class="w-full min-w-[640px] table-fixed text-sm">
+        <table class="m-cards w-full min-w-[640px] table-fixed text-sm">
             <colgroup>
                 <col class="w-[20%]" /><col class="w-[20%]" /><col class="w-[16%]" /><col class="w-[18%]" /><col class="w-[14%]" /><col class="w-[12%]" />
             </colgroup>
