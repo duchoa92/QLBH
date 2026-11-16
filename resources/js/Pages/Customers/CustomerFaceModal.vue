@@ -7,7 +7,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import api from '@/Services/api'
 import {
-    blobToCanvas, cameraErrorMessage, detectFace, detectStill, faceStatusMessage, loadFaceApi, makeThumbnail, startCamera, stopCamera,
+    blobToCanvas, cameraErrorMessage, detectFace, detectStill, faceStatusMessage, loadFaceModels, makeThumbnail, startCamera, stopCamera,
 } from '@/utils/faceRecognition'
 
 /**
@@ -88,7 +88,7 @@ const toggleCamera = async () => {
     }
     cameraStarting.value = true
     try {
-        await loadFaceApi()
+        await loadFaceModels()
         cameraOn.value = true
         await new Promise(resolve => setTimeout(resolve, 0)) // chờ thẻ video hiện ra
         stream = await startCamera(video.value)

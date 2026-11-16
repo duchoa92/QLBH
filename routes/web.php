@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\DoorCameraSettingsController;
 use App\Http\Controllers\Setup\InstallerController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\BackupCloudOAuthController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\WorkShiftController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\CustomerVisitController;
 use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\ProductImeiController;
 use App\Http\Controllers\ProfileController;
@@ -81,6 +83,8 @@ Route::middleware(['auth'])->group(function () {
     // Settings
     Route::get('/settings', [SettingController::class, 'index'])->middleware('permission:settings.view')->name('settings.index');
     Route::post('/settings', [SettingController::class, 'update'])->middleware('permission:settings.edit|payment_accounts.manage|units.manage')->name('settings.update');
+    Route::get('/settings/door-camera/status', [DoorCameraSettingsController::class, 'status'])->middleware('permission:settings.edit')->name('settings.door-camera.status');
+    Route::post('/settings/door-camera/key', [DoorCameraSettingsController::class, 'regenerateKey'])->middleware('permission:settings.edit')->name('settings.door-camera.key');
     Route::get('/settings/system-cleanup/scan', [SystemCleanupController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.cleanup.scan');
     Route::delete('/settings/system-cleanup', [SystemCleanupController::class, 'destroy'])->middleware('permission:settings.edit')->name('settings.cleanup.destroy');
     Route::get('/backups', [BackupController::class, 'index'])->middleware('permission:backups.manage')->name('backups.index');
@@ -327,6 +331,10 @@ Route::middleware(['auth'])->group(function () {
         ->middlewareFor(['edit', 'update'], 'permission:customers.edit')
         ->middlewareFor('destroy', 'permission:customers.delete');
     Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
+
+    // Thống kê lượt khách ra vào (camera POS) và gán tên cho khách lạ.
+    Route::get('/customer-visits', [CustomerVisitController::class, 'index'])->middleware('permission:customers.view')->name('customer-visits.index');
+    Route::delete('/customer-visits/{visit}', [CustomerVisitController::class, 'destroy'])->middleware('permission:customers.edit')->name('customer-visits.destroy');
     Route::patch('/customers/{customer}/block', [CustomerController::class, 'toggleBlock'])->name('customers.block');
 
     Route::get('/debts/customers', [DebtPaymentController::class, 'customers'])->middleware('permission:customer_debts.view')->name('debts.customers');

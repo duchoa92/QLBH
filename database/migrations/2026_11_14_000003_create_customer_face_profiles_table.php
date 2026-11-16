@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('customer_face_profiles', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
-            // Chỉ lưu vector đặc trưng 128 số, KHÔNG lưu ảnh khuôn mặt.
+            // Chỉ lưu vector đặc trưng (Human), KHÔNG lưu ảnh khuôn mặt.
             $table->json('descriptor');
             // Khách đã đồng ý lưu dữ liệu nhận diện: thời điểm và nhân viên ghi nhận.
             $table->timestamp('consented_at');

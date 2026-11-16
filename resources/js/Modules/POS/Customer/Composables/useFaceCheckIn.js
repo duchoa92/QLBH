@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import api from '@/Services/api'
-import { cameraErrorMessage, cropThumbnail, detectFaces, loadFaceApi, startCamera, stopCamera } from '@/utils/faceRecognition'
+import { cameraErrorMessage, cropThumbnail, detectFaces, loadFaceModels, startCamera, stopCamera } from '@/utils/faceRecognition'
 
 /**
  * Tự nhận ra khách đã đăng ký khuôn mặt khi họ đứng trước camera POS — nhiều người cùng lúc cũng được.
@@ -27,23 +27,28 @@ const UNKNOWN_RETRY = 6000 // khách chưa đăng ký: thử lại sau (phòng k
 const AMBIGUOUS_RETRY = 2500
 const SUGGESTION_TTL = 25000
 const DISMISS_COOLDOWN = 60000
+const SUGGESTION_RETRY = 8000 // gợi ý hết hạn mà chưa ai bấm: nhắc lại sau
 
 const FACING_KEY = 'pos.faceCheckIn.facing'
 const readFacing = () => { try { return localStorage.getItem(FACING_KEY) === 'environment' ? 'environment' : 'user' } catch { return 'user' } }
-const readEnabled = () => { try { return localStorage.getItem(STORAGE_KEY) === '1' } catch { return false } }
+const readEnabled = (key) => { try { return localStorage.getItem(key) === '1' } catch { return false } }
 
-export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = {}) => {
+export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {}, currentCustomerId = () => null, storageKey = STORAGE_KEY, onVisit = () => {} } = {}) => {
     const page = usePage()
     // Tính năng có được chủ cửa hàng bật trong Cài đặt không (mặc định tắt).
     const featureOn = computed(() => !!page.props.settings?.face_recognition_enabled)
-    const enabled = ref(readEnabled())
+    const enabled = ref(readEnabled(storageKey))
     const active = computed(() => featureOn.value && enabled.value)
+    // Ghi nhận lượt khách ra vào (Cài đặt → Khách hàng): mặc định tắt.
+    const trackingOn = computed(() => !!page.props.settings?.face_visit_tracking_enabled)
     const failed = ref(false)
     const facing = ref(readFacing()) // 'user' = camera trước, 'environment' = camera sau
     const switching = ref(false)
     const status = ref('')
     const tone = ref('idle') // idle | scanning | found | error
     const suggestions = ref([])
+    const liveFaces = ref([]) // khuôn mặt đang thấy trong khung hình (vẽ khung bắt mặt trên trang thống kê)
+    const queue = ref([]) // khách đang đứng chờ (đã nhận ra nhưng chưa được chọn, hoặc chưa có dữ liệu)
 
     let stream = null
     let analysis = null // <video> ẩn dùng để phân tích, tồn tại độc lập với giao diện
@@ -55,6 +60,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
     let tracks = []
     let nextTrackId = 1
     const dismissed = new Map() // customerId -> thời điểm bỏ qua
+    let servedId = null // khách vừa được chọn cho đơn hiện tại
 
     const statusText = computed(() => {
         if (failed.value) return status.value
@@ -115,6 +121,38 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
         }
     }
 
+    /* ---------------- ghi nhận lượt khách ra vào ---------------- */
+    const sendLeft = (track) => {
+        if (!track.visitId) {
+            if (track.visitSent) track.leftPending = true // đang gửi dở: gửi "đã rời" ngay khi có mã
+            return
+        }
+        if (track.leftSent) return
+        track.leftSent = true
+        api.post(`/api/customers/visits/${track.visitId}/left`).catch(() => {})
+    }
+
+    const recordVisit = async (track) => {
+        if (!trackingOn.value || track.visitId || track.visitSent) return
+        const payload = { thumb: track.thumb || null }
+        if (track.match) payload.customer_id = track.match.customer.id
+        else if (track.samples[0]?.descriptor) payload.descriptor = track.samples[0].descriptor
+        else return
+
+        track.visitSent = true
+        try {
+            const { data } = await api.post('/api/customers/visits', payload)
+            if (data?.recorded) {
+                track.visitId = data.id
+                if (track.leftPending) sendLeft(track)
+                refreshQueue()
+                onVisit(data)
+            }
+        } catch {
+            track.visitSent = false // lần nhận diện sau sẽ thử lại
+        }
+    }
+
     const updateTracks = (faces, now) => {
         const used = new Set()
         for (const face of faces) {
@@ -129,6 +167,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
             track.hits += 1
 
             // Mặt đã có kết quả thì không cần thêm mẫu; mặt đang chờ thử lại bắt đầu thu mẫu mới khi tới giờ.
+            if (track.served) continue
             if (track.state === 'waiting' && now >= track.retryAt) {
                 track.state = 'collecting'
                 track.samples = []
@@ -137,7 +176,11 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
             }
             if (track.state === 'collecting') addSample(track, face)
         }
-        tracks = tracks.filter(track => now - track.lastSeen < TRACK_TTL)
+        const gone = tracks.filter(track => now - track.lastSeen >= TRACK_TTL)
+        if (gone.length) {
+            gone.forEach(sendLeft)
+            tracks = tracks.filter(track => now - track.lastSeen < TRACK_TTL)
+        }
     }
 
     const isReady = (track, now) => {
@@ -154,10 +197,17 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
     }
 
     const buildSuggestions = (now) => {
+        // Đang phục vụ khách khác thì không bật gợi ý; những người này nằm trong hàng chờ.
+        if (paused()) {
+            suggestions.value = []
+            clearTimeout(suggestionTimer)
+            refreshQueue(now)
+            return
+        }
         const list = []
         const seen = new Set()
         const matched = tracks
-            .filter(track => track.state === 'matched' && track.match)
+            .filter(track => track.state === 'matched' && track.match && !track.served)
             .sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height) // người gần camera nhất đứng đầu
 
         for (const track of matched) {
@@ -168,7 +218,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
                 track.retryAt = skippedAt + DISMISS_COOLDOWN
                 continue
             }
-            if (seen.has(customer.id)) continue
+            if (seen.has(customer.id) || customer.id === currentCustomerId()) continue
             seen.add(customer.id)
             list.push({
                 trackId: track.id,
@@ -185,15 +235,58 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
             tone.value = 'found'
             status.value = list.length > 1 ? `Nhận ra ${list.length} khách` : 'Đã nhận ra khách'
             suggestionTimer = setTimeout(() => {
-                // Hết thời gian mà chưa ai xác nhận: bỏ gợi ý, các mặt này sẽ được nhận lại khi cần.
+                // Hết thời gian mà chưa ai xác nhận: bỏ gợi ý, người đó chuyển xuống hàng chờ và được nhắc lại sau.
+                const retryAt = Date.now() + SUGGESTION_RETRY
+                suggestions.value.forEach((item) => {
+                    const track = tracks.find(other => other.id === item.trackId)
+                    if (track) { track.state = 'waiting'; track.retryAt = retryAt }
+                })
                 clearSuggestions()
-                resetTracks()
+                refreshQueue()
             }, SUGGESTION_TTL)
         }
+        refreshQueue(now)
+    }
+
+    /* ---------------- hàng chờ ---------------- */
+    const refreshQueue = (now = Date.now()) => {
+        const inSuggestion = new Set(suggestions.value.map(item => item.trackId))
+        const list = []
+        const knownIds = new Set()
+        const ordered = [...tracks].sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height)
+        for (const track of ordered) {
+            if (track.served || inSuggestion.has(track.id)) continue
+            const base = { trackId: track.id, thumb: track.thumb, descriptor: track.samples[0]?.descriptor || null, visitId: track.visitId || null }
+            if (track.match && (track.state === 'matched' || track.state === 'waiting')) {
+                const customer = track.match.customer
+                const skippedAt = dismissed.get(customer.id)
+                if (skippedAt && now - skippedAt < DISMISS_COOLDOWN) continue
+                if (customer.id === currentCustomerId() || knownIds.has(customer.id)) continue
+                knownIds.add(customer.id)
+                list.push({ ...base, kind: 'known', customer, confidence: track.match.confidence })
+            } else if (!track.match && track.unregistered && track.state === 'waiting') {
+                list.push({ ...base, kind: 'unknown', customer: null })
+            }
+        }
+        const signature = items => items.map(item => `${item.trackId}:${item.kind}:${item.customer?.id || ''}:${item.visitId || ''}:${item.thumb ? 1 : 0}`).join('|')
+        if (signature(list) !== signature(queue.value)) queue.value = list
+    }
+
+    // Khách chưa có dữ liệu vừa được nhập thông tin: gỡ khỏi hàng chờ, không hỏi lại.
+    const markServed = (item, customer = null) => {
+        const track = tracks.find(other => other.id === item?.trackId)
+        if (track) {
+            track.served = true
+            if (customer) track.match = { customer, confidence: 1 }
+        }
+        if (customer?.id) dismissed.set(customer.id, Date.now())
+        refreshQueue()
     }
 
     const resetTracks = () => {
+        tracks.forEach(sendLeft)
         tracks = []
+        queue.value = []
     }
 
     const resolveTracks = async (now) => {
@@ -215,7 +308,9 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
                 if (result?.matched && result.customer) {
                     track.state = 'matched'
                     track.match = { customer: result.customer, confidence: result.confidence }
+                    track.unregistered = false
                 } else {
+                    track.match = null
                     track.state = 'waiting'
                     track.retryAt = now + (result?.ambiguous ? AMBIGUOUS_RETRY : UNKNOWN_RETRY)
                     track.unregistered = !result?.ambiguous
@@ -227,7 +322,32 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
             throw error
         }
 
+        ready.forEach((track) => {
+            if (track.match || track.unregistered) recordVisit(track)
+        })
         buildSuggestions(now)
+    }
+
+    const publishLive = (now) => {
+        const width = analysis?.videoWidth || 0
+        const height = analysis?.videoHeight || 0
+        if (!width || !height) { liveFaces.value = []; return }
+        liveFaces.value = tracks
+            .filter(track => now - track.lastSeen < TRACK_TTL)
+            .map((track) => {
+                const known = track.match && (track.state === 'matched' || track.state === 'waiting' || track.served)
+                const unknown = !known && track.unregistered && track.state === 'waiting'
+                return {
+                    id: track.id,
+                    x: track.box.x / width,
+                    y: track.box.y / height,
+                    w: track.box.width / width,
+                    h: track.box.height / height,
+                    kind: known ? 'known' : (unknown ? 'unknown' : 'scanning'),
+                    label: known ? track.match.customer.full_name : (unknown ? `Khách mới${track.visitId ? ` #${track.visitId}` : ''}` : 'Đang nhận diện…'),
+                    thumb: track.thumb,
+                }
+            })
     }
 
     const describeStatus = (tooSmall) => {
@@ -272,7 +392,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
     const cycle = async () => {
         if (!running) return
         if (busy) return schedule(200)
-        if (document.hidden || paused() || suggestions.value.length || !analysis || analysis.readyState < 2) return schedule(400)
+        if (document.hidden || !analysis || analysis.readyState < 2) return schedule(400)
 
         busy = true
         const startedAt = performance.now()
@@ -283,6 +403,8 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
             updateTracks(faces, now)
             await resolveTracks(now)
             describeStatus(tooSmall)
+            refreshQueue(now)
+            publishLive(now)
 
             if (!faces.length) delay = IDLE_DELAY
             else if (tracks.every(track => track.state === 'waiting' || track.state === 'matched')) delay = RESOLVED_DELAY
@@ -301,7 +423,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
         status.value = 'Đang mở camera…'
         tone.value = 'scanning'
         try {
-            await loadFaceApi()
+            await loadFaceModels()
             analysis = createAnalysisVideo()
             stream = await startCamera(analysis, facing.value)
             if (previewEl) attachPreview(previewEl)
@@ -326,6 +448,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
         analysis = null
         if (previewEl) previewEl.srcObject = null
         resetTracks()
+        liveFaces.value = []
         clearSuggestions()
     }
 
@@ -345,18 +468,21 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
 
     const toggle = () => {
         enabled.value = !enabled.value
-        try { localStorage.setItem(STORAGE_KEY, enabled.value ? '1' : '0') } catch { /* bỏ qua */ }
+        try { localStorage.setItem(storageKey, enabled.value ? '1' : '0') } catch { /* bỏ qua */ }
     }
 
     /* ---------------- thao tác của nhân viên ---------------- */
     const confirm = (suggestion) => {
         if (!suggestion) return
         clearSuggestions()
+        dismissed.set(suggestion.customer.id, Date.now())
+        const served = tracks.find(track => track.id === suggestion.trackId)
+        if (served) served.served = true
         onConfirm(suggestion.customer)
         // Nhân viên xác nhận đúng người: lưu thêm mẫu này để lần sau nhận chính xác hơn (máy chủ tự kiểm tra và giới hạn số mẫu).
         if (suggestion.descriptor) api.post(`/api/customers/${suggestion.customer.id}/face-feedback`, { descriptor: suggestion.descriptor }).catch(() => {})
-        // Những người còn lại trước camera sẽ được nhận lại cho đơn kế tiếp.
-        resetTracks()
+        // Những người còn lại trước camera giữ nguyên trong hàng chờ cho đơn kế tiếp.
+        refreshQueue()
     }
 
     const dismiss = (suggestion) => {
@@ -373,6 +499,7 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
             status.value = 'Đang chờ khách…'
             tone.value = 'idle'
         }
+        refreshQueue()
     }
 
     const dismissAll = () => {
@@ -382,10 +509,13 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
     watch(active, (value) => { value ? start() : stop() }, { immediate: true })
 
     // Đơn trước thanh toán xong (khách được bỏ chọn): nhận lại những người đang đứng trước camera.
+    watch(currentCustomerId, (id) => { if (id) servedId = id })
     watch(() => paused(), (value, previous) => {
         if (previous && !value) {
-            resetTracks()
-            clearSuggestions()
+            // Người vừa thanh toán có thể vẫn đứng đó: không hỏi lại ngay. Những người còn lại được gợi ý tiếp.
+            if (servedId) dismissed.set(servedId, Date.now())
+            servedId = null
+            buildSuggestions(Date.now())
         }
     })
 
@@ -400,6 +530,8 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
         switching,
         tone,
         suggestions,
+        queue,
+        liveFaces,
         statusText,
         attachPreview,
         toggle,
@@ -407,5 +539,6 @@ export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {} } = 
         confirm,
         dismiss,
         dismissAll,
+        markServed,
     }
 }

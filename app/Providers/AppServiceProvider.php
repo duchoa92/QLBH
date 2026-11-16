@@ -65,6 +65,11 @@ class AppServiceProvider extends ServiceProvider
                 'face_recognition_enabled' => filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 // Khi nhận ra khách bằng khuôn mặt: hiện thêm hộp thông báo chi tiết (mặc định TẮT, giữ cách hỏi ngay trong ô khách).
                 'face_notify_modal_enabled' => filter_var(setting('face_notify_modal_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                // Ghi nhận lượt khách trước camera POS (kể cả khách lạ) để thống kê; mặc định TẮT.
+                'face_visit_tracking_enabled' => filter_var(setting('face_visit_tracking_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                // POS không mở camera mà đọc "ai đang ở cửa" từ máy chủ (worker camera cửa lo nhận diện); mặc định TẮT.
+                'face_door_camera_enabled' => filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'face_visit_retention_days' => min(365, max(1, (int) setting('face_visit_retention_days', 30))),
                 'bank_bin' => setting('bank_bin', ''),
                 'bank_account' => setting('bank_account', ''),
                 'bank_account_name' => setting('bank_account_name', ''),

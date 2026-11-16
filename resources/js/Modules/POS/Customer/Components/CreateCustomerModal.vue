@@ -11,6 +11,14 @@ const props = defineProps({
         type: String,
         default: '',
     },
+
+    // Khách chưa có dữ liệu được nhận diện bằng camera: hiện ảnh và hỏi đồng ý lưu khuôn mặt.
+    faceThumb: {
+        type: String,
+        default: '',
+    },
+
+    askFaceConsent: Boolean,
 })
 
 const emit = defineEmits([
@@ -21,6 +29,7 @@ const emit = defineEmits([
 
 const fullName = ref('')
 const phone = ref('')
+const faceConsent = ref(false)
 
 watch(
 
@@ -35,6 +44,7 @@ watch(
 
         fullName.value = props.keyword
         phone.value = ''
+        faceConsent.value = false
     }
 )
 
@@ -45,6 +55,7 @@ const submit = () => {
         {
             full_name: fullName.value,
             phone: phone.value,
+            ...(props.askFaceConsent ? { face_consent: faceConsent.value } : {}),
         }
     )
 }
@@ -71,6 +82,10 @@ const openFullDetail = () => {
         </button>
     </div>
     <div class="space-y-4">
+        <div v-if="faceThumb" class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-2">
+            <img :src="faceThumb" alt="" class="h-14 w-14 shrink-0 rounded-full object-cover">
+            <p class="text-xs text-amber-800">Khách này chưa có dữ liệu khuôn mặt. Nhập thông tin để lưu khách.</p>
+        </div>
         <label class="block text-sm font-semibold text-slate-700">
             Họ tên
             <input v-model="fullName" class="mt-1 w-full rounded-lg border border-slate-300 p-3 font-normal">
@@ -78,6 +93,10 @@ const openFullDetail = () => {
         <label class="block text-sm font-semibold text-slate-700">
             Số điện thoại
             <input v-model="phone" class="mt-1 w-full rounded-lg border border-slate-300 p-3 font-normal">
+        </label>
+        <label v-if="askFaceConsent" class="flex min-h-11 items-start gap-2 text-sm text-slate-700">
+            <input v-model="faceConsent" type="checkbox" class="mt-1 h-4 w-4 shrink-0">
+            <span>Khách đồng ý lưu khuôn mặt để nhận ra lần sau</span>
         </label>
     </div>
     <template #footer>

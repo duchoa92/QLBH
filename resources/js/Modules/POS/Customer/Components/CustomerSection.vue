@@ -11,7 +11,8 @@ import CustomerDebtModal from './CustomerDebtModal.vue'
 import { customerDebtService } from '../Services/customerDebtService'
 import { useCustomerSearch } from '@/Modules/POS/Customer/Composables/useCustomerSearch.js'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
-import { ScanFace, RefreshCw, User, UserRoundPlus } from 'lucide-vue-next'
+import { ScanFace, RefreshCw, User, UserRoundPlus, UsersRound } from 'lucide-vue-next'
+import api from '@/Services/api'
 import CreateCustomerModal from './CreateCustomerModal.vue'
 import { customerService } from '../Services/customerService'
 import { openModal } from '@/Stores/modal'
@@ -21,8 +22,12 @@ import FaceSuggestionPanel from './FaceSuggestionPanel.vue'
 import FaceDetectedModal from './FaceDetectedModal.vue'
 import { usePage } from '@inertiajs/vue3'
 import { useFaceCheckIn } from '../Composables/useFaceCheckIn'
+import { useDoorQueue } from '../Composables/useDoorQueue'
 
 const page = usePage()
+
+// Camera cửa: worker trên máy chủ lo nhận diện, POS không mở camera mà chỉ đọc "ai đang ở cửa" (cài đặt đọc lúc tải trang).
+const doorMode = !!page.props.settings?.face_door_camera_enabled
 
 // Cài đặt → Khách hàng: hiện hộp thông báo chi tiết thay cho phần hỏi trong ô khách hàng.
 const faceModalOn = computed(() => !!page.props.settings?.face_notify_modal_enabled)
@@ -67,6 +72,8 @@ const {
     switching: faceSwitching,
     tone: faceTone,
     suggestions: faceSuggestions,
+    queue: faceQueue,
+    markServed: markFaceServed,
     statusText: faceStatusText,
     attachPreview: attachFacePreview,
     toggle: toggleFace,
@@ -74,8 +81,9 @@ const {
     confirm: confirmFace,
     dismiss: dismissFace,
     dismissAll: dismissAllFaces,
-} = useFaceCheckIn({
+} = (doorMode ? useDoorQueue : useFaceCheckIn)({
     paused: () => !!props.customer || !!keyword.value.trim(),
+    currentCustomerId: () => props.customer?.id || null,
     onConfirm: customer => selectCustomer(customer),
 })
 
@@ -154,6 +162,39 @@ const openDebtModal = async () => {
 // Mở modal tạo KH
 const showCreateCustomerModal = ref(false)
 
+// Hàng chờ khách (nhận diện): bấm khách quen để chọn, bấm khách chưa có dữ liệu để nhập thông tin.
+const queueTarget = ref(null)
+const openQueueItem = (item) => {
+    if (props.customer) return
+    if (item.kind === 'known') {
+        confirmFace(item)
+        return
+    }
+    queueTarget.value = item
+    showCreateCustomerModal.value = true
+}
+const closeCreateModal = () => {
+    showCreateCustomerModal.value = false
+    queueTarget.value = null
+}
+// Gán lượt khách (và khuôn mặt nếu khách đồng ý) vào khách vừa tạo.
+const linkQueueTarget = async (customer, consent) => {
+    const target = queueTarget.value
+    queueTarget.value = null
+    if (!target) return
+    if (target.visitId) {
+        try {
+            await api.post(`/api/customers/visits/${target.visitId}/link`, { customer_id: customer.id, consent: !!consent })
+        } catch (error) {
+            console.error(error)
+        }
+    } else if (consent && target.descriptor) {
+        // Chưa kịp ghi lượt khách: vẫn lưu khuôn mặt cho khách vừa tạo (cùng cơ chế "xác nhận đúng người").
+        api.post(`/api/customers/${customer.id}/face-feedback`, { descriptor: target.descriptor }).catch(() => {})
+    }
+    markFaceServed(target, customer)
+}
+
 // Tạo ref cho vùng tìm kiếm
 const customerSearchRef = ref(null)
 
@@ -169,6 +210,7 @@ const onSearchInput = () => {
 const showResults = computed(() => customers.value.length > 0 || (addRowOpen.value && !!keyword.value.trim()))
 // Mở modal trước, rồi mới đóng danh sách (đóng trước sẽ gỡ nút khỏi trang giữa lúc đang bấm).
 const startCreateCustomer = () => {
+    queueTarget.value = null
     if (identityPrefill.value) openFullCustomerModal(identityPrefill.value)
     else showCreateCustomerModal.value = true
 
@@ -181,16 +223,20 @@ const startCreateCustomer = () => {
 
 // Lưu KH
 const saveCustomer = async (
-    data
+    payload
 ) => {
 
     try {
+
+        const { face_consent: faceConsent, ...data } = payload || {}
 
         const customer =
 
             await customerService.create(
                 data
             )
+
+        await linkQueueTarget(customer, faceConsent)
 
         selectCustomer(
             customer
@@ -231,6 +277,7 @@ const openFullCustomerModal = (
 
             if (customer) {
 
+                linkQueueTarget(customer, false)
                 selectCustomer(customer)
             }
         },
@@ -323,7 +370,7 @@ onBeforeUnmount(() => {
                 <div v-show="!inlineFaceAsk" ref="customerSearchRef" class="flex items-center gap-2">
                     <!-- Khung camera nằm riêng bên trái ô nhập (không che chữ). Nhấp vào để đổi camera trước / sau. -->
                     <button
-                        v-if="faceActive"
+                        v-if="faceActive && !doorMode"
                         type="button"
                         class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 ring-2 transition active:scale-95 disabled:opacity-60"
                         :class="facePreviewRing"
@@ -421,6 +468,33 @@ onBeforeUnmount(() => {
             </div>            
         </div>
 
+        <!-- Hàng chờ: những khách đứng sau trước camera (đã nhận ra hoặc chưa có dữ liệu) -->
+        <div v-if="faceActive && faceQueue.length" class="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <div class="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <UsersRound class="h-3.5 w-3.5" />
+                Khách đang chờ ({{ faceQueue.length }})
+            </div>
+            <div class="flex gap-2 overflow-x-auto pb-1">
+                <button
+                    v-for="item in faceQueue"
+                    :key="item.trackId"
+                    type="button"
+                    :disabled="!!props.customer"
+                    class="flex min-h-11 max-w-[11rem] shrink-0 items-center gap-2 rounded-lg border bg-white px-2 py-1 text-left transition active:scale-95 disabled:opacity-60"
+                    :class="item.kind === 'known' ? 'border-emerald-200' : 'border-amber-300'"
+                    :title="props.customer ? 'Hoàn tất đơn hiện tại trước' : (item.kind === 'known' ? 'Chọn khách này' : 'Khách chưa có dữ liệu — bấm để nhập thông tin')"
+                    @click="openQueueItem(item)"
+                >
+                    <img v-if="item.thumb" :src="item.thumb" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
+                    <span v-else class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-500"><User class="h-4 w-4" /></span>
+                    <span class="min-w-0">
+                        <span class="block truncate text-xs font-semibold text-slate-800">{{ item.kind === 'known' ? item.customer.full_name : 'Khách mới' }}</span>
+                        <span class="block truncate text-[11px]" :class="item.kind === 'known' ? 'text-emerald-600' : 'text-amber-600'">{{ item.kind === 'known' ? 'Đã nhận ra' : 'Chưa có dữ liệu' }}</span>
+                    </span>
+                </button>
+            </div>
+        </div>
+
     </div>
 
 <FaceDetectedModal
@@ -446,8 +520,10 @@ onBeforeUnmount(() => {
 
 <CreateCustomerModal
     :show="showCreateCustomerModal"
-    :keyword="keyword"
-    @close="showCreateCustomerModal = false"
+    :keyword="queueTarget ? '' : keyword"
+    :face-thumb="queueTarget?.thumb || ''"
+    :ask-face-consent="!!queueTarget"
+    @close="closeCreateModal"
     @save="saveCustomer"
     @full-detail="openFullCustomerModal"
 />

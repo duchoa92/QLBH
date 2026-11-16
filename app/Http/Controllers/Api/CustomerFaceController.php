@@ -7,22 +7,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
+use App\Support\FaceMatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Nhận diện khách hàng bằng khuôn mặt (chỉ khi khách đã đồng ý).
  *
- * - Trình duyệt tính vector đặc trưng 128 số bằng face-api (không gửi ảnh lên máy chủ).
+ * - Trình duyệt và worker camera cửa tính vector đặc trưng bằng Human (không gửi ảnh lên máy chủ).
  * - Máy chủ chỉ lưu vector, so khớp phía server nên vector của khách khác không bao giờ gửi xuống POS.
  */
 class CustomerFaceController extends Controller
 {
-    private const DESCRIPTOR_SIZE = 128;
-
     /** Tối đa 5 ảnh/mẫu đăng ký, mỗi ảnh có thể kèm bản lật gương nên tối đa 10 vector. */
     private const MAX_SAMPLES = 10;
 
@@ -33,16 +33,6 @@ class CustomerFaceController extends Controller
     /** Số mẫu tự học (sau khi nhân viên xác nhận ở POS) giữ lại tối đa cho mỗi khách. */
     private const MAX_AUTO_SAMPLES = 5;
 
-    /** Chỉ tự học khi vector mới đủ gần khách đó nhưng chưa trùng hẳn mẫu đã có. */
-    private const FEEDBACK_MAX_DISTANCE = 0.55;
-    private const FEEDBACK_MIN_NOVELTY = 0.12;
-
-    /** Khoảng cách Euclid tối đa coi là cùng người (face-api khuyến nghị ≤ 0.6; dùng 0.5 cho chặt hơn). */
-    private const MATCH_THRESHOLD = 0.5;
-
-    /** Người gần nhất phải hơn người gần nhì ít nhất mức này, nếu không coi là chưa chắc chắn. */
-    private const MIN_MARGIN = 0.04;
-
     public function status(Customer $customer): JsonResponse
     {
         $profiles = CustomerFaceProfile::query()->where('customer_id', $customer->id)->get(['id', 'consented_at']);
@@ -52,7 +42,8 @@ class CustomerFaceController extends Controller
             'samples' => $profiles->count(),
             'consented_at' => $profiles->max('consented_at')?->toIso8601String(),
             // Có cấu hình camera an ninh (địa chỉ ảnh chụp) trong Cài đặt hay chưa.
-            'cctv_configured' => filled(setting('face_cctv_snapshot_url')),
+            // Chỉ địa chỉ ảnh chụp http/https mới lấy được ảnh ở đây; địa chỉ RTSP dành cho worker camera cửa.
+            'cctv_configured' => (bool) preg_match('#^https?://#i', trim((string) setting('face_cctv_snapshot_url', ''))),
         ]);
     }
 
@@ -65,8 +56,8 @@ class CustomerFaceController extends Controller
         $data = $request->validate([
             'consent' => ['required', 'accepted'],
             'descriptors' => ['required', 'array', 'min:1', 'max:'.self::MAX_SAMPLES],
-            'descriptors.*' => ['required', 'array', 'size:'.self::DESCRIPTOR_SIZE],
-            'descriptors.*.*' => ['required', 'numeric', 'between:-5,5'],
+            'descriptors.*' => ['required', 'array', ...$this->sizeRules()],
+            'descriptors.*.*' => ['required', 'numeric', $this->valueRule()],
         ], [
             'consent.accepted' => 'Cần có sự đồng ý của khách hàng trước khi lưu dữ liệu khuôn mặt.',
         ]);
@@ -102,6 +93,9 @@ class CustomerFaceController extends Controller
         }
 
         $url = trim((string) setting('face_cctv_snapshot_url', ''));
+        if (preg_match('#^rtsps?://#i', $url)) {
+            return response()->json(['message' => 'Camera đang dùng địa chỉ RTSP nên chỉ worker camera cửa đọc được. Muốn lấy ảnh đăng ký khuôn mặt từ camera, hãy nhập thêm địa chỉ ảnh chụp http của camera.'], 422);
+        }
         if ($url === '' || ! preg_match('#^https?://#i', $url)) {
             return response()->json(['message' => 'Chưa cấu hình địa chỉ ảnh chụp camera an ninh trong Thiết lập → Khách hàng.'], 422);
         }
@@ -154,8 +148,8 @@ class CustomerFaceController extends Controller
         }
 
         $data = $request->validate([
-            'descriptor' => ['required', 'array', 'size:'.self::DESCRIPTOR_SIZE],
-            'descriptor.*' => ['required', 'numeric', 'between:-5,5'],
+            'descriptor' => ['required', 'array', ...$this->sizeRules()],
+            'descriptor.*' => ['required', 'numeric', $this->valueRule()],
         ]);
         $probe = array_map('floatval', $data['descriptor']);
 
@@ -164,9 +158,9 @@ class CustomerFaceController extends Controller
             return response()->json(['added' => false, 'reason' => 'not_registered']);
         }
 
-        $nearest = $profiles->map(fn ($profile) => $this->distance($probe, $profile->descriptor))->min();
-        if ($nearest > self::FEEDBACK_MAX_DISTANCE || $nearest < self::FEEDBACK_MIN_NOVELTY) {
-            return response()->json(['added' => false, 'reason' => $nearest < self::FEEDBACK_MIN_NOVELTY ? 'duplicate' : 'too_far']);
+        $best = $profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max();
+        if ($best < (float) config('face.feedback_min_similarity') || $best >= (float) config('face.feedback_duplicate_similarity')) {
+            return response()->json(['added' => false, 'reason' => $best >= (float) config('face.feedback_duplicate_similarity') ? 'duplicate' : 'too_far']);
         }
 
         DB::transaction(function () use ($customer, $probe, $profiles): void {
@@ -209,13 +203,13 @@ class CustomerFaceController extends Controller
         }
 
         $data = $request->validate([
-            'descriptor' => ['required_without:faces', 'array', 'size:'.self::DESCRIPTOR_SIZE],
-            'descriptor.*' => ['required', 'numeric', 'between:-5,5'],
+            'descriptor' => ['required_without:faces', 'array', ...$this->sizeRules()],
+            'descriptor.*' => ['required', 'numeric', $this->valueRule()],
             'faces' => ['required_without:descriptor', 'array', 'min:1', 'max:'.self::MAX_FACES],
             'faces.*.key' => ['required'],
             'faces.*.descriptors' => ['required', 'array', 'min:1', 'max:'.self::MAX_PROBES],
-            'faces.*.descriptors.*' => ['required', 'array', 'size:'.self::DESCRIPTOR_SIZE],
-            'faces.*.descriptors.*.*' => ['required', 'numeric', 'between:-5,5'],
+            'faces.*.descriptors.*' => ['required', 'array', ...$this->sizeRules()],
+            'faces.*.descriptors.*.*' => ['required', 'numeric', $this->valueRule()],
         ]);
 
         $legacy = isset($data['descriptor']);
@@ -239,6 +233,9 @@ class CustomerFaceController extends Controller
                 $face['descriptors'] ?? [$face]
             );
             $outcome = $this->matchFace($probes, $bank);
+            if (config('face.log_scores')) {
+                Log::info('face.match', ['key' => $face['key'], 'best_similarity' => $outcome['best'] ?? null, 'matched' => isset($outcome['customer_id']), 'ambiguous' => ! empty($outcome['ambiguous'])]);
+            }
             $outcome['key'] = $face['key'];
             $outcomes[] = $outcome;
             if (isset($outcome['customer_id'])) {
@@ -276,12 +273,12 @@ class CustomerFaceController extends Controller
 
     /**
      * So khớp 1 người (nhiều vector từ nhiều khung hình) với toàn bộ khách đã đăng ký.
-     * Điểm của mỗi khách = trung bình các khoảng cách tốt nhất (nửa số vector, làm tròn lên): một khung hình mờ
+     * Điểm của mỗi khách = trung bình các độ giống tốt nhất (nửa số vector, làm tròn lên): một khung hình mờ
      * không làm hỏng kết quả, còn kết quả đúng thì phải ổn định qua nhiều khung hình.
      *
      * @param  array<int, array<int, float>>  $probes
      * @param  array<int, array<int, array<int, float>>>  $bank
-     * @return array{customer_id?: int, confidence?: float, ambiguous?: bool}
+     * @return array{customer_id?: int, confidence?: float, ambiguous?: bool, best?: float}
      */
     private function matchFace(array $probes, array $bank): array
     {
@@ -289,37 +286,39 @@ class CustomerFaceController extends Controller
         $scores = [];
 
         foreach ($bank as $customerId => $samples) {
-            $nearestPerProbe = [];
+            $bestPerProbe = [];
             foreach ($probes as $probe) {
-                $nearest = INF;
+                $best = 0.0;
                 foreach ($samples as $sample) {
-                    $distance = $this->distance($probe, $sample);
-                    if ($distance < $nearest) {
-                        $nearest = $distance;
-                    }
+                    $best = max($best, FaceMatcher::similarity($probe, $sample));
                 }
-                $nearestPerProbe[] = $nearest;
+                $bestPerProbe[] = $best;
             }
-            sort($nearestPerProbe);
-            $scores[$customerId] = array_sum(array_slice($nearestPerProbe, 0, $keep)) / $keep;
+            rsort($bestPerProbe);
+            $scores[$customerId] = array_sum(array_slice($bestPerProbe, 0, $keep)) / $keep;
         }
 
-        asort($scores);
+        arsort($scores);
         $ids = array_keys($scores);
-        $distances = array_values($scores);
+        $similarities = array_values($scores);
+        $threshold = (float) config('face.match_similarity');
 
-        if ($ids === [] || $distances[0] > self::MATCH_THRESHOLD) {
+        if ($ids === []) {
             return [];
         }
+        if ($similarities[0] < $threshold) {
+            return ['best' => round($similarities[0], 3)];
+        }
 
-        if (isset($distances[1]) && ($distances[1] - $distances[0]) < self::MIN_MARGIN) {
-            return ['ambiguous' => true];
+        if (isset($similarities[1]) && ($similarities[0] - $similarities[1]) < (float) config('face.margin')) {
+            return ['ambiguous' => true, 'best' => round($similarities[0], 3)];
         }
 
         return [
             'customer_id' => (int) $ids[0],
-            // Độ tin cậy gần đúng để hiển thị gợi ý (1 = rất giống).
-            'confidence' => round(max(0, 1 - $distances[0] / self::MATCH_THRESHOLD), 2),
+            'best' => round($similarities[0], 3),
+            // Độ tin cậy gần đúng để hiển thị gợi ý (0 = vừa đủ ngưỡng, 1 = rất giống).
+            'confidence' => round(max(0, ($similarities[0] - $threshold) / max(0.0001, 1 - $threshold)), 2),
         ];
     }
 
@@ -333,16 +332,14 @@ class CustomerFaceController extends Controller
         return response()->json(['message' => 'Tính năng nhận diện khuôn mặt đang tắt trong Cài đặt → Khách hàng.'], 403);
     }
 
-    /** @param array<int, float|int|string> $a @param array<int, float|int|string> $b */
-    private function distance(array $a, array $b): float
+    /** @return array<int, string> */
+    private function sizeRules(): array
     {
-        $sum = 0.0;
-        $count = min(count($a), count($b));
-        for ($i = 0; $i < $count; $i++) {
-            $diff = (float) $a[$i] - (float) $b[$i];
-            $sum += $diff * $diff;
-        }
+        return ['min:'.FaceMatcher::MIN_SIZE, 'max:'.FaceMatcher::MAX_SIZE];
+    }
 
-        return sqrt($sum);
+    private function valueRule(): string
+    {
+        return 'between:-'.FaceMatcher::VALUE_LIMIT.','.FaceMatcher::VALUE_LIMIT;
     }
 }

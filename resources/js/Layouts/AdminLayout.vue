@@ -139,6 +139,7 @@ const currentTitle = computed(() => {
     if (path.startsWith('/products')) return 'Sản phẩm'
     if (path.startsWith('/product-imeis') || path.startsWith('/imeis')) return 'IMEI'
     if (path.startsWith('/categories') || path.startsWith('/brands')) return 'Danh mục & Thương hiệu'
+    if (path.startsWith('/customer-visits')) return 'Lượt khách ra vào'
     if (path.startsWith('/customers')) return 'Khách hàng'
     if (path.startsWith('/sales')) return 'Hóa đơn'
     if (path.startsWith('/work-shifts')) return 'Lịch sử kiểm kê'

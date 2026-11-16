@@ -1,30 +1,69 @@
 /**
- * Nhận diện khuôn mặt chạy ngay trên trình duyệt (face-api). Chỉ trả về vector đặc trưng 128 số,
+ * Nhận diện khuôn mặt chạy ngay trên trình duyệt (Human, @vladmandic/human). Chỉ trả về vector đặc trưng,
  * không có ảnh nào được gửi lên máy chủ. Thư viện và mô hình chỉ được tải khi thật sự dùng tới.
  *
- * Cần: `npm i @vladmandic/face-api` và chạy `node scripts/copy-face-models.mjs` một lần
- * (chép mô hình vào public/models/face).
+ * Worker camera cửa (door-worker) dùng cùng thư viện và cùng bộ mô hình nên vector từ hai nơi khớp nhau.
+ * Cần: `npm i @vladmandic/human` và chạy `node scripts/copy-face-models.mjs` một lần
+ * (chép mô hình vào public/models/human).
  */
-const MODEL_URL = '/models/face'
-let faceApiPromise = null
-let stillModelPromise = null
+const MODEL_URL = '/models/human/'
+let humanPromise = null
 
-export const loadFaceApi = () => {
-    if (!faceApiPromise) {
-        faceApiPromise = (async () => {
-            const faceapi = await import('@vladmandic/face-api/dist/face-api.esm.js')
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-            ])
-            return faceapi
+export const loadFaceModels = () => {
+    if (!humanPromise) {
+        humanPromise = (async () => {
+            const module = await import('@vladmandic/human')
+            const Human = module.Human || module.default
+            const human = new Human({
+                modelBasePath: MODEL_URL,
+                backend: 'webgl',
+                debug: false,
+                async: true,
+                warmup: 'none',
+                // Mỗi khung hình đều tính mới (không dùng bộ nhớ đệm giữa các khung) để chọn đúng khung nét nhất.
+                cacheSensitivity: 0,
+                filter: { enabled: false },
+                face: {
+                    enabled: true,
+                    detector: { modelPath: 'blazeface.json', rotation: false, maxDetected: 6, minConfidence: 0.4, skipFrames: 0, skipTime: 0 },
+                    mesh: { enabled: true },
+                    iris: { enabled: false },
+                    description: { enabled: true, minConfidence: 0.1, skipFrames: 0, skipTime: 0 },
+                    emotion: { enabled: false },
+                    antispoof: { enabled: false },
+                    liveness: { enabled: false },
+                },
+                body: { enabled: false },
+                hand: { enabled: false },
+                object: { enabled: false },
+                gesture: { enabled: false },
+                segmentation: { enabled: false },
+            })
+            await human.load()
+            return human
         })().catch((error) => {
-            faceApiPromise = null
+            humanPromise = null
             throw error
         })
     }
-    return faceApiPromise
+    return humanPromise
+}
+
+const roundDescriptor = descriptor => Array.from(descriptor, value => Math.round(value * 1e5) / 1e5)
+
+const mediaSize = source => ({
+    width: source.videoWidth || source.naturalWidth || source.width || 1,
+    height: source.videoHeight || source.naturalHeight || source.height || 1,
+})
+
+/** Dò mọi khuôn mặt trong ảnh/video/canvas. Human trả box dạng [x, y, rộng, cao] theo điểm ảnh của nguồn. */
+const detectAll = async (source) => {
+    const human = await loadFaceModels()
+    const result = await human.detect(source)
+    return (result.face || []).map(face => ({
+        box: { x: face.box[0], y: face.box[1], width: face.box[2], height: face.box[3] },
+        descriptor: face.embedding?.length ? roundDescriptor(face.embedding) : null,
+    }))
 }
 
 /**
@@ -32,20 +71,17 @@ export const loadFaceApi = () => {
  * status: none (không có mặt) | multiple (nhiều người) | small (đứng xa quá) | ok (kèm descriptor)
  */
 export const detectFace = async (video, { minFaceRatio = 0.2 } = {}) => {
-    const faceapi = await loadFaceApi()
-    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.6 })
-    const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks(true).withFaceDescriptors()
+    const faces = await detectAll(video)
 
-    if (results.length === 0) return { status: 'none' }
-    if (results.length > 1) return { status: 'multiple' }
+    if (faces.length === 0) return { status: 'none' }
+    if (faces.length > 1) return { status: 'multiple' }
 
-    const face = results[0]
-    // video dùng videoWidth, ảnh/canvas dùng naturalWidth/width.
-    const mediaWidth = video.videoWidth || video.naturalWidth || video.width || 1
-    const ratio = face.detection.box.width / mediaWidth
+    const face = faces[0]
+    const ratio = face.box.width / mediaSize(video).width
     if (ratio < minFaceRatio) return { status: 'small', ratio }
+    if (!face.descriptor) return { status: 'none' }
 
-    return { status: 'ok', ratio, descriptor: Array.from(face.descriptor, value => Math.round(value * 1e5) / 1e5) }
+    return { status: 'ok', ratio, descriptor: face.descriptor }
 }
 
 /**
@@ -54,24 +90,21 @@ export const detectFace = async (video, { minFaceRatio = 0.2 } = {}) => {
  * box, ratio, sharpness (độ nét, càng cao càng nét) và descriptor; tooSmall là số mặt bị bỏ vì quá nhỏ/quá xa.
  */
 export const detectFaces = async (video, { maxFaces = 6 } = {}) => {
-    const faceapi = await loadFaceApi()
-    // inputSize 416 + ngưỡng thấp hơn: dò được cả mặt nhỏ hoặc hơi mờ; các mặt kém chất lượng vẫn bị loại ở bước kích thước.
-    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 })
-    const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks(true).withFaceDescriptors()
+    const found = await detectAll(video)
 
-    const mediaWidth = video.videoWidth || video.naturalWidth || video.width || 640
+    const mediaWidth = mediaSize(video).width
     const minWidth = Math.max(56, mediaWidth * 0.07)
     const faces = []
     let tooSmall = 0
 
-    for (const result of results) {
-        const box = result.detection.box
-        if (box.width < minWidth) { tooSmall += 1; continue }
+    for (const face of found) {
+        if (face.box.width < minWidth) { tooSmall += 1; continue }
+        if (!face.descriptor) continue
         faces.push({
-            box: { x: box.x, y: box.y, width: box.width, height: box.height },
-            ratio: box.width / mediaWidth,
-            sharpness: faceSharpness(video, box),
-            descriptor: Array.from(result.descriptor, value => Math.round(value * 1e5) / 1e5),
+            box: face.box,
+            ratio: face.box.width / mediaWidth,
+            sharpness: faceSharpness(video, face.box),
+            descriptor: face.descriptor,
         })
     }
 
@@ -202,21 +235,8 @@ export const faceStatusMessage = {
 }
 
 /* ------------------------------------------------------------------
- * Ảnh tĩnh (ảnh tải lên, ảnh camera an ninh): dò mặt kỹ hơn để nhận ra cả khi ảnh nhỏ/mờ
+ * Ảnh tĩnh (ảnh tải lên, ảnh camera an ninh): dò kỹ hơn để nhận ra cả khi ảnh nhỏ/mờ
  * ------------------------------------------------------------------ */
-const loadStillModel = async () => {
-    const faceapi = await loadFaceApi()
-    if (!stillModelPromise) {
-        // SSD MobileNet chính xác hơn bộ dò nhanh dùng ở camera trực tiếp, nhưng chậm hơn nên chỉ dùng cho ảnh tĩnh.
-        stillModelPromise = faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL).catch((error) => {
-            stillModelPromise = null
-            throw error
-        })
-    }
-    await stillModelPromise
-    return faceapi
-}
-
 const scaleCanvas = (source, factor) => {
     const maxSide = 3200
     const k = Math.min(factor, maxSide / Math.max(source.width, source.height))
@@ -246,40 +266,35 @@ const mirrorCanvas = (source) => {
  * Trả thêm descriptorFlip (từ bản lật gương) để 1 ảnh vẫn cho 2 mẫu, giúp nhận ra khách ở cả hai bên mặt.
  */
 export const detectStill = async (canvas) => {
-    const faceapi = await loadStillModel()
-    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 })
-    const detect = target => faceapi.detectAllFaces(target, options).withFaceLandmarks(true).withFaceDescriptors()
-
     let work = canvas
-    let results = await detect(work)
-    if (results.length === 0) {
+    let faces = await detectAll(work)
+    if (faces.length === 0) {
         work = scaleCanvas(canvas, 2)
-        results = await detect(work)
+        faces = await detectAll(work)
     }
-    if (results.length === 0) return { status: 'none' }
-    if (results.length > 1) return { status: 'multiple' }
+    if (faces.length === 0) return { status: 'none' }
+    if (faces.length > 1) return { status: 'multiple' }
 
-    let face = results[0]
-    const originalRatio = face.detection.box.width / work.width
+    let face = faces[0]
+    const originalRatio = face.box.width / work.width
 
     // Mặt nhỏ (dưới ~120px): phóng to để mặt rộng ~160px rồi nhận diện lại.
-    const faceWidth = face.detection.box.width
-    if (faceWidth < 120) {
-        const enlarged = scaleCanvas(work, Math.min(4, 160 / faceWidth))
-        const again = await detect(enlarged)
+    if (face.box.width < 120) {
+        const enlarged = scaleCanvas(work, Math.min(4, 160 / face.box.width))
+        const again = await detectAll(enlarged)
         if (again.length === 1) {
             work = enlarged
             face = again[0]
         }
     }
+    if (!face.descriptor) return { status: 'none' }
 
-    const round = descriptor => Array.from(descriptor, value => Math.round(value * 1e5) / 1e5)
-    const flipped = await detect(mirrorCanvas(work))
+    const flipped = await detectAll(mirrorCanvas(work))
 
     return {
         status: 'ok',
         ratio: originalRatio,
-        descriptor: round(face.descriptor),
-        descriptorFlip: flipped.length === 1 ? round(flipped[0].descriptor) : null,
+        descriptor: face.descriptor,
+        descriptorFlip: flipped.length === 1 ? flipped[0].descriptor : null,
     }
 }

@@ -83,6 +83,9 @@ class SettingController extends Controller
                 'customer_points_enabled' => filter_var(setting('customer_points_enabled', true), FILTER_VALIDATE_BOOLEAN),
                 'face_recognition_enabled' => filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 'face_notify_modal_enabled' => filter_var(setting('face_notify_modal_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'face_visit_tracking_enabled' => filter_var(setting('face_visit_tracking_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'face_door_camera_enabled' => filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN),
+                'face_visit_retention_days' => min(365, max(1, (int) setting('face_visit_retention_days', 30))),
                 'face_cctv_snapshot_url' => setting('face_cctv_snapshot_url', ''),
                 'face_cctv_auth' => in_array(setting('face_cctv_auth', 'none'), ['none', 'basic', 'digest'], true) ? setting('face_cctv_auth', 'none') : 'none',
                 'face_cctv_username' => setting('face_cctv_username', ''),
@@ -105,6 +108,8 @@ class SettingController extends Controller
             'purchase_contract_defaults' => ['title' => DefaultPurchaseContract::TITLE, 'content' => DefaultPurchaseContract::CONTENT],
             'can_update_bank_settings' => $this->canUpdateBankSettings($request),
             'can_edit_settings' => $user?->can('settings.edit') ?? false,
+            // Khóa camera tự sinh + địa chỉ máy chủ để hiện lệnh cài worker (chỉ người được sửa cài đặt).
+            'door_camera' => $user?->can('settings.edit') ? DoorCameraSettingsController::info() : null,
             'can_manage_payment_accounts' => $user?->can('payment_accounts.manage') ?? false,
             'can_manage_inventory_settings' => $user?->can('units.manage') ?? false,
             'can_manage_backups' => $canManageBackups,
@@ -149,7 +154,17 @@ class SettingController extends Controller
             'customer_points_enabled' => ['sometimes', 'boolean'],
             'face_recognition_enabled' => ['sometimes', 'boolean'],
             'face_notify_modal_enabled' => ['sometimes', 'boolean'],
-            'face_cctv_snapshot_url' => ['sometimes', 'nullable', 'url:http,https', 'max:500'],
+            'face_visit_tracking_enabled' => ['sometimes', 'boolean'],
+            'face_door_camera_enabled' => ['sometimes', 'boolean'],
+            'face_visit_retention_days' => ['sometimes', 'integer', 'min:1', 'max:365'],
+            'face_cctv_snapshot_url' => [
+                'sometimes', 'nullable', 'string', 'max:500',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (filled($value) && self::parseCameraUrl((string) $value) === null) {
+                        $fail('Địa chỉ camera phải bắt đầu bằng http://, https:// hoặc rtsp:// kèm địa chỉ máy (ví dụ rtsp://192.168.1.50:554/Streaming/Channels/101).');
+                    }
+                },
+            ],
             'face_cctv_auth' => ['sometimes', 'in:none,basic,digest'],
             'face_cctv_username' => ['sometimes', 'nullable', 'string', 'max:100'],
             'face_cctv_password' => ['sometimes', 'nullable', 'string', 'max:200'],
@@ -221,6 +236,19 @@ class SettingController extends Controller
             $allowedKeys = array_merge($allowedKeys, $this->bankSettingKeys);
         }
         $data = array_intersect_key($data, array_flip($allowedKeys));
+
+        // Dán nguyên link kiểu rtsp://admin:matkhau@ip/... thì tách tài khoản/mật khẩu ra lưu riêng (mật khẩu được mã hóa),
+        // địa chỉ lưu lại không còn mật khẩu để khỏi lộ khi trả về trình duyệt.
+        if (array_key_exists('face_cctv_snapshot_url', $data) && filled($data['face_cctv_snapshot_url'])) {
+            [$cleanUrl, $cameraUser, $cameraPassword] = $this->splitCameraCredentials((string) $data['face_cctv_snapshot_url']);
+            $data['face_cctv_snapshot_url'] = $cleanUrl;
+            if ($cameraUser !== null) {
+                $data['face_cctv_username'] = mb_substr($cameraUser, 0, 100);
+                if (filled($cameraPassword)) {
+                    $data['face_cctv_password'] = mb_substr($cameraPassword, 0, 200);
+                }
+            }
+        }
 
         foreach ($data as $key => $value) {
             if ($key === 'label_template') {
@@ -392,6 +420,52 @@ class SettingController extends Controller
             'label_template.price_size' => 'Cỡ chữ giá',
             'label_template.barcode_height_mm' => 'Chiều cao mã vạch',
             'label_template.footer_text' => 'Dòng chân tem',
+        ];
+    }
+
+    /**
+     * Địa chỉ camera hợp lệ: ảnh chụp http/https (POS, đăng ký khuôn mặt) hoặc luồng rtsp/rtsps (worker camera cửa).
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function parseCameraUrl(string $url): ?array
+    {
+        $url = trim($url);
+        if ($url === '' || preg_match('/\s/', $url)) {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if (! is_array($parts) || ! in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https', 'rtsp', 'rtsps'], true) || blank($parts['host'] ?? null)) {
+            return null;
+        }
+
+        return $parts;
+    }
+
+    /**
+     * Tách tài khoản/mật khẩu nằm trong địa chỉ camera.
+     *
+     * @return array{0: string, 1: ?string, 2: ?string} [địa chỉ không kèm mật khẩu, tài khoản, mật khẩu]
+     */
+    private function splitCameraCredentials(string $url): array
+    {
+        $url = trim($url);
+        $parts = self::parseCameraUrl($url);
+        if ($parts === null || ! isset($parts['user'])) {
+            return [$url, null, null];
+        }
+
+        $clean = $parts['scheme'] . '://' . $parts['host']
+            . (isset($parts['port']) ? ':' . $parts['port'] : '')
+            . ($parts['path'] ?? '')
+            . (isset($parts['query']) ? '?' . $parts['query'] : '')
+            . (isset($parts['fragment']) ? '#' . $parts['fragment'] : '');
+
+        return [
+            $clean,
+            rawurldecode((string) $parts['user']),
+            isset($parts['pass']) ? rawurldecode((string) $parts['pass']) : null,
         ];
     }
 

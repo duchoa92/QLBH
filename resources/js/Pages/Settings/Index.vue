@@ -15,6 +15,7 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import LabelTemplateEditor from './LabelTemplateEditor.vue'
 import SettingSwitch from './SettingSwitch.vue'
 import SettingCollapse from './SettingCollapse.vue'
+import DoorCameraSetup from './DoorCameraSetup.vue'
 import { mergeLabelTemplate } from '@/utils/printLabels'
 import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
@@ -29,6 +30,7 @@ const props = defineProps({
     banks: { type: Array, default: () => [] },
     can_update_bank_settings: Boolean,
     can_edit_settings: { type: Boolean, default: false },
+    door_camera: { type: Object, default: null },
     can_manage_payment_accounts: { type: Boolean, default: false },
     can_manage_inventory_settings: { type: Boolean, default: false },
     units: {
@@ -216,6 +218,8 @@ const closeModal = () => {
 }
 
 // Mỗi mục chỉ gửi và lưu đúng các trường của mình, tránh ghi đè cài đặt khác bằng dữ liệu cũ của trang.
+// Địa chỉ RTSP (rtsp://...) do worker camera cửa đọc bằng ffmpeg; địa chỉ http là ảnh chụp tĩnh.
+const faceCctvIsRtsp = computed(() => /^rtsps?:\/\//i.test(String(form.face_cctv_snapshot_url || '').trim()))
 const faceCctvAuthOptions = [
     { value: 'none', label: 'Không cần đăng nhập' },
     { value: 'basic', label: 'Tài khoản (Basic)' },
@@ -226,7 +230,7 @@ const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -340,6 +344,13 @@ const buildFormValues = () => ({
     face_notify_modal_enabled: liveSettings.value.face_notify_modal_enabled === true
         || liveSettings.value.face_notify_modal_enabled === 1
         || liveSettings.value.face_notify_modal_enabled === '1',
+    face_visit_tracking_enabled: liveSettings.value.face_visit_tracking_enabled === true
+        || liveSettings.value.face_visit_tracking_enabled === 1
+        || liveSettings.value.face_visit_tracking_enabled === '1',
+    face_door_camera_enabled: liveSettings.value.face_door_camera_enabled === true
+        || liveSettings.value.face_door_camera_enabled === 1
+        || liveSettings.value.face_door_camera_enabled === '1',
+    face_visit_retention_days: Number(liveSettings.value.face_visit_retention_days) || 30,
     face_cctv_snapshot_url: liveSettings.value.face_cctv_snapshot_url || '',
     face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
     face_cctv_username: liveSettings.value.face_cctv_username || '',
@@ -732,21 +743,43 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             title="Hiện hộp thông báo chi tiết khi nhận ra khách"
                             description="Khi POS nhận ra khách, mở thêm một hộp thoại cho biết tên, số điện thoại, CCCD và tình trạng công nợ để nhân viên xác nhận. Tắt thì chỉ hỏi ngay trong ô khách hàng."
                         />
+                        <SettingSwitch
+                            v-if="form.face_recognition_enabled"
+                            v-model="form.face_visit_tracking_enabled"
+                            title="Ghi nhận lượt khách ra vào"
+                            description="POS ghi lại mỗi người xuất hiện trước camera (cả khách lạ chưa có thông tin) để thống kê ở trang Lượt khách. Khách lạ được chụp ảnh nhỏ để nhân viên gán tên sau. Chỉ bật khi cửa hàng đã có biển thông báo dùng camera."
+                        />
+                        <SettingSwitch
+                            v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled"
+                            v-model="form.face_door_camera_enabled"
+                            title="Dùng camera cửa (worker chạy nền)"
+                            description="Camera IP ở cửa do chương trình worker chạy nền xử lý, kể cả khi không mở POS. POS không mở camera nữa mà chỉ hiện danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
+                        />
+                        <DoorCameraSetup v-if="form.face_door_camera_enabled && door_camera" :info="door_camera" />
+                        <div v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled" class="max-w-xs">
+                            <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Giữ ảnh khách lạ (ngày)" />
+                            <p class="mt-1 text-xs text-slate-500">Hết hạn, ảnh và dữ liệu nhận diện của khách lạ bị xóa tự động; số liệu thống kê vẫn được giữ.</p>
+                            <p v-if="form.errors.face_visit_retention_days" class="text-xs text-rose-600">{{ form.errors.face_visit_retention_days }}</p>
+                        </div>
                         <div v-if="form.face_recognition_enabled" class="space-y-3 rounded-lg bg-slate-50 p-3">
                             <div>
-                                <h3 class="text-xs font-bold text-slate-800">Camera an ninh (tùy chọn)</h3>
+                                <h3 class="text-xs font-bold text-slate-800">{{ form.face_door_camera_enabled ? 'Camera cửa (bắt buộc)' : 'Camera an ninh (tùy chọn)' }}</h3>
                                 <p class="mt-0.5 text-xs text-slate-500">
-                                    Nhập địa chỉ <strong>ảnh chụp tĩnh</strong> của camera để lấy ảnh khách khi đăng ký khuôn mặt.
-                                    Ví dụ (tùy hãng/model): Hikvision <code>http://IP/ISAPI/Streaming/channels/101/picture</code>,
-                                    Dahua <code>http://IP/cgi-bin/snapshot.cgi</code>. Máy chủ gọi camera trong mạng nội bộ nên máy chủ phải truy cập được camera.
+                                    Nhập địa chỉ camera, hỗ trợ hai kiểu:
+                                    <strong>RTSP</strong> (luồng video, ví dụ Hikvision <code>rtsp://IP:554/Streaming/Channels/101</code>,
+                                    Dahua <code>rtsp://IP:554/cam/realmonitor?channel=1&amp;subtype=0</code>) cho worker camera cửa, cần cài <code>ffmpeg</code> trên máy chạy worker;
+                                    hoặc <strong>ảnh chụp tĩnh http</strong> (Hikvision <code>http://IP/ISAPI/Streaming/channels/101/picture</code>,
+                                    Dahua <code>http://IP/cgi-bin/snapshot.cgi</code>), dùng được cả khi đăng ký khuôn mặt từ camera.
+                                    Tài khoản/mật khẩu nhập ở ô bên dưới (hoặc dán nguyên link dạng <code>rtsp://tài-khoản:mật-khẩu@IP/...</code>, hệ thống tự tách và lưu mật khẩu được mã hóa).
+                                    Máy chạy worker/máy chủ phải truy cập được camera trong mạng nội bộ.
                                 </p>
                             </div>
-                            <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Địa chỉ ảnh chụp (http/https)" placeholder-text="http://192.168.1.50/..." />
+                            <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Địa chỉ camera (RTSP hoặc ảnh chụp http)" placeholder-text="rtsp://192.168.1.50:554/..." />
                             <p v-if="form.errors.face_cctv_snapshot_url" class="text-xs text-rose-600">{{ form.errors.face_cctv_snapshot_url }}</p>
                             <div v-if="form.face_cctv_snapshot_url" class="grid gap-2 sm:grid-cols-3">
-                                <FloatingSelect v-model="form.face_cctv_auth" name="face_cctv_auth" label="Đăng nhập camera" :options="faceCctvAuthOptions" :show-placeholder="false" />
-                                <FloatingInput v-if="form.face_cctv_auth !== 'none'" v-model="form.face_cctv_username" name="face_cctv_username" label="Tài khoản" autocomplete="off" />
-                                <FloatingInput v-if="form.face_cctv_auth !== 'none'" v-model="form.face_cctv_password" name="face_cctv_password" type="password" autocomplete="new-password" :label="liveSettings.face_cctv_has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
+                                <FloatingSelect v-if="!faceCctvIsRtsp" v-model="form.face_cctv_auth" name="face_cctv_auth" label="Đăng nhập camera" :options="faceCctvAuthOptions" :show-placeholder="false" />
+                                <FloatingInput v-if="faceCctvIsRtsp || form.face_cctv_auth !== 'none'" v-model="form.face_cctv_username" name="face_cctv_username" label="Tài khoản" autocomplete="off" />
+                                <FloatingInput v-if="faceCctvIsRtsp || form.face_cctv_auth !== 'none'" v-model="form.face_cctv_password" name="face_cctv_password" type="password" autocomplete="new-password" :label="liveSettings.face_cctv_has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
                             </div>
                         </div>
                         <p class="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">

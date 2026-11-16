@@ -3,6 +3,10 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerFaceController;
+use App\Http\Controllers\Api\DoorCameraController;
+use App\Http\Middleware\DoorCameraKey;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use App\Http\Controllers\CustomerVisitController;
 use App\Http\Controllers\Api\PosScanController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
@@ -16,6 +20,16 @@ use App\Http\Controllers\BankTransferWebhookController;
 use App\Http\Controllers\SettingController;
 
 Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class, 'receive'])->name('bank-payments.webhook');
+
+// Worker camera cửa (chạy nền, không đăng nhập): xác thực bằng khóa X-Camera-Key, dùng lại đúng logic so khớp/ghi lượt của POS.
+Route::middleware([DoorCameraKey::class, SubstituteBindings::class])->prefix('door-camera')->group(function () {
+    Route::post('/heartbeat', [DoorCameraController::class, 'heartbeat'])->middleware('throttle:30,1');
+    Route::get('/config', [DoorCameraController::class, 'config'])->middleware('throttle:30,1');
+    Route::post('/face-match', [CustomerFaceController::class, 'match'])->middleware('throttle:240,1');
+    Route::post('/visits', [CustomerVisitController::class, 'record'])->middleware('throttle:240,1');
+    Route::post('/visits/{visit}/seen', [CustomerVisitController::class, 'left'])->middleware('throttle:600,1');
+    Route::post('/visits/{visit}/link', [CustomerVisitController::class, 'link'])->middleware('throttle:60,1');
+});
 
 
 Route::middleware(['web', 'auth'])->group(function ()
@@ -67,6 +81,17 @@ Route::middleware(['web', 'auth'])->group(function ()
         ->middleware(['permission:pos.access', 'throttle:60,1']);
     Route::post('/customers/{customer}/face-feedback', [CustomerFaceController::class, 'feedback'])
         ->middleware(['permission:pos.access', 'throttle:30,1']);
+    // Ghi nhận lượt khách trước camera POS (khách quen + khách lạ), liên kết khách lạ khi đã có thông tin.
+    Route::post('/customers/visits', [CustomerVisitController::class, 'record'])
+        ->middleware(['permission:pos.access', 'throttle:60,1']);
+    Route::get('/customers/visits/present', [CustomerVisitController::class, 'present'])
+        ->middleware(['permission:pos.access', 'throttle:120,1']);
+    Route::post('/customers/visits/{visit}/served', [CustomerVisitController::class, 'served'])
+        ->middleware(['permission:pos.access', 'throttle:60,1']);
+    Route::post('/customers/visits/{visit}/left', [CustomerVisitController::class, 'left'])
+        ->middleware(['permission:pos.access', 'throttle:120,1']);
+    Route::post('/customers/visits/{visit}/link', [CustomerVisitController::class, 'link'])
+        ->middleware(['permission:pos.access|customers.edit', 'throttle:30,1']);
     Route::get('/customers/face-cctv-snapshot', [CustomerFaceController::class, 'cctvSnapshot'])
         ->middleware(['permission:customers.edit', 'throttle:20,1']);
     Route::get('/customers/{customer}/face', [CustomerFaceController::class, 'status'])
