@@ -166,7 +166,7 @@ onBeforeUnmount(() => {
         <!-- DROPDOWN DANH SÁCH THÔNG BÁO -->
         <div
             v-if="isOpen"
-            class="fixed inset-x-2 top-[4.25rem] z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:max-h-none sm:overflow-visible sm:w-96 rounded-2xl bg-white p-2 shadow-2xl border border-slate-100 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-150"
+            class="fixed inset-x-2 top-[4.25rem] z-50 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 rounded-2xl bg-white p-2 shadow-2xl border border-slate-100 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-150"
         >
             <!-- HEADER DROPDOWN -->
             <div class="mb-1 flex min-w-0 items-center gap-2 border-b border-slate-100 px-2 py-2">
@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
                         <SlidersHorizontal :size="14" class="shrink-0 text-slate-500" />
                         <span class="min-w-0 flex-1 truncate">{{ activeFilterLabel }}</span>
                     </button>
-                    <div v-if="filterMenuOpen" class="absolute left-0 top-full z-[60] mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                    <div v-if="filterMenuOpen" class="absolute left-0 top-full z-[60] mt-1 w-48 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
                         <button
                             v-for="filter in filters"
                             :key="filter.id"
@@ -215,7 +215,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- DANH SÁCH ITEM -->
-            <div class="max-h-[60dvh] overflow-y-auto space-y-1 pr-0.5 sm:max-h-80">
+            <div class="max-h-[min(60dvh,calc(100dvh-9rem))] overflow-y-auto space-y-1 pr-0.5 sm:max-h-80">
                 <div
                     v-for="item in filteredNotifications"
                     :key="item.id"

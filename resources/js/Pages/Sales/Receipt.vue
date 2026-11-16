@@ -1,5 +1,7 @@
 <script setup>
+import { onMounted } from 'vue'
 import { usePage } from '@inertiajs/vue3'
+import { applyReceiptPrintStyle } from '@/utils/receiptPrint'
 import { formatCurrency, formatNumber, formatDateTime } from '@/utils/format'
 
 defineOptions({
@@ -88,7 +90,14 @@ const customerPaymentRows = () => {
     return [{ label: customerPaymentLabel(props.sale?.payment_method), amount: Math.max(0, Number(props.sale?.paid_amount || 0)) }]
 }
 
-// Trang được nhúng trong modal xem trước; chỉ in khi người dùng bấm nút In ở modal.
+// Trang được nhúng trong modal xem trước nên không tự in. Khi mở ở tab riêng bằng ?print=1 (điện thoại) thì tự mở hộp thoại in.
+onMounted(() => {
+    if (window.top !== window || new URLSearchParams(window.location.search).get('print') !== '1') return
+
+    applyReceiptPrintStyle(document, page.props.settings || {})
+    window.addEventListener('afterprint', () => window.close(), { once: true })
+    window.setTimeout(() => window.print(), 500)
+})
 </script>
 
 <!-- Receipt.vue -->

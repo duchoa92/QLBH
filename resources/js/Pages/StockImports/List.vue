@@ -850,11 +850,11 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
             </div>
 
-            <div class="divide-y divide-slate-100 md:hidden">
-                <article v-for="item in importsData.data" :key="`mobile-import-${item.id}`" class="cursor-pointer space-y-2.5 p-3.5 active:bg-slate-50" @click="showImport(item.id)">
+            <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+                <article v-for="item in importsData.data" :key="`mobile-import-${item.id}`" class="cursor-pointer space-y-2.5 rounded-xl border border-slate-200 border-l-4 border-l-indigo-400 bg-white p-3.5 shadow-sm transition active:bg-slate-50" @click="showImport(item.id)">
                     <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900"><HighlightText :text="item.code" :keyword="search" /></div><div class="mt-0.5 truncate text-xs text-slate-500"><HighlightText :text="importPartyName(item)" :keyword="search" /></div><div class="text-xs text-slate-500"><HighlightText :text="importPartyPhone(item)" :keyword="search" /></div><div v-if="hasActiveSearch && importSearchMatches(item).length" class="mt-1 space-y-0.5 text-[10px] font-medium text-slate-500"><div v-for="match in importSearchMatches(item)" :key="`${match.label}-${match.text}`" class="truncate"><span>{{ match.label }}: </span><HighlightText :text="match.text" :keyword="search" /></div></div></div><span class="shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></div>
                     <div class="flex items-center justify-between border-t border-slate-100 pt-2 text-xs"><span class="text-slate-500">{{ formatDate(item.import_date) }} · {{ item.items_count }} dòng</span><span class="font-bold text-slate-900">{{ money(item.grand_total) }}</span></div>
-                    <div class="flex items-center justify-between pt-0.5"><span class="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700">Xem chi tiết <ChevronRight class="h-3 w-3" /></span><div class="flex items-center gap-1"><button type="button" :disabled="!canManageImports || item.status === 'cancelled'" class="rounded-lg p-2 transition" :class="canManageImports && item.status !== 'cancelled' ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-300 opacity-60'" title="Sửa phiếu nhập" @click.stop="editImport(item)"><Pencil class="h-4 w-4" /></button><button type="button" :disabled="!canManageImports || item.status === 'cancelled'" class="rounded-lg p-2 transition" :class="canManageImports && item.status !== 'cancelled' ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-300 opacity-60'" title="Hủy phiếu nhập" @click.stop="requestCancelImport(item)"><XCircle class="h-4 w-4" /></button></div></div>
+                    <div class="flex items-center justify-end pt-0.5"><span class="hidden"></span><div class="flex items-center gap-1"><button type="button" :disabled="!canManageImports || item.status === 'cancelled'" class="rounded-lg p-2 transition" :class="canManageImports && item.status !== 'cancelled' ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-300 opacity-60'" title="Sửa phiếu nhập" @click.stop="editImport(item)"><Pencil class="h-4 w-4" /></button><button type="button" :disabled="!canManageImports || item.status === 'cancelled'" class="rounded-lg p-2 transition" :class="canManageImports && item.status !== 'cancelled' ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-300 opacity-60'" title="Hủy phiếu nhập" @click.stop="requestCancelImport(item)"><XCircle class="h-4 w-4" /></button></div></div>
                 </article>
                 <div v-if="!importsData.data?.length" class="p-8 text-center text-sm text-slate-500">{{ search ? `Không tìm thấy phiếu nhập phù hợp với “${search}”` : 'Chưa có đơn nhập hàng' }}</div>
             </div>
@@ -962,9 +962,9 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                             <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                                 <template v-for="(item, index) in displayImportItems" :key="item._key || item.id">
                                     <tr class="transition hover:bg-slate-50/60">
-                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400">{{ index + 1 }}</td>
-                                        <td class="px-3 py-2.5">
-                                            <div class="text-sm font-bold text-slate-900">{{ item.product?.name || '-' }}</div>
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400" data-m-hide>{{ index + 1 }}</td>
+                                        <td class="px-3 py-2.5" data-m-wide>
+                                            <div class="text-sm font-bold text-slate-900"><span class="mr-1 text-slate-400 md:hidden">{{ index + 1 }}.</span>{{ item.product?.name || '-' }}</div>
                                             <div class="text-xs text-slate-400">SKU: {{ item.product?.sku || '-' }}</div>
                                             <button v-if="hasItemDetail(item)" type="button" class="mt-1 inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" @click="openImportItemDetail(item)">
                                                 {{ itemImportImeis(item).length ? `${itemImportImeis(item).length} IMEI / biến thể` : (item._variantRows?.length > 1 ? `${item._variantRows.length} biến thể` : 'Xem biến thể') }} <ChevronRight class="h-3 w-3" />
@@ -1096,10 +1096,10 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                     <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
                         <tr v-for="row in importItemDetailRows" :key="row.key" class="hover:bg-slate-50/60">
                             <td class="px-3 py-2.5">
-                                <template v-if="row.type === 'imei'">
+                                <div v-if="row.type === 'imei'">
                                     <div class="font-mono text-sm font-bold text-slate-900">{{ row.imei }}</div>
                                     <div v-if="row.serial" class="mt-0.5 font-mono text-[11px] text-slate-400">Serial: {{ row.serial }}</div>
-                                </template>
+                                </div>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
                             <td class="px-3 py-2.5"><div class="flex flex-wrap items-center gap-1"><span class="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">{{ variantLabel(row.variant) }}</span><span v-if="row.hasVat" class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">VAT</span><span v-if="row.isUsed" class="inline-flex rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">CŨ</span></div></td>

@@ -7,7 +7,7 @@ import { AlertTriangle } from 'lucide-vue-next'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import { fetchPageProps } from '@/utils/inertiaFetch'
-import { DEFAULT_CANCEL_REASONS, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
+import { DEFAULT_CANCEL_REASONS, openReceiptInTab, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
 
 defineOptions({ inheritAttrs: false })
 
@@ -39,7 +39,10 @@ onMounted(async () => {
 const printFrameUrl = ref('')
 const printFrameKey = ref(0)
 const openPrintWindow = (saleId) => {
-    printFrameUrl.value = route('sales.receipt', saleId)
+    const url = route('sales.receipt', saleId)
+    if (openReceiptInTab(url)) return
+
+    printFrameUrl.value = url
     printFrameKey.value++
 }
 const printReceiptFrame = (event) => printReceiptInFrame(event, page.props.settings || {}, () => { printFrameUrl.value = '' })

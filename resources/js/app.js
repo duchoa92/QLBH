@@ -14,6 +14,7 @@ import { notifyReferenceDataChanged } from '@/Stores/referenceData'
 import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
 import { installInsecureNotice, syncInsecureNotice } from '@/utils/insecureNotice'
 import { installMobileTables } from '@/utils/mobileTables'
+import { installViewportFix } from '@/utils/viewportFix'
 
 const AdminLayout = defineAsyncComponent(() => import('@/Layouts/AdminLayout.vue'))
 const pageComponents = import.meta.glob([
@@ -40,6 +41,7 @@ const pageComponents = import.meta.glob([
 installAppPathSupport(router)
 installInsecureNotice()
 installMobileTables()
+installViewportFix()
 
 if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname === 'localhost')) {
     navigator.serviceWorker.register(new URL('service-worker.js', appBaseUrl), {

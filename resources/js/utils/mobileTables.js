@@ -26,7 +26,9 @@ const labelTable = (table) => {
                 if (cell.dataset.label !== label) cell.dataset.label = label
                 const isAction = !!headerRow && span === 1 && ACTION_HEADER.test(labels[col] ?? 'x') && cell.querySelector('button, a')
                 cell.classList.toggle('m-cell-actions', Boolean(isAction))
-                cell.classList.toggle('m-cell-wide', span > 1 || !label)
+                // data-m-wide: ô chiếm cả hàng, không nhãn; data-m-hide: ẩn ô trên thẻ mobile (desktop vẫn hiện).
+                cell.classList.toggle('m-cell-wide', span > 1 || !label || cell.dataset.mWide !== undefined)
+                cell.classList.toggle('m-cell-hide', cell.dataset.mHide !== undefined)
                 col += span
             })
         })

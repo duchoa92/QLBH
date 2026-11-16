@@ -77,6 +77,7 @@ class PosController extends Controller
             'invoice_discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'invoice_discount_type' => ['nullable', 'in:amount,percent'],
             'extra_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'note' => ['nullable', 'string', 'max:2000'],
             'total_amount' => ['required', 'integer', 'min:1', 'max:9999999999999'],
             'cash_received_amount' => ['nullable', 'integer', 'min:0', 'max:9999999999999'],
             'bank_account' => ['required', 'string', 'max:50'],
@@ -138,6 +139,7 @@ class PosController extends Controller
                 'invoice_discount_type' => $invoiceDiscountType,
                 'extra_fee' => $extraFee,
                 'vat_rate' => $vatRate,
+                'note' => $data['note'] ?? null,
             ],
             'status' => 'waiting',
             'expires_at' => now()->addMinutes(15),
@@ -245,6 +247,7 @@ class PosController extends Controller
             'invoice_discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'invoice_discount_type' => ['nullable', 'in:amount,percent'],
             'extra_fee' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
+            'note' => ['nullable', 'string', 'max:2000'],
             'invoice_code' => ['nullable', 'string', 'regex:/^INV-[0-9]{14}$/', 'unique:sales,code'],
 
             'items.*.discount_type' => 'nullable|string',
@@ -323,6 +326,7 @@ class PosController extends Controller
                 vatRate: (float) setting('pos_vat_rate', 10),
                 workShiftId: $workShift?->id,
                 bankAccount: $request->input('bank_account'),
+                note: $request->input('note'),
             );
 
             $sale->load([

@@ -420,9 +420,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                             <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                                 <template v-for="(item, index) in displayImportItems" :key="item._key || item.id">
                                     <tr class="transition hover:bg-slate-50/60">
-                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400">{{ index + 1 }}</td>
-                                        <td class="px-3 py-2.5">
-                                            <div class="text-sm font-bold text-slate-900">{{ item.product?.name || '-' }}</div>
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400" data-m-hide>{{ index + 1 }}</td>
+                                        <td class="px-3 py-2.5" data-m-wide>
+                                            <div class="text-sm font-bold text-slate-900"><span class="mr-1 text-slate-400 md:hidden">{{ index + 1 }}.</span>{{ item.product?.name || '-' }}</div>
                                             <div class="text-xs text-slate-400">SKU: {{ item.product?.sku || '-' }}</div>
                                             <div v-if="item.product?.model" class="text-xs text-slate-400">Model: {{ item.product.model }}</div>
                                             <button v-if="hasItemDetail(item)" type="button" class="mt-1 inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" @click="openImportItemDetail(item)">
@@ -555,10 +555,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                     <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
                         <tr v-for="row in importItemDetailRows" :key="row.key" class="hover:bg-slate-50/60">
                             <td class="px-3 py-2.5">
-                                <template v-if="row.type === 'imei'">
+                                <div v-if="row.type === 'imei'">
                                     <div class="font-mono text-sm font-bold text-slate-900">{{ row.imei }}</div>
                                     <div v-if="row.serial" class="mt-0.5 font-mono text-[11px] text-slate-400">Serial: {{ row.serial }}</div>
-                                </template>
+                                </div>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
                             <td class="px-3 py-2.5"><div class="flex flex-wrap items-center gap-1"><span class="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">{{ variantLabel(row.variant) }}</span><span v-if="row.hasVat" class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">VAT</span><span v-if="row.isUsed" class="inline-flex rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">CŨ</span></div></td>

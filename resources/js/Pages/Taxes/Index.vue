@@ -116,20 +116,14 @@ const bankAccountSelectOptions = computed(() => [
         </div>
 
         <ListToolbar v-model="search" placeholder="Tìm mã hóa đơn, khách hàng, sản phẩm, SKU, IMEI..." :loading="loading">
-            <template #filters>
-                <button type="button" class="relative inline-flex h-[42px] items-center justify-center gap-2 rounded-xl border px-3.5 text-xs font-semibold transition" :class="filterOpen || activeFilterCount ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'" :aria-expanded="filterOpen" @click="filterOpen = !filterOpen">
-                    <ListFilter :size="16" /> Bộ lọc
-                    <span v-if="activeFilterCount" class="grid h-5 min-w-[20px] place-items-center rounded-full bg-blue-600 px-1 text-[11px] font-bold text-white">{{ activeFilterCount }}</span>
-                </button>
+            <template #actions>
                 <a :href="exportUrl" class="inline-flex h-[42px] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700" title="Tải file Excel theo kỳ và bộ lọc đang chọn"><FileSpreadsheet :size="16" /> Xuất Excel</a>
             </template>
-            <template v-if="filterOpen" #expanded>
-                <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-                    <ListFilterSelect v-model="vat" label="VAT" :options="vatOptions" width="sm:w-full" />
-                    <ListFilterSelect v-model="receipt" label="Hình thức nhận tiền" :options="receiptOptions" width="sm:w-full" />
-                    <ListFilterSelect v-model="bankAccount" label="Nhận tiền vào tài khoản" :options="bankAccountSelectOptions" width="sm:w-full" />
-                    <button type="button" :disabled="!activeFilterCount" class="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50" @click="clearSelectFilters"><FilterX :size="15" /> Xóa bộ lọc</button>
-                </div>
+            <template #filters>
+                <ListFilterSelect v-model="vat" label="VAT" :options="vatOptions" />
+                <ListFilterSelect v-model="receipt" label="Hình thức nhận tiền" :options="receiptOptions" width="sm:w-[200px]" />
+                <ListFilterSelect v-model="bankAccount" label="Nhận tiền vào tài khoản" :options="bankAccountSelectOptions" width="sm:w-[220px]" />
+                <button type="button" :disabled="!activeFilterCount" class="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50" @click="clearSelectFilters"><FilterX :size="15" /> Xóa bộ lọc</button>
             </template>
         </ListToolbar>
 

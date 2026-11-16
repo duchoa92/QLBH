@@ -39,6 +39,50 @@ const effectiveSidebarCollapsed = computed(() =>
 )
 
 const page = usePage()
+
+/* THANH TRÊN (điện thoại / máy tính bảng): ẩn khi vuốt trang xuống, hiện lại ngay khi vuốt ngược lên (kiểu thanh công cụ trình duyệt).
+   Luôn hiện ở đầu trang và khi đang mở menu / ô tìm kiếm / menu tài khoản. Máy tính để bàn: luôn hiện. */
+const SCROLL_STEP = 6
+const HEADER_IDLE_MS = 3000 // không tác động ngần này thì tự ẩn (khi không ở đầu trang)
+const mainRef = ref(null)
+const headerHidden = ref(false)
+let lastScrollTop = 0
+let headerTimer = null
+
+const headerPinned = computed(() => sidebarOpen.value || userDropdownOpen.value || showMobileSearch.value)
+const hideHeader = computed(() => !isDesktop.value && headerHidden.value && !headerPinned.value)
+
+const scheduleHeaderHide = () => {
+    clearTimeout(headerTimer)
+    if (isDesktop.value || headerPinned.value) return
+
+    headerTimer = setTimeout(() => {
+        if (!headerPinned.value && (mainRef.value?.scrollTop ?? 0) > 56) headerHidden.value = true
+    }, HEADER_IDLE_MS)
+}
+
+const onMainScroll = () => {
+    const top = mainRef.value?.scrollTop ?? 0
+    const delta = top - lastScrollTop
+
+    if (top <= 56) headerHidden.value = false
+    else if (delta > SCROLL_STEP) headerHidden.value = true
+    else if (delta < -SCROLL_STEP) headerHidden.value = false
+
+    // Chỉ cập nhật mốc khi đã đi đủ một bước, tránh rung do thay đổi nhỏ.
+    if (Math.abs(delta) > SCROLL_STEP || top <= 56) lastScrollTop = top
+
+    scheduleHeaderHide()
+}
+watch(() => page.url, () => {
+    clearTimeout(headerTimer)
+    headerHidden.value = false
+    lastScrollTop = 0
+})
+watch(headerPinned, (pinned) => {
+    if (pinned) clearTimeout(headerTimer)
+    else scheduleHeaderHide()
+})
 const user = computed(() => page.props.auth?.user || { name: 'Administrator', email: 'admin@gmail.com' })
 const shopName = computed(() => page.props.settings?.shop_name || 'QLBH POS')
 const userRoles = computed(() => page.props.auth?.roles || [])
@@ -151,6 +195,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('resize', updateViewport)
+    clearTimeout(headerTimer)
 })
 </script>
 
@@ -185,165 +230,162 @@ onBeforeUnmount(() => {
         <!-- MAIN CONTENT AREA -->
         <div class="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-slate-50">
 
-            <!-- HEADER HOÀN CHỈNH ĐÃ THÊM NÚT SỬA CHỮA & TỐI ƯU MOBILE -->
-            <header class="shrink-0 border-b border-slate-200/80 bg-white z-30 shadow-2xs relative">
-                <div class="flex h-14 items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:px-6 sm:gap-4">
 
-                    <!-- GÓC TRÁI: MOBILE MENU TOGGLE & TIÊU ĐỀ -->
-                    <div class="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-                        <button
-                            type="button"
-                            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 lg:hidden transition active:scale-95 shrink-0"
-                            @click="sidebarOpen = !sidebarOpen"
-                            aria-label="Mở menu"
-                        >
-                            <X v-if="sidebarOpen" :size="18" />
-                            <Menu v-else :size="18" />
-                        </button>
+            <!-- MAIN CONTENT AREA (vùng cuộn, gồm cả thanh trên) -->
+            <main ref="mainRef" class="flex-1 overflow-y-auto overscroll-contain" @scroll.passive="onMainScroll">
+            <!-- HEADER: dính đỉnh vùng cuộn; điện thoại / máy tính bảng ẩn khi vuốt xuống, hiện lại khi vuốt lên -->
+                <header
+                    class="sticky top-0 z-30 border-b border-slate-200/80 bg-white shadow-2xs transition-transform duration-200 ease-out"
+                    :class="hideHeader ? '-translate-y-full pointer-events-none' : 'translate-y-0'"
+                >
+                    <div class="flex h-14 items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:px-6 sm:gap-4">
 
-                        <div class="min-w-0">
-                            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate hidden sm:block">
-                                Hệ thống quản lý
-                            </div>
-                            <h1 class="text-[15px] sm:text-lg font-black text-slate-900 truncate leading-tight">
-                                {{ currentTitle }}
-                            </h1>
-                        </div>
-                    </div>
-
-                    <!-- GÓC PHẢI: TÌM KIẾM, NÚT TÁC VỤ & USER -->
-                    <div class="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0 flex-1">
-
-                        <!-- TÌM KIẾM GLOBAL (DESKTOP: co giãn theo độ rộng màn hình) -->
-                        <div class="hidden md:block min-w-0 flex-1 md:max-w-[15rem] lg:max-w-[24rem] xl:max-w-[32rem] 2xl:max-w-[40rem]">
-                            <GlobalSearch />
-                        </div>
-
-                        <!-- BUTTON TÌM KIẾM (MOBILE: Bấm để bật/tắt ô search) -->
-                        <button
-                            type="button"
-                            @click="showMobileSearch = !showMobileSearch"
-                            class="md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition active:scale-95 shrink-0"
-                            title="Tìm kiếm"
-                        >
-                            <Search :size="18" />
-                        </button>
-
-                        <!-- NÚT 1: TIẾP NHẬN MÁY SỬA -->
-                        <button
-                            v-if="can('repairs.create')"
-                            type="button"
-                            @click="openRepairReceipt"
-                            class="hidden shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-2.5 sm:px-3 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:bg-amber-600 active:scale-95 transition-all shrink-0 sm:inline-flex"
-                            title="Tiếp nhận sửa chữa"
-                        >
-                            <Wrench :size="15" />
-                            <span class="hidden lg:inline">Nhận máy sửa</span>
-                        </button>
-
-                        <!-- NÚT 2: MỞ POS BÁN HÀNG -->
-                        <Link
-                            v-if="can('pos.access')"
-                            href="/pos"
-                            @click="prepareOpenPos"
-                            class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0 sm:h-auto"
-                            title="Mở POS bán hàng"
-                        >
-                            <Store :size="15" />
-                            <span class="hidden sm:inline">Mở POS</span>
-                        </Link>
-
-                        <!-- THÔNG BÁO -->
-                        <NotificationBell />
-
-                        <div class="h-6 w-px bg-slate-200 hidden sm:block shrink-0"></div>
-
-                        <!-- USER DROPDOWN MENU -->
-                        <div class="relative shrink-0">
+                        <!-- GÓC TRÁI: MOBILE MENU TOGGLE & TIÊU ĐỀ -->
+                        <div class="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
                             <button
                                 type="button"
-                                @click="userDropdownOpen = !userDropdownOpen"
-                                class="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-50 active:bg-slate-100 transition"
+                                class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 lg:hidden transition active:scale-95 shrink-0"
+                                @click="sidebarOpen = !sidebarOpen"
+                                aria-label="Mở menu"
                             >
-                                <div class="h-8 w-8 sm:h-8 sm:w-8 overflow-hidden rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
-                                    <img v-if="user.avatar" :src="imageUrl(user.avatar)" alt="Ảnh đại diện" class="h-full w-full object-cover">
-                                    <span v-else>{{ (user.name || 'A').charAt(0).toUpperCase() }}</span>
-                                </div>
-                                <div class="hidden xl:block text-left">
-                                    <div class="text-xs font-bold text-slate-800 leading-tight truncate max-w-[100px]">
-                                        {{ user.name }}
-                                    </div>
-                                    <div class="text-[10px] font-medium text-slate-400">
-                                        {{ roleTitle }}
-                                    </div>
-                                </div>
-                                <ChevronDown :size="14" class="text-slate-400 hidden sm:block transition-transform duration-200" :class="userDropdownOpen && 'rotate-180'" />
+                                <X v-if="sidebarOpen" :size="18" />
+                                <Menu v-else :size="18" />
                             </button>
 
-                            <!-- DROPDOWN TÀI KHOẢN -->
-                            <div
-                                v-if="userDropdownOpen"
-                                @click="userDropdownOpen = false"
-                                class="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1rem)] sm:w-52 rounded-2xl bg-white p-1.5 shadow-xl border border-slate-100 z-50 text-sm sm:text-xs animate-in fade-in slide-in-from-top-2 duration-150"
-                            >
-                                <div class="px-3 py-2 border-b border-slate-100 mb-1">
-                                    <p class="font-bold text-slate-900 truncate">{{ user.name }}</p>
-                                    <p class="text-[11px] text-slate-400 truncate">{{ user.email || user.username }}</p>
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate hidden sm:block">
+                                    Hệ thống quản lý
                                 </div>
-
-                                <button
-                                    v-if="can('repairs.create')"
-                                    type="button"
-                                    @click="openRepairReceipt"
-                                    class="flex w-full items-center gap-2 px-3 py-2.5 rounded-xl text-amber-700 hover:bg-amber-50 font-bold text-left transition sm:hidden"
-                                >
-                                    <Wrench :size="15" />
-                                    <span>Nhận máy sửa</span>
-                                </button>
-
-                                <Link
-                                    href="/profile"
-                                    class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
-                                >
-                                    <User :size="15" class="text-slate-400" />
-                                    <span>Tài khoản cá nhân</span>
-                                </Link>
-
-                                <Link
-                                    v-if="can('settings.view')"
-                                    href="settings"
-                                    class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
-                                >
-                                    <Shield :size="15" class="text-slate-400" />
-                                    <span>Thiết lập hệ thống</span>
-                                </Link>
-
-                                <div class="my-1 border-t border-slate-100"></div>
-
-                                <button
-                                    type="button"
-                                    @click="handleLogout"
-                                    class="w-full flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-left transition"
-                                >
-                                    <LogOut :size="15" />
-                                    <span>Đăng xuất</span>
-                                </button>
+                                <h1 class="text-[15px] sm:text-lg font-black text-slate-900 truncate leading-tight">
+                                    {{ currentTitle }}
+                                </h1>
                             </div>
                         </div>
 
+                        <!-- GÓC PHẢI: TÌM KIẾM, NÚT TÁC VỤ & USER -->
+                        <div class="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0 flex-1">
+
+                            <!-- TÌM KIẾM GLOBAL (DESKTOP: co giãn theo độ rộng màn hình) -->
+                            <div class="hidden md:block min-w-0 flex-1 md:max-w-[15rem] lg:max-w-[24rem] xl:max-w-[32rem] 2xl:max-w-[40rem]">
+                                <GlobalSearch />
+                            </div>
+
+                            <!-- BUTTON TÌM KIẾM (MOBILE: Bấm để bật/tắt ô search) -->
+                            <button
+                                type="button"
+                                @click="showMobileSearch = !showMobileSearch"
+                                class="md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition active:scale-95 shrink-0"
+                                title="Tìm kiếm"
+                            >
+                                <Search :size="18" />
+                            </button>
+
+                            <!-- NÚT 1: TIẾP NHẬN MÁY SỬA -->
+                            <button
+                                v-if="can('repairs.create')"
+                                type="button"
+                                @click="openRepairReceipt"
+                                class="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-0 text-xs font-bold text-white shadow-md shadow-amber-500/20 transition-all hover:bg-amber-600 active:scale-95 sm:h-auto sm:w-auto sm:px-3 sm:py-2"
+                                title="Tiếp nhận sửa chữa"
+                                aria-label="Nhận máy sửa"
+                            >
+                                <Wrench :size="16" />
+                                <span class="hidden lg:inline">Nhận máy sửa</span>
+                            </button>
+
+                            <!-- NÚT 2: MỞ POS BÁN HÀNG -->
+                            <Link
+                                v-if="can('pos.access')"
+                                href="/pos"
+                                @click="prepareOpenPos"
+                                class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0 sm:h-auto"
+                                title="Mở POS bán hàng"
+                            >
+                                <Store :size="15" />
+                                <span class="hidden sm:inline">Mở POS</span>
+                            </Link>
+
+                            <!-- THÔNG BÁO -->
+                            <NotificationBell />
+
+                            <div class="h-6 w-px bg-slate-200 hidden sm:block shrink-0"></div>
+
+                            <!-- USER DROPDOWN MENU -->
+                            <div class="relative shrink-0">
+                                <button
+                                    type="button"
+                                    @click="userDropdownOpen = !userDropdownOpen"
+                                    class="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-50 active:bg-slate-100 transition"
+                                >
+                                    <div class="h-8 w-8 sm:h-8 sm:w-8 overflow-hidden rounded-lg bg-cyan-950 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                                        <img v-if="user.avatar" :src="imageUrl(user.avatar)" alt="Ảnh đại diện" class="h-full w-full object-cover">
+                                        <span v-else>{{ (user.name || 'A').charAt(0).toUpperCase() }}</span>
+                                    </div>
+                                    <div class="hidden xl:block text-left">
+                                        <div class="text-xs font-bold text-slate-800 leading-tight truncate max-w-[100px]">
+                                            {{ user.name }}
+                                        </div>
+                                        <div class="text-[10px] font-medium text-slate-400">
+                                            {{ roleTitle }}
+                                        </div>
+                                    </div>
+                                    <ChevronDown :size="14" class="text-slate-400 hidden sm:block transition-transform duration-200" :class="userDropdownOpen && 'rotate-180'" />
+                                </button>
+
+                                <!-- DROPDOWN TÀI KHOẢN -->
+                                <div
+                                    v-if="userDropdownOpen"
+                                    @click="userDropdownOpen = false"
+                                    class="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1rem)] sm:w-52 rounded-2xl bg-white p-1.5 shadow-xl border border-slate-100 z-50 text-sm sm:text-xs animate-in fade-in slide-in-from-top-2 duration-150"
+                                >
+                                    <div class="px-3 py-2 border-b border-slate-100 mb-1">
+                                        <p class="font-bold text-slate-900 truncate">{{ user.name }}</p>
+                                        <p class="text-[11px] text-slate-400 truncate">{{ user.email || user.username }}</p>
+                                    </div>
+
+                                    <Link
+                                        href="/profile"
+                                        class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
+                                    >
+                                        <User :size="15" class="text-slate-400" />
+                                        <span>Tài khoản cá nhân</span>
+                                    </Link>
+
+                                    <Link
+                                        v-if="can('settings.view')"
+                                        href="settings"
+                                        class="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-slate-700 hover:bg-slate-100 font-medium transition"
+                                    >
+                                        <Shield :size="15" class="text-slate-400" />
+                                        <span>Thiết lập hệ thống</span>
+                                    </Link>
+
+                                    <div class="my-1 border-t border-slate-100"></div>
+
+                                    <button
+                                        type="button"
+                                        @click="handleLogout"
+                                        class="w-full flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold text-left transition"
+                                    >
+                                        <LogOut :size="15" />
+                                        <span>Đăng xuất</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
-                </div>
 
-                <!-- KHU VỰC TÌM KIẾM DÀNH CHO MOBILE (Trượt xuống khi bấm nút kính lúp) -->
-                <div v-if="showMobileSearch" class="md:hidden border-t border-slate-200/80 p-2.5 bg-slate-50 animate-in slide-in-from-top-2 duration-150">
-                    <GlobalSearch @selected="showMobileSearch = false" />
-                </div>
-            </header>
+                    <!-- KHU VỰC TÌM KIẾM DÀNH CHO MOBILE (Trượt xuống khi bấm nút kính lúp) -->
+                    <div v-if="showMobileSearch" class="md:hidden border-t border-slate-200/80 p-2.5 bg-slate-50 animate-in slide-in-from-top-2 duration-150">
+                        <GlobalSearch @selected="showMobileSearch = false" />
+                    </div>
+                </header>
 
-            <!-- MAIN CONTENT AREA -->
-            <main class="flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3 sm:pb-3 sm:pt-1.5">
-                <div class="mx-auto w-full max-w-[1760px] space-y-3">
-                    <slot :key="page.url" />
+                <div class="px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3 sm:pb-3 sm:pt-1.5">
+                    <div class="mx-auto w-full max-w-[1760px] space-y-3">
+                        <slot :key="page.url" />
+                    </div>
                 </div>
             </main>
 

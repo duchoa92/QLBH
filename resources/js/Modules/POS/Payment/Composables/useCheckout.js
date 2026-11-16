@@ -107,6 +107,9 @@ export function useCheckout(
 
                     pay_old_debt:
                         paymentData.pay_old_debt,
+
+                    note:
+                        paymentData.note ?? null,
                 })
 
             /*

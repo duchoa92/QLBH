@@ -37,6 +37,7 @@ class PosCheckoutService
         float $vatRate = 0,
         ?int $workShiftId = null,
         ?string $bankAccount = null,
+        ?string $note = null,
     ): Sale {
 
         return DB::transaction(function () use (
@@ -55,6 +56,7 @@ class PosCheckoutService
             $vatRate,
             $workShiftId,
             $bankAccount,
+            $note,
         ): Sale {
 
             /*
@@ -129,6 +131,8 @@ class PosCheckoutService
                 'payment_method' => $paymentMethod ?? 'cash', // Phòng hờ nếu null thì lưu là 'cash'
                 'work_shift_id' => $workShiftId,
                 'bank_account' => in_array($paymentMethod, ['bank', 'mixed'], true) ? $bankAccount : null,
+                // Ghi chú toàn đơn nhập ở màn thanh toán.
+                'note' => $note !== null && trim($note) !== '' ? trim($note) : null,
             ]);
 
             /*

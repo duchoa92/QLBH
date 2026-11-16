@@ -178,6 +178,7 @@ class BankTransferWebhookController extends Controller
                     vatRate: (float) ($payload['vat_rate'] ?? setting('pos_vat_rate', 10)),
                     workShiftId: $locked->work_shift_id ? (int) $locked->work_shift_id : null,
                     bankAccount: $locked->bank_account,
+                    note: $payload['note'] ?? null,
                 );
                 $sale->load(['items.product', 'items.variant', 'items.productImei', 'customer']);
                 $saleResponse = $this->saleResponse($sale);

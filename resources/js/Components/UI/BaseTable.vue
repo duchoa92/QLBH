@@ -121,15 +121,14 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
         </table>
     </div>
 
-    <div class="divide-y divide-slate-100 md:hidden">
-        <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 p-4 transition active:bg-slate-100" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
+    <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+        <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 rounded-xl border border-slate-200 border-l-4 border-l-slate-300 bg-white p-3.5 shadow-sm transition active:bg-slate-50" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
             <div class="flex items-start gap-2">
                 <input v-if="selectable" type="checkbox" class="mt-1 shrink-0" :checked="selectedIds.includes(row.id)" @click.stop @change="$emit('toggleOne', row.id)" />
                 <div class="min-w-0 flex-1">
                     <slot name="mobile-title" :row="row">
                     <div class="break-words text-sm font-bold text-slate-900">{{ displayValue(primaryValue(row)) }}</div>
                     </slot>
-                    <div v-if="rowClickable" class="mt-0.5 text-[11px] font-semibold text-emerald-600">Xem chi tiết ›</div>
                 </div>
             </div>
             <slot name="mobile-body" :row="row">

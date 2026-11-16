@@ -475,6 +475,7 @@ const handleCheckout = async (data) => {
                 bank_received_amount: 0,
                 payment_method: 'cash', bank_account: null,
                 invoice_code: data.invoice_code, pay_old_debt: false,
+                note: data.note ?? null,
             }
             await enqueueOfflineSale({ id: data.invoice_code, code: data.invoice_code, userId: page.props.auth?.user?.id, queuedAt: Date.now(), payload })
             clearCart()

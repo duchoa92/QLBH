@@ -18,8 +18,6 @@ import {
     Phone,
     ChevronRight,
     X,
-    CalendarDays,
-    ChevronLeft,
 } from 'lucide-vue-next'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -29,10 +27,12 @@ import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
-import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
+import ListToolbar from '@/Components/UI/ListToolbar.vue'
+import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
+import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import api from '@/Services/api'
-import { DEFAULT_CANCEL_REASONS, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
+import { DEFAULT_CANCEL_REASONS, openReceiptInTab, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
 
 defineOptions({
     layout: AdminLayout
@@ -87,12 +87,6 @@ const status = ref(props.filters?.status ?? '')
 const paymentStatus = ref(props.filters?.payment_status ?? '')
 const dateFrom = ref(props.filters?.date_from ?? '')
 const dateTo = ref(props.filters?.date_to ?? '')
-const datePreset = ref(dateFrom.value || dateTo.value ? 'custom' : 'all')
-const calendarOpen = ref(false)
-const calendarRef = ref(null)
-const pickerStart = ref('')
-const pickerEnd = ref('')
-const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 const perPage = ref(Number(props.filters?.per_page ?? 10))
 
 const detailSale = ref(null)
@@ -146,7 +140,6 @@ const loadingSales = ref(false)
 onBeforeUnmount(() => {
     clearTimeout(searchTimeout)
     salesRequestController?.abort()
-    window.removeEventListener('pointerdown', closeCalendarOnOutside)
 })
 
 const syncFilterUrl = (filters) => {
@@ -245,133 +238,23 @@ const paymentStatusOptions = [
     { label: 'Còn nợ', value: 'debt' },
 ]
 
+const onSearchInput = (value) => {
+    search.value = value
+    handleFilterChange()
+}
+
+// Áp dụng ngay (Enter, chọn ngày): bỏ qua độ trễ khi gõ.
+const applyNow = () => {
+    clearTimeout(searchTimeout)
+    requestSales()
+}
+
 const clearSearch = () => {
     search.value = ''
     clearTimeout(searchTimeout)
     requestSales()
 }
 
-const datePresetOptions = [
-    { label: 'Toàn thời gian', value: 'all' },
-    { label: 'Hôm nay', value: 'today' },
-    { label: 'Hôm qua', value: 'yesterday' },
-    { label: '7 ngày qua', value: 'last_7_days' },
-    { label: '30 ngày qua', value: 'last_30_days' },
-    { label: 'Tháng này', value: 'this_month' },
-    { label: 'Tháng trước', value: 'last_month' },
-]
-
-const dateInputValue = (date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-}
-
-const dateFromInput = value => value ? new Date(`${value}T12:00:00`) : null
-const dateRangeFor = (preset) => {
-    const today = new Date()
-    if (preset === 'all') return { from: '', to: '' }
-    if (preset === 'today') {
-        const value = dateInputValue(today)
-        return { from: value, to: value }
-    }
-    if (preset === 'yesterday') {
-        const yesterday = new Date(today)
-        yesterday.setDate(today.getDate() - 1)
-        const value = dateInputValue(yesterday)
-        return { from: value, to: value }
-    }
-    if (preset === 'last_7_days') {
-        const from = new Date(today)
-        from.setDate(today.getDate() - 6)
-        return { from: dateInputValue(from), to: dateInputValue(today) }
-    }
-    if (preset === 'last_30_days') {
-        const from = new Date(today)
-        from.setDate(today.getDate() - 29)
-        return { from: dateInputValue(from), to: dateInputValue(today) }
-    }
-    if (preset === 'this_month') return { from: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)), to: dateInputValue(today) }
-    if (preset === 'last_month') return { from: dateInputValue(new Date(today.getFullYear(), today.getMonth() - 1, 1)), to: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 0)) }
-    return null
-}
-const applyDatePreset = (preset) => {
-    datePreset.value = preset
-    const range = dateRangeFor(preset)
-    if (!range) return
-    dateFrom.value = range.from
-    dateTo.value = range.to
-    calendarOpen.value = false
-    clearTimeout(searchTimeout)
-    requestSales()
-}
-const stageDatePreset = (preset) => {
-    datePreset.value = preset
-    const range = dateRangeFor(preset)
-    if (!range) return
-    pickerStart.value = range.from
-    pickerEnd.value = range.to
-    if (range.from) {
-        const anchor = dateFromInput(range.from)
-        calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
-    }
-}
-const monthLabel = month => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(month)
-const calendarCellsFor = (month) => {
-    const first = new Date(month.getFullYear(), month.getMonth(), 1)
-    const start = new Date(first)
-    start.setDate(1 - ((first.getDay() + 6) % 7))
-    return Array.from({ length: 42 }, (_, index) => {
-        const date = new Date(start)
-        date.setDate(start.getDate() + index)
-        return { key: dateInputValue(date), day: date.getDate(), currentMonth: date.getMonth() === month.getMonth() }
-    })
-}
-const calendarCells = computed(() => calendarCellsFor(calendarMonth.value))
-const isPickerSelected = key => key === pickerStart.value || key === pickerEnd.value
-const isPickerInRange = key => Boolean(pickerStart.value && pickerEnd.value && key > pickerStart.value && key < pickerEnd.value)
-const pickerRangeLabel = computed(() => {
-    const format = value => new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
-    if (!pickerStart.value) return 'Chọn ngày bắt đầu, rồi chọn ngày kết thúc'
-    return pickerEnd.value ? `${format(pickerStart.value)} – ${format(pickerEnd.value)}` : `Từ ${format(pickerStart.value)} · chọn ngày kết thúc`
-})
-const selectedDateRangeLabel = computed(() => {
-    const format = value => new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(dateFromInput(value))
-    if (!dateFrom.value && !dateTo.value) return 'Toàn thời gian'
-    if (!dateTo.value || dateTo.value === dateFrom.value) return format(dateFrom.value || dateTo.value)
-    return `${format(dateFrom.value)} – ${format(dateTo.value)}`
-})
-const openDatePicker = () => {
-    pickerStart.value = dateFrom.value
-    pickerEnd.value = dateTo.value
-    const anchor = dateFromInput(pickerStart.value) || new Date()
-    calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
-    calendarOpen.value = true
-}
-const moveCalendarMonth = amount => { calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + amount, 1) }
-const selectPickerDate = (key) => {
-    if (!pickerStart.value || pickerEnd.value) { pickerStart.value = key; pickerEnd.value = ''; return }
-    if (key < pickerStart.value) { pickerEnd.value = pickerStart.value; pickerStart.value = key } else pickerEnd.value = key
-}
-const applyCustomDateRange = () => {
-    if (datePreset.value === 'all') {
-        applyDatePreset('all')
-        return
-    }
-    if (!pickerStart.value) return
-    datePreset.value = 'custom'
-    dateFrom.value = pickerStart.value
-    dateTo.value = pickerEnd.value || pickerStart.value
-    calendarOpen.value = false
-    clearTimeout(searchTimeout)
-    requestSales()
-}
-const clearDateRange = () => applyDatePreset('all')
-const closeCalendarOnOutside = event => {
-    if (calendarOpen.value && calendarRef.value && !calendarRef.value.contains(event.target)) calendarOpen.value = false
-}
-onMounted(() => window.addEventListener('pointerdown', closeCalendarOnOutside))
 
 // Hàm kích hoạt lọc (chỉ gửi request khi có thay đổi)
 const handleFilterChange = () => {
@@ -397,7 +280,11 @@ const getCustomerPhone = (sale) => sale?.customer?.phone || 'Không có SĐT'
 
 // In hóa đơn
 const openPrintWindow = (saleId) => {
-    printFrameUrl.value = route('sales.receipt', saleId)
+    const url = route('sales.receipt', saleId)
+
+    if (openReceiptInTab(url)) return
+
+    printFrameUrl.value = url
     printFrameKey.value++
 }
 
@@ -431,10 +318,25 @@ const handleCancelSale = () => {
     )
 }
 
+// Sửa ngay từ modal chi tiết: đóng chi tiết rồi mở form sửa của đúng hóa đơn đó.
+const editFromDetail = (sale) => {
+    closeSaleDetail()
+    editSale.value = sale
+}
+
 const onSaleEdited = () => {
     editSale.value = null
-    router.reload({ only: ['sales'], preserveScroll: true })
+    router.reload({ only: ['sales', 'selectedSale'], preserveScroll: true })
 }
+
+// Modal chi tiết đang giữ bản sao của dòng hóa đơn: khi danh sách tải lại (sau khi sửa ghi chú, thanh toán...) thì lấy bản mới.
+watch(() => salesData.value?.data, (rows) => {
+    const currentId = detailSale.value?.id
+    if (!currentId) return
+
+    const fresh = rows?.find(sale => sale.id === currentId) || (props.selectedSale?.id === currentId ? props.selectedSale : null)
+    if (fresh) detailSale.value = fresh
+})
 
 // Lý do hủy mẫu
 const defaultReasons = DEFAULT_CANCEL_REASONS
@@ -528,41 +430,31 @@ const highlightedSearchSegments = (value) => {
         <PageHeader title="Hóa đơn bán hàng" />
         <DataPanel detached>
             <template #header>
-                <div class="flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
-                    <div class="relative min-w-0 w-full sm:min-w-[220px] sm:flex-1">
-                            <Search class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input id="sales-search" v-model="search" type="text" autocomplete="off" placeholder="Tìm Mã HĐ, Tên KH, SĐT, sản phẩm, Serial/IMEI..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm font-normal text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-100" @input="handleFilterChange" />
-                            <LoaderCircle v-if="loadingSales" class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" />
-                            <button v-else-if="search" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa từ khóa" @click="clearSearch"><X class="h-3 w-3" /></button>
-                    </div>
-
-                    <FloatingSelect
-                        :model-value="paymentStatus"
-                        label="Trạng thái thanh toán"
-                        :options="paymentStatusOptions"
-                        input-class="!h-[42px] !rounded-xl !border-slate-200 !px-3 !pb-1 !pt-3 !text-xs !font-semibold focus:!border-blue-400"
-                        wrapper-class="w-full sm:w-[180px]"
-                        @update:model-value="applyPaymentStatus"
-                    />
-                    <div ref="calendarRef" class="relative w-full min-w-0 shrink-0 sm:w-auto">
-                            <button type="button" class="inline-flex h-[42px] w-full min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-left text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 sm:min-w-[220px] sm:w-auto" title="Lọc theo khoảng ngày" @click="calendarOpen ? calendarOpen = false : openDatePicker()"><CalendarDays class="h-4 w-4 shrink-0 text-blue-600" /><span class="min-w-0 flex-1 truncate">{{ selectedDateRangeLabel }}</span><ChevronRight class="h-4 w-4 shrink-0 rotate-90 text-slate-400" /></button>
-                            <div v-if="calendarOpen" class="absolute right-0 top-full z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:w-[470px]">
-                                <div class="flex flex-col sm:flex-row">
-                                    <aside class="border-b border-slate-200 bg-slate-50/70 p-2 sm:w-40 sm:shrink-0 sm:border-b-0 sm:border-r">
-                                        <p class="mb-1 px-2 pt-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Khoảng có sẵn</p>
-                                        <div class="flex flex-wrap gap-1 sm:block sm:space-y-0.5">
-                                            <button v-for="preset in datePresetOptions" :key="preset.value" type="button" class="w-auto rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold transition sm:w-full sm:px-2.5 sm:py-2" :class="datePreset === preset.value ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-white hover:text-slate-900'" @click="stageDatePreset(preset.value)">{{ preset.label }}</button>
-                                        </div>
-                                    </aside>
-                                    <section class="min-w-0 flex-1 p-2.5 sm:p-3">
-                                        <header class="mb-2 flex items-center justify-between gap-2"><button type="button" class="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100" aria-label="Tháng trước" @click="moveCalendarMonth(-1)"><ChevronLeft class="h-4 w-4" /></button><div class="min-w-0 flex-1 text-center text-xs font-bold capitalize text-slate-800">{{ monthLabel(calendarMonth) }}</div><button type="button" class="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100" aria-label="Tháng sau" @click="moveCalendarMonth(1)"><ChevronRight class="h-4 w-4" /></button></header>
-                                        <div class="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1">{{ day }}</span></div><div class="grid grid-cols-7"><button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-8 w-8 place-items-center rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectPickerDate(cell.key)">{{ cell.day }}</button></div>
-                                    </section>
-                                </div>
-                                <footer class="flex flex-col gap-2 border-t border-slate-200 bg-slate-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"><p class="truncate text-xs font-medium text-slate-600">Đã chọn: <span class="font-bold text-slate-800">{{ pickerRangeLabel }}</span></p><div class="flex items-center justify-end gap-2"><button type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-rose-600" @click="clearDateRange">Xóa</button><button type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white" @click="calendarOpen = false">Hủy</button><button type="button" :disabled="datePreset !== 'all' && !pickerStart" class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCustomDateRange">Áp dụng</button></div></footer>
-                            </div>
-                    </div>
-                </div>
+                <ListToolbar
+                    :model-value="search"
+                    :loading="loadingSales"
+                    search-id="sales-search"
+                    placeholder="Tìm Mã HĐ, Tên KH, SĐT, sản phẩm, Serial/IMEI..."
+                    @update:model-value="onSearchInput"
+                    @clear="clearSearch"
+                    @submit="applyNow"
+                >
+                    <template #filters>
+                        <ListFilterSelect
+                            :model-value="paymentStatus"
+                            label="Trạng thái thanh toán"
+                            :options="paymentStatusOptions"
+                            @update:model-value="applyPaymentStatus"
+                        />
+                        <DateRangeFilter
+                            :from="dateFrom"
+                            :to="dateTo"
+                            @update:from="dateFrom = $event"
+                            @update:to="dateTo = $event"
+                            @change="applyNow"
+                        />
+                    </template>
+                </ListToolbar>
             </template>
 
             <!-- DANH SÁCH BẢNG DỮ LIỆU CÓ SORT & CLICK LỌC -->
@@ -816,9 +708,9 @@ const highlightedSearchSegments = (value) => {
                 </table>
                 </div>
 
-                <div class="divide-y divide-slate-100 md:hidden">
-                    <article v-for="sale in sortedSalesData" :key="`mobile-${sale.id}`" class="cursor-pointer space-y-2.5 p-4 transition active:bg-slate-100" @click="openSaleDetail(sale)">
-                        <div class="flex items-start justify-between gap-2">
+                <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+                    <article v-for="sale in sortedSalesData" :key="`mobile-${sale.id}`" class="cursor-pointer space-y-2.5 rounded-xl border border-slate-200 border-l-4 bg-white p-3.5 shadow-sm transition active:bg-slate-50" :class="sale.status === 'cancelled' ? 'border-l-rose-400' : saleHasDebt(sale) ? 'border-l-amber-400' : 'border-l-emerald-500'" @click="openSaleDetail(sale)">
+                        <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
                             <div class="text-sm font-bold text-slate-900">
                                 <template v-for="(segment, segmentIndex) in highlightedSearchSegments(`#${sale.code || ''}`)" :key="segmentIndex">
                                     <mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark>
@@ -838,7 +730,7 @@ const highlightedSearchSegments = (value) => {
                                         <span v-else>{{ segment.text }}</span>
                                     </template>
                                 </div>
-                                <div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><Phone class="h-3 w-3" /> {{ getCustomerPhone(sale) }} · {{ sale.user?.name || '-' }}</div>
+                                <div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><Phone class="h-3 w-3" /> {{ getCustomerPhone(sale) }}</div>
                             </div>
                             <div class="shrink-0 text-right">
                                 <div class="text-sm font-extrabold text-slate-900">{{ formatMoney(saleTotal(sale)) }}</div>
@@ -862,7 +754,6 @@ const highlightedSearchSegments = (value) => {
                                 <button v-if="canEditSales" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-40" :disabled="sale.status === 'cancelled'" title="Sửa hóa đơn" aria-label="Sửa hóa đơn" @click="editSale = sale"><Pencil class="h-5 w-5" /></button>
                                 <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 active:bg-emerald-100" title="In hóa đơn" aria-label="In hóa đơn" @click="openPrintWindow(sale.id)"><Printer class="h-5 w-5" /></button>
                                 <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100 disabled:opacity-40" :disabled="!canCancelSales || sale.status === 'cancelled'" title="Trả hàng / Hủy hóa đơn" aria-label="Trả hàng / Hủy hóa đơn" @click="confirmCancel(sale)"><Undo2 class="h-5 w-5" /></button>
-                                <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 active:bg-slate-200" title="Xem chi tiết" aria-label="Xem chi tiết" @click="openSaleDetail(sale)"><ChevronRight class="h-5 w-5" /></button>
                             </div>
                         </div>
                     </article>
@@ -885,9 +776,11 @@ const highlightedSearchSegments = (value) => {
             :invoice="detailSale"
             :can-cancel="canCancelSales && detailSale?.status !== 'cancelled'"
             can-print
+            :can-edit="canEditSales"
             @close="closeSaleDetail"
             @cancel="confirmCancel"
             @print="openPrintWindow($event.id)"
+            @edit="editFromDetail"
         />
         <iframe
             v-if="printFrameUrl"

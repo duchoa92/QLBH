@@ -6,6 +6,7 @@ import {
     CheckCircle2,
     Gift,
     Printer,
+    Pencil,
     Undo2,
     XCircle,
     X,
@@ -36,13 +37,17 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    canEdit: {
+        type: Boolean,
+        default: false,
+    },
     layerClass: {
         type: String,
         default: 'z-50',
     },
 })
 
-const emit = defineEmits(['close', 'cancel', 'print'])
+const emit = defineEmits(['close', 'cancel', 'print', 'edit'])
 const openWarrantyNoteId = ref(null)
 
 const toggleWarrantyNote = (item) => {
@@ -332,30 +337,32 @@ const cancelReason = computed(() =>
                                     :key="item.id || index"
                                 >
                                     <tr class="hover:bg-slate-50/60 transition">
-                                        <td class="px-3 py-2.5 text-center text-slate-400 font-bold">
+                                        <td class="px-3 py-2.5 text-center text-slate-400 font-bold" data-m-hide>
                                             {{ index + 1 }}
                                         </td>
-                                        <td class="px-3 py-2.5">
+                                        <td class="px-3 py-2.5" data-m-wide>
+                                            <div class="min-w-0 w-full">
                                             <div class="font-bold text-slate-900 text-sm">
-                                                {{ item.product?.name || item.product_name || '-' }}
+                                                <span class="mr-1 text-slate-400 md:hidden">{{ index + 1 }}.</span>{{ item.product?.name || item.product_name || '-' }}
                                                 <span v-if="item.has_vat" class="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-emerald-700">Có VAT</span><span v-if="item.vat_applied" class="ml-1 rounded bg-blue-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-blue-700">VAT tính</span>
                                             </div>
 
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                                             <div
                                                 v-if="variantLabel(item.variant)"
-                                                class="mt-1 inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700"
+                                                class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700"
                                             >
                                                 {{ variantLabel(item.variant) }}
                                             </div>
 
-                                            <div v-if="item.product_imei?.imei || item.imei" class="mt-1">
-                                                <span class="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-mono font-bold text-blue-600 border border-blue-100">
+                                            <div v-if="item.product_imei?.imei || item.imei" class="inline-flex items-center gap-1.5">
+                                                <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-blue-50 px-2 py-0.5 text-xs font-mono font-bold text-blue-600 border border-blue-100">
                                                     <Tag :size="11" /> IMEI: {{ item.product_imei?.imei || item.imei }}
                                                 </span>
-                                                <span v-if="item.product_imei?.is_used" class="ml-1.5 inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span>
+                                                <span v-if="item.product_imei?.is_used" class="inline-flex shrink-0 items-center rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-bold not-italic text-amber-800 font-sans">CŨ</span>
                                             </div>
 
-                                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="mt-1 inline-flex items-center gap-1.5">
+                                            <div v-if="item.product_imei?.customer_warranty_days !== null && item.product_imei?.customer_warranty_days !== undefined" class="inline-flex items-center gap-1.5">
                                                 <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold" :class="warrantyEndDate(item) ? 'text-emerald-700' : 'text-slate-500'">
                                                 {{ warrantyEndDate(item)
                                                     ? `Bảo hành đến ${warrantyEndDate(item)}`
@@ -365,13 +372,14 @@ const cancelReason = computed(() =>
                                                     <MessageSquare :size="14" />
                                                 </button>
                                             </div>
-                                            <div v-else-if="(item.warranty_days !== null && item.warranty_days !== undefined) || item.warranty_note" class="mt-1 inline-flex items-center gap-1.5">
+                                            <div v-else-if="(item.warranty_days !== null && item.warranty_days !== undefined) || item.warranty_note" class="inline-flex items-center gap-1.5">
                                                 <span v-if="item.warranty_days !== null && item.warranty_days !== undefined" class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold" :class="Number(item.warranty_days) > 0 ? 'text-emerald-700' : 'text-slate-500'">
                                                     {{ Number(item.warranty_days) > 0 && warrantyEndDate(item) ? `Bảo hành đến ${warrantyEndDate(item)}` : 'Không áp dụng bảo hành' }}
                                                 </span>
                                                 <button v-if="item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" :aria-label="`Xem ghi chú bảo hành ${item.product?.name || ''}`" :aria-expanded="openWarrantyNoteId === item.id" @click.stop="toggleWarrantyNote(item)">
                                                     <MessageSquare :size="14" />
                                                 </button>
+                                            </div>
                                             </div>
                                             <div v-if="item.warranty_note && openWarrantyNoteId === item.id" class="mt-1 max-w-sm rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 whitespace-pre-line">
                                                 {{ item.warranty_note }}
@@ -392,9 +400,10 @@ const cancelReason = computed(() =>
                                             <div v-if="item.note" class="mt-1 text-xs italic text-slate-400">
                                                 Ghi chú: {{ item.note }}
                                             </div>
+                                            </div>
                                         </td>
 
-                                        <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                        <td class="px-3 py-2.5 text-center whitespace-nowrap" data-m-hide>
                                             <span class="inline-block rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-600 whitespace-nowrap">
                                                 Sản phẩm
                                             </span>
@@ -425,14 +434,15 @@ const cancelReason = computed(() =>
                                         :key="`gift-${item.id || index}-${gift.id || giftIndex}`"
                                         class="bg-emerald-50/40 text-xs"
                                     >
-                                        <td class="px-3 py-2 text-center text-slate-300">-</td>
-                                        <td class="px-3 py-2 text-emerald-800">
+                                        <td class="px-3 py-2 text-center text-slate-300" data-m-hide>-</td>
+                                        <td class="px-3 py-2 text-emerald-800" data-m-wide>
                                             <span class="inline-flex items-center gap-1 font-bold">
                                                 <Gift :size="13" class="text-emerald-600" />
                                                 {{ gift.product?.name || gift.product_name || 'Quà tặng' }}
+                                                <span class="rounded-full border border-emerald-200 bg-emerald-100/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 md:hidden">Quà tặng</span>
                                             </span>
                                         </td>
-                                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                                        <td class="px-3 py-2 text-center whitespace-nowrap" data-m-hide>
                                             <span class="inline-block rounded-full border border-emerald-200 bg-emerald-100/60 px-2.5 py-0.5 text-xs font-bold text-emerald-700 whitespace-nowrap">
                                                 Quà tặng
                                             </span>
@@ -447,14 +457,15 @@ const cancelReason = computed(() =>
                                     </tr>
 
                                     <tr v-if="item.gift_product" class="bg-emerald-50/40 text-xs">
-                                        <td class="px-3 py-2 text-center text-slate-300">-</td>
-                                        <td class="px-3 py-2 text-emerald-800">
+                                        <td class="px-3 py-2 text-center text-slate-300" data-m-hide>-</td>
+                                        <td class="px-3 py-2 text-emerald-800" data-m-wide>
                                             <span class="inline-flex items-center gap-1 font-bold">
                                                 <Gift :size="13" class="text-emerald-600" />
                                                 {{ item.gift_product.name }}
+                                                <span class="rounded-full border border-emerald-200 bg-emerald-100/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 md:hidden">Quà tặng</span>
                                             </span>
                                         </td>
-                                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                                        <td class="px-3 py-2 text-center whitespace-nowrap" data-m-hide>
                                             <span class="inline-block rounded-full border border-emerald-200 bg-emerald-100/60 px-2.5 py-0.5 text-xs font-bold text-emerald-700 whitespace-nowrap">
                                                 Quà tặng
                                             </span>
@@ -549,6 +560,18 @@ const cancelReason = computed(() =>
                 </div>
 
                 <div class="flex items-center gap-2">
+                    <button
+                        v-if="canEdit && invoice && !isCancelled"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-100 active:scale-95"
+                        title="Sửa hóa đơn"
+                        aria-label="Sửa hóa đơn"
+                        @click="emit('edit', invoice)"
+                    >
+                        <Pencil :size="14" />
+                        <span class="hidden sm:inline">Sửa</span>
+                    </button>
+
                     <button
                         type="button"
                         class="rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"

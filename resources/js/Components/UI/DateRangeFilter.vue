@@ -70,14 +70,18 @@ const dateRangeFor = (preset) => {
     return null
 }
 
-const commit = (from, to) => {
+// Đang chờ ngày thứ hai để mở rộng thành khoảng ngày (sau khi bấm ngày đầu tiên, bộ lọc đã áp dụng 1 ngày đó).
+const awaitingEnd = ref(false)
+
+const commit = (from, to, { close = true } = {}) => {
     emit('update:from', from)
     emit('update:to', to)
-    open.value = false
+    if (close) open.value = false
     emit('change', { from, to })
 }
 
 const applyDatePreset = (preset) => {
+    awaitingEnd.value = false
     datePreset.value = preset
     const range = dateRangeFor(preset)
     if (!range) return
@@ -98,8 +102,9 @@ const calendarCells = computed(() => {
 const isPickerSelected = key => key === pickerStart.value || key === pickerEnd.value
 const isPickerInRange = key => Boolean(pickerStart.value && pickerEnd.value && key > pickerStart.value && key < pickerEnd.value)
 const pickerRangeLabel = computed(() => {
-    if (!pickerStart.value) return 'Chọn ngày bắt đầu, rồi chọn ngày kết thúc'
-    return pickerEnd.value ? `${formatDate(pickerStart.value)} – ${formatDate(pickerEnd.value)}` : `Từ ${formatDate(pickerStart.value)} · chọn ngày kết thúc (bấm lại ngày này nếu chỉ lọc 1 ngày)`
+    if (!pickerStart.value) return 'Bấm một ngày để lọc, hoặc bấm hai ngày để lọc khoảng ngày'
+    if (awaitingEnd.value) return `${formatDate(pickerStart.value)} · bấm thêm một ngày nữa nếu muốn lọc khoảng ngày`
+    return !pickerEnd.value || pickerEnd.value === pickerStart.value ? formatDate(pickerStart.value) : `${formatDate(pickerStart.value)} – ${formatDate(pickerEnd.value)}`
 })
 const selectedLabel = computed(() => {
     if (!props.from && !props.to) return 'Toàn thời gian'
@@ -108,6 +113,7 @@ const selectedLabel = computed(() => {
 })
 
 const openPicker = () => {
+    awaitingEnd.value = false
     pickerStart.value = props.from
     pickerEnd.value = props.to
     const anchor = dateFromInput(pickerStart.value) || new Date()
@@ -116,12 +122,22 @@ const openPicker = () => {
 }
 const moveMonth = amount => { calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + amount, 1) }
 const selectDate = (key) => {
-    if (!pickerStart.value || pickerEnd.value) { pickerStart.value = key; pickerEnd.value = ''; return }
-    // Chọn xong ngày thứ hai: áp dụng luôn khoảng đó. Muốn lọc đúng 1 ngày thì bấm lại chính ngày đó.
+    datePreset.value = 'custom'
+
+    // Bấm ngày đầu tiên: áp dụng NGAY đúng ngày đó (lọc 1 ngày), lịch vẫn mở để có thể bấm thêm ngày thứ hai.
+    if (!awaitingEnd.value) {
+        pickerStart.value = key
+        pickerEnd.value = key
+        awaitingEnd.value = true
+        commit(key, key, { close: false })
+        return
+    }
+
+    // Bấm ngày thứ hai: mở rộng thành khoảng ngày, áp dụng và đóng lịch (bấm lại cùng ngày thì giữ 1 ngày).
     const [from, to] = key < pickerStart.value ? [key, pickerStart.value] : [pickerStart.value, key]
     pickerStart.value = from
     pickerEnd.value = to
-    datePreset.value = 'custom'
+    awaitingEnd.value = false
     commit(from, to)
 }
 const closeOnOutside = event => {
@@ -160,7 +176,10 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
             </div>
             <footer class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/50 px-3 py-2.5">
                 <p class="min-w-0 truncate text-xs font-medium text-slate-600">Đã chọn: <span class="font-bold text-slate-800">{{ pickerRangeLabel }}</span></p>
-                <button v-if="allowAll" type="button" class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-rose-600" @click="applyDatePreset('all')">Xóa</button>
+                <div class="flex shrink-0 items-center gap-1">
+                    <button v-if="allowAll" type="button" class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-rose-600" @click="applyDatePreset('all')">Xóa</button>
+                    <button type="button" class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700" @click="open = false">Xong</button>
+                </div>
             </footer>
         </div>
     </div>

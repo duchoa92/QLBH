@@ -352,6 +352,30 @@ body {
     }
 }
 
+/* iOS Safari tự phóng to trang khi chạm vào ô nhập có chữ nhỏ hơn 16px: đặt đúng 16px để không bị zoom tự động. */
+@supports (-webkit-touch-callout: none) {
+    @media (pointer: coarse) {
+        input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+        select,
+        textarea {
+            font-size: 16px !important;
+        }
+    }
+}
+
+/* Bàn phím ảo đang mở (class kb-open do utils/viewportFix.js gắn): khung phủ toàn màn hình chỉ chiếm phần nhìn thấy,
+   hộp thoại không cao hơn phần đó nên nội dung và nút bên dưới không bị bàn phím che. */
+html.kb-open .fixed.inset-0 {
+    top: var(--vv-top, 0px);
+    bottom: auto;
+    height: var(--vv-h, 100dvh);
+}
+
+html.kb-open .base-modal-sheet,
+html.kb-open [role="dialog"] {
+    max-height: calc(var(--vv-h, 100dvh) - 0.75rem) !important;
+}
+
 /* POS toàn màn hình: khóa cuộn trang nền, không kéo giãn/nảy làm lộ thanh trình duyệt. */
 html.pos-fullscreen,
 html.pos-fullscreen body {
@@ -455,14 +479,21 @@ summary,
         display: none !important;
     }
 
+    /* Mỗi dòng là một block riêng (giống danh sách Tiếp nhận sửa): nền xám nhạt, thẻ trắng viền + vạch trái + đổ bóng nhẹ. */
+    table.m-cards tbody {
+        padding: 0.25rem 0;
+        background: rgb(248 250 252 / 0.7) !important;
+    }
+
     table.m-cards tr {
         display: block;
-        margin: 0.5rem;
-        padding: 0.375rem 0.75rem;
+        margin: 0.625rem;
+        padding: 0.5rem 0.875rem;
         border: 1px solid #e2e8f0;
+        border-left: 4px solid #cbd5e1;
         border-radius: 0.75rem;
         background: #fff !important;
-        box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
     }
 
     table.m-cards tbody tr:hover,
@@ -506,14 +537,35 @@ summary,
         text-transform: uppercase;
     }
 
-    /* Ô không có tiêu đề / gộp cột: chiếm cả hàng, không nhãn. */
+    /* Ô không có tiêu đề / gộp cột: chiếm cả hàng, không nhãn. Dùng block để các khối con (tên, nhãn, ghi chú...) xếp dọc thay vì thành nhiều cột. */
     table.m-cards td.m-cell-wide {
-        justify-content: flex-start;
+        display: block !important;
         text-align: left !important;
+    }
+
+    /* Ô chứa ô nhập liệu: nhãn bên trái, ô nhập bên phải có bề rộng vừa phải. */
+    table.m-cards td.m-input-cell {
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    table.m-cards td.m-input-cell > div,
+    table.m-cards td.m-input-cell > span {
+        flex: 0 1 11rem;
+        margin-left: auto;
+    }
+
+    table.m-cards td.m-input-cell > button {
+        margin-left: auto;
     }
 
     table.m-cards td.m-cell-wide::before {
         display: none;
+    }
+
+    /* Ô dư thừa trên thẻ mobile (vd. STT, cột Loại): ẩn đi, desktop vẫn giữ nguyên. */
+    table.m-cards td.m-cell-hide {
+        display: none !important;
     }
 
     /* Ô thao tác: nút biểu tượng nằm gọn một hàng ở cuối thẻ. */

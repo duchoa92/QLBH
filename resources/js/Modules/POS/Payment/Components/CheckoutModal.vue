@@ -388,6 +388,7 @@ const startBankPayment = async () => {
             invoice_discount: Number(props.invoiceDiscount || 0),
             invoice_discount_type: props.invoiceDiscountType === 'percent' ? 'percent' : 'amount',
             extra_fee: Number(props.extraFee || 0),
+            note: note.value || null,
             cash_received_amount: mixedPayment.value ? Math.round(cashReceivedAmount.value) : 0,
             bank_account: selectedBankAccount.value?.bank_account,
         })
