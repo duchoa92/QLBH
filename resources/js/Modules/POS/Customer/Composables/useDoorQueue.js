@@ -14,6 +14,8 @@ import api from '@/Services/api'
 const POLL_MS = 2500
 const DISMISS_COOLDOWN = 60000
 const DEFAULT_KEY = 'pos.doorQueue'
+const UNAVAILABLE_AFTER = 2 // số lần hỏi liên tiếp báo worker/camera lỗi (~5 giây) thì coi camera cửa không dùng được
+const RECOVER_AFTER = 2 // số lần liên tiếp báo ổn lại thì quay về camera cửa
 
 const readEnabled = (key) => { try { return localStorage.getItem(key) !== '0' } catch { return true } }
 
@@ -27,6 +29,9 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
     const workerOnline = ref(true)
     const cameraOk = ref(true)
     const requestFailed = ref(false)
+    const unavailable = ref(false) // camera cửa không dùng được (worker không chạy / camera lỗi), có độ trễ để khỏi nhấp nháy
+    let badStreak = 0
+    let goodStreak = 0
     const tick = ref(0) // tăng mỗi lần dữ liệu/trạng thái đổi để các computed tính lại (cooldown theo thời gian)
     const dismissed = new Map() // visitId -> thời điểm bỏ qua
     const served = new Set() // visitId đã phục vụ ở quầy này
@@ -35,6 +40,7 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
     let busy = false
 
     const toItem = visit => ({
+        source: 'door', // useFaceSource dựa vào đây để biết mục thuộc camera cửa hay camera máy
         trackId: `v${visit.id}`,
         visitId: visit.id,
         kind: visit.kind,
@@ -92,6 +98,14 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
             workerOnline.value = !!data?.worker_online
             cameraOk.value = data?.camera_ok !== false
             requestFailed.value = false
+            // Chỉ tính khi máy chủ trả lời được: mất kết nối tới máy chủ thì camera máy cũng không nhận diện được.
+            if (!workerOnline.value || !cameraOk.value) {
+                goodStreak = 0
+                if (++badStreak >= UNAVAILABLE_AFTER) unavailable.value = true
+            } else {
+                badStreak = 0
+                if (++goodStreak >= RECOVER_AFTER) unavailable.value = false
+            }
         } catch {
             requestFailed.value = true
         } finally {
@@ -109,6 +123,9 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
         if (timer) clearInterval(timer)
         timer = null
         present.value = []
+        unavailable.value = false
+        badStreak = 0
+        goodStreak = 0
     }
     const onVisible = () => { if (!document.hidden && active.value) poll() }
 
@@ -158,6 +175,8 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
         enabled,
         active,
         failed,
+        unavailable,
+        unavailableReason: computed(() => (!workerOnline.value ? 'Camera cửa chưa chạy' : 'Không lấy được ảnh camera cửa')),
         facing: ref('user'),
         switching: ref(false),
         tone,

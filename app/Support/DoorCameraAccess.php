@@ -94,6 +94,6 @@ final class DoorCameraAccess
     /** Dấu vân tay của cấu hình camera: đổi địa chỉ/tài khoản trong Cài đặt thì worker tự nạp lại. */
     public static function configHash(): string
     {
-        return substr(hash('sha256', (string) json_encode(self::camera())), 0, 16);
+        return substr(hash('sha256', (string) json_encode([self::camera(), FaceTuning::worker()])), 0, 16);
     }
 }

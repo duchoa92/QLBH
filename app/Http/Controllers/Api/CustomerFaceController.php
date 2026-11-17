@@ -8,8 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
 use App\Support\FaceMatcher;
+use App\Support\FaceTuning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -43,7 +45,10 @@ class CustomerFaceController extends Controller
             'consented_at' => $profiles->max('consented_at')?->toIso8601String(),
             // Có cấu hình camera an ninh (địa chỉ ảnh chụp) trong Cài đặt hay chưa.
             // Chỉ địa chỉ ảnh chụp http/https mới lấy được ảnh ở đây; địa chỉ RTSP dành cho worker camera cửa.
-            'cctv_configured' => (bool) preg_match('#^https?://#i', trim((string) setting('face_cctv_snapshot_url', ''))),
+            // Camera RTSP cũng dùng được khi đã bật chế độ camera cửa (worker gửi ảnh gốc lên máy chủ).
+            'cctv_configured' => (bool) preg_match('#^https?://#i', trim((string) setting('face_cctv_snapshot_url', '')))
+                || ((bool) preg_match('#^rtsps?://#i', trim((string) setting('face_cctv_snapshot_url', '')))
+                    && filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN)),
         ]);
     }
 
@@ -94,7 +99,16 @@ class CustomerFaceController extends Controller
 
         $url = trim((string) setting('face_cctv_snapshot_url', ''));
         if (preg_match('#^rtsps?://#i', $url)) {
-            return response()->json(['message' => 'Camera đang dùng địa chỉ RTSP nên chỉ worker camera cửa đọc được. Muốn lấy ảnh đăng ký khuôn mặt từ camera, hãy nhập thêm địa chỉ ảnh chụp http của camera.'], 422);
+            // Camera RTSP: nhờ worker camera cửa gửi 1 ảnh gốc (máy chủ web không đọc được luồng RTSP).
+            if (! DoorCameraController::status()['online']) {
+                return response()->json(['message' => 'Worker camera cửa chưa chạy nên chưa lấy được ảnh từ camera RTSP. Chạy worker (npm start trong door-worker) rồi thử lại.'], 422);
+            }
+            $jpeg = DoorCameraController::freshSnapshot();
+            if ($jpeg === null) {
+                return response()->json(['message' => 'Worker chưa gửi được ảnh từ camera cửa. Kiểm tra worker đang chạy bản mới nhất rồi thử lại.'], 502);
+            }
+
+            return response($jpeg, 200, ['Content-Type' => 'image/jpeg', 'Cache-Control' => 'no-store']);
         }
         if ($url === '' || ! preg_match('#^https?://#i', $url)) {
             return response()->json(['message' => 'Chưa cấu hình địa chỉ ảnh chụp camera an ninh trong Thiết lập → Khách hàng.'], 422);
@@ -233,6 +247,10 @@ class CustomerFaceController extends Controller
                 $face['descriptors'] ?? [$face]
             );
             $outcome = $this->matchFace($probes, $bank);
+            // Chỉ worker camera cửa (gửi X-Camera-Key, nhìn khách qua nhiều khung hình) mới tự học; POS học khi nhân viên bấm "Đúng".
+            if ($request->hasHeader('X-Camera-Key')) {
+                $this->learnFromMatch($probes, $outcome);
+            }
             if (config('face.log_scores')) {
                 Log::info('face.match', ['key' => $face['key'], 'best_similarity' => $outcome['best'] ?? null, 'matched' => isset($outcome['customer_id']), 'ambiguous' => ! empty($outcome['ambiguous'])]);
             }
@@ -278,7 +296,7 @@ class CustomerFaceController extends Controller
      *
      * @param  array<int, array<int, float>>  $probes
      * @param  array<int, array<int, array<int, float>>>  $bank
-     * @return array{customer_id?: int, confidence?: float, ambiguous?: bool, best?: float}
+     * @return array{customer_id?: int, confidence?: float, ambiguous?: bool, best?: float, gap?: float}
      */
     private function matchFace(array $probes, array $bank): array
     {
@@ -317,9 +335,92 @@ class CustomerFaceController extends Controller
         return [
             'customer_id' => (int) $ids[0],
             'best' => round($similarities[0], 3),
+            // Cách biệt với khách giống thứ nhì (1 nếu chỉ có một khách đã đăng ký): dùng để quyết định có tự học hay không.
+            'gap' => isset($similarities[1]) ? round($similarities[0] - $similarities[1], 3) : 1.0,
             // Độ tin cậy gần đúng để hiển thị gợi ý (0 = vừa đủ ngưỡng, 1 = rất giống).
             'confidence' => round(max(0, ($similarities[0] - $threshold) / max(0.0001, 1 - $threshold)), 2),
         ];
+    }
+
+    /**
+     * Tự bổ sung mẫu khuôn mặt cho khách đã được nhận ra, để lần sau nhận đúng hơn ở nhiều góc/ánh sáng.
+     * Chỉ học khi RẤT chắc chắn (sai một lần là mẫu sai nằm lại và kéo theo nhận nhầm về sau), cụ thể phải đủ mọi điều kiện:
+     *  - khách đã đăng ký và đồng ý; tính năng tự học đang bật (setting face_auto_learn_enabled, mặc định bật);
+     *  - có từ 2 khung hình trở lên, độ giống trung bình đạt ngưỡng cao (face.auto_learn_similarity) và hơn hẳn khách thứ nhì;
+     *  - TỪNG khung hình đều giống khách này đạt ngưỡng đó (không chỉ trung bình), và đủ gần mẫu đăng ký gốc (chống trôi dần qua các mẫu tự học);
+     *  - mẫu mới không trùng mẫu đã có (tránh thêm mẫu thừa); mỗi khách tối đa 1 mẫu mới mỗi khoảng nghỉ (mặc định 2 giờ) và tối đa
+     *    MAX_AUTO_SAMPLES mẫu tự học (mẫu cũ nhất bị thay). Mẫu đăng ký gốc không bao giờ bị xóa.
+     *
+     * @param  array<int, array<int, float>>  $probes  vector các khung hình, khung nét nhất đứng đầu
+     * @param  array{customer_id?: int, best?: float, gap?: float}  $outcome
+     */
+    private function learnFromMatch(array $probes, array $outcome): void
+    {
+        try {
+            $customerId = (int) ($outcome['customer_id'] ?? 0);
+            if ($customerId === 0 || count($probes) < 2) {
+                return;
+            }
+            if (! FaceTuning::autoLearnEnabled()) {
+                return;
+            }
+
+            $minSimilarity = FaceTuning::int('face_auto_learn_min_percent') / 100;
+            if (($outcome['best'] ?? 0) < $minSimilarity || ($outcome['gap'] ?? 0) < FaceTuning::int('face_auto_learn_margin_percent') / 100) {
+                return;
+            }
+
+            $cooldownKey = 'face.auto_learn.'.$customerId;
+            if (Cache::has($cooldownKey)) {
+                return;
+            }
+
+            $profiles = CustomerFaceProfile::query()->where('customer_id', $customerId)->orderBy('id')->get();
+            if ($profiles->isEmpty()) {
+                return;
+            }
+            $enrolled = $profiles->where('source', '!=', 'auto');
+            $anchorMin = (float) config('face.match_similarity', 0.5) + 0.05;
+            $duplicateAt = (float) config('face.auto_learn_duplicate_similarity', 0.93);
+
+            $candidate = null;
+            foreach ($probes as $probe) {
+                if ($profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max() < $minSimilarity) {
+                    return;
+                }
+                if ($enrolled->isNotEmpty() && $enrolled->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max() < $anchorMin) {
+                    return;
+                }
+                if ($candidate === null && $profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max() < $duplicateAt) {
+                    $candidate = $probe;
+                }
+            }
+            if ($candidate === null) {
+                return; // mọi khung đều giống hệt mẫu đã có: không có gì mới để học
+            }
+
+            DB::transaction(function () use ($customerId, $candidate, $profiles): void {
+                CustomerFaceProfile::query()->create([
+                    'customer_id' => $customerId,
+                    'descriptor' => $candidate,
+                    'source' => 'auto',
+                    // Giữ nguyên thời điểm đồng ý ban đầu của khách.
+                    'consented_at' => $profiles->max('consented_at'),
+                    'consented_by' => null,
+                ]);
+
+                $autoIds = CustomerFaceProfile::query()->where('customer_id', $customerId)->where('source', 'auto')->orderByDesc('id')->pluck('id');
+                if ($autoIds->count() > self::MAX_AUTO_SAMPLES) {
+                    CustomerFaceProfile::query()->whereIn('id', $autoIds->slice(self::MAX_AUTO_SAMPLES)->all())->delete();
+                }
+            });
+
+            Cache::put($cooldownKey, 1, now()->addMinutes(FaceTuning::int('face_auto_learn_cooldown_minutes')));
+            Log::info('face.auto_learn', ['customer_id' => $customerId, 'best_similarity' => $outcome['best'] ?? null, 'gap' => $outcome['gap'] ?? null]);
+        } catch (\Throwable $e) {
+            // Tự học chỉ là phần thêm: lỗi ở đây không được làm hỏng việc nhận diện.
+            Log::warning('face.auto_learn_failed', ['message' => $e->getMessage()]);
+        }
     }
 
     /** Tính năng tắt trong Cài đặt thì không đăng ký/so khớp (vẫn cho xem trạng thái và xóa dữ liệu). */

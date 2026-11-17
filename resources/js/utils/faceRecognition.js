@@ -81,7 +81,7 @@ export const detectFace = async (video, { minFaceRatio = 0.2 } = {}) => {
     if (ratio < minFaceRatio) return { status: 'small', ratio }
     if (!face.descriptor) return { status: 'none' }
 
-    return { status: 'ok', ratio, descriptor: face.descriptor }
+    return { status: 'ok', ratio, descriptor: face.descriptor, box: face.box, sharpness: faceSharpness(video, face.box) }
 }
 
 /**

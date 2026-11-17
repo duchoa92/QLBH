@@ -33,12 +33,13 @@ const FACING_KEY = 'pos.faceCheckIn.facing'
 const readFacing = () => { try { return localStorage.getItem(FACING_KEY) === 'environment' ? 'environment' : 'user' } catch { return 'user' } }
 const readEnabled = (key) => { try { return localStorage.getItem(key) === '1' } catch { return false } }
 
-export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {}, currentCustomerId = () => null, storageKey = STORAGE_KEY, onVisit = () => {} } = {}) => {
+export const useFaceCheckIn = ({ paused = () => false, onConfirm = () => {}, currentCustomerId = () => null, storageKey = STORAGE_KEY, onVisit = () => {}, activeWhen = null } = {}) => {
     const page = usePage()
     // Tính năng có được chủ cửa hàng bật trong Cài đặt không (mặc định tắt).
     const featureOn = computed(() => !!page.props.settings?.face_recognition_enabled)
     const enabled = ref(readEnabled(storageKey))
-    const active = computed(() => featureOn.value && enabled.value)
+    // activeWhen: bên ngoài (useFaceSource) quyết định lúc nào mở camera máy, ví dụ chỉ khi camera cửa không dùng được.
+    const active = computed(() => featureOn.value && (activeWhen ? !!activeWhen() : enabled.value))
     // Ghi nhận lượt khách ra vào (Cài đặt → Khách hàng): mặc định tắt.
     const trackingOn = computed(() => !!page.props.settings?.face_visit_tracking_enabled)
     const failed = ref(false)

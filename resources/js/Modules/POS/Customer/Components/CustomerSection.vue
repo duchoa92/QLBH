@@ -21,13 +21,9 @@ import CustomerIdCardScanner from '@/Components/CustomerIdCardScanner.vue'
 import FaceSuggestionPanel from './FaceSuggestionPanel.vue'
 import FaceDetectedModal from './FaceDetectedModal.vue'
 import { usePage } from '@inertiajs/vue3'
-import { useFaceCheckIn } from '../Composables/useFaceCheckIn'
-import { useDoorQueue } from '../Composables/useDoorQueue'
+import { useFaceSource } from '../Composables/useFaceSource'
 
 const page = usePage()
-
-// Camera cửa: worker trên máy chủ lo nhận diện, POS không mở camera mà chỉ đọc "ai đang ở cửa" (cài đặt đọc lúc tải trang).
-const doorMode = !!page.props.settings?.face_door_camera_enabled
 
 // Cài đặt → Khách hàng: hiện hộp thông báo chi tiết thay cho phần hỏi trong ô khách hàng.
 const faceModalOn = computed(() => !!page.props.settings?.face_notify_modal_enabled)
@@ -62,6 +58,8 @@ const props = defineProps({
     },
 })
 
+// Nguồn nhận diện: đã bật camera cửa thì ưu tiên camera cửa (POS không mở camera, chỉ đọc "ai đang ở cửa");
+// chỉ khi worker không chạy / camera cửa lỗi mới tự mở camera máy làm dự phòng (xem useFaceSource).
 // Nhận diện khuôn mặt nằm ngay trong ô nhập tên: bật/tắt bằng nút cạnh nút quét CCCD, khung quét hiện trong ô,
 // bước hỏi xác nhận thay thế ô nhập khi đã nhận ra khách. Tạm dừng khi đã chọn khách hoặc nhân viên đang gõ tìm.
 const {
@@ -75,13 +73,17 @@ const {
     queue: faceQueue,
     markServed: markFaceServed,
     statusText: faceStatusText,
+    usingLocal: faceUsingLocal,
+    doorMode: faceDoorMode,
+    doorPreviewSrc: faceDoorSrc,
+    doorPreviewOk: faceDoorOk,
     attachPreview: attachFacePreview,
     toggle: toggleFace,
     switchCamera: switchFaceCamera,
     confirm: confirmFace,
     dismiss: dismissFace,
     dismissAll: dismissAllFaces,
-} = (doorMode ? useDoorQueue : useFaceCheckIn)({
+} = useFaceSource({
     paused: () => !!props.customer || !!keyword.value.trim(),
     currentCustomerId: () => props.customer?.id || null,
     onConfirm: customer => selectCustomer(customer),
@@ -277,7 +279,7 @@ const openFullCustomerModal = (
 
             if (customer) {
 
-                linkQueueTarget(customer, false)
+                linkQueueTarget(customer, true) // DEMO: mặc định đồng ý lưu khuôn mặt
                 selectCustomer(customer)
             }
         },
@@ -370,7 +372,7 @@ onBeforeUnmount(() => {
                 <div v-show="!inlineFaceAsk" ref="customerSearchRef" class="flex items-center gap-2">
                     <!-- Khung camera nằm riêng bên trái ô nhập (không che chữ). Nhấp vào để đổi camera trước / sau. -->
                     <button
-                        v-if="faceActive && !doorMode"
+                        v-if="faceActive && faceUsingLocal"
                         type="button"
                         class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 ring-2 transition active:scale-95 disabled:opacity-60"
                         :class="facePreviewRing"
@@ -387,6 +389,17 @@ onBeforeUnmount(() => {
                             <RefreshCw class="h-3 w-3" />
                         </span>
                     </button>
+
+                    <!-- Camera cửa: vòng tròn xem trước ảnh cửa (cập nhật liên tục), viền đổi màu theo trạng thái nhận diện -->
+                    <div
+                        v-if="faceActive && faceDoorMode"
+                        class="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 ring-2"
+                        :class="faceFailed || !faceDoorOk ? 'ring-rose-400' : facePreviewRing"
+                        :title="faceStatusText || 'Camera cửa'"
+                    >
+                        <img v-if="faceDoorSrc && faceDoorOk" :src="faceDoorSrc" alt="Camera cửa" class="h-full w-full object-cover">
+                        <ScanFace v-else class="h-5 w-5" :class="faceFailed ? 'text-rose-500' : 'text-slate-400'" />
+                    </div>
 
                     <div class="relative min-w-0 flex-1">
                         <FloatingInput

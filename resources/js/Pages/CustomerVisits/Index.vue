@@ -1,13 +1,14 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Camera, CameraOff, Clock, Footprints, RefreshCw, ScanFace, Trash2, User, UserCheck, UserPlus, UserRoundPlus, UsersRound, TriangleAlert } from 'lucide-vue-next'
+import { Camera, CameraOff, Clock, Footprints, History, RefreshCw, ScanFace, Trash2, User, UserCheck, UserPlus, UserRoundPlus, UsersRound, TriangleAlert, Video } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import api from '@/Services/api'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useFaceCheckIn } from '@/Modules/POS/Customer/Composables/useFaceCheckIn'
+import { useDoorPreview } from '@/Modules/POS/Customer/Composables/useDoorPreview'
 
 defineOptions({ layout: AdminLayout })
 
@@ -31,7 +32,7 @@ const lastUpdated = ref(new Date())
 let reloadTimer = null
 let pollTimer = null
 const reloadNow = () => {
-    if (document.hidden || target.value) return
+    if (document.hidden || target.value || historyOf.value) return
     router.reload({
         only: ['summary', 'hours', 'days', 'visits'],
         preserveScroll: true,
@@ -44,7 +45,7 @@ const scheduleReload = () => {
     reloadTimer = setTimeout(reloadNow, 1000)
 }
 onMounted(() => {
-    pollTimer = setInterval(reloadNow, 10000)
+    pollTimer = setInterval(reloadNow, props.doorCamera.enabled ? 5000 : 10000)
     document.addEventListener('visibilitychange', reloadNow)
 })
 onBeforeUnmount(() => {
@@ -54,7 +55,18 @@ onBeforeUnmount(() => {
 })
 
 /* ---------------- camera xem trực tiếp + bắt khuôn mặt ---------------- */
-// Dùng chung bộ nhận diện của POS: thấy ai thì ghi lượt (nếu đã bật ghi nhận) và trang tự cập nhật ngay.
+// Hai nguồn xem, đổi qua lại bằng hai nút trên đầu khung:
+//  - Camera cửa: worker nhận diện trên máy chủ, gửi ảnh + khung mặt + tên về (vẽ ở đây).
+//  - Camera máy: camera của thiết bị đang mở trang này, bắt mặt ngay trên trình duyệt (đổi được camera trước/sau).
+const hasDoor = computed(() => !!props.doorCamera.enabled)
+const readFlag = (key, fallback) => { try { const value = localStorage.getItem(key); return value === null ? fallback : value } catch { return fallback } }
+const writeFlag = (key, value) => { try { localStorage.setItem(key, value) } catch { /* bỏ qua */ } }
+const cameraSource = ref(hasDoor.value && readFlag('visits.cameraSource', 'door') !== 'local' ? 'door' : 'local')
+const localOn = ref(readFlag('visits.localCameraOn', '0') === '1')
+const showDoor = computed(() => hasDoor.value && cameraSource.value === 'door')
+const setSource = (value) => { cameraSource.value = value; writeFlag('visits.cameraSource', value) }
+const toggleLocal = () => { localOn.value = !localOn.value; writeFlag('visits.localCameraOn', localOn.value ? '1' : '0') }
+
 const {
     featureOn: faceFeatureOn,
     active: cameraActive,
@@ -64,9 +76,21 @@ const {
     liveFaces,
     statusText: cameraStatus,
     attachPreview,
-    toggle: toggleCamera,
     switchCamera,
-} = useFaceCheckIn({ storageKey: 'visits.camera', onVisit: scheduleReload })
+} = useFaceCheckIn({
+    storageKey: 'visits.camera',
+    onVisit: scheduleReload,
+    // Camera máy chỉ chạy khi đang chọn nguồn "Camera máy" và đã bấm bật; chọn Camera cửa thì tự tắt.
+    activeWhen: () => !showDoor.value && localOn.value,
+})
+
+const doorPreview = useDoorPreview(computed(() => showDoor.value && faceFeatureOn.value))
+const doorFaces = computed(() => (doorPreview.ok.value ? doorPreview.faces.value : []))
+const doorStatus = computed(() => {
+    if (!props.doorCamera.online) return 'Camera cửa chưa chạy'
+    if (!props.doorCamera.camera_ok) return 'Không lấy được ảnh camera cửa'
+    return doorFaces.value.length ? `Đang thấy ${doorFaces.value.length} người` : 'Đang xem camera cửa'
+})
 
 const videoRatio = ref(4 / 3)
 const onMeta = (event) => {
@@ -75,14 +99,19 @@ const onMeta = (event) => {
 }
 const mirrored = computed(() => cameraFacing.value === 'user')
 const stageStyle = computed(() => ({ aspectRatio: String(videoRatio.value), width: `min(100%, calc(62vh * ${videoRatio.value}))` }))
-const boxStyle = (face) => ({
-    left: `${(mirrored.value ? 1 - face.x - face.w : face.x) * 100}%`,
+// Toạ độ khung mặt là 0..1 theo khung hình; camera trước lật gương nên phải lật khung theo.
+const boxStyle = (face, mirror = false) => ({
+    left: `${(mirror ? 1 - face.x - face.w : face.x) * 100}%`,
     top: `${face.y * 100}%`,
     width: `${face.w * 100}%`,
     height: `${face.h * 100}%`,
 })
-const boxTone = { known: 'border-emerald-400 text-emerald-300', unknown: 'border-amber-400 text-amber-300', scanning: 'border-cyan-300 text-cyan-200' }
+const boxTone = { known: 'border-emerald-400', unknown: 'border-amber-400', scanning: 'border-cyan-300' }
+const labelTone = { known: 'bg-emerald-500 text-white', unknown: 'bg-amber-500 text-white', scanning: 'bg-black/70 text-cyan-100' }
+const dotTone = { known: 'bg-emerald-400', unknown: 'bg-amber-400', scanning: 'bg-cyan-300' }
 const chipTone = { known: 'ring-emerald-400', unknown: 'ring-amber-400', scanning: 'ring-cyan-300' }
+// Mặt sát mép trên thì đặt nhãn tên vào trong khung để không bị cắt.
+const labelPos = face => (face.y < 0.08 ? 'top-0.5 left-0.5' : '-top-6 left-0')
 
 /* ---------------- bộ lọc ---------------- */
 const ranges = [
@@ -159,7 +188,7 @@ const results = ref([])
 const searching = ref(false)
 const newName = ref('')
 const newPhone = ref('')
-const consent = ref(false)
+const consent = ref(true) // DEMO: mặc định đồng ý, sửa lại thành false khi chạy thật
 const saving = ref(false)
 const error = ref('')
 let searchTimer = null
@@ -172,7 +201,7 @@ const openAssign = (visit) => {
     results.value = []
     newName.value = ''
     newPhone.value = ''
-    consent.value = false
+    consent.value = true // DEMO: mặc định đồng ý
     error.value = ''
 }
 const closeAssign = () => { target.value = null }
@@ -223,6 +252,49 @@ const createAndLink = async () => {
     }
 }
 
+/* ---------------- lịch sử của một lượt khách ---------------- */
+const historyOf = ref(null)
+const history = ref(null)
+const historyLoading = ref(false)
+const historyError = ref('')
+let historySeq = 0
+
+const openHistory = async (visit) => {
+    historyOf.value = visit
+    history.value = null
+    historyError.value = ''
+    historyLoading.value = true
+    const seq = ++historySeq
+    try {
+        const { data } = await api.get(`/customer-visits/${visit.id}/history`)
+        if (seq === historySeq) history.value = data
+    } catch (e) {
+        if (seq === historySeq) historyError.value = e?.response?.data?.message || 'Không tải được lịch sử, vui lòng thử lại.'
+    } finally {
+        if (seq === historySeq) historyLoading.value = false
+    }
+}
+const closeHistory = () => { historySeq++; historyOf.value = null; history.value = null }
+const assignFromHistory = () => { const visit = historyOf.value; closeHistory(); if (visit) openAssign(visit) }
+
+// Gom các lượt theo ngày cho dễ đọc.
+const historyGroups = computed(() => {
+    const groups = []
+    for (const item of history.value?.visits || []) {
+        const key = dateText(item.first_seen_at)
+        let group = groups[groups.length - 1]
+        if (!group || group.date !== key) { group = { date: key, items: [] }; groups.push(group) }
+        group.items.push(item)
+    }
+    return groups
+})
+const historyNote = computed(() => {
+    if (!history.value) return ''
+    if (history.value.matched_by === 'face') return 'Chưa có tên: các lượt dưới đây được gom theo khuôn mặt giống nhau (chỉ còn trong thời hạn lưu dữ liệu).'
+    if (history.value.matched_by === 'single') return 'Lượt này không còn dữ liệu khuôn mặt nên không gom được các lần đến khác.'
+    return ''
+})
+
 const remove = (visit) => {
     confirmBox.show({
         title: 'Xác nhận',
@@ -268,60 +340,102 @@ const remove = (visit) => {
 
         <!-- Camera xem trực tiếp -->
         <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
                 <div class="flex min-w-0 items-center gap-2">
                     <ScanFace class="h-4 w-4 shrink-0 text-blue-600" />
-                    <h3 class="truncate text-sm font-bold text-slate-800">Camera cửa ra vào</h3>
-                    <span v-if="cameraActive" class="truncate text-xs text-slate-500">{{ cameraStatus }}</span>
+                    <h3 class="truncate text-sm font-bold text-slate-800">Camera ra vào</h3>
+                    <span v-if="faceFeatureOn && showDoor" class="truncate text-xs text-slate-500">{{ doorStatus }}</span>
+                    <span v-else-if="faceFeatureOn && cameraActive" class="truncate text-xs text-slate-500">{{ cameraStatus }}</span>
                 </div>
+
                 <div v-if="faceFeatureOn" class="flex shrink-0 items-center gap-1.5">
-                    <button
-                        v-if="cameraActive"
-                        type="button"
-                        class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 transition hover:bg-slate-200 active:scale-95 disabled:opacity-50"
-                        :disabled="cameraSwitching"
-                        title="Đổi camera trước / sau"
-                        aria-label="Đổi camera trước hoặc sau"
-                        @click="switchCamera"
-                    >
-                        <RefreshCw class="h-5 w-5" />
-                    </button>
-                    <button
-                        type="button"
-                        class="flex h-10 w-10 items-center justify-center rounded-lg transition active:scale-95"
-                        :class="cameraActive ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-blue-600 text-white hover:bg-blue-700'"
-                        :title="cameraActive ? 'Tắt camera' : 'Bật camera'"
-                        :aria-label="cameraActive ? 'Tắt camera' : 'Bật camera'"
-                        @click="toggleCamera"
-                    >
-                        <CameraOff v-if="cameraActive" class="h-5 w-5" />
-                        <Camera v-else class="h-5 w-5" />
-                    </button>
+                    <!-- Chuyển qua lại giữa camera cửa và camera máy -->
+                    <div v-if="hasDoor" class="grid grid-cols-2 gap-0.5 rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+                        <button type="button" class="flex min-h-9 items-center gap-1 rounded-md px-2.5 transition" :class="showDoor ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" @click="setSource('door')"><Video class="h-4 w-4" />Camera cửa</button>
+                        <button type="button" class="flex min-h-9 items-center gap-1 rounded-md px-2.5 transition" :class="!showDoor ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" @click="setSource('local')"><Camera class="h-4 w-4" />Camera máy</button>
+                    </div>
+                    <template v-if="!showDoor">
+                        <button
+                            v-if="cameraActive"
+                            type="button"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 transition hover:bg-slate-200 active:scale-95 disabled:opacity-50"
+                            :disabled="cameraSwitching"
+                            title="Đổi camera trước / sau"
+                            aria-label="Đổi camera trước hoặc sau"
+                            @click="switchCamera"
+                        >
+                            <RefreshCw class="h-5 w-5" />
+                        </button>
+                        <button
+                            type="button"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg transition active:scale-95"
+                            :class="cameraActive ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-blue-600 text-white hover:bg-blue-700'"
+                            :title="cameraActive ? 'Tắt camera' : 'Bật camera'"
+                            :aria-label="cameraActive ? 'Tắt camera' : 'Bật camera'"
+                            @click="toggleLocal"
+                        >
+                            <CameraOff v-if="cameraActive" class="h-5 w-5" />
+                            <Camera v-else class="h-5 w-5" />
+                        </button>
+                    </template>
                 </div>
             </div>
 
             <p v-if="!faceFeatureOn" class="p-4 text-sm text-slate-500">
                 Chưa bật nhận diện khuôn mặt. Bật trong <Link href="/settings" class="font-semibold text-blue-600 underline">Cài đặt → Khách hàng</Link> để xem camera tại đây.
             </p>
-            <p v-else-if="!cameraActive" class="p-4 text-sm text-slate-500">Bấm biểu tượng camera để xem trực tiếp và bắt khuôn mặt khách vào cửa hàng.</p>
+
+            <!-- Camera cửa: ảnh từ worker + khung bắt mặt kèm tên -->
+            <div v-else-if="showDoor" class="bg-slate-900 p-2">
+                <div class="relative mx-auto flex min-h-[10rem] items-center justify-center overflow-hidden rounded-lg bg-black">
+                    <div v-if="doorPreview.src.value && doorPreview.ok.value" class="relative inline-block max-w-full">
+                        <img :src="doorPreview.src.value" alt="Camera cửa ra vào" class="mx-auto block max-h-[62vh] w-auto max-w-full">
+                        <div class="pointer-events-none absolute inset-0 overflow-hidden">
+                            <div
+                                v-for="face in doorFaces"
+                                :key="face.id"
+                                class="absolute rounded-md border-2 transition-all duration-200"
+                                :class="boxTone[face.kind]"
+                                :style="boxStyle(face)"
+                            >
+                                <span class="absolute max-w-[12rem] truncate rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none" :class="[labelTone[face.kind], labelPos(face)]">{{ face.label }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p v-else-if="doorPreview.loading.value" class="p-6 text-sm text-slate-300">Đang tải ảnh camera cửa…</p>
+                    <p v-else class="p-6 text-center text-sm text-rose-300">
+                        Chưa có ảnh từ camera cửa. Kiểm tra worker camera cửa đang chạy và gửi được ảnh (camera RTSP cần worker gửi khung hình; camera http thì kiểm tra địa chỉ ảnh chụp).
+                    </p>
+                </div>
+                <div v-if="doorFaces.length" class="mt-2 flex flex-wrap gap-1.5">
+                    <span v-for="face in doorFaces" :key="face.id" class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-100">
+                        <span class="h-2 w-2 shrink-0 rounded-full" :class="dotTone[face.kind]"></span>
+                        <span class="truncate">{{ face.label }}</span>
+                    </span>
+                </div>
+            </div>
+
+            <p v-else-if="!cameraActive" class="p-4 text-sm text-slate-500">Bấm biểu tượng camera để xem trực tiếp và bắt khuôn mặt khách bằng camera của máy này.</p>
+
+            <!-- Camera máy: bắt mặt ngay trên trình duyệt -->
             <div v-else class="bg-slate-900 p-2">
                 <div class="relative mx-auto overflow-hidden rounded-lg bg-black" :style="stageStyle">
                     <video v-show="!cameraFailed" :ref="attachPreview" class="absolute inset-0 h-full w-full" :class="mirrored ? '-scale-x-100' : ''" autoplay muted playsinline @loadedmetadata="onMeta"></video>
                     <div v-if="cameraFailed" class="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-rose-300">{{ cameraStatus }}</div>
 
-                    <!-- Khung bắt khuôn mặt -->
+                    <!-- Khung bắt khuôn mặt + tên -->
                     <div
                         v-for="face in liveFaces"
                         :key="face.id"
                         class="pointer-events-none absolute rounded-md border-2 transition-all duration-150"
                         :class="boxTone[face.kind]"
-                        :style="boxStyle(face)"
+                        :style="boxStyle(face, mirrored)"
                     >
-                        <span class="absolute -top-5 left-0 max-w-[10rem] truncate rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold leading-none">{{ face.label }}</span>
+                        <span class="absolute max-w-[12rem] truncate rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none" :class="[labelTone[face.kind], labelPos(face)]">{{ face.label }}</span>
                     </div>
                 </div>
 
-                <!-- Ảnh khuôn mặt vừa bắt được + mã -->
+                <!-- Ảnh khuôn mặt vừa bắt được + tên -->
                 <div v-if="liveFaces.length" class="mt-2 flex gap-2 overflow-x-auto pb-1">
                     <div v-for="face in liveFaces" :key="face.id" class="w-20 shrink-0 text-center">
                         <img v-if="face.thumb" :src="face.thumb" alt="" class="mx-auto h-16 w-16 rounded-lg object-cover ring-2" :class="chipTone[face.kind]">
@@ -413,7 +527,17 @@ const remove = (visit) => {
         <!-- Danh sách lượt khách: thẻ trên mobile, lưới trên màn lớn -->
         <div v-if="visits.data.length" class="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             <div class="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-3">
-                <div v-for="visit in visits.data" :key="visit.id" class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
+                <div
+                    v-for="visit in visits.data"
+                    :key="visit.id"
+                    role="button"
+                    tabindex="0"
+                    class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm transition hover:border-blue-300 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    title="Xem lịch sử các lần đến"
+                    @click="openHistory(visit)"
+                    @keydown.enter.self.prevent="openHistory(visit)"
+                    @keydown.space.self.prevent="openHistory(visit)"
+                >
                     <img v-if="visit.thumb" :src="visit.thumb" alt="" class="h-14 w-14 shrink-0 rounded-full object-cover ring-1 ring-slate-200">
                     <span v-else class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"><User class="h-6 w-6" /></span>
 
@@ -428,10 +552,11 @@ const remove = (visit) => {
                         <div class="mt-1 flex flex-wrap items-center gap-1.5">
                             <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1" :class="kindOf(visit).cls">{{ kindOf(visit).text }}</span>
                             <span class="text-[11px] text-slate-400">{{ durationText(visit.minutes) }}</span>
+                            <History class="ml-auto h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
                         </div>
                     </div>
 
-                    <div v-if="canManage" class="flex shrink-0 flex-col gap-1.5">
+                    <div v-if="canManage" class="flex shrink-0 flex-col gap-1.5" @click.stop @keydown.stop>
                         <button
                             v-if="!visit.customer"
                             type="button"
@@ -459,6 +584,72 @@ const remove = (visit) => {
         <div v-else class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             Chưa có lượt khách nào trong khoảng này.
         </div>
+
+        <!-- Lịch sử các lần đến của người trong lượt khách đã bấm -->
+        <BaseModal v-if="historyOf" title="Lịch sử lượt khách" size="md" @close="closeHistory">
+            <div class="space-y-4">
+                <div class="flex items-center gap-3">
+                    <img v-if="history?.person?.thumb || historyOf.thumb" :src="history?.person?.thumb || historyOf.thumb" alt="" class="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-slate-200">
+                    <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"><User class="h-7 w-7" /></span>
+                    <div class="min-w-0">
+                        <div class="truncate text-base font-bold text-slate-900">{{ history?.person?.name || historyOf.customer?.full_name || 'Khách chưa có tên' }}</div>
+                        <div v-if="history?.person?.phone || historyOf.customer?.phone" class="truncate text-sm text-slate-500">{{ history?.person?.phone || historyOf.customer?.phone }}</div>
+                        <span class="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1" :class="kindOf(historyOf).cls">{{ kindOf(historyOf).text }}</span>
+                    </div>
+                </div>
+
+                <p v-if="historyLoading" class="py-6 text-center text-sm text-slate-400">Đang tải lịch sử…</p>
+                <p v-else-if="historyError" class="rounded-lg bg-rose-50 p-3 text-sm font-medium text-rose-700">{{ historyError }}</p>
+
+                <template v-else-if="history">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div class="rounded-lg bg-slate-50 p-2.5">
+                            <div class="text-xl font-bold leading-none text-slate-900 tabular-nums">{{ history.stats.count }}</div>
+                            <div class="mt-1 text-[11px] text-slate-500">Số lượt đến</div>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-2.5">
+                            <div class="text-xl font-bold leading-none text-slate-900 tabular-nums">{{ history.stats.days }}</div>
+                            <div class="mt-1 text-[11px] text-slate-500">Số ngày khác nhau</div>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-2.5">
+                            <div class="text-sm font-bold leading-none text-slate-900">{{ dateText(history.stats.first_at) }}</div>
+                            <div class="mt-1 text-[11px] text-slate-500">Lần đầu thấy</div>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-2.5">
+                            <div class="text-sm font-bold leading-none text-slate-900">{{ dateText(history.stats.last_at) }}</div>
+                            <div class="mt-1 text-[11px] text-slate-500">Gần nhất · ở TB {{ durationText(history.stats.avg_minutes) }}</div>
+                        </div>
+                    </div>
+
+                    <p v-if="historyNote" class="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800">{{ historyNote }}</p>
+
+                    <div class="max-h-72 space-y-3 overflow-y-auto pr-1">
+                        <div v-for="group in historyGroups" :key="group.date">
+                            <div class="mb-1 text-xs font-bold text-slate-500">{{ group.date }}</div>
+                            <div class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
+                                <div v-for="item in group.items" :key="item.id" class="flex items-center gap-2.5 px-2.5 py-2 text-sm" :class="item.current ? 'bg-blue-50' : 'bg-white'">
+                                    <img v-if="item.thumb" :src="item.thumb" alt="" class="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-slate-200">
+                                    <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"><User class="h-4 w-4" /></span>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="font-semibold text-slate-800 tabular-nums">{{ timeText(item.first_seen_at) }}<span v-if="item.minutes"> – {{ timeText(item.last_seen_at) }}</span></div>
+                                        <div class="text-xs text-slate-500">{{ durationText(item.minutes) }}</div>
+                                    </div>
+                                    <span v-if="item.current" class="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">Lượt đang xem</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p v-if="history.truncated" class="text-xs text-slate-400">Chỉ hiện 100 lượt gần nhất.</p>
+                </template>
+            </div>
+
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <button v-if="canManage && !historyOf.customer" type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100" @click="assignFromHistory"><UserRoundPlus class="h-4 w-4" />Gán tên</button>
+                    <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700" @click="closeHistory">Đóng</button>
+                </div>
+            </template>
+        </BaseModal>
 
         <!-- Gán tên / thêm khách mới -->
         <BaseModal v-if="target" title="Gán tên cho khách" size="md" @close="closeAssign">

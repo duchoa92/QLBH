@@ -45,7 +45,7 @@ const shownKey = computed(() => (showKey.value ? apiKey.value : `${apiKey.value.
 const buildCommand = (key) => [
     'cd door-worker',
     'npm install',
-    `npm run setup -- --url ${apiUrl.value} --key ${key}`,
+    `npm run setup -- --url ${apiUrl.value} --key ${key}${/^https:/i.test(apiUrl.value) ? ' --trust-cert' : ''}`,
     'npm start',
 ].join('\n')
 const displayCommand = computed(() => buildCommand(shownKey.value))

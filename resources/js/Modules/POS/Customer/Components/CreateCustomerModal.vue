@@ -29,7 +29,7 @@ const emit = defineEmits([
 
 const fullName = ref('')
 const phone = ref('')
-const faceConsent = ref(false)
+const faceConsent = ref(true) // DEMO: mặc định đồng ý, sửa lại thành false khi chạy thật
 
 watch(
 
@@ -44,7 +44,7 @@ watch(
 
         fullName.value = props.keyword
         phone.value = ''
-        faceConsent.value = false
+        faceConsent.value = true // DEMO: mặc định đồng ý
     }
 )
 

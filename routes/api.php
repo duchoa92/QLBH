@@ -23,8 +23,11 @@ Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class
 
 // Worker camera cửa (chạy nền, không đăng nhập): xác thực bằng khóa X-Camera-Key, dùng lại đúng logic so khớp/ghi lượt của POS.
 Route::middleware([DoorCameraKey::class, SubstituteBindings::class])->prefix('door-camera')->group(function () {
-    Route::post('/heartbeat', [DoorCameraController::class, 'heartbeat'])->middleware('throttle:30,1');
-    Route::get('/config', [DoorCameraController::class, 'config'])->middleware('throttle:30,1');
+    Route::post('/heartbeat', [DoorCameraController::class, 'heartbeat'])->middleware('throttle:120,1,door_heartbeat');
+    Route::get('/config', [DoorCameraController::class, 'config'])->middleware('throttle:60,1,door_config');
+    Route::post('/frame', [DoorCameraController::class, 'storeFrame'])->middleware('throttle:900,1,door_frame'); // có tiền tố riêng: không dùng chung bộ đếm với heartbeat/config
+    Route::post('/snapshot', [DoorCameraController::class, 'storeSnapshot'])->middleware('throttle:120,1,door_snapshot');
+    Route::post('/faces', [DoorCameraController::class, 'storeFaces'])->middleware('throttle:900,1,door_faces'); // khung bắt mặt + tên để vẽ lên ảnh xem trước
     Route::post('/face-match', [CustomerFaceController::class, 'match'])->middleware('throttle:240,1');
     Route::post('/visits', [CustomerVisitController::class, 'record'])->middleware('throttle:240,1');
     Route::post('/visits/{visit}/seen', [CustomerVisitController::class, 'left'])->middleware('throttle:600,1');
@@ -92,6 +95,8 @@ Route::middleware(['web', 'auth'])->group(function ()
         ->middleware(['permission:pos.access', 'throttle:120,1']);
     Route::post('/customers/visits/{visit}/link', [CustomerVisitController::class, 'link'])
         ->middleware(['permission:pos.access|customers.edit', 'throttle:30,1']);
+    Route::get('/customers/door-camera/frame', [DoorCameraController::class, 'frame'])
+        ->middleware(['permission:pos.access|customers.view', 'throttle:900,1,door_frame_view']);
     Route::get('/customers/face-cctv-snapshot', [CustomerFaceController::class, 'cctvSnapshot'])
         ->middleware(['permission:customers.edit', 'throttle:20,1']);
     Route::get('/customers/{customer}/face', [CustomerFaceController::class, 'status'])

@@ -91,6 +91,7 @@ class SettingController extends Controller
                 'face_cctv_username' => setting('face_cctv_username', ''),
                 // Không trả mật khẩu về trình duyệt, chỉ cho biết đã lưu hay chưa.
                 'face_cctv_has_password' => filled(setting('face_cctv_password')),
+                ...\App\Support\FaceTuning::all(),
                 'customer_points_amount_per_point' => max(1, (int) setting('customer_points_amount_per_point', 10000)),
                 'customer_points_basis' => in_array(setting('customer_points_basis', 'revenue'), ['revenue', 'profit'], true) ? setting('customer_points_basis', 'revenue') : 'revenue',
                 'customer_points_debt_enabled' => filter_var(setting('customer_points_debt_enabled', true), FILTER_VALIDATE_BOOLEAN),
@@ -165,6 +166,7 @@ class SettingController extends Controller
                     }
                 },
             ],
+            ...\App\Support\FaceTuning::rules(),
             'face_cctv_auth' => ['sometimes', 'in:none,basic,digest'],
             'face_cctv_username' => ['sometimes', 'nullable', 'string', 'max:100'],
             'face_cctv_password' => ['sometimes', 'nullable', 'string', 'max:200'],
@@ -223,6 +225,14 @@ class SettingController extends Controller
             'payment_voice_language' => ['sometimes', 'in:vi-VN,en-US'],
             'payment_voice_enabled' => ['sometimes', 'boolean'],
         ], $this->validationMessages(), $this->validationAttributes());
+
+        // Vùng dò mặt không được vượt ra ngoài khung hình.
+        if (isset($data['face_roi_left'], $data['face_roi_width']) && $data['face_roi_left'] + $data['face_roi_width'] > 100) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['face_roi_width' => 'Lề trái + chiều rộng vùng dò mặt không được quá 100%.']);
+        }
+        if (isset($data['face_roi_top'], $data['face_roi_height']) && $data['face_roi_top'] + $data['face_roi_height'] > 100) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['face_roi_height' => 'Lề trên + chiều cao vùng dò mặt không được quá 100%.']);
+        }
 
         // Quyền được cộng dồn: một người có thể vừa quản lý đơn vị/kho vừa quản lý tài khoản thanh toán.
         $allowedKeys = [];

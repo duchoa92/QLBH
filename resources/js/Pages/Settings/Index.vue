@@ -16,6 +16,7 @@ import LabelTemplateEditor from './LabelTemplateEditor.vue'
 import SettingSwitch from './SettingSwitch.vue'
 import SettingCollapse from './SettingCollapse.vue'
 import DoorCameraSetup from './DoorCameraSetup.vue'
+import FaceTuningSettings from './FaceTuningSettings.vue'
 import { mergeLabelTemplate } from '@/utils/printLabels'
 import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
@@ -230,7 +231,7 @@ const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_preview_fps', 'face_preview_width', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -355,6 +356,22 @@ const buildFormValues = () => ({
     face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
     face_cctv_username: liveSettings.value.face_cctv_username || '',
     face_cctv_password: '', // không bao giờ nhận lại từ máy chủ; để trống = giữ mật khẩu đã lưu
+    // Tinh chỉnh nhận diện (mặc định khớp FaceTuning ở máy chủ)
+    face_min_face_px: Number(liveSettings.value.face_min_face_px ?? 60),
+    face_detect_fps: Number(liveSettings.value.face_detect_fps ?? 4),
+    face_detect_interval_ms: Number(liveSettings.value.face_detect_interval_ms ?? 300),
+    face_roi_left: Number(liveSettings.value.face_roi_left ?? 0),
+    face_roi_top: Number(liveSettings.value.face_roi_top ?? 0),
+    face_roi_width: Number(liveSettings.value.face_roi_width ?? 100),
+    face_roi_height: Number(liveSettings.value.face_roi_height ?? 100),
+    face_preview_fps: Number(liveSettings.value.face_preview_fps ?? 5),
+    face_preview_width: Number(liveSettings.value.face_preview_width ?? 480),
+    face_auto_learn_enabled: liveSettings.value.face_auto_learn_enabled !== false
+        && liveSettings.value.face_auto_learn_enabled !== 0
+        && liveSettings.value.face_auto_learn_enabled !== '0',
+    face_auto_learn_min_percent: Number(liveSettings.value.face_auto_learn_min_percent ?? 75),
+    face_auto_learn_margin_percent: Number(liveSettings.value.face_auto_learn_margin_percent ?? 15),
+    face_auto_learn_cooldown_minutes: Number(liveSettings.value.face_auto_learn_cooldown_minutes ?? 120),
     payment_voice_enabled: liveSettings.value.payment_voice_enabled !== false
         && liveSettings.value.payment_voice_enabled !== 0
         && liveSettings.value.payment_voice_enabled !== '0',
@@ -756,6 +773,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             description="Camera IP ở cửa do chương trình worker chạy nền xử lý, kể cả khi không mở POS. POS không mở camera nữa mà chỉ hiện danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
                         />
                         <DoorCameraSetup v-if="form.face_door_camera_enabled && door_camera" :info="door_camera" />
+                        <FaceTuningSettings v-if="form.face_door_camera_enabled" :form="form" />
                         <div v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled" class="max-w-xs">
                             <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Giữ ảnh khách lạ (ngày)" />
                             <p class="mt-1 text-xs text-slate-500">Hết hạn, ảnh và dữ liệu nhận diện của khách lạ bị xóa tự động; số liệu thống kê vẫn được giữ.</p>

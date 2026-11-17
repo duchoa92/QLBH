@@ -334,6 +334,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Thống kê lượt khách ra vào (camera POS) và gán tên cho khách lạ.
     Route::get('/customer-visits', [CustomerVisitController::class, 'index'])->middleware('permission:customers.view')->name('customer-visits.index');
+    Route::get('/customer-visits/{visit}/history', [CustomerVisitController::class, 'history'])->middleware('permission:customers.view')->name('customer-visits.history');
     Route::delete('/customer-visits/{visit}', [CustomerVisitController::class, 'destroy'])->middleware('permission:customers.edit')->name('customer-visits.destroy');
     Route::patch('/customers/{customer}/block', [CustomerController::class, 'toggleBlock'])->name('customers.block');
 

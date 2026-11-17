@@ -126,6 +126,72 @@ class CustomerVisitController extends Controller
         ]);
     }
 
+    /**
+     * Lịch sử của người trong một lượt khách bấm vào: khách đã có tên thì mọi lượt của khách đó; khách chưa có tên thì
+     * các lượt khác có khuôn mặt giống (còn vector trong thời hạn lưu), không có vector thì chỉ có chính lượt này.
+     */
+    public function history(CustomerVisit $visit): JsonResponse
+    {
+        $visit->loadMissing('customer:id,code,full_name,phone');
+        $limit = 100;
+
+        if ($visit->customer_id) {
+            $query = CustomerVisit::query()->where('customer_id', $visit->customer_id);
+            $total = (clone $query)->count();
+            $rows = $query->orderByDesc('first_seen_at')->limit($limit)->get();
+            $matchedBy = 'customer';
+        } elseif ($visit->descriptor) {
+            $probe = array_map('floatval', $visit->descriptor);
+            $ids = CustomerVisit::query()
+                ->whereNull('customer_id')
+                ->whereNotNull('descriptor')
+                ->where('id', '!=', $visit->id)
+                ->get(['id', 'descriptor'])
+                ->filter(fn (CustomerVisit $other) => FaceMatcher::isSamePerson($probe, $other->descriptor))
+                ->pluck('id')
+                ->push($visit->id);
+            $total = $ids->count();
+            $rows = CustomerVisit::query()->whereIn('id', $ids)->orderByDesc('first_seen_at')->limit($limit)->get();
+            $matchedBy = 'face';
+        } else {
+            $total = 1;
+            $rows = collect([$visit]);
+            $matchedBy = 'single';
+        }
+
+        $minutesOf = fn (CustomerVisit $row) => max(0, (int) round($row->first_seen_at->diffInSeconds($row->last_seen_at) / 60));
+        $totalMinutes = $rows->sum($minutesOf);
+
+        return response()->json([
+            'person' => [
+                'customer_id' => $visit->customer?->id,
+                'name' => $visit->customer?->full_name,
+                'code' => $visit->customer?->code,
+                'phone' => $visit->customer?->phone,
+                'recognized' => $visit->recognized,
+                'thumb' => $visit->thumb ?? $rows->firstWhere('thumb', '!=', null)?->thumb,
+            ],
+            'matched_by' => $matchedBy,
+            'stats' => [
+                'count' => $total,
+                'days' => $rows->map(fn (CustomerVisit $row) => $row->first_seen_at->format('Y-m-d'))->unique()->count(),
+                'first_at' => $rows->min('first_seen_at')?->toIso8601String(),
+                'last_at' => $rows->max('last_seen_at')?->toIso8601String(),
+                'avg_minutes' => $rows->count() ? (int) round($totalMinutes / $rows->count()) : 0,
+            ],
+            'visits' => $rows->map(fn (CustomerVisit $row) => [
+                'id' => $row->id,
+                'current' => $row->id === $visit->id,
+                'recognized' => $row->recognized,
+                'thumb' => $row->thumb,
+                'first_seen_at' => $row->first_seen_at?->toIso8601String(),
+                'last_seen_at' => $row->last_seen_at?->toIso8601String(),
+                'minutes' => $minutesOf($row),
+            ])->values(),
+            'truncated' => $total > $rows->count(),
+        ]);
+    }
+
     public function destroy(CustomerVisit $visit): JsonResponse
     {
         $visit->delete();

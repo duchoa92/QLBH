@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
-import { Camera, CircleAlert, ImagePlus, ScanFace, Trash2, Video, X } from 'lucide-vue-next'
+import { Camera, CircleAlert, ImagePlus, LoaderCircle, ScanFace, Trash2, Video, X, Zap } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
@@ -14,6 +14,9 @@ import {
  * Đăng ký khuôn mặt từ nhiều nguồn cùng lúc: camera tại quầy, ảnh tải lên/chụp bằng điện thoại,
  * ảnh chụp từ camera an ninh. Các mẫu từ mọi nguồn gom chung (tối đa 5) rồi lưu một lần.
  * Chỉ vector đặc trưng được gửi lên máy chủ; ảnh chỉ dùng tạm trên trình duyệt.
+ *
+ * Camera tại quầy và camera an ninh TỰ QUÉT: thấy đúng một khuôn mặt rõ nét, giữ yên đủ lâu thì tự chụp mẫu, rồi nhắc đổi
+ * góc mặt cho mẫu kế tiếp, đến khi đủ số mẫu thì tự dừng. Không cần bấm tay (vẫn có nút "Chụp ngay" dự phòng).
  */
 const props = defineProps({
     customer: { type: Object, required: true },
@@ -21,6 +24,12 @@ const props = defineProps({
 const emit = defineEmits(['close', 'updated'])
 
 const MAX_SAMPLES = 5 // số ảnh/mẫu tối đa; mỗi ảnh tĩnh kèm thêm bản lật gương nên tối đa 10 vector
+const AUTO_STEADY_FRAMES = 2 // số lần dò liên tiếp thấy mặt rõ nét thì mới tự chụp (tránh chụp lúc đang quay đầu)
+const AUTO_GAP_MS = 1500 // nghỉ giữa hai lần tự chụp để khách kịp đổi góc mặt
+const AUTO_BLUR_FLOOR = 10 // độ nét tối thiểu của vùng mặt (cùng ngưỡng với nhận diện ở POS)
+const CCTV_GAP_MS = 3500 // camera an ninh: giới hạn máy chủ 20 yêu cầu/phút nên không quét dày hơn
+const CCTV_MAX_MISSES = 25 // quét liên tiếp từng đó lần mà không có mặt dùng được thì tự dừng
+const POSES = ['Nhìn thẳng vào camera', 'Xoay mặt nhẹ sang trái', 'Xoay mặt nhẹ sang phải', 'Ngẩng mặt nhẹ', 'Cúi mặt nhẹ']
 const MIN_VECTORS = 2 // 1 ảnh tĩnh (2 vector) hoặc 2 mẫu camera là đủ để lưu
 const featureOn = computed(() => !!usePage().props.settings?.face_recognition_enabled)
 
@@ -29,11 +38,15 @@ const fileInput = ref(null)
 const cameraOn = ref(false)
 const cameraStarting = ref(false)
 const busy = ref(false)
-const consent = ref(false)
+const consent = ref(true) // DEMO: mặc định đồng ý, sửa lại thành false khi chạy thật
 const registered = ref(false)
 const consentedAt = ref('')
 const cctvConfigured = ref(false)
 const samples = ref([]) // { id, source, descriptors[], thumb, lowQuality }
+const autoCapture = ref(true) // camera tại quầy: tự quét và tự chụp
+const scanState = ref('idle') // idle | none | multiple | small | blurry | hold: màu viền khung camera
+const flash = ref(false)
+const cctvScanning = ref(false)
 const message = ref('')
 const messageTone = ref('info')
 let stream = null
@@ -60,7 +73,11 @@ onMounted(() => {
     loadStatus()
     if (!featureOn.value) say('Tính năng nhận diện khuôn mặt đang tắt.', 'warn')
 })
-onBeforeUnmount(() => stopCamera(stream, video.value))
+onBeforeUnmount(() => {
+    stopAuto()
+    stopCctvScan()
+    stopCamera(stream, video.value)
+})
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -81,6 +98,7 @@ const removeSample = (id) => { samples.value = samples.value.filter(sample => sa
 /* ---------- Nguồn 1: camera tại quầy ---------- */
 const toggleCamera = async () => {
     if (cameraOn.value) {
+        stopAuto()
         stopCamera(stream, video.value)
         stream = null
         cameraOn.value = false
@@ -92,7 +110,8 @@ const toggleCamera = async () => {
         cameraOn.value = true
         await new Promise(resolve => setTimeout(resolve, 0)) // chờ thẻ video hiện ra
         stream = await startCamera(video.value)
-        say('Đề nghị khách nhìn thẳng vào camera rồi bấm "Chụp mẫu".')
+        if (autoCapture.value && !isFull.value) startAuto()
+        else say('Đề nghị khách nhìn thẳng vào camera rồi bấm "Chụp ngay".')
     } catch (error) {
         cameraOn.value = false
         say(cameraErrorMessage(error), 'error')
@@ -120,6 +139,93 @@ const captureFromCamera = async () => {
         busy.value = false
     }
 }
+
+/* ---------- Tự quét + tự chụp bằng camera tại quầy ---------- */
+let autoTimer = null
+let autoRunning = false
+let steady = 0
+let lastCaptureAt = 0
+
+const nextPose = () => POSES[Math.min(samples.value.length, POSES.length - 1)]
+const autoHint = computed(() => (cameraOn.value && autoCapture.value && !isFull.value ? nextPose() : ''))
+
+const flashOnce = () => {
+    flash.value = true
+    setTimeout(() => { flash.value = false }, 180)
+}
+
+const stopAuto = () => {
+    autoRunning = false
+    clearTimeout(autoTimer)
+    autoTimer = null
+    steady = 0
+    scanState.value = 'idle'
+}
+
+const autoTick = async () => {
+    if (!autoRunning) return
+    let delay = 350
+    try {
+        if (document.hidden || !video.value || video.value.readyState < 2 || busy.value) {
+            delay = 400
+        } else {
+            const result = await detectFace(video.value, { minFaceRatio: 0.28 })
+            if (!autoRunning) return
+            const now = Date.now()
+            if (result.status !== 'ok') {
+                steady = 0
+                scanState.value = result.status
+                say({
+                    none: 'Chưa thấy khuôn mặt. Đứng vào giữa khung hình.',
+                    multiple: 'Chỉ để một người trong khung hình.',
+                    small: 'Hãy lại gần camera hơn.',
+                }[result.status] || 'Đang tìm khuôn mặt…', 'warn')
+            } else if (result.sharpness < AUTO_BLUR_FLOOR) {
+                steady = 0
+                scanState.value = 'blurry'
+                say('Ảnh hơi mờ, giữ yên mặt hoặc thêm ánh sáng.', 'warn')
+            } else if (now - lastCaptureAt < AUTO_GAP_MS) {
+                scanState.value = 'hold'
+                say(`Đã chụp ${samples.value.length}/${MAX_SAMPLES}. Tiếp theo: ${nextPose().toLowerCase()}.`, 'ok')
+            } else {
+                steady += 1
+                scanState.value = 'hold'
+                if (steady >= AUTO_STEADY_FRAMES) {
+                    steady = 0
+                    lastCaptureAt = now
+                    addSample('camera', result, video.value)
+                    flashOnce()
+                    if (isFull.value) {
+                        stopAuto()
+                        say(`Đã đủ ${MAX_SAMPLES} mẫu. Bấm "Lưu" để hoàn tất.`, 'ok')
+                        return
+                    }
+                    say(`Đã chụp ${samples.value.length}/${MAX_SAMPLES}. Tiếp theo: ${nextPose().toLowerCase()}.`, 'ok')
+                } else {
+                    say('Giữ yên, đang chụp…')
+                }
+            }
+        }
+    } catch {
+        delay = 800 // lỗi dò tạm thời: thử lại, không làm gián đoạn
+    }
+    if (autoRunning) autoTimer = setTimeout(autoTick, delay)
+}
+
+const startAuto = () => {
+    if (autoRunning || !cameraOn.value || isFull.value) return
+    autoRunning = true
+    steady = 0
+    lastCaptureAt = Date.now() - AUTO_GAP_MS // lần đầu chụp ngay khi mặt đã rõ
+    say(`${nextPose()}. Hệ thống tự chụp khi mặt rõ nét.`)
+    autoTimer = setTimeout(autoTick, 200)
+}
+
+watch(autoCapture, (on) => { on ? startAuto() : (stopAuto(), cameraOn.value && say('Đã tắt tự động. Bấm "Chụp ngay" để chụp từng mẫu.')) })
+// Xóa bớt mẫu khi đã đủ thì quét tiếp; đủ mẫu thì tự dừng cả hai chế độ.
+watch(isFull, (full) => {
+    if (full) { stopAuto(); stopCctvScan() } else if (cameraOn.value && autoCapture.value) startAuto()
+})
 
 /* ---------- Nguồn 2 & 3: ảnh tải lên, ảnh camera an ninh ---------- */
 const addFromBlob = async (blob, source, label) => {
@@ -154,29 +260,67 @@ const onFilesPicked = async (event) => {
     }
 }
 
-const fetchFromCctv = async () => {
-    if (busy.value || isFull.value) return
-    busy.value = true
-    say('Đang lấy ảnh từ camera an ninh…')
-    try {
-        const response = await api.get('/api/customers/face-cctv-snapshot', { responseType: 'blob' })
-        await addFromBlob(response.data, 'cctv', 'Ảnh camera an ninh')
-        say(`Đã thêm mẫu từ camera an ninh (${samples.value.length}/${MAX_SAMPLES}).`, 'ok')
-    } catch (error) {
-        let text = error?.message
-        const blob = error?.response?.data
-        if (blob instanceof Blob) {
-            try { text = JSON.parse(await blob.text()).message || text } catch { /* giữ nguyên */ }
-        }
-        say(text || 'Không lấy được ảnh từ camera an ninh.', 'error')
-    } finally {
-        busy.value = false
+const readRequestError = async (error) => {
+    let text = error?.message
+    const blob = error?.response?.data
+    if (blob instanceof Blob) {
+        try { text = JSON.parse(await blob.text()).message || text } catch { /* giữ nguyên */ }
     }
+    return text
+}
+
+// Camera an ninh: bấm một lần là tự lấy ảnh liên tục, thấy đúng một khuôn mặt dùng được thì tự thêm mẫu, đủ mẫu thì dừng.
+let cctvToken = 0
+const stopCctvScan = () => { cctvToken += 1; cctvScanning.value = false }
+
+const toggleCctvScan = async () => {
+    if (cctvScanning.value) {
+        stopCctvScan()
+        say('Đã dừng quét camera an ninh.')
+        return
+    }
+    if (busy.value || isFull.value) return
+    const token = ++cctvToken
+    cctvScanning.value = true
+    let misses = 0
+    let requestErrors = 0
+    say('Đang quét camera an ninh… Khách đứng trước camera, hệ thống tự chụp mẫu.')
+
+    while (token === cctvToken && !isFull.value) {
+        let delay = CCTV_GAP_MS
+        try {
+            const response = await api.get('/api/customers/face-cctv-snapshot', { responseType: 'blob' })
+            if (token !== cctvToken) break
+            requestErrors = 0
+            await addFromBlob(response.data, 'cctv', 'Ảnh camera an ninh')
+            misses = 0
+            say(isFull.value
+                ? `Đã đủ ${MAX_SAMPLES} mẫu. Bấm "Lưu" để hoàn tất.`
+                : `Đã tự chụp mẫu từ camera an ninh (${samples.value.length}/${MAX_SAMPLES}). Mời khách ${nextPose().toLowerCase()}.`, 'ok')
+        } catch (error) {
+            if (token !== cctvToken) break
+            const text = await readRequestError(error)
+            if (error?.response) {
+                // Lỗi từ máy chủ/camera (chưa cấu hình, camera không trả ảnh...): thử lại vài lần rồi dừng hẳn.
+                requestErrors += 1
+                if (error.response.status === 429) delay = 6000
+                else if (requestErrors >= 3) { say(text || 'Không lấy được ảnh từ camera an ninh.', 'error'); break }
+            } else {
+                misses += 1
+                if (misses >= CCTV_MAX_MISSES) { say('Không thấy khuôn mặt dùng được nên đã dừng quét. Bấm lại để quét tiếp.', 'warn'); break }
+            }
+            if (token === cctvToken) say(`${text || 'Chưa lấy được mặt.'} Đang quét tiếp…`, 'warn')
+        }
+        if (token === cctvToken) await wait(delay)
+    }
+    if (token === cctvToken) cctvScanning.value = false
 }
 
 /* ---------- Lưu / xóa ---------- */
 const save = async () => {
     if (!canSave.value) return
+    stopAuto()
+    stopCctvScan()
     busy.value = true
     try {
         await api.post(`/api/customers/${props.customer.id}/face`, {
@@ -185,6 +329,8 @@ const save = async () => {
         })
         registered.value = true
         consentedAt.value = new Date().toISOString()
+        // Đã lưu xong: tắt camera để không tự chụp thêm mẫu mới khi danh sách mẫu vừa được làm trống.
+        if (cameraOn.value) { stopCamera(stream, video.value); stream = null; cameraOn.value = false }
         samples.value = []
         say('Đã lưu dữ liệu nhận diện cho khách.', 'ok')
         toast.success('Đã đăng ký khuôn mặt khách hàng.')
@@ -235,22 +381,28 @@ const remove = async () => {
                 <div class="grid gap-2 sm:grid-cols-3">
                     <button type="button" class="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition" :class="cameraOn ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-700 hover:border-blue-300'" :disabled="cameraStarting" @click="toggleCamera">
                         <Video class="h-5 w-5 shrink-0" />
-                        <span>{{ cameraStarting ? 'Đang mở camera…' : cameraOn ? 'Tắt camera' : 'Camera tại quầy' }}<small class="block text-[11px] font-normal text-slate-500">Chụp trực tiếp khách đang đứng</small></span>
+                        <span>{{ cameraStarting ? 'Đang mở camera…' : cameraOn ? 'Tắt camera' : 'Camera tại quầy' }}<small class="block text-[11px] font-normal text-slate-500">Tự quét và tự chụp khách đang đứng</small></span>
                     </button>
                     <button type="button" class="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:border-emerald-300 disabled:opacity-50" :disabled="busy || isFull" @click="fileInput.click()">
                         <ImagePlus class="h-5 w-5 shrink-0 text-emerald-600" />
                         <span>Tải ảnh lên / chụp<small class="block text-[11px] font-normal text-slate-500">Chọn nhiều ảnh, hoặc chụp bằng điện thoại</small></span>
                     </button>
-                    <button type="button" class="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:border-violet-300 disabled:opacity-50" :disabled="busy || isFull || !cctvConfigured" :title="cctvConfigured ? '' : 'Chưa cấu hình camera an ninh trong Thiết lập → Khách hàng'" @click="fetchFromCctv">
-                        <Camera class="h-5 w-5 shrink-0 text-violet-600" />
-                        <span>Camera an ninh<small class="block text-[11px] font-normal text-slate-500">{{ cctvConfigured ? 'Lấy ảnh chụp hiện tại' : 'Chưa cấu hình trong Thiết lập' }}</small></span>
+                    <button type="button" class="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition disabled:opacity-50" :class="cctvScanning ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-slate-200 text-slate-700 hover:border-violet-300'" :disabled="(busy || isFull || !cctvConfigured) && !cctvScanning" :title="cctvConfigured ? '' : 'Chưa cấu hình camera an ninh trong Thiết lập → Khách hàng'" @click="toggleCctvScan">
+                        <LoaderCircle v-if="cctvScanning" class="h-5 w-5 shrink-0 animate-spin" />
+                        <Camera v-else class="h-5 w-5 shrink-0 text-violet-600" />
+                        <span>{{ cctvScanning ? 'Đang quét… bấm để dừng' : 'Camera an ninh' }}<small class="block text-[11px] font-normal text-slate-500">{{ cctvConfigured ? 'Tự quét và tự chụp khi thấy khách' : 'Chưa cấu hình trong Thiết lập' }}</small></span>
                     </button>
                 </div>
                 <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onFilesPicked" />
 
-                <div v-show="cameraOn" class="relative overflow-hidden rounded-2xl bg-slate-900">
+                <div v-show="cameraOn" class="relative overflow-hidden rounded-2xl bg-slate-900 ring-4 transition" :class="{ 'ring-emerald-400': scanState === 'hold', 'ring-amber-400': ['none', 'multiple', 'small', 'blurry'].includes(scanState), 'ring-transparent': scanState === 'idle' }">
                     <video ref="video" class="aspect-[4/3] max-h-72 w-full -scale-x-100 object-cover" playsinline muted></video>
-                    <button type="button" class="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-900 shadow-lg disabled:opacity-50" :disabled="busy || isFull" @click="captureFromCamera">Chụp mẫu</button>
+                    <div v-if="flash" class="pointer-events-none absolute inset-0 bg-white/70"></div>
+                    <span v-if="autoHint" class="pointer-events-none absolute left-1/2 top-3 max-w-[90%] -translate-x-1/2 truncate rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">{{ autoHint }} · {{ samples.length }}/{{ MAX_SAMPLES }}</span>
+                    <div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2">
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-bold shadow-lg" :class="autoCapture ? 'bg-emerald-500 text-white' : 'bg-white/90 text-slate-700'" :aria-pressed="autoCapture" @click="autoCapture = !autoCapture"><Zap class="h-3.5 w-3.5" />Tự động: {{ autoCapture ? 'Bật' : 'Tắt' }}</button>
+                        <button type="button" class="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-900 shadow-lg disabled:opacity-50" :disabled="busy || isFull" @click="captureFromCamera">Chụp ngay</button>
+                    </div>
                 </div>
 
                 <!-- Các mẫu đã thu thập từ mọi nguồn -->
