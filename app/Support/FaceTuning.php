@@ -19,7 +19,7 @@ final class FaceTuning
         'face_roi_top' => [0, 0, 80],
         'face_roi_width' => [100, 10, 100],
         'face_roi_height' => [100, 10, 100],
-        'face_preview_fps' => [5, 1, 15],             // ảnh xem trước camera cửa
+        'face_preview_fps' => [10, 1, 15],            // ảnh xem trước camera cửa
         'face_preview_width' => [480, 240, 1280],
         // Tự học khuôn mặt
         'face_auto_learn_min_percent' => [75, 60, 95],      // độ giống tối thiểu (%)

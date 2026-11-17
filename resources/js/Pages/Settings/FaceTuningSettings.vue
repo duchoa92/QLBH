@@ -19,7 +19,7 @@ const roiFields = [
     { key: 'face_roi_height', label: 'Cao (%)' },
 ]
 const previewFields = [
-    { key: 'face_preview_fps', label: 'Ảnh xem trước: hình/giây', hint: 'Số hình mỗi giây của khung camera trên POS và trang Lượt khách.' },
+    { key: 'face_preview_fps', label: 'Ảnh xem trước: hình/giây', hint: 'Mặc định 10 hình/giây. Tăng lên nếu cần hình mượt hơn; mức cao hơn dùng thêm băng thông và CPU.' },
     { key: 'face_preview_width', label: 'Ảnh xem trước: rộng (px)', hint: 'Lớn hơn thì nét hơn nhưng nặng hơn khi truyền.' },
 ]
 const learnFields = [

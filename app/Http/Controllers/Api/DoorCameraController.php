@@ -34,6 +34,8 @@ class DoorCameraController extends Controller
 
     private const FRAME_MAX_BYTES = 400 * 1024;
 
+    private const PREVIEW_DIRECTORY = 'app/private/door-camera-preview';
+
     private const FRAME_FRESH_SECONDS = 10;
 
     public function heartbeat(Request $request): JsonResponse
@@ -56,7 +58,7 @@ class DoorCameraController extends Controller
             'enabled' => self::enabled(),
             'config_hash' => DoorCameraAccess::configHash(),
             // Có người đang xem camera cửa (POS / trang Lượt khách): worker nên gửi khung hình qua POST /door-camera/frame.
-            'send_frame' => Cache::has(self::WANTED_KEY),
+            'send_frame' => self::frameWanted(),
             // Có người cần ảnh gốc độ phân giải cao (đăng ký khuôn mặt từ camera cửa): worker gửi ảnh nguyên bản qua POST /door-camera/snapshot.
             'send_snapshot' => Cache::has(self::SNAPSHOT_WANTED_KEY),
         ]);
@@ -70,7 +72,10 @@ class DoorCameraController extends Controller
             return response()->json(['message' => 'Khung hình phải là ảnh JPEG nhỏ hơn 400KB.'], 422);
         }
 
-        Cache::put(self::FRAME_KEY, ['at' => now()->timestamp, 'jpeg' => base64_encode($body)], 60);
+        $frameAt = (int) floor(microtime(true) * 1000);
+        if (! self::writePreviewData('frame.jpg', $frameAt."\n".$body)) {
+            return response()->json(['message' => 'Không lưu được khung hình xem trước. Kiểm tra quyền ghi thư mục storage.'], 500);
+        }
 
         return response()->json(['ok' => true]);
     }
@@ -92,7 +97,13 @@ class DoorCameraController extends Controller
             'faces.*.label' => ['nullable', 'string', 'max:80'],
         ]);
 
-        Cache::put(self::FACES_KEY, ['at' => now()->timestamp, 'faces' => array_values($data['faces'])], 30);
+        $faces = json_encode([
+            'at' => (int) floor(microtime(true) * 1000),
+            'faces' => array_values($data['faces']),
+        ], JSON_UNESCAPED_UNICODE);
+        if ($faces === false || ! self::writePreviewData('faces.json', $faces)) {
+            return response()->json(['message' => 'Không lưu được dữ liệu khung nhận diện. Kiểm tra quyền ghi thư mục storage.'], 500);
+        }
 
         return response()->json(['ok' => true]);
     }
@@ -100,10 +111,99 @@ class DoorCameraController extends Controller
     /** Khuôn mặt mới nhất worker vừa gửi (rỗng nếu đã cũ), đính kèm vào ảnh xem trước dạng base64 JSON ở header. */
     private function facesHeader(): array
     {
-        $stored = Cache::get(self::FACES_KEY);
-        $faces = is_array($stored) && ($stored['at'] ?? 0) >= now()->timestamp - self::FACES_FRESH_SECONDS ? ($stored['faces'] ?? []) : [];
+        $contents = self::readPreviewData('faces.json');
+        $stored = $contents !== null ? json_decode($contents, true) : null;
+        $faces = is_array($stored) && ($stored['at'] ?? 0) >= (int) floor((microtime(true) - self::FACES_FRESH_SECONDS) * 1000)
+            ? ($stored['faces'] ?? [])
+            : [];
 
         return ['X-Door-Faces' => base64_encode(json_encode($faces, JSON_UNESCAPED_UNICODE))];
+    }
+
+    /**
+     * Live preview data is temporary and written many times per second. Keep it off the configured
+     * Laravel cache store (which may be database-backed); use short locked files instead.
+     */
+    private static function previewPath(string $name): string
+    {
+        return storage_path(self::PREVIEW_DIRECTORY.'/'.$name);
+    }
+
+    private static function writePreviewData(string $name, string $contents): bool
+    {
+        $directory = storage_path(self::PREVIEW_DIRECTORY);
+        if (! is_dir($directory) && ! @mkdir($directory, 0775, true) && ! is_dir($directory)) {
+            return false;
+        }
+
+        $handle = @fopen(self::previewPath($name), 'c+b');
+        if ($handle === false) {
+            return false;
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX) || ! ftruncate($handle, 0) || ! rewind($handle)) {
+                return false;
+            }
+
+            $length = strlen($contents);
+            $written = 0;
+            while ($written < $length) {
+                $count = fwrite($handle, substr($contents, $written));
+                if ($count === false || $count === 0) {
+                    return false;
+                }
+                $written += $count;
+            }
+
+            return fflush($handle);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
+    private static function readPreviewData(string $name): ?string
+    {
+        $handle = @fopen(self::previewPath($name), 'rb');
+        if ($handle === false) {
+            return null;
+        }
+
+        try {
+            if (! flock($handle, LOCK_SH)) {
+                return null;
+            }
+
+            $contents = stream_get_contents($handle);
+
+            return $contents === false ? null : $contents;
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
+    private static function frameWanted(): bool
+    {
+        $path = self::previewPath('viewers.lease');
+        if (! is_file($path)) {
+            return false;
+        }
+
+        $lastRequestedAt = @filemtime($path);
+        return $lastRequestedAt !== false && $lastRequestedAt >= time() - 15;
+    }
+
+    private static function markFrameWanted(): void
+    {
+        $path = self::previewPath('viewers.lease');
+        $lastRequestedAt = is_file($path) ? @filemtime($path) : false;
+        if ($lastRequestedAt !== false && $lastRequestedAt >= time() - 2) {
+            return;
+        }
+
+        self::writePreviewData('viewers.lease', (string) time());
     }
 
     /** Worker gửi ảnh nguyên bản từ camera (JPEG, độ phân giải gốc) khi có người cần chụp ảnh đăng ký khuôn mặt. */
@@ -146,21 +246,34 @@ class DoorCameraController extends Controller
      * Ảnh xem trước camera cửa cho giao diện. Ưu tiên khung hình worker vừa gửi (dùng được cho camera RTSP);
      * chưa có thì lấy ảnh chụp http của camera (cache 1 giây để nhiều quầy cùng xem không dồn tải lên camera).
      */
-    public function frame(): Response
+    public function frame(Request $request): Response
     {
         if (! filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN)) {
             return response('', 204);
         }
 
-        Cache::put(self::WANTED_KEY, 1, 15);
+        self::markFrameWanted();
 
-        $headers = ['Content-Type' => 'image/jpeg', 'Cache-Control' => 'no-store', 'Access-Control-Expose-Headers' => 'X-Door-Faces'] + $this->facesHeader();
+        $headers = ['Content-Type' => 'image/jpeg', 'Cache-Control' => 'no-store', 'Access-Control-Expose-Headers' => 'X-Door-Faces, X-Door-Frame-At, X-Door-Frame-Unchanged'] + $this->facesHeader();
+        $after = is_numeric($request->query('after')) ? (int) $request->query('after') : 0;
+        $unchanged = static fn (): Response => response('', 204, $headers + ['X-Door-Frame-Unchanged' => '1']);
 
-        $stored = Cache::get(self::FRAME_KEY);
-        if (is_array($stored) && ($stored['at'] ?? 0) >= now()->timestamp - self::FRAME_FRESH_SECONDS) {
-            $jpeg = base64_decode((string) ($stored['jpeg'] ?? ''), true);
-            if ($jpeg !== false && $jpeg !== '') {
-                return response($jpeg, 200, $headers);
+        $stored = self::readPreviewData('frame.jpg');
+        $separator = $stored !== null ? strpos($stored, "\n") : false;
+        if ($separator !== false) {
+            $frameAt = (int) substr($stored, 0, $separator);
+            $jpeg = substr($stored, $separator + 1);
+        } else {
+            $frameAt = 0;
+            $jpeg = '';
+        }
+
+        if ($frameAt >= (int) floor((microtime(true) - self::FRAME_FRESH_SECONDS) * 1000)) {
+            if ($after > 0 && $frameAt <= $after) {
+                return $unchanged();
+            }
+            if ($jpeg !== '') {
+                return response($jpeg, 200, $headers + ['X-Door-Frame-At' => (string) $frameAt]);
             }
         }
 
@@ -169,7 +282,7 @@ class DoorCameraController extends Controller
             return response('', 204);
         }
 
-        $jpeg = Cache::remember('door_camera.http_frame', 1, function () use ($camera): string {
+        $stored = Cache::remember('door_camera.http_frame', 1, function () use ($camera): array {
             try {
                 $request = Http::timeout(4)->withoutRedirecting()->accept('image/*');
                 if ($camera['username'] !== '' && $camera['auth'] === 'digest') {
@@ -179,19 +292,31 @@ class DoorCameraController extends Controller
                 }
                 $response = $request->get($camera['snapshot_url']);
             } catch (\Throwable) {
-                return '';
+                return ['at' => (int) floor(microtime(true) * 1000), 'jpeg' => ''];
             }
 
             $isImage = str_starts_with(strtolower((string) $response->header('Content-Type')), 'image/');
 
-            return $response->successful() && $isImage && strlen($response->body()) <= 8 * 1024 * 1024 ? base64_encode($response->body()) : '';
+            $jpeg = $response->successful() && $isImage && strlen($response->body()) <= 8 * 1024 * 1024 ? base64_encode($response->body()) : '';
+
+            return ['at' => (int) floor(microtime(true) * 1000), 'jpeg' => $jpeg];
         });
 
-        if ($jpeg === '') {
+        if (! is_array($stored) || ($stored['jpeg'] ?? '') === '') {
             return response('', 204);
         }
 
-        return response(base64_decode($jpeg), 200, $headers);
+        $frameAt = (int) ($stored['at'] ?? 0);
+        if ($after > 0 && $frameAt <= $after) {
+            return $unchanged();
+        }
+
+        $jpeg = base64_decode((string) $stored['jpeg'], true);
+        if ($jpeg === false || $jpeg === '') {
+            return response('', 204);
+        }
+
+        return response($jpeg, 200, $headers + ['X-Door-Frame-At' => (string) $frameAt]);
     }
 
     /** Thông tin camera nhập ở Cài đặt: worker đọc về, không phải khai báo lại trong file .env của worker. */

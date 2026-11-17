@@ -364,7 +364,7 @@ const buildFormValues = () => ({
     face_roi_top: Number(liveSettings.value.face_roi_top ?? 0),
     face_roi_width: Number(liveSettings.value.face_roi_width ?? 100),
     face_roi_height: Number(liveSettings.value.face_roi_height ?? 100),
-    face_preview_fps: Number(liveSettings.value.face_preview_fps ?? 5),
+    face_preview_fps: Number(liveSettings.value.face_preview_fps ?? 10),
     face_preview_width: Number(liveSettings.value.face_preview_width ?? 480),
     face_auto_learn_enabled: liveSettings.value.face_auto_learn_enabled !== false
         && liveSettings.value.face_auto_learn_enabled !== 0
