@@ -8,7 +8,7 @@ import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import api from '@/Services/api'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useFaceCheckIn } from '@/Modules/POS/Customer/Composables/useFaceCheckIn'
-import { useDoorPreview } from '@/Modules/POS/Customer/Composables/useDoorPreview'
+import { useDoorWebrtc } from '@/Modules/POS/Customer/Composables/useDoorWebrtc'
 
 defineOptions({ layout: AdminLayout })
 
@@ -56,7 +56,7 @@ onBeforeUnmount(() => {
 
 /* ---------------- camera xem trực tiếp + bắt khuôn mặt ---------------- */
 // Hai nguồn xem, đổi qua lại bằng hai nút trên đầu khung:
-//  - Camera cửa: worker nhận diện trên máy chủ, gửi ảnh + khung mặt + tên về (vẽ ở đây).
+//  - Camera cửa: video WebRTC từ go2rtc; khung mặt và nhãn từ worker được vẽ đè ở đây.
 //  - Camera máy: camera của thiết bị đang mở trang này, bắt mặt ngay trên trình duyệt (đổi được camera trước/sau).
 const hasDoor = computed(() => !!props.doorCamera.enabled)
 const readFlag = (key, fallback) => { try { const value = localStorage.getItem(key); return value === null ? fallback : value } catch { return fallback } }
@@ -84,8 +84,8 @@ const {
     activeWhen: () => !showDoor.value && localOn.value,
 })
 
-const doorPreview = useDoorPreview(computed(() => showDoor.value && faceFeatureOn.value))
-const doorFaces = computed(() => (doorPreview.ok.value ? doorPreview.faces.value : []))
+const doorVideo = useDoorWebrtc(computed(() => showDoor.value && faceFeatureOn.value))
+const doorFaces = computed(() => (doorVideo.ok.value ? doorVideo.faces.value : []))
 const doorStatus = computed(() => {
     if (!props.doorCamera.online) return 'Camera cửa chưa chạy'
     if (!props.doorCamera.camera_ok) return 'Không lấy được ảnh camera cửa'
@@ -325,7 +325,7 @@ const remove = (visit) => {
             </p>
         </div>
 
-        <!-- Trạng thái worker camera cửa (chỉ hiện khi đã bật chế độ camera cửa) -->
+        <!-- Trạng thái Camera AI nền (chỉ hiện khi đã bật chế độ camera cửa) -->
         <div
             v-if="trackingEnabled && doorCamera.enabled"
             class="flex items-start gap-2 rounded-xl border p-3 text-sm"
@@ -333,8 +333,8 @@ const remove = (visit) => {
         >
             <Camera v-if="doorCamera.online && doorCamera.camera_ok" class="mt-0.5 h-4 w-4 shrink-0" />
             <CameraOff v-else class="mt-0.5 h-4 w-4 shrink-0" />
-            <p v-if="!doorCamera.online">Worker camera cửa chưa chạy nên chưa có lượt khách mới. Xem lệnh cài ở Cài đặt → Khách hàng → Camera cửa, hoặc kiểm tra dịch vụ <code>door-worker</code> trên máy chạy nền.</p>
-            <p v-else-if="!doorCamera.camera_ok">Worker đang chạy nhưng không lấy được ảnh từ camera{{ doorCamera.message ? ': ' + doorCamera.message : '' }}.</p>
+            <p v-if="!doorCamera.online">Camera AI chưa chạy nên chưa có lượt khách mới. Xem hướng dẫn cài camera stack ở Cài đặt → Khách hàng → Camera cửa.</p>
+            <p v-else-if="!doorCamera.camera_ok">Camera AI đang chạy nhưng không lấy được ảnh từ camera{{ doorCamera.message ? ': ' + doorCamera.message : '' }}.</p>
             <p v-else>Camera cửa đang hoạt động.</p>
         </div>
 
@@ -385,11 +385,11 @@ const remove = (visit) => {
                 Chưa bật nhận diện khuôn mặt. Bật trong <Link href="/settings" class="font-semibold text-blue-600 underline">Cài đặt → Khách hàng</Link> để xem camera tại đây.
             </p>
 
-            <!-- Camera cửa: ảnh từ worker + khung bắt mặt kèm tên -->
+            <!-- Camera cửa: video WebRTC liên tục + lớp khung bắt mặt và nhãn -->
             <div v-else-if="showDoor" class="bg-slate-900 p-2">
-                <div class="relative mx-auto flex min-h-[10rem] items-center justify-center overflow-hidden rounded-lg bg-black">
-                    <div v-if="doorPreview.src.value && doorPreview.ok.value" class="relative inline-block max-w-full">
-                        <img :src="doorPreview.src.value" alt="Camera cửa ra vào" class="mx-auto block max-h-[62vh] w-auto max-w-full">
+                <div class="relative mx-auto flex min-h-[10rem] items-center justify-center overflow-hidden rounded-lg bg-black" :style="stageStyle">
+                    <div v-if="doorVideo.ok.value" class="absolute inset-0">
+                        <video :ref="doorVideo.setVideo" autoplay muted playsinline class="absolute inset-0 h-full w-full object-contain" aria-label="Video camera cửa" @loadedmetadata="onMeta"></video>
                         <div class="pointer-events-none absolute inset-0 overflow-hidden">
                             <div
                                 v-for="face in doorFaces"
@@ -402,9 +402,9 @@ const remove = (visit) => {
                             </div>
                         </div>
                     </div>
-                    <p v-else-if="doorPreview.loading.value" class="p-6 text-sm text-slate-300">Đang tải ảnh camera cửa…</p>
+                    <p v-else-if="doorVideo.loading.value" class="p-6 text-sm text-slate-300">Đang kết nối video WebRTC…</p>
                     <p v-else class="p-6 text-center text-sm text-rose-300">
-                        Chưa có ảnh từ camera cửa. Kiểm tra worker camera cửa đang chạy và gửi được ảnh (camera RTSP cần worker gửi khung hình; camera http thì kiểm tra địa chỉ ảnh chụp).
+                        {{ doorVideo.error.value || 'Chưa có luồng camera.' }}
                     </p>
                 </div>
                 <div v-if="doorFaces.length" class="mt-2 flex flex-wrap gap-1.5">

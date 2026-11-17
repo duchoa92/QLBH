@@ -101,7 +101,7 @@ class CustomerFaceController extends Controller
         if (preg_match('#^rtsps?://#i', $url)) {
             // Camera RTSP: nhờ worker camera cửa gửi 1 ảnh gốc (máy chủ web không đọc được luồng RTSP).
             if (! DoorCameraController::status()['online']) {
-                return response()->json(['message' => 'Worker camera cửa chưa chạy nên chưa lấy được ảnh từ camera RTSP. Chạy worker (npm start trong door-worker) rồi thử lại.'], 422);
+                return response()->json(['message' => 'Camera AI chưa chạy nên chưa lấy được ảnh từ camera RTSP. Hãy kiểm tra trạng thái camera stack trong Cài đặt → Khách hàng → Camera cửa.'], 422);
             }
             $jpeg = DoorCameraController::freshSnapshot();
             if ($jpeg === null) {

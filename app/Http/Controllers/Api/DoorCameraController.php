@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Support\DoorCameraAccess;
 use App\Support\FaceTuning;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -18,12 +19,6 @@ class DoorCameraController extends Controller
 {
     public const CACHE_KEY = 'door_camera.heartbeat';
 
-    public const FRAME_KEY = 'door_camera.frame';
-
-    private const WANTED_KEY = 'door_camera.frame_wanted';
-
-    public const FACES_KEY = 'door_camera.faces';
-
     private const FACES_FRESH_SECONDS = 3;
 
     public const SNAPSHOT_KEY = 'door_camera.snapshot';
@@ -32,11 +27,7 @@ class DoorCameraController extends Controller
 
     private const SNAPSHOT_MAX_BYTES = 3 * 1024 * 1024;
 
-    private const FRAME_MAX_BYTES = 400 * 1024;
-
-    private const PREVIEW_DIRECTORY = 'app/private/door-camera-preview';
-
-    private const FRAME_FRESH_SECONDS = 10;
+    private const LIVE_DIRECTORY = 'app/private/door-camera-live';
 
     public function heartbeat(Request $request): JsonResponse
     {
@@ -57,32 +48,15 @@ class DoorCameraController extends Controller
             'ok' => true,
             'enabled' => self::enabled(),
             'config_hash' => DoorCameraAccess::configHash(),
-            // Có người đang xem camera cửa (POS / trang Lượt khách): worker nên gửi khung hình qua POST /door-camera/frame.
-            'send_frame' => self::frameWanted(),
+            // Worker chỉ gửi dữ liệu nhãn khi trình duyệt đang phát luồng go2rtc.
+            'send_faces' => self::facesWanted(),
             // Có người cần ảnh gốc độ phân giải cao (đăng ký khuôn mặt từ camera cửa): worker gửi ảnh nguyên bản qua POST /door-camera/snapshot.
             'send_snapshot' => Cache::has(self::SNAPSHOT_WANTED_KEY),
         ]);
     }
 
-    /** Worker gửi 1 khung hình nhỏ (JPEG) để POS và trang Lượt khách xem camera cửa; chỉ giữ ảnh mới nhất trong bộ nhớ đệm vài giây. */
-    public function storeFrame(Request $request): JsonResponse
-    {
-        $body = (string) $request->getContent();
-        if ($body === '' || strlen($body) > self::FRAME_MAX_BYTES || ! str_starts_with($body, "\xFF\xD8\xFF")) {
-            return response()->json(['message' => 'Khung hình phải là ảnh JPEG nhỏ hơn 400KB.'], 422);
-        }
-
-        $frameAt = (int) floor(microtime(true) * 1000);
-        if (! self::writePreviewData('frame.jpg', $frameAt."\n".$body)) {
-            return response()->json(['message' => 'Không lưu được khung hình xem trước. Kiểm tra quyền ghi thư mục storage.'], 500);
-        }
-
-        return response()->json(['ok' => true]);
-    }
-
     /**
-     * Worker gửi các khuôn mặt đang thấy (toạ độ 0..1 theo khung hình) cùng tên khách nếu đã nhận ra.
-     * Giao diện vẽ khung bắt mặt + tên lên ảnh xem trước; dữ liệu chỉ giữ vài giây trong bộ nhớ đệm.
+     * Worker gửi tọa độ và nhãn; giao diện vẽ lên luồng WebRTC liên tục.
      */
     public function storeFaces(Request $request): JsonResponse
     {
@@ -101,42 +75,209 @@ class DoorCameraController extends Controller
             'at' => (int) floor(microtime(true) * 1000),
             'faces' => array_values($data['faces']),
         ], JSON_UNESCAPED_UNICODE);
-        if ($faces === false || ! self::writePreviewData('faces.json', $faces)) {
-            return response()->json(['message' => 'Không lưu được dữ liệu khung nhận diện. Kiểm tra quyền ghi thư mục storage.'], 500);
+        if ($faces === false || ! self::writeLiveData('faces.json', $faces)) {
+            return response()->json(['message' => 'Không lưu được dữ liệu nhận diện. Kiểm tra quyền ghi thư mục storage.'], 500);
         }
 
         return response()->json(['ok' => true]);
     }
 
-    /** Khuôn mặt mới nhất worker vừa gửi (rỗng nếu đã cũ), đính kèm vào ảnh xem trước dạng base64 JSON ở header. */
-    private function facesHeader(): array
+    /** Lấy thông tin kết nối WebRTC và đánh dấu đang có giao diện xem camera. */
+    public function live(): JsonResponse
     {
-        $contents = self::readPreviewData('faces.json');
+        self::markFacesWanted();
+        $camera = DoorCameraAccess::camera();
+        $isRtsp = preg_match('#^rtsps?://#i', $camera['snapshot_url']) === 1;
+        $ready = $isRtsp && $this->syncGo2rtcSource(false);
+
+        return response()->json([
+            'ready' => $ready,
+            'stream' => (string) config('door_camera.go2rtc_stream_name', 'qlbh_door_camera'),
+            'message' => $isRtsp ? ($ready ? null : 'Không kết nối được go2rtc. Kiểm tra go2rtc đang chạy và cấu hình API.') : 'Xem luồng trực tiếp cần camera RTSP.',
+        ]);
+    }
+
+    /** Worker giữ nhãn ngắn hạn; trang POS/Thống kê đọc metadata tách khỏi luồng video. */
+    public function liveFaces(): JsonResponse
+    {
+        self::markFacesWanted();
+        $contents = self::readLiveData('faces.json');
         $stored = $contents !== null ? json_decode($contents, true) : null;
         $faces = is_array($stored) && ($stored['at'] ?? 0) >= (int) floor((microtime(true) - self::FACES_FRESH_SECONDS) * 1000)
             ? ($stored['faces'] ?? [])
             : [];
 
-        return ['X-Door-Faces' => base64_encode(json_encode($faces, JSON_UNESCAPED_UNICODE))];
+        return response()->json(['at' => (int) ($stored['at'] ?? 0), 'faces' => $faces]);
     }
 
-    /**
-     * Live preview data is temporary and written many times per second. Keep it off the configured
-     * Laravel cache store (which may be database-backed); use short locked files instead.
-     */
-    private static function previewPath(string $name): string
+    /** Laravel authenticates the viewer; only this server-side call reaches go2rtc's private API. */
+    public function webrtcOffer(Request $request): Response|JsonResponse
     {
-        return storage_path(self::PREVIEW_DIRECTORY.'/'.$name);
+        $offer = (string) $request->getContent();
+        if (strlen($offer) > 256 * 1024 || ! str_starts_with(ltrim($offer), 'v=0')) {
+            return response()->json(['message' => 'Đề nghị WebRTC không hợp lệ.'], 422);
+        }
+
+        try {
+            $stream = (string) config('door_camera.go2rtc_stream_name', 'qlbh_door_camera');
+            $camera = DoorCameraAccess::camera();
+            $sourceHash = hash('sha256', $stream.'|'.self::rtspSource($camera));
+            $transcodeKey = 'door_camera.go2rtc.webrtc_transcode.'.$sourceHash;
+            $transcodedStream = (string) config('door_camera.go2rtc_webrtc_stream_name', $stream.'_webrtc');
+            $transcodeAttempted = Cache::get($transcodeKey, false) === true;
+
+            if ($transcodeAttempted) {
+                if (! $this->syncGo2rtcNamedStream($transcodedStream, 'ffmpeg:'.$stream.'#video=h264', false)) {
+                    return response()->json(['message' => 'Không đăng ký được luồng H.264 dự phòng trong go2rtc. Kiểm tra nhật ký dịch vụ.'], 502);
+                }
+                $response = $this->requestWebrtcOffer($transcodedStream, $offer);
+            } else {
+                $response = $this->requestWebrtcOffer($stream, $offer);
+                if (! $response->successful() && str_contains(strtolower($response->body()), 'codecs not matched')) {
+                    $transcodeAttempted = true;
+                    Cache::put($transcodeKey, true, 86400);
+                    if ($this->syncGo2rtcNamedStream($transcodedStream, 'ffmpeg:'.$stream.'#video=h264', false)) {
+                        $response = $this->requestWebrtcOffer($transcodedStream, $offer);
+                    }
+                }
+            }
+        } catch (\Throwable $error) {
+            report($error);
+
+            return response()->json(['message' => 'Không gọi được go2rtc. Kiểm tra dịch vụ và cấu hình GO2RTC_API_URL.'], 502);
+        }
+
+        if (! $response->successful()) {
+            $details = strtolower($response->body());
+            if ($transcodeAttempted) {
+                $message = 'Không phát được video H.265 sau khi thử chuyển mã. Cài FFmpeg trên máy chủ, thêm ffmpeg vào PATH rồi khởi động lại go2rtc; kiểm tra nhật ký nếu lỗi vẫn còn.';
+            } elseif (str_contains($details, 'codecs not matched')) {
+                $message = 'Camera đang phát codec trình duyệt không hỗ trợ. Cài FFmpeg trên máy chủ, thêm ffmpeg vào PATH rồi khởi động lại go2rtc để bật chuyển mã dự phòng.';
+            } else {
+                $message = 'go2rtc không tạo được phiên WebRTC. Kiểm tra nguồn RTSP, nhật ký go2rtc và kết nối cổng WebRTC.';
+            }
+
+            return response()->json(['message' => $message], 502);
+        }
+
+        return response($response->body(), $response->status(), [
+            'Content-Type' => $response->header('Content-Type', 'application/sdp'),
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
-    private static function writePreviewData(string $name, string $contents): bool
+    /** Register the current RTSP URL dynamically; camera credentials never go to the browser. */
+    private function syncGo2rtcSource(bool $force): bool
     {
-        $directory = storage_path(self::PREVIEW_DIRECTORY);
+        $camera = DoorCameraAccess::camera();
+        $name = (string) config('door_camera.go2rtc_stream_name', 'qlbh_door_camera');
+        $base = rtrim((string) config('door_camera.go2rtc_api_url'), '/');
+        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $name) || $base === '') {
+            return false;
+        }
+
+        $apiUrl = $base.'/api/streams';
+        if (preg_match('#^rtsps?://#i', $camera['snapshot_url']) !== 1) {
+            $transcodedName = (string) config('door_camera.go2rtc_webrtc_stream_name', $name.'_webrtc');
+            foreach (array_unique([$name, $transcodedName]) as $staleName) {
+                try {
+                    $this->go2rtcRequest()->delete($apiUrl.'?'.http_build_query(['src' => $staleName, 'persist' => 'false']));
+                } catch (\Throwable) {
+                    // No stream to clean up.
+                }
+                Cache::forget('door_camera.go2rtc.source_hash.'.$staleName);
+            }
+
+            return false;
+        }
+
+        return $this->syncGo2rtcNamedStream($name, self::rtspSource($camera), $force);
+    }
+
+    /** Register a named source without exposing it to the browser. */
+    private function syncGo2rtcNamedStream(string $name, string $source, bool $force): bool
+    {
+        $base = rtrim((string) config('door_camera.go2rtc_api_url'), '/');
+        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $name) || $base === '') {
+            return false;
+        }
+
+        try {
+            $apiUrl = $base.'/api/streams';
+            $existing = $this->go2rtcRequest()->get($apiUrl);
+            $hasStream = $existing->successful() && array_key_exists($name, (array) $existing->json());
+            $sourceHash = hash('sha256', $source);
+            $cacheKey = 'door_camera.go2rtc.source_hash.'.$name;
+            if ($hasStream && ! $force && Cache::get($cacheKey) === $sourceHash) {
+                return true;
+            }
+
+            $url = $apiUrl.'?'.http_build_query(['name' => $name, 'src' => $source, 'persist' => 'false']);
+            $response = $hasStream
+                ? $this->go2rtcRequest()->patch($url)
+                : $this->go2rtcRequest()->put($url);
+            if ($response->successful()) {
+                Cache::put($cacheKey, $sourceHash, 86400);
+            }
+
+            return $response->successful();
+        } catch (\Throwable $error) {
+            report($error);
+
+            return false;
+        }
+    }
+
+    private function requestWebrtcOffer(string $stream, string $offer): \Illuminate\Http\Client\Response
+    {
+        $url = rtrim((string) config('door_camera.go2rtc_api_url'), '/').'/api/webrtc?'.http_build_query(['src' => $stream]);
+
+        return $this->go2rtcRequest()->timeout(20)->withBody($offer, 'application/sdp')->post($url);
+    }
+
+    private function go2rtcRequest(): PendingRequest
+    {
+        $request = Http::timeout(8)->accept('*/*');
+        $username = (string) config('door_camera.go2rtc_api_username', '');
+        if ($username !== '') {
+            $request = $request->withBasicAuth($username, (string) config('door_camera.go2rtc_api_password', ''));
+        }
+
+        return $request;
+    }
+
+    /** Add camera credentials saved in QLBH settings without exposing them to clients. */
+    private static function rtspSource(array $camera): string
+    {
+        $parts = parse_url($camera['snapshot_url']);
+        if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host']) || isset($parts['user'])) {
+            return $camera['snapshot_url'];
+        }
+
+        $credentials = '';
+        if ($camera['username'] !== '') {
+            $credentials = rawurlencode($camera['username']).':'.rawurlencode($camera['password']).'@';
+        }
+        $authority = $credentials.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        $path = $parts['path'] ?? '';
+        $query = isset($parts['query']) ? '?'.$parts['query'] : '';
+
+        return $parts['scheme'].'://'.$authority.$path.$query;
+    }
+
+    private static function liveDataPath(string $name): string
+    {
+        return storage_path(self::LIVE_DIRECTORY.'/'.$name);
+    }
+
+    private static function writeLiveData(string $name, string $contents): bool
+    {
+        $directory = storage_path(self::LIVE_DIRECTORY);
         if (! is_dir($directory) && ! @mkdir($directory, 0775, true) && ! is_dir($directory)) {
             return false;
         }
 
-        $handle = @fopen(self::previewPath($name), 'c+b');
+        $handle = @fopen(self::liveDataPath($name), 'c+b');
         if ($handle === false) {
             return false;
         }
@@ -163,9 +304,9 @@ class DoorCameraController extends Controller
         }
     }
 
-    private static function readPreviewData(string $name): ?string
+    private static function readLiveData(string $name): ?string
     {
-        $handle = @fopen(self::previewPath($name), 'rb');
+        $handle = @fopen(self::liveDataPath($name), 'rb');
         if ($handle === false) {
             return null;
         }
@@ -184,9 +325,9 @@ class DoorCameraController extends Controller
         }
     }
 
-    private static function frameWanted(): bool
+    private static function facesWanted(): bool
     {
-        $path = self::previewPath('viewers.lease');
+        $path = self::liveDataPath('viewers.lease');
         if (! is_file($path)) {
             return false;
         }
@@ -195,15 +336,15 @@ class DoorCameraController extends Controller
         return $lastRequestedAt !== false && $lastRequestedAt >= time() - 15;
     }
 
-    private static function markFrameWanted(): void
+    private static function markFacesWanted(): void
     {
-        $path = self::previewPath('viewers.lease');
+        $path = self::liveDataPath('viewers.lease');
         $lastRequestedAt = is_file($path) ? @filemtime($path) : false;
         if ($lastRequestedAt !== false && $lastRequestedAt >= time() - 2) {
             return;
         }
 
-        self::writePreviewData('viewers.lease', (string) time());
+        self::writeLiveData('viewers.lease', (string) time());
     }
 
     /** Worker gửi ảnh nguyên bản từ camera (JPEG, độ phân giải gốc) khi có người cần chụp ảnh đăng ký khuôn mặt. */
@@ -242,89 +383,25 @@ class DoorCameraController extends Controller
         return null;
     }
 
-    /**
-     * Ảnh xem trước camera cửa cho giao diện. Ưu tiên khung hình worker vừa gửi (dùng được cho camera RTSP);
-     * chưa có thì lấy ảnh chụp http của camera (cache 1 giây để nhiều quầy cùng xem không dồn tải lên camera).
-     */
-    public function frame(Request $request): Response
-    {
-        if (! filter_var(setting('face_recognition_enabled', false), FILTER_VALIDATE_BOOLEAN)) {
-            return response('', 204);
-        }
-
-        self::markFrameWanted();
-
-        $headers = ['Content-Type' => 'image/jpeg', 'Cache-Control' => 'no-store', 'Access-Control-Expose-Headers' => 'X-Door-Faces, X-Door-Frame-At, X-Door-Frame-Unchanged'] + $this->facesHeader();
-        $after = is_numeric($request->query('after')) ? (int) $request->query('after') : 0;
-        $unchanged = static fn (): Response => response('', 204, $headers + ['X-Door-Frame-Unchanged' => '1']);
-
-        $stored = self::readPreviewData('frame.jpg');
-        $separator = $stored !== null ? strpos($stored, "\n") : false;
-        if ($separator !== false) {
-            $frameAt = (int) substr($stored, 0, $separator);
-            $jpeg = substr($stored, $separator + 1);
-        } else {
-            $frameAt = 0;
-            $jpeg = '';
-        }
-
-        if ($frameAt >= (int) floor((microtime(true) - self::FRAME_FRESH_SECONDS) * 1000)) {
-            if ($after > 0 && $frameAt <= $after) {
-                return $unchanged();
-            }
-            if ($jpeg !== '') {
-                return response($jpeg, 200, $headers + ['X-Door-Frame-At' => (string) $frameAt]);
-            }
-        }
-
-        $camera = DoorCameraAccess::camera();
-        if (! preg_match('#^https?://#i', $camera['snapshot_url'])) {
-            return response('', 204);
-        }
-
-        $stored = Cache::remember('door_camera.http_frame', 1, function () use ($camera): array {
-            try {
-                $request = Http::timeout(4)->withoutRedirecting()->accept('image/*');
-                if ($camera['username'] !== '' && $camera['auth'] === 'digest') {
-                    $request = $request->withDigestAuth($camera['username'], $camera['password']);
-                } elseif ($camera['username'] !== '' && $camera['auth'] === 'basic') {
-                    $request = $request->withBasicAuth($camera['username'], $camera['password']);
-                }
-                $response = $request->get($camera['snapshot_url']);
-            } catch (\Throwable) {
-                return ['at' => (int) floor(microtime(true) * 1000), 'jpeg' => ''];
-            }
-
-            $isImage = str_starts_with(strtolower((string) $response->header('Content-Type')), 'image/');
-
-            $jpeg = $response->successful() && $isImage && strlen($response->body()) <= 8 * 1024 * 1024 ? base64_encode($response->body()) : '';
-
-            return ['at' => (int) floor(microtime(true) * 1000), 'jpeg' => $jpeg];
-        });
-
-        if (! is_array($stored) || ($stored['jpeg'] ?? '') === '') {
-            return response('', 204);
-        }
-
-        $frameAt = (int) ($stored['at'] ?? 0);
-        if ($after > 0 && $frameAt <= $after) {
-            return $unchanged();
-        }
-
-        $jpeg = base64_decode((string) $stored['jpeg'], true);
-        if ($jpeg === false || $jpeg === '') {
-            return response('', 204);
-        }
-
-        return response($jpeg, 200, $headers + ['X-Door-Frame-At' => (string) $frameAt]);
-    }
-
     /** Thông tin camera nhập ở Cài đặt: worker đọc về, không phải khai báo lại trong file .env của worker. */
     public function config(): JsonResponse
     {
+        // Keep go2rtc pointed at the latest camera URL. API credentials remain server-side.
+        $camera = DoorCameraAccess::camera();
+        if (preg_match('#^rtsps?://#i', $camera['snapshot_url']) === 1 && $this->syncGo2rtcSource(true)) {
+            $frameUrl = rtrim((string) config('door_camera.go2rtc_worker_frame_url', 'http://127.0.0.1:1984/api/frame.jpeg'), '?&');
+            $separator = str_contains($frameUrl, '?') ? '&' : '?';
+            $camera['snapshot_url'] = $frameUrl.$separator.http_build_query([
+                'src' => (string) config('door_camera.go2rtc_stream_name', 'qlbh_door_camera'),
+            ]);
+            $camera['auth'] = 'none';
+            $camera['username'] = '';
+            $camera['password'] = '';
+        }
+
         return response()->json([
             'enabled' => self::enabled(),
-            'camera' => DoorCameraAccess::camera(),
+            'camera' => $camera,
             'tuning' => FaceTuning::worker(),
             'config_hash' => DoorCameraAccess::configHash(),
         ]);
@@ -349,5 +426,23 @@ class DoorCameraController extends Controller
             'message' => $online ? ($beat['message'] ?? null) : null,
             'seconds_ago' => is_array($beat) ? max(0, now()->timestamp - (int) ($beat['at'] ?? 0)) : null,
         ];
+    }
+
+    /** Health check for the Camera settings page; keep the go2rtc API host private. */
+    public static function streamStatus(): array
+    {
+        return Cache::remember('door_camera.go2rtc.health', 3, function (): array {
+            $camera = DoorCameraAccess::camera();
+            if (preg_match('#^rtsps?://#i', $camera['snapshot_url']) !== 1) {
+                return ['ready' => false, 'message' => 'Nhập địa chỉ camera RTSP để bật video trực tiếp.'];
+            }
+
+            $ready = app(self::class)->syncGo2rtcSource(false);
+
+            return [
+                'ready' => $ready,
+                'message' => $ready ? 'API đã kết nối, nguồn camera đã được đăng ký; hình ảnh được xác nhận khi mở video.' : 'Chưa kết nối go2rtc. Hãy khởi động go2rtc trên máy chủ.',
+            ];
+        });
     }
 }

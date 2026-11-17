@@ -231,7 +231,7 @@ const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_preview_fps', 'face_preview_width', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -364,8 +364,6 @@ const buildFormValues = () => ({
     face_roi_top: Number(liveSettings.value.face_roi_top ?? 0),
     face_roi_width: Number(liveSettings.value.face_roi_width ?? 100),
     face_roi_height: Number(liveSettings.value.face_roi_height ?? 100),
-    face_preview_fps: Number(liveSettings.value.face_preview_fps ?? 10),
-    face_preview_width: Number(liveSettings.value.face_preview_width ?? 480),
     face_auto_learn_enabled: liveSettings.value.face_auto_learn_enabled !== false
         && liveSettings.value.face_auto_learn_enabled !== 0
         && liveSettings.value.face_auto_learn_enabled !== '0',
@@ -769,8 +767,8 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                         <SettingSwitch
                             v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled"
                             v-model="form.face_door_camera_enabled"
-                            title="Dùng camera cửa (worker chạy nền)"
-                            description="Camera IP ở cửa do chương trình worker chạy nền xử lý, kể cả khi không mở POS. POS không mở camera nữa mà chỉ hiện danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
+                            title="Dùng camera cửa (Camera AI chạy nền)"
+                            description="Camera AI nhận diện khuôn mặt liên tục kể cả khi không mở POS. POS hiển thị video go2rtc cùng nhãn nhận diện và danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
                         />
                         <DoorCameraSetup v-if="form.face_door_camera_enabled && door_camera" :info="door_camera" />
                         <FaceTuningSettings v-if="form.face_door_camera_enabled" :form="form" />
@@ -785,11 +783,11 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                                 <p class="mt-0.5 text-xs text-slate-500">
                                     Nhập địa chỉ camera, hỗ trợ hai kiểu:
                                     <strong>RTSP</strong> (luồng video, ví dụ Hikvision <code>rtsp://IP:554/Streaming/Channels/101</code>,
-                                    Dahua <code>rtsp://IP:554/cam/realmonitor?channel=1&amp;subtype=0</code>) cho worker camera cửa, cần cài <code>ffmpeg</code> trên máy chạy worker;
+                                    Dahua <code>rtsp://IP:554/cam/realmonitor?channel=1&amp;subtype=0</code>) cho Camera AI, cần cài <code>ffmpeg</code> trên máy chạy go2rtc nếu camera chỉ phát H.265;
                                     hoặc <strong>ảnh chụp tĩnh http</strong> (Hikvision <code>http://IP/ISAPI/Streaming/channels/101/picture</code>,
                                     Dahua <code>http://IP/cgi-bin/snapshot.cgi</code>), dùng được cả khi đăng ký khuôn mặt từ camera.
                                     Tài khoản/mật khẩu nhập ở ô bên dưới (hoặc dán nguyên link dạng <code>rtsp://tài-khoản:mật-khẩu@IP/...</code>, hệ thống tự tách và lưu mật khẩu được mã hóa).
-                                    Máy chạy worker/máy chủ phải truy cập được camera trong mạng nội bộ.
+                                    Máy chủ chạy camera stack phải truy cập được camera trong mạng nội bộ.
                                 </p>
                             </div>
                             <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Địa chỉ camera (RTSP hoặc ảnh chụp http)" placeholder-text="rtsp://192.168.1.50:554/..." />

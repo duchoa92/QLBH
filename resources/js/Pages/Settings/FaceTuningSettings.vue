@@ -18,10 +18,6 @@ const roiFields = [
     { key: 'face_roi_width', label: 'Rộng (%)' },
     { key: 'face_roi_height', label: 'Cao (%)' },
 ]
-const previewFields = [
-    { key: 'face_preview_fps', label: 'Ảnh xem trước: hình/giây', hint: 'Mặc định 10 hình/giây. Tăng lên nếu cần hình mượt hơn; mức cao hơn dùng thêm băng thông và CPU.' },
-    { key: 'face_preview_width', label: 'Ảnh xem trước: rộng (px)', hint: 'Lớn hơn thì nét hơn nhưng nặng hơn khi truyền.' },
-]
 const learnFields = [
     { key: 'face_auto_learn_min_percent', label: 'Độ giống tối thiểu (%)', hint: 'Chỉ tự thêm mẫu khi độ giống với khách cao hơn mức này. Càng cao càng an toàn.' },
     { key: 'face_auto_learn_margin_percent', label: 'Hơn khách giống thứ nhì (%)', hint: 'Phải hơn người giống thứ hai ít nhất bấy nhiêu, tránh học nhầm khi 2 khách giống nhau.' },
@@ -58,16 +54,6 @@ const learnFields = [
             </div>
         </div>
 
-        <div class="space-y-2">
-            <h4 class="text-xs font-semibold text-slate-700">Ảnh xem trước camera</h4>
-            <div class="grid gap-3 sm:grid-cols-2">
-                <div v-for="field in previewFields" :key="field.key">
-                    <FloatingInput v-model="form[field.key]" :name="field.key" type="number" :label="field.label" />
-                    <p class="mt-1 text-[11px] leading-4 text-slate-500">{{ field.hint }}</p>
-                    <p v-if="form.errors[field.key]" class="text-xs text-rose-600">{{ form.errors[field.key] }}</p>
-                </div>
-            </div>
-        </div>
 
         <div class="space-y-3">
             <h4 class="text-xs font-semibold text-slate-700">Tự học khuôn mặt</h4>

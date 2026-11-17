@@ -2,7 +2,7 @@
  * Nhận diện khuôn mặt chạy ngay trên trình duyệt (Human, @vladmandic/human). Chỉ trả về vector đặc trưng,
  * không có ảnh nào được gửi lên máy chủ. Thư viện và mô hình chỉ được tải khi thật sự dùng tới.
  *
- * Worker camera cửa (door-worker) dùng cùng thư viện và cùng bộ mô hình nên vector từ hai nơi khớp nhau.
+ * Camera AI nền dùng cùng thư viện và bộ mô hình nên vector từ hai nơi khớp nhau.
  * Cần: `npm i @vladmandic/human` và chạy `node scripts/copy-face-models.mjs` một lần
  * (chép mô hình vào public/models/human).
  */

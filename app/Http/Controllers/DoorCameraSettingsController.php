@@ -18,6 +18,8 @@ class DoorCameraSettingsController extends Controller
             'key' => DoorCameraAccess::ensureKey(),
             'api_url' => rtrim(url('/api'), '/'),
             'camera_configured' => filled(setting('face_cctv_snapshot_url')),
+            'go2rtc' => DoorCameraController::streamStatus(),
+            'server_os' => PHP_OS_FAMILY,
         ];
     }
 
@@ -26,6 +28,8 @@ class DoorCameraSettingsController extends Controller
     {
         return response()->json(DoorCameraController::status() + [
             'camera_configured' => filled(setting('face_cctv_snapshot_url')),
+            'go2rtc' => DoorCameraController::streamStatus(),
+            'server_os' => PHP_OS_FAMILY,
         ]);
     }
 

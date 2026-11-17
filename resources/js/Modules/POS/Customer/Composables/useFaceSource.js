@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useDoorQueue } from './useDoorQueue'
 import { useFaceCheckIn } from './useFaceCheckIn'
-import { useDoorPreview } from './useDoorPreview'
+import { useDoorWebrtc } from './useDoorWebrtc'
 
 /**
  * Nguồn nhận diện khách cho POS.
@@ -17,15 +17,15 @@ export const useFaceSource = (options = {}) => {
     const doorConfigured = !!page.props.settings?.face_door_camera_enabled // đọc lúc tải trang, giống trước đây
 
     if (!doorConfigured) {
-        return { ...useFaceCheckIn(options), usingLocal: computed(() => true), fallbackActive: computed(() => false), doorMode: computed(() => false), doorPreviewSrc: ref(''), doorPreviewOk: ref(false) }
+        return { ...useFaceCheckIn(options), usingLocal: computed(() => true), fallbackActive: computed(() => false), doorMode: computed(() => false), setDoorVideo: () => {}, doorVideoOk: ref(false) }
     }
 
     const door = useDoorQueue(options)
     const usingLocal = computed(() => door.active.value && door.unavailable.value)
     const local = useFaceCheckIn({ ...options, activeWhen: () => usingLocal.value })
 
-    // Camera cửa đang là nguồn chính: hiện ảnh xem trước lấy từ máy chủ (camera máy dự phòng thì dùng khung video như cũ).
-    const preview = useDoorPreview(computed(() => door.active.value && !usingLocal.value))
+    // Camera cửa: video liên tục qua WebRTC, metadata nhận diện được vẽ riêng trên hình.
+    const live = useDoorWebrtc(computed(() => door.active.value && !usingLocal.value))
 
     const source = () => (usingLocal.value ? local : door)
     const pick = key => computed(() => source()[key].value)
@@ -53,8 +53,8 @@ export const useFaceSource = (options = {}) => {
         statusText,
         usingLocal,
         doorMode: computed(() => door.active.value && !usingLocal.value),
-        doorPreviewSrc: preview.src,
-        doorPreviewOk: preview.ok,
+        setDoorVideo: live.setVideo,
+        doorVideoOk: live.ok,
         fallbackActive: usingLocal,
         attachPreview: local.attachPreview,
         toggle: door.toggle, // một công tắc chung: tắt là tắt cả camera cửa lẫn camera máy dự phòng

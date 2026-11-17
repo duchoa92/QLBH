@@ -1,6 +1,6 @@
 # Hướng dẫn cài đặt và triển khai QLBH
 
-Tài liệu này tổng hợp cách cài toàn bộ dự án Laravel/Vue, database, build giao diện, lịch tác vụ và worker camera cửa khi cài máy mới, chuyển máy hoặc đưa lên server.
+Tài liệu này tổng hợp cách cài toàn bộ dự án Laravel/Vue, database, build giao diện, lịch tác vụ và camera stack khi cài máy mới, chuyển máy hoặc đưa lên server.
 
 ## 1. Thành phần cần cài
 
@@ -8,11 +8,11 @@ Tài liệu này tổng hợp cách cài toàn bộ dự án Laravel/Vue, databa
 |---|---|---|
 | PHP CLI và Composer 2 | Laravel, migration, lệnh quản trị | PHP 8.2 trở lên. Bật ctype, curl, fileinfo, gd, mbstring, openssl, PDO, tokenizer, xml, xmlreader, xmlwriter, zip. Bật pdo_mysql, pdo_sqlite hoặc pdo_pgsql theo database. |
 | MySQL/MariaDB, PostgreSQL hoặc SQLite | Lưu dữ liệu | Trình cài đặt web hỗ trợ MySQL, PostgreSQL và SQLite. Production nên dùng database server. |
-| Node.js và npm | Cài thư viện frontend, Vite, worker camera | Vite trong lockfile cần Node ^20.19.0 hoặc >=22.12.0. |
+| Node.js và npm | Cài thư viện frontend, Vite và Camera AI | Vite trong lockfile cần Node ^20.19.0 hoặc >=22.12.0. |
 | Apache hoặc Nginx + PHP-FPM | Phục vụ website | Document root phải là thư mục public của repo. |
-| FFmpeg (tuỳ chọn) | Camera RTSP | Chỉ cần nếu camera dùng rtsp:// hoặc rtsps://; ảnh chụp HTTP không cần. |
+| FFmpeg (tuỳ chọn) | Chuyển mã camera H.265 | go2rtc cần khi camera không phát H.264. Camera AI lấy ảnh từ go2rtc nên không tự mở FFmpeg để đọc RTSP trong cấu hình cùng máy. |
 
-Dùng các lockfile có sẵn composer.lock, package-lock.json và door-worker/package-lock.json. Không chép vendor/ hay node_modules/ từ máy cũ; cài lại trên máy đích.
+Dùng các lockfile có sẵn composer.lock, package-lock.json và camera-ai/package-lock.json. Không chép vendor/ hay node_modules/ từ máy cũ; cài lại trên máy đích.
 
 ## 2. Cài dependency và build
 
@@ -149,66 +149,21 @@ Không chạy queue worker trong một SSH session tạm nếu cần nó tiếp 
 
 ## 7. Model nhận diện khuôn mặt
 
-Browser POS và worker chia sẻ model Human. Sau khi npm ci ở thư mục gốc, tạo file model:
+Browser POS và Camera AI chia sẻ model Human. Sau npm ci ở thư mục gốc, tạo file model:
 
     node scripts/copy-face-models.mjs
 
 Khi deploy, chuyển đủ public/models/human/ (các file .json và .bin) và chạy npm run build sau khi thay đổi frontend/model. Dự án hiện dùng @vladmandic/human.
 
-## 8. Worker camera cửa
+## 8. Camera AI 24/7 và go2rtc
 
-Worker là tiến trình Node riêng; máy chạy worker phải truy cập được cả API QLBH và camera. Lấy URL và lệnh có khóa từ Cài đặt → Khách hàng → Camera cửa. Ví dụ cài trên Windows:
+go2rtc QLBH truyền luồng RTSP qua WebRTC và trực tiếp giám sát tiến trình Camera AI. AI nhận diện khuôn mặt nền và chỉ gửi nhãn khi có người xem video. AI dùng TensorFlow.js Node nên vẫn là tiến trình con, nhưng không cần cài service manager thứ hai. Thao tác cài đặt nằm tại [camera-ai/README.md](camera-ai/README.md).
 
-    cd C:\laragon\www\QLBH\door-worker
-    npm ci --ignore-scripts
-    npm run setup -- --url https://pos.example.com/api --key <KHOA_CAMERA>
-    npm run check
+Trên Windows, cài Node.js 22 x64, chạy `cd camera-ai`, `npm ci`, rồi dùng lệnh `npm run setup` được tạo ở **Cài đặt → Khách hàng → Camera cửa**. Bản go2rtc QLBH đã biên dịch đi kèm dự án. Tại thư mục gốc, chạy ` .\deploy\camera-stack\install-windows.ps1`; một tác vụ chạy go2rtc ẩn khi đăng nhập và log được ghi ở `storage/logs/camera-stack/go2rtc.log`.
 
-npm ci --ignore-scripts tránh tự chạy hook pin-cert trong postinstall. Backend mặc định auto sẽ dùng tfjs-node nếu native đã cài, nếu không thì dùng WASM; Windows không có toolchain C++ có thể chạy bằng WASM. Nếu package hiện tại không có hook postinstall hoặc bạn muốn chạy tất cả install scripts, có thể dùng npm ci rồi xác nhận pin-cert đúng máy chủ.
+Trên Linux, cài Docker Engine/Compose, cấu hình `camera-ai/.env` một lần, rồi chạy `cd deploy/go2rtc && sudo docker compose up -d --build`. Compose build một container go2rtc QLBH; go2rtc khởi chạy và giám sát Camera AI con. Model được gắn từ `public/models/human`.
 
-HTTPS tự ký: chỉ ghim sau khi xác minh máy chủ. Có thể dùng fingerprint SHA-256 đã biết:
-
-    npm run pin-cert -- --fingerprint <SHA256_DA_XAC_MINH>
-
-Không tắt kiểm tra TLS. Với HTTP trên mạng riêng, không chạy pin-cert; dùng firewall/VPN để giới hạn truy cập.
-
-### Backend TensorFlow native
-
-Mặc định TF_BACKEND=auto: thử tfjs-node, sau đó dùng WASM nếu native không khả dụng. Ép backend native:
-
-    $env:TF_BACKEND="tfjs-node"
-    npm start
-
-Windows với @tensorflow/tfjs-node 4.22.0 có thể không tải được binary có sẵn và phải biên dịch. Cần Node.js x64, Python tương thích node-gyp, Visual Studio 2022 workload Desktop development with C++, MSVC x64/x86 build tools và Windows SDK. Node 20 riêng lẻ không khắc phục lỗi thiếu binary/toolset.
-
-Kiểm tra native backend:
-
-    node -e "const tf=require('@tensorflow/tfjs-node'); const x=tf.tensor1d([1,2]); console.log('backend='+tf.getBackend(), 'sum='+x.sum().dataSync()[0])"
-
-Kết quả mong đợi: backend=cpu sum=3. Nếu báo thiếu tfjs_binding.node, trên Windows chạy rebuild sau khi đã cài workload C++:
-
-    npm rebuild @tensorflow/tfjs-node --build-from-source
-
-Trên Linux, nếu gói không có binary phù hợp, cài compiler toolchain (build-essential, Python 3 và make), rồi chạy npm rebuild @tensorflow/tfjs-node. Chỉ đặt TF_BACKEND=tfjs-node sau khi phép tính kiểm tra ở trên thành công.
-
-### Chạy worker liên tục
-
-Linux có file mẫu door-worker/door-worker.service. Sửa User, WorkingDirectory và ExecStart theo máy đích; đường dẫn Node phải đúng, nhất là nếu Node cài qua nvm:
-
-    sudo cp door-worker/door-worker.service /etc/systemd/system/door-worker.service
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now door-worker
-    sudo systemctl status door-worker
-    journalctl -u door-worker -f
-
-Mẫu dùng user www-data, thư mục /var/www/qlbh/door-worker và /usr/bin/node. Chỉnh nếu máy khác. Cài ffmpeg nếu camera dùng RTSP:
-
-    sudo apt install ffmpeg
-    ffmpeg -version
-
-Windows có thể chạy npm start trong PowerShell để kiểm tra; nếu cần tự chạy sau reboot, cấu hình Task Scheduler hoặc process manager chạy đúng user, thư mục và Node PATH.
-
-Camera snapshot HTTP không cần ffmpeg. RTSP cần ffmpeg. Nhập URL, kiểu đăng nhập và tài khoản camera ở Cài đặt → Khách hàng → Camera cửa; worker tự đọc và cập nhật cấu hình từ server. Dùng npm run check để kiểm tra API, camera và dò mặt.
+Nhập RTSP, tài khoản và mật khẩu ở Cài đặt. AI lấy ảnh JPEG từ API nội bộ go2rtc. Giữ API quản trị `1984` và RTSP `8554` trong localhost/firewall nội bộ; mở TCP/UDP `8555` cho WebRTC. Nếu camera H.265 cần chuyển mã, cài FFmpeg trên máy chạy go2rtc. Đổi thông tin camera tại Cài đặt, dịch vụ tự đọc lại.
 
 ## 9. Chuyển máy hoặc nâng cấp server có dữ liệu
 
@@ -217,7 +172,7 @@ Camera snapshot HTTP không cần ffmpeg. RTSP cần ffmpeg. Nhập URL, kiểu 
 3. Chuyển .env an toàn, giữ APP_KEY hiện tại, cấu hình DB_* theo server mới, và giữ các dữ liệu storage/ cần thiết, gồm storage/app/installed.
 4. Import database backup, kiểm tra APP_URL, HTTPS, quyền file và kết nối DB.
 5. Chạy php artisan migrate --force, php artisan storage:link, php artisan optimize:clear, rồi php artisan optimize.
-6. Cài lại scheduler, queue worker nếu dùng queue bất đồng bộ, và door-worker trên máy được chọn.
+6. Cài lại scheduler, queue worker nếu dùng queue bất đồng bộ, và camera stack trên máy được chọn.
 7. Kiểm tra đăng nhập, tải ảnh/file, camera, backup và log.
 
 Không chạy /setup trên database có dữ liệu. Không tạo APP_KEY mới khi chuyển app cũ vì dữ liệu mã hóa có thể không đọc được.
@@ -235,14 +190,14 @@ Không chạy /setup trên database có dữ liệu. Không tạo APP_KEY mới 
 | SQLSTATE / không kết nối DB | Kiểm tra DB_*, host/port, quyền user và chọn database trống khi cài mới. |
 | Thiếu Vite manifest | Chạy npm ci, npm run build; kiểm tra public/build/manifest.json. |
 | Lỗi ghi cache/session/log/upload | Cấp quyền ghi đúng cho storage/ và bootstrap/cache/. |
-| Browser không thấy camera | Dùng HTTPS hoặc localhost và kiểm tra quyền camera. |
-| Worker báo sai khóa hoặc không kết nối | Lấy lại lệnh cài từ QLBH; kiểm tra URL API từ máy worker và TLS certificate. |
+| Browser không thấy camera cửa | Kiểm tra go2rtc chạy, URL camera RTSP và TCP/UDP 8555. Nếu log báo codec mismatch/H.265, cài FFmpeg vào PATH rồi khởi động lại go2rtc; H.264 chạy trực tiếp nhẹ hơn. Camera máy cần HTTPS hoặc localhost và quyền camera. |
+| Camera AI báo sai khóa hoặc không kết nối | Lấy lại lệnh cấu hình từ QLBH; kiểm tra URL API từ máy chủ và TLS certificate. |
 | tfjs_binding.node không có | Build lại tfjs-node; Windows cần MSVC C++ workload và Windows SDK. |
-| RTSP lỗi | Cài ffmpeg, kiểm tra URL/luồng, tài khoản và thử bằng VLC. |
+| Camera AI không dò được camera RTSP | Kiểm tra trạng thái AI, go2rtc API và URL RTSP. Nếu dùng camera H.265, bảo đảm FFmpeg dùng được cho go2rtc; H.264 tránh chuyển mã. |
 
 ### Hai file môi trường
 
 - .env ở thư mục gốc: Laravel, APP_KEY, database, mail và tích hợp dịch vụ.
-- door-worker/.env: API_URL, DOOR_CAMERA_KEY, TF_BACKEND, đường dẫn model và TLS pin.
+- camera-ai/.env: API_URL, DOOR_CAMERA_KEY, TF_BACKEND, đường dẫn model và TLS pin.
 - Không ghi đè .env đang chạy bằng .env.example; rà lại cấu hình sau mỗi lần chuyển máy.
 

@@ -75,8 +75,8 @@ const {
     statusText: faceStatusText,
     usingLocal: faceUsingLocal,
     doorMode: faceDoorMode,
-    doorPreviewSrc: faceDoorSrc,
-    doorPreviewOk: faceDoorOk,
+    setDoorVideo: setFaceDoorVideo,
+    doorVideoOk: faceDoorOk,
     attachPreview: attachFacePreview,
     toggle: toggleFace,
     switchCamera: switchFaceCamera,
@@ -397,7 +397,7 @@ onBeforeUnmount(() => {
                         :class="faceFailed || !faceDoorOk ? 'ring-rose-400' : facePreviewRing"
                         :title="faceStatusText || 'Camera cửa'"
                     >
-                        <img v-if="faceDoorSrc && faceDoorOk" :src="faceDoorSrc" alt="Camera cửa" class="h-full w-full object-cover">
+                        <video v-if="faceDoorOk" :ref="setFaceDoorVideo" autoplay muted playsinline class="h-full w-full object-cover" aria-label="Camera cửa"></video>
                         <ScanFace v-else class="h-5 w-5" :class="faceFailed ? 'text-rose-500' : 'text-slate-400'" />
                     </div>
 
