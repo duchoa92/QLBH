@@ -92,15 +92,4 @@ final class DoorCameraAccess
         ];
     }
 
-    /** Dấu vân tay của cấu hình camera: đổi địa chỉ/tài khoản trong Cài đặt thì worker tự nạp lại. */
-    public static function configHash(): string
-    {
-        return substr(hash('sha256', (string) json_encode([self::camera(), FaceTuning::worker()])), 0, 16);
-    }
-
-    /** Dấu vân tay riêng của nguồn video; tinh chỉnh AI không cần làm WebRTC kết nối lại. */
-    public static function sourceHash(): string
-    {
-        return substr(hash('sha256', (string) json_encode(self::camera())), 0, 16);
-    }
 }

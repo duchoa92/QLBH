@@ -9,14 +9,24 @@ const waitForIce = peer => new Promise(resolve => {
     peer.addEventListener('icegatheringstatechange', check)
 })
 
-/** MediaMTX/WHEP player and AI metadata overlay; no go2rtc API is used. */
+/** MediaMTX/WHEP player and AI metadata overlay. */
 export const useCameraIntelligenceWebrtc = (enabled, { camera = 'door-1', facesInterval = 350, sourceKey = null } = {}) => {
     const ok = ref(false), loading = ref(true), error = ref(''), faces = ref([]), videoElement = ref(null)
-    let peer = null, facesTimer = null, retryTimer = null, frameTimer = null, retryAttempts = 0, generation = 0
+    let peer = null, facesTimer = null, retryTimer = null, frameTimer = null, retryAttempts = 0, generation = 0, lastFacesAt = 0, lastFacesChangedAt = 0
     const setVideo = element => { videoElement.value = element; if (element?.srcObject) element.play?.().catch(() => {}) }
-    const stop = () => { generation += 1; clearInterval(facesTimer); clearTimeout(retryTimer); clearTimeout(frameTimer); peer?.close(); peer = null; facesTimer = null; frameTimer = null; if (videoElement.value) videoElement.value.srcObject = null; ok.value = false; loading.value = true; error.value = ''; faces.value = [] }
+    const stop = () => { generation += 1; clearInterval(facesTimer); clearTimeout(retryTimer); clearTimeout(frameTimer); peer?.close(); peer = null; facesTimer = null; frameTimer = null; lastFacesAt = 0; lastFacesChangedAt = 0; if (videoElement.value) videoElement.value.srcObject = null; ok.value = false; loading.value = true; error.value = ''; faces.value = [] }
     const retry = () => { clearTimeout(retryTimer); retryTimer = setTimeout(() => { if (enabled.value) start() }, Math.min(10000, 800 * (2 ** Math.min(retryAttempts++, 3)))) }
-    const getFaces = async run => { try { const { data } = await api.get('/api/customers/camera-intelligence/faces', { params: { camera } }); if (run === generation) faces.value = data?.faces || [] } catch {} }
+    const getFaces = async run => {
+        try {
+            const { data } = await api.get('/api/customers/camera-intelligence/faces', { params: { camera } })
+            if (run !== generation) return
+            const at = Number(data?.at || 0)
+            if (at && at !== lastFacesAt) { lastFacesAt = at; lastFacesChangedAt = Date.now() }
+            // The endpoint can return its cached last value while the worker
+            // is delayed. Never keep an old named overlay on a new video frame.
+            faces.value = at && Date.now() - lastFacesChangedAt <= 1200 ? (data?.faces || []) : []
+        } catch { /* Keep the latest valid frame only until its short TTL expires. */ }
+    }
     const start = async () => {
         stop(); const run = generation
         try {

@@ -12,6 +12,9 @@ class Box:
     width: float
     height: float
     score: float
+    # YuNet returns right eye, left eye, nose, right mouth, left mouth. Keep
+    # them with the detection so SFace can receive a pose-normalised crop.
+    landmarks: tuple[tuple[float, float], ...] = ()
 
     def iou(self, other: "Box") -> float:
         left, top = max(self.x, other.x), max(self.y, other.y)

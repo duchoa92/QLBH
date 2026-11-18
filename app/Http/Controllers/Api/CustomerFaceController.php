@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
+use App\Support\DoorCameraAccess;
 use App\Support\FaceMatcher;
 use App\Support\FaceTuning;
 use Illuminate\Http\JsonResponse;
@@ -42,14 +43,13 @@ class CustomerFaceController extends Controller
 
         return response()->json([
             'registered' => $profiles->isNotEmpty(),
+            'sface_registered' => $profiles->where('engine', FaceMatcher::SFACE)->isNotEmpty(),
             'samples' => $profiles->count(),
             'consented_at' => $profiles->max('consented_at')?->toIso8601String(),
             'engines' => [FaceMatcher::SFACE => $profiles->where('engine', FaceMatcher::SFACE)->count()],
-            // Có cấu hình camera an ninh (địa chỉ ảnh chụp) trong Cài đặt hay chưa.
-            // Chỉ địa chỉ ảnh chụp http/https mới lấy được ảnh ở đây; địa chỉ RTSP dành cho worker camera cửa.
-            // RTSP được xử lý trực tiếp bởi Camera Intelligence; ảnh tĩnh chỉ dùng cho đăng ký thủ công.
-            'cctv_configured' => (bool) preg_match('#^https?://#i', trim((string) setting('face_cctv_snapshot_url', '')))
-                || false,
+            // HTTP snapshots are proxied from the camera itself; RTSP streams
+            // are proxied from Camera Intelligence's in-memory current frame.
+            'cctv_configured' => (bool) preg_match('#^(?:https?|rtsps?)://#i', trim((string) setting('face_cctv_snapshot_url', ''))),
         ]);
     }
 
@@ -103,7 +103,7 @@ class CustomerFaceController extends Controller
     }
 
     /**
-     * Lấy 1 ảnh chụp hiện tại từ camera an ninh qua địa chỉ HTTP đã cấu hình trong Cài đặt.
+     * Lấy 1 ảnh chụp hiện tại từ camera an ninh.
      * Máy chủ gọi camera (trình duyệt gọi trực tiếp thường bị chặn CORS/đăng nhập). Chỉ dùng địa chỉ do quản trị
      * cấu hình, người dùng không nhập được địa chỉ tùy ý nên không thể bắt máy chủ truy cập nơi khác.
      * Ảnh chỉ trả về trình duyệt để tính vector, không lưu trên máy chủ.
@@ -115,7 +115,9 @@ class CustomerFaceController extends Controller
         }
 
         $url = trim((string) setting('face_cctv_snapshot_url', ''));
-        if (preg_match('#^rtsps?://#i', $url)) return response()->json(['message' => 'Đăng ký mẫu từ RTSP được thực hiện bởi Camera Intelligence; hãy dùng ảnh tải lên hoặc camera máy trong lúc cấu hình dịch vụ.'], 422);
+        if (preg_match('#^rtsps?://#i', $url)) {
+            return $this->cameraIntelligenceSnapshot();
+        }
         if ($url === '' || ! preg_match('#^https?://#i', $url)) {
             return response()->json(['message' => 'Chưa cấu hình địa chỉ ảnh chụp camera an ninh trong Thiết lập → Khách hàng.'], 422);
         }
@@ -154,6 +156,43 @@ class CustomerFaceController extends Controller
         }
 
         return response($body, 200, ['Content-Type' => $type, 'Cache-Control' => 'no-store']);
+    }
+
+    /**
+     * RTSP cannot be rendered directly by the browser or PHP HTTP client.
+     * Ask the local worker for its latest decoded frame instead, so enrolment
+     * and background recognition always use the same selected camera.
+     */
+    private function cameraIntelligenceSnapshot()
+    {
+        try {
+            $response = Http::timeout(8)->accept('image/*')
+                ->withHeaders(['X-Camera-Key' => DoorCameraAccess::ensureKey()])
+                ->get(rtrim((string) config('camera_intelligence.service_url'), '/').'/snapshot', ['camera' => 'door-1']);
+        } catch (\Throwable) {
+            return response()->json(['message' => 'Không gọi được Camera Intelligence để lấy ảnh từ camera an ninh.'], 503);
+        }
+
+        if (! $response->successful()) {
+            return response()->json(['message' => 'Camera Intelligence chưa nhận được ảnh từ camera. Kiểm tra dịch vụ và địa chỉ RTSP đã lưu.'], 503);
+        }
+
+        $type = strtolower((string) $response->header('Content-Type'));
+        $body = $response->body();
+        if (! str_starts_with($type, 'image/') || $body === '' || strlen($body) > 8 * 1024 * 1024) {
+            return response()->json(['message' => 'Camera Intelligence không trả về ảnh camera hợp lệ.'], 503);
+        }
+
+        $faceCount = max(0, (int) $response->header('X-Face-Count', '0'));
+
+        return response($body, 200, [
+            'Content-Type' => $type,
+            'Cache-Control' => 'no-store',
+            // Let the browser know that this exact frame was checked with the
+            // same YuNet model used by the background worker.
+            'X-Face-Engine' => $response->header('X-Face-Engine', ''),
+            'X-Face-Count' => (string) $faceCount,
+        ]);
     }
 
     /**

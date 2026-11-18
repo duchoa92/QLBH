@@ -11,8 +11,8 @@ use RuntimeException;
 class ConfigureCameraIntelligence extends Command
 {
     protected $signature = 'camera-intelligence:configure
-        {--ai-rtsp= : RTSP main-stream used by the AI}
-        {--view-rtsp= : H.264 sub-stream used by MediaMTX/WebRTC}
+        {--ai-rtsp= : RTSP main-stream retained as the camera primary source}
+        {--view-rtsp= : H.264 sub-stream used by both Camera Intelligence and MediaMTX/WebRTC}
         {--api-url= : Base URL to this QLBH API (normally leave blank on the same machine)}
         {--camera=door-1 : Unique camera id}
         {--name=Camera cua : Camera display name}';
@@ -62,8 +62,14 @@ class ConfigureCameraIntelligence extends Command
                 ."  device: AUTO\n"
                 ."  detector_model: models/face_detection_yunet_2023mar.onnx\n"
                 ."  recognizer_model: models/face_recognition_sface_2021dec.onnx\n"
-                ."  min_face_px: 60\n"
-                ."  detect_fps: 8\n"
+                // Camera cửa thường đặt cao; 40px vẫn đủ cho YuNet tạo 5 điểm
+                // mốc, còn SFace/quality gate phía sau mới quyết định có nhận
+                // diện và lưu lượt khách hay không.
+                ."  min_face_px: 40\n"
+                // Ten fresh frames a second keeps first sighting responsive
+                // while the latest-frame reader prevents a slow HTTP event
+                // from turning those frames into a delayed backlog.
+                ."  detect_fps: 10\n"
                 ."  recognition_cooldown_seconds: 4\n"
                 ."  match_threshold: 0.72\n"
                 ."  match_margin: 0.08\n\n"
@@ -148,14 +154,9 @@ class ConfigureCameraIntelligence extends Command
             return $provided;
         }
 
-        // In a Laragon install APP_URL often advertises a LAN HTTPS address even
-        // when Apache itself only listens locally on HTTP. The background service
-        // shares this host, so loopback is both more reliable and never leaks the
-        // camera key onto the LAN.
-        if (app()->environment('local')) {
-            return 'http://127.0.0.1/api';
-        }
-
+        // Resolve the route from APP_URL. Laragon commonly serves this project
+        // from a subdirectory (for example /qlbh/public), which loopback /api
+        // alone would miss and therefore return 404 to the background worker.
         return rtrim(url('/api'), '/');
     }
 }

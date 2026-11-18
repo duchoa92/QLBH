@@ -2,7 +2,9 @@
  * Nhận diện khuôn mặt chạy ngay trên trình duyệt (Human, @vladmandic/human). Chỉ trả về vector đặc trưng,
  * không có ảnh nào được gửi lên máy chủ. Thư viện và mô hình chỉ được tải khi thật sự dùng tới.
  *
- * Camera AI nền dùng cùng thư viện và bộ mô hình nên vector từ hai nơi khớp nhau.
+ * Camera Intelligence nền dùng YuNet + SFace ở máy chủ. Human chỉ giữ cho
+ * Camera máy và ảnh cục bộ; các vector legacy human-v1 không được trộn với
+ * vector SFace khi đối chiếu.
  * Cần: `npm i @vladmandic/human` và chạy `node scripts/copy-face-models.mjs` một lần
  * (chép mô hình vào public/models/human).
  */

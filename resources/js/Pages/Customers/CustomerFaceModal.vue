@@ -40,6 +40,7 @@ const cameraStarting = ref(false)
 const busy = ref(false)
 const consent = ref(true) // DEMO: mặc định đồng ý, sửa lại thành false khi chạy thật
 const registered = ref(false)
+const sfaceRegistered = ref(false)
 const consentedAt = ref('')
 const cctvConfigured = ref(false)
 const profileEngines = ref({ 'sface-v1': 0 })
@@ -64,6 +65,7 @@ const loadStatus = async () => {
     try {
         const { data } = await api.get(`/api/customers/${props.customer.id}/face`)
         registered.value = !!data.registered
+        sfaceRegistered.value = !!data.sface_registered
         consentedAt.value = data.consented_at || ''
         cctvConfigured.value = !!data.cctv_configured
         profileEngines.value = data.engines || { 'sface-v1': 0 }
@@ -238,6 +240,22 @@ const addFromBlob = async (blob, source, label) => {
     addSample(source, result, canvas)
 }
 
+// Camera Intelligence has already checked this exact RTSP frame with YuNet.
+// Keep the image only in the modal until the operator saves; SFace on the
+// local service produces the actual descriptor then.  This avoids asking the
+// legacy browser-only detector to reject a face that YuNet has found.
+const addCctvSnapshot = async blob => {
+    const canvas = await blobToCanvas(blob)
+    samples.value.push({
+        id: nextId++,
+        source: 'cctv',
+        descriptors: [],
+        image: makeEnrollmentImage(canvas),
+        thumb: makeThumbnail(canvas),
+        lowQuality: false,
+    })
+}
+
 const onFilesPicked = async (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
@@ -294,7 +312,20 @@ const toggleCctvScan = async () => {
             const response = await api.get('/api/customers/face-cctv-snapshot', { responseType: 'blob' })
             if (token !== cctvToken) break
             requestErrors = 0
-            await addFromBlob(response.data, 'cctv', 'Ảnh camera an ninh')
+            if (response.headers?.['x-face-engine'] === 'yunet-sface') {
+                const faceCount = Number(response.headers?.['x-face-count'] || 0)
+                if (faceCount !== 1) {
+                    throw new Error(faceCount > 1
+                        ? 'Ảnh camera an ninh có nhiều khuôn mặt. Chỉ để một người trong khung.'
+                        : 'Camera Intelligence chưa thấy khuôn mặt trong ảnh.')
+                }
+                await addCctvSnapshot(response.data)
+            } else {
+                // A legacy HTTP snapshot camera is still supported through
+                // the browser fallback; RTSP uses the authoritative YuNet path
+                // above.
+                await addFromBlob(response.data, 'cctv', 'Ảnh camera an ninh')
+            }
             misses = 0
             say(isFull.value
                 ? `Đã đủ ${MAX_SAMPLES} mẫu. Bấm "Lưu" để hoàn tất.`
@@ -330,6 +361,7 @@ const save = async () => {
             images: samples.value.map(sample => sample.image),
         })
         registered.value = true
+        sfaceRegistered.value = true
         consentedAt.value = new Date().toISOString()
         // Đã lưu xong: tắt camera để không tự chụp thêm mẫu mới khi danh sách mẫu vừa được làm trống.
         if (cameraOn.value) { stopCamera(stream, video.value); stream = null; cameraOn.value = false }
@@ -351,6 +383,7 @@ const remove = async () => {
     try {
         await api.delete(`/api/customers/${props.customer.id}/face`)
         registered.value = false
+        sfaceRegistered.value = false
         consentedAt.value = ''
         say('Đã xóa dữ liệu nhận diện của khách.', 'ok')
         toast.success('Đã xóa dữ liệu khuôn mặt.')
@@ -369,13 +402,17 @@ const remove = async () => {
             <div class="text-sm">
                 <span class="font-bold text-slate-900">{{ customer.full_name }}</span>
                 <span v-if="customer.phone" class="text-slate-500"> · {{ customer.phone }}</span>
-                <span v-if="registered" class="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">Đã đăng ký</span>
+                <span v-if="sfaceRegistered" class="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">Đã đăng ký</span>
+                <span v-else-if="registered" class="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">Cần đăng ký lại</span>
             </div>
 
             <div v-if="!featureOn" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
                 Tính năng nhận diện khuôn mặt đang <strong>tắt</strong>. Hãy bật tại
                 <Link href="/settings?section=loyalty" class="font-bold underline">Thiết lập → Khách hàng</Link>
                 rồi quay lại đăng ký. Bạn vẫn xóa được dữ liệu đã lưu.
+            </div>
+            <div v-else-if="registered && !sfaceRegistered" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+                Mẫu cũ không tương thích với Camera Intelligence mới. Hãy chụp lại 1–5 ảnh rõ khuôn mặt và bấm <strong>Lưu dữ liệu khuôn mặt</strong> để hệ thống nhận ra khách qua camera cửa.
             </div>
 
             <template v-if="featureOn">

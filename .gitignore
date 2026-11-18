@@ -23,6 +23,15 @@
 /storage/pail
 /vendor
 /deploy/.tools/
+# Camera Platform writes these files from the Settings database at runtime.
+# They contain machine-specific RTSP addresses and credentials, so never commit
+# them with the application source.
+/deploy/camera-platform/mediamtx.yml
+/deploy/camera-platform/runtime/ffmpeg/
+/deploy/camera-platform/runtime/*.zip
+
+# A malformed external installer can create this literal folder in the project.
+/%SystemDrive%/
 Homestead.json
 Homestead.yaml
 Thumbs.db

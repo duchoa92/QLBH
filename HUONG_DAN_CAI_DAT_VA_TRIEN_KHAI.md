@@ -10,7 +10,7 @@ Tài liệu này tổng hợp cách cài toàn bộ dự án Laravel/Vue, databa
 | MySQL/MariaDB, PostgreSQL hoặc SQLite | Lưu dữ liệu | Trình cài đặt web hỗ trợ MySQL, PostgreSQL và SQLite. Production nên dùng database server. |
 | Node.js và npm | Cài thư viện frontend và Vite | Vite trong lockfile cần Node ^20.19.0 hoặc >=22.12.0. |
 | Apache hoặc Nginx + PHP-FPM | Phục vụ website | Document root phải là thư mục public của repo. |
-| Python 3.10–3.12 | Dịch vụ Camera Intelligence nền | Cài trên máy chạy camera; dùng OpenVINO, không dùng Node/TFJS. |
+| Python 3.10–3.14 | Dịch vụ Camera Intelligence nền | Cài bản 64-bit trên máy chạy camera; dùng OpenVINO, không dùng Node/TFJS. |
 | FFmpeg | Đọc RTSP cho dịch vụ AI | Có trong image Docker; cài vào PATH nếu chạy dịch vụ native. |
 
 Dùng các lockfile có sẵn composer.lock và package-lock.json. Không chép vendor/ hay node_modules/ từ máy cũ; cài lại trên máy đích.
@@ -158,19 +158,21 @@ Khi deploy, chuyển đủ public/models/human/ (các file .json và .bin) và c
 
 ## 8. Camera Platform 24/7: MediaMTX + OpenVINO
 
-Hệ thống dùng hai dịch vụ nền độc lập với trình duyệt: **MediaMTX** phát RTSP sub-stream H.264 qua WebRTC/WHEP gần thời gian thực; **Camera Intelligence** đọc main-stream, dùng OpenVINO + YuNet/SFace để phát hiện, theo dõi và nhận diện nhiều khuôn mặt. Laravel chỉ nhận event, lưu lượt khách và trả lớp phủ tên cho giao diện. Vì vậy đóng trang web không dừng nhận diện.
+Hệ thống dùng hai dịch vụ nền độc lập với trình duyệt: **MediaMTX** phát RTSP sub-stream H.264 qua WebRTC/WHEP gần thời gian thực; **Camera Intelligence** cũng đọc đúng sub-stream đó, dùng OpenVINO + YuNet/SFace để phát hiện, theo dõi và nhận diện nhiều khuôn mặt. Vì vậy hình đang xem và nhãn nhận diện luôn cùng một khung hình. Laravel chỉ nhận event, lưu lượt khách và trả lớp phủ tên cho giao diện; đóng trang web không dừng nhận diện.
 
-Trước khi chạy, tạo `camera-intelligence/config.yaml` từ `config.example.yaml`, điền camera key lấy trong **Cài đặt → Khách hàng → Camera Platform**, hai URL RTSP và tên camera. Dùng main-stream cho `ai_rtsp_url`; dùng sub-stream H.264 cho `view_rtsp_url` để video mượt. Chép hai file model ONNX đã kiểm thử vào `camera-intelligence/models/` theo [hướng dẫn dịch vụ](camera-intelligence/README.md).
+Trước khi chạy, tạo `camera-intelligence/config.yaml` từ `config.example.yaml`, điền camera key lấy trong **Cài đặt → Khách hàng → Camera Platform**, hai URL RTSP và tên camera. Giữ main-stream ở `ai_rtsp_url` làm nguồn dự phòng; dùng sub-stream H.264 ở `view_rtsp_url` cho cả AI và WebRTC để kết quả đồng bộ với video. Chép hai file model ONNX đã kiểm thử vào `camera-intelligence/models/` theo [hướng dẫn dịch vụ](camera-intelligence/README.md).
 
-Trên Windows, cài Python 3.10–3.12 và FFmpeg vào PATH, sau đó chạy:
+Trên Windows, cài Python 64-bit từ 3.10–3.14 rồi chạy. Script tự tải FFmpeg bản LGPL vào thư mục runtime riêng, không sửa PATH hệ thống. Ví dụ sau dùng Python 3.14; nếu máy đang có một bản khác trong khoảng này, thay số phiên bản cho phù hợp:
 
     cd C:\laragon\www\QLBH\camera-intelligence
-    py -3.12 -m venv .venv
-    .\.venv\Scripts\python -m pip install -r requirements.txt
+    py -3.14 -m venv .venv
+    .\.venv\Scripts\python.exe -m pip install --upgrade pip
+    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+    .\.venv\Scripts\python.exe tools\fetch_models.py
     cd ..
     .\deploy\camera-platform\install-windows.ps1
 
-Script tải MediaMTX, tạo tác vụ Windows `QLBH Camera Intelligence` tự chạy lúc đăng nhập, rồi chạy MediaMTX ẩn. Mở UDP/TCP `8189` và TCP `8889` trên LAN cho WebRTC; TCP 8189 là đường dự phòng nếu router hoặc firewall chặn UDP. Không cần Node, tfjs-node, go2rtc hoặc mở thêm cửa sổ terminal.
+Script tải MediaMTX, tạo tác vụ Windows `QLBH Camera Intelligence` tự chạy lúc đăng nhập, rồi chạy MediaMTX ẩn. Mở UDP/TCP `8189` và TCP `8889` trên LAN cho WebRTC; TCP 8189 là đường dự phòng khi mạng chặn UDP. Stack này không cần Node hay TFJS; MediaMTX là media bridge duy nhất của Camera Platform.
 
 Trên Ubuntu, cài Docker Engine + Compose, chuẩn bị `camera-intelligence/config.yaml` và `models/`, rồi chạy:
 

@@ -97,6 +97,10 @@ Route::middleware(['web', 'auth'])->group(function ()
         ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,camera_intelligence_live']);
     Route::post('/customers/camera-intelligence/webrtc-offer', [CameraIntelligenceController::class, 'webrtcOffer'])
         ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,camera_intelligence_webrtc']);
+    // Snapshot is proxied by Laravel so the browser never receives RTSP
+    // credentials and can enrol a customer from the selected door camera.
+    Route::get('/customers/face-cctv-snapshot', [CustomerFaceController::class, 'cctvSnapshot'])
+        ->middleware(['permission:customers.edit', 'throttle:20,1,customer_face_cctv_snapshot']);
     Route::get('/customers/{customer}/face', [CustomerFaceController::class, 'status'])
         ->middleware('permission:customers.view|customers.edit');
     Route::post('/customers/{customer}/face', [CustomerFaceController::class, 'store'])

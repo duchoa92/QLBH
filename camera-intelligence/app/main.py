@@ -12,6 +12,7 @@ from io import BytesIO
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel, Field
 
@@ -55,7 +56,12 @@ def create_app(config_path: str) -> FastAPI:
         def report_heartbeat() -> None:
             while True:
                 try:
-                    supervisor.heartbeat()
+                    # /reload replaces the supervisor. Always resolve the
+                    # current instance so Laravel never receives the stopped
+                    # worker state from before a camera/configuration change.
+                    current = state.get("supervisor")
+                    if isinstance(current, WorkerSupervisor):
+                        current.heartbeat()
                 except Exception as error:
                     logging.getLogger(__name__).warning('heartbeat failed: %s', error)
                 sleep(5)
@@ -79,10 +85,13 @@ def create_app(config_path: str) -> FastAPI:
         return {"cameras": supervisor.status() if isinstance(supervisor, WorkerSupervisor) else {}}
 
     @app.post("/reload")
-    def reload_config() -> dict:
+    def reload_config(x_camera_key: str = Header(default="")) -> dict:
         supervisor = state.get("supervisor")
-        if not isinstance(supervisor, WorkerSupervisor):
+        config = state.get("config")
+        if not isinstance(supervisor, WorkerSupervisor) or not isinstance(config, AppConfig):
             raise HTTPException(503, "service is starting")
+        if not hmac.compare_digest(x_camera_key, config.server.camera_key):
+            raise HTTPException(401, "invalid camera key")
         config = load_config(config_path)
         # Recreate the publisher too: a regenerated camera key must take effect
         # immediately, not after the next Windows/Linux service restart.
@@ -93,6 +102,36 @@ def create_app(config_path: str) -> FastAPI:
             config.inference.detector_model, config.inference.recognizer_model, config.inference.device, config.inference.min_face_px,
         )
         return {"ok": True, "cameras": list(replacement.workers)}
+
+    @app.get("/snapshot")
+    def snapshot(camera: str = 'door-1', x_camera_key: str = Header(default="")) -> Response:
+        """Return the current in-memory RTSP frame for controlled enrolment.
+
+        Laravel proxies this endpoint to an authenticated operator.  Requiring
+        the same shared key as /enroll means this local endpoint cannot become
+        an unauthenticated camera feed on the LAN.
+        """
+        config = state.get("config")
+        supervisor = state.get("supervisor")
+        if not isinstance(config, AppConfig) or not isinstance(supervisor, WorkerSupervisor):
+            raise HTTPException(503, "service is starting")
+        if not hmac.compare_digest(x_camera_key, config.server.camera_key):
+            raise HTTPException(401, "invalid camera key")
+        camera_state = supervisor.states.get(camera)
+        if camera_state is None:
+            raise HTTPException(404, "camera is not configured")
+        snapshot = camera_state.snapshot_jpeg()
+        if snapshot is None:
+            raise HTTPException(503, "camera has not received a frame yet")
+        image, face_count = snapshot
+        return Response(content=image, media_type='image/jpeg', headers={
+            'Cache-Control': 'no-store',
+            # Laravel forwards these two non-sensitive facts to the enrolment
+            # modal. It then trusts this YuNet result instead of the retired
+            # browser-only Human detector, which missed distant CCTV faces.
+            'X-Face-Engine': 'yunet-sface',
+            'X-Face-Count': str(face_count),
+        })
 
     @app.post("/enroll")
     def enroll(payload: EnrollmentRequest, x_camera_key: str = Header(default="")) -> dict:

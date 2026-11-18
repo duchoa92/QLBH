@@ -284,7 +284,14 @@ class CustomerVisitController extends Controller
                 ->first();
 
             if ($visit) {
-                $visit->update(['last_seen_at' => $now]);
+                $changes = ['last_seen_at' => $now];
+                // Older AI events had no thumbnail. Fill it on the first
+                // subsequent clear sighting instead of leaving the card as a
+                // generic silhouette forever.
+                if ($visit->thumb === null && ! empty($data['thumb'])) {
+                    $changes['thumb'] = $data['thumb'];
+                }
+                $visit->update($changes);
 
                 return response()->json(['recorded' => true, 'id' => $visit->id, 'customer_id' => $visit->customer_id]);
             }
@@ -321,7 +328,11 @@ class CustomerVisitController extends Controller
             ->first(fn (CustomerVisit $visit) => FaceMatcher::isSamePerson($probe, $visit->descriptor, $engine));
 
         if ($existing) {
-            $existing->update(['last_seen_at' => $now]);
+            $changes = ['last_seen_at' => $now];
+            if ($existing->thumb === null && ! empty($data['thumb'])) {
+                $changes['thumb'] = $data['thumb'];
+            }
+            $existing->update($changes);
 
             return response()->json(['recorded' => true, 'id' => $existing->id, 'customer_id' => null]);
         }

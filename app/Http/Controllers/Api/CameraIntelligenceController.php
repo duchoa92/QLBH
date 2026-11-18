@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
+use App\Support\DoorCameraAccess;
 use App\Support\FaceMatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,7 +55,9 @@ class CameraIntelligenceController extends Controller
             'faces.*.kind' => ['required', 'in:known,unknown,scanning'],
             'faces.*.label' => ['nullable', 'string', 'max:80'],
         ]);
-        Cache::put(self::FACES_KEY.'.'.$data['camera_id'], ['at' => (int) floor(microtime(true) * 1000), 'faces' => array_values($data['faces'])], 8);
+        // Overlay labels are ephemeral. A stopped/delayed worker must not
+        // leave an old face box on top of a newer empty WebRTC frame.
+        Cache::put(self::FACES_KEY.'.'.$data['camera_id'], ['at' => (int) floor(microtime(true) * 1000), 'faces' => array_values($data['faces'])], 3);
 
         return response()->json(['ok' => true]);
     }
@@ -141,6 +144,7 @@ class CameraIntelligenceController extends Controller
         $cameras = $online ? ($data['cameras'] ?? []) : [];
         $ready = $online && collect($cameras)->contains(fn ($camera) => ($camera['running'] ?? false) && ($camera['inference_ready'] ?? false));
         $error = collect($cameras)->pluck('last_error')->filter()->first();
+        $source = DoorCameraAccess::camera();
 
         return [
             'online' => $online,
@@ -148,7 +152,10 @@ class CameraIntelligenceController extends Controller
             'cameras' => $cameras,
             'message' => $error,
             'seconds_ago' => is_array($data) ? now()->timestamp - $data['at'] : null,
-            'source_hash' => substr(hash('sha256', json_encode($cameras)), 0, 16),
+            // Used by WebRTC consumers to decide whether a peer needs a fresh
+            // offer. It must only change when the RTSP source changes, never
+            // when heartbeat counters or frame counts advance.
+            'source_hash' => substr(hash('sha256', $source['snapshot_url'].'|'.$source['view_rtsp_url']), 0, 16),
         ];
     }
 

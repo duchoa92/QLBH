@@ -1,0 +1,18 @@
+# Reference only. The application regenerates mediamtx.yml locally from
+# camera-intelligence/config.yaml every time the platform is installed or a
+# camera setting is refreshed. The generated file is intentionally ignored
+# because its RTSP sources can contain credentials.
+api: true
+apiAddress: 127.0.0.1:9997
+metrics: true
+metricsAddress: 127.0.0.1:9998
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: true
+webrtcIPsFromInterfacesList: []
+pathDefaults:
+  rtspTransport: tcp
+  sourceOnDemand: false
+paths: {}

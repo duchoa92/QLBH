@@ -10,8 +10,12 @@ use App\Services\CloudBackupStorage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Support\DefaultPurchaseContract;
+use App\Support\DoorCameraAccess;
+use Symfony\Component\Process\Process;
 
 class SettingController extends Controller
 {
@@ -241,14 +245,6 @@ class SettingController extends Controller
             'payment_voice_enabled' => ['sometimes', 'boolean'],
         ], $this->validationMessages(), $this->validationAttributes());
 
-        // Vùng dò mặt không được vượt ra ngoài khung hình.
-        if (isset($data['face_roi_left'], $data['face_roi_width']) && $data['face_roi_left'] + $data['face_roi_width'] > 100) {
-            throw \Illuminate\Validation\ValidationException::withMessages(['face_roi_width' => 'Lề trái + chiều rộng vùng dò mặt không được quá 100%.']);
-        }
-        if (isset($data['face_roi_top'], $data['face_roi_height']) && $data['face_roi_top'] + $data['face_roi_height'] > 100) {
-            throw \Illuminate\Validation\ValidationException::withMessages(['face_roi_height' => 'Lề trên + chiều cao vùng dò mặt không được quá 100%.']);
-        }
-
         // Quyền được cộng dồn: một người có thể vừa quản lý đơn vị/kho vừa quản lý tài khoản thanh toán.
         $allowedKeys = [];
         if ($user->can('settings.edit')) {
@@ -288,6 +284,14 @@ class SettingController extends Controller
             }
         }
 
+        $cameraChanged = (bool) array_intersect([
+            'face_door_camera_enabled', 'face_cctv_snapshot_url', 'face_cctv_view_rtsp_url',
+            'face_cctv_auth', 'face_cctv_username', 'face_cctv_password',
+            // These fields can cause the browser to auto-generate a new RTSP
+            // source, so include them in the apply path as well.
+            'face_camera_brand', 'face_camera_host', 'face_camera_channel',
+        ], array_keys($data));
+
         foreach ($data as $key => $value) {
             if ($key === 'label_template') {
                 Setting::set($key, json_encode(\App\Support\LabelTemplate::normalize($value), JSON_UNESCAPED_UNICODE));
@@ -310,7 +314,7 @@ class SettingController extends Controller
             Setting::forget('face_cctv_password');
         }
 
-        // Camera Intelligence / MediaMTX đọc cấu hình riêng; không gọi hoặc khởi động tiến trình media từ request web.
+        $cameraApplied = ! $cameraChanged || $this->applyDoorCameraConfiguration();
 
         if (array_key_exists('bank_accounts', $data)) {
             $existingAccounts = collect(json_decode((string) setting('bank_accounts', '[]'), true) ?: [])->keyBy(fn ($account) => (string) ($account['id'] ?? ''));
@@ -388,7 +392,64 @@ class SettingController extends Controller
                 : '[]');
         }
 
-        return back()->with('success', 'Đã lưu cài đặt');
+        return back()
+            ->with('success', $cameraChanged && $cameraApplied
+                ? 'Đã lưu và áp dụng cấu hình camera mới.'
+                : 'Đã lưu cài đặt')
+            ->when($cameraChanged && ! $cameraApplied, fn ($redirect) => $redirect->with('error', 'Đã lưu địa chỉ camera, nhưng không thể làm mới Camera Platform. Mở lại phần Camera cửa để xem trạng thái dịch vụ.'));
+    }
+
+    /** Đồng bộ RTSP đã lưu sang worker và MediaMTX trước khi trả kết quả lưu. */
+    private function applyDoorCameraConfiguration(): bool
+    {
+        if (! filled(setting('face_cctv_snapshot_url')) || ! filled(setting('face_cctv_view_rtsp_url'))) {
+            // Nothing is running yet, but saving an incomplete camera form is
+            // still valid and must not be reported as a failed application.
+            return true;
+        }
+
+        try {
+            if (Artisan::call('camera-intelligence:configure') !== 0) {
+                Log::warning('Không thể tạo lại cấu hình Camera Intelligence sau khi lưu Cài đặt.');
+
+                return false;
+            }
+
+            // Nạp ngay worker đang chạy. Header khóa ngăn ứng dụng khác trên LAN
+            // yêu cầu service local đổi nguồn camera.
+            $reload = Http::timeout(8)->withHeaders(['X-Camera-Key' => DoorCameraAccess::key()])
+                ->post(rtrim((string) config('camera_intelligence.service_url'), '/').'/reload');
+            if (! $reload->successful()) {
+                Log::warning('Camera Intelligence từ chối nạp lại cấu hình RTSP.', ['status' => $reload->status()]);
+
+                return false;
+            }
+
+            // MediaMTX keeps RTSP sources in memory. Refresh it synchronously
+            // so the success notification means both the worker and WebRTC
+            // have moved to the saved address.  The worker was already reloaded
+            // above, therefore refresh-windows.ps1 deliberately does not stop
+            // its scheduled task a second time.
+            if (PHP_OS_FAMILY === 'Windows') {
+                $script = base_path('deploy/camera-platform/refresh-windows.ps1');
+                if (is_file($script)) {
+                    $refresh = new Process([
+                        'powershell.exe', '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', $script,
+                    ], base_path(), timeout: 20);
+                    $refresh->run();
+                    if (! $refresh->isSuccessful()) {
+                        Log::warning('MediaMTX không thể nạp lại nguồn RTSP mới.', ['output' => trim($refresh->getErrorOutput())]);
+
+                        return false;
+                    }
+                }
+            }
+            return true;
+        } catch (\Throwable $exception) {
+            Log::warning('Không thể làm mới Camera Platform sau khi đổi RTSP.', ['exception' => $exception->getMessage()]);
+
+            return false;
+        }
     }
 
     /** Danh sách tài khoản ngân hàng đã bỏ khóa bí mật, dùng chung cho trang Cài đặt và dữ liệu chia sẻ toàn app. */

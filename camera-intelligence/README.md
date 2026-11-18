@@ -12,19 +12,23 @@ Dich vu AI chay nen doc lap cho QLBH. Dich vu nay chi phat hien, theo doi va nha
 ## Chay native (Windows / Ubuntu)
 
 ```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item config.example.yaml config.yaml
-.\.venv\Scripts\python -m app.main --config config.yaml
+# Kiem tra cac Python dang co: py -0p
+py -3.14 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe tools\fetch_models.py
+if (-not (Test-Path config.yaml)) { Copy-Item config.example.yaml config.yaml }
 ```
 
-Tren Ubuntu, dung `python3` thay cho `py` va kich hoat `.venv/bin/activate`.
+Dung Python 64-bit tu 3.10 den 3.14. Lenh tren dung 3.14; neu may da cai mot ban khac trong khoang nay, thay `3.14` bang so ban do. Tren Ubuntu, dung `python3` thay cho `py` va kich hoat `.venv/bin/activate`.
+
+Khong can chay `app.main` thu cong neu dung script `deploy/camera-platform/install-windows.ps1`: script se tao tac vu nen va tu khoi dong dich vu. Script cung tu tai FFmpeg ban LGPL vao `deploy/camera-platform/runtime/ffmpeg/`; khong can sua PATH he thong.
 
 `config.yaml` khong duoc commit: chua camera key va RTSP URL.
 
 ## Model
 
-Dat hai file da duoc QLBH kiem thu vao `models/`:
+Chay `tools/fetch_models.py` sau khi cai dependency de tai hai model chinh thuc tu OpenCV Zoo va kiem tra SHA-256. Script tu bo qua file da dung hash va tu choi ghi de file sai hash. Hai file can co trong `models/`:
 
 - `face_detection_yunet_2023mar.onnx`
 - `face_recognition_sface_2021dec.onnx`

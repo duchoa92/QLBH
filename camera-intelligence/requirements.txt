@@ -1,7 +1,11 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
-pydantic==2.11.7
-PyYAML==6.0.2
-numpy==2.2.6
-openvino==2025.3.0
+# 2.11.7 pins pydantic-core without a CPython 3.14 Windows wheel.
+pydantic==2.12.5
+PyYAML==6.0.3
+# 2.2.6 has no CPython 3.14 wheel and makes pip try to compile NumPy on Windows.
+numpy==2.3.5
+# 2025.3.0 predates CPython 3.14 wheels; this release has a Windows CPython 3.14 wheel.
+openvino==2026.4.1
+opencv-python-headless==4.14.0.94
 Pillow==11.3.0
