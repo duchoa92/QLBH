@@ -392,11 +392,19 @@ class SettingController extends Controller
                 : '[]');
         }
 
-        return back()
-            ->with('success', $cameraChanged && $cameraApplied
-                ? 'Đã lưu và áp dụng cấu hình camera mới.'
-                : 'Đã lưu cài đặt')
-            ->when($cameraChanged && ! $cameraApplied, fn ($redirect) => $redirect->with('error', 'Đã lưu địa chỉ camera, nhưng không thể làm mới Camera Platform. Mở lại phần Camera cửa để xem trạng thái dịch vụ.'));
+        // `back()` returns a RedirectResponse, not a fluent Collection-like
+        // object.  Do not call `when()` here: RedirectResponse has no such
+        // method and saving the Camera section would turn a successful write
+        // into a 500 error.
+        $response = back()->with('success', $cameraChanged && $cameraApplied
+            ? 'Đã lưu và áp dụng cấu hình camera mới.'
+            : 'Đã lưu cài đặt');
+
+        if ($cameraChanged && ! $cameraApplied) {
+            $response->with('error', 'Đã lưu địa chỉ camera, nhưng không thể làm mới Camera Platform. Mở lại phần Camera cửa để xem trạng thái dịch vụ.');
+        }
+
+        return $response;
     }
 
     /** Đồng bộ RTSP đã lưu sang worker và MediaMTX trước khi trả kết quả lưu. */
