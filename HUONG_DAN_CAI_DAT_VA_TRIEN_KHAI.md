@@ -8,11 +8,12 @@ Tài liệu này tổng hợp cách cài toàn bộ dự án Laravel/Vue, databa
 |---|---|---|
 | PHP CLI và Composer 2 | Laravel, migration, lệnh quản trị | PHP 8.2 trở lên. Bật ctype, curl, fileinfo, gd, mbstring, openssl, PDO, tokenizer, xml, xmlreader, xmlwriter, zip. Bật pdo_mysql, pdo_sqlite hoặc pdo_pgsql theo database. |
 | MySQL/MariaDB, PostgreSQL hoặc SQLite | Lưu dữ liệu | Trình cài đặt web hỗ trợ MySQL, PostgreSQL và SQLite. Production nên dùng database server. |
-| Node.js và npm | Cài thư viện frontend, Vite và Camera AI | Vite trong lockfile cần Node ^20.19.0 hoặc >=22.12.0. |
+| Node.js và npm | Cài thư viện frontend và Vite | Vite trong lockfile cần Node ^20.19.0 hoặc >=22.12.0. |
 | Apache hoặc Nginx + PHP-FPM | Phục vụ website | Document root phải là thư mục public của repo. |
-| FFmpeg (tuỳ chọn) | Chuyển mã camera H.265 | go2rtc cần khi camera không phát H.264. Camera AI lấy ảnh từ go2rtc nên không tự mở FFmpeg để đọc RTSP trong cấu hình cùng máy. |
+| Python 3.10–3.12 | Dịch vụ Camera Intelligence nền | Cài trên máy chạy camera; dùng OpenVINO, không dùng Node/TFJS. |
+| FFmpeg | Đọc RTSP cho dịch vụ AI | Có trong image Docker; cài vào PATH nếu chạy dịch vụ native. |
 
-Dùng các lockfile có sẵn composer.lock, package-lock.json và camera-ai/package-lock.json. Không chép vendor/ hay node_modules/ từ máy cũ; cài lại trên máy đích.
+Dùng các lockfile có sẵn composer.lock và package-lock.json. Không chép vendor/ hay node_modules/ từ máy cũ; cài lại trên máy đích.
 
 ## 2. Cài dependency và build
 
@@ -155,15 +156,30 @@ Browser POS và Camera AI chia sẻ model Human. Sau npm ci ở thư mục gốc
 
 Khi deploy, chuyển đủ public/models/human/ (các file .json và .bin) và chạy npm run build sau khi thay đổi frontend/model. Dự án hiện dùng @vladmandic/human.
 
-## 8. Camera AI 24/7 và go2rtc
+## 8. Camera Platform 24/7: MediaMTX + OpenVINO
 
-go2rtc QLBH truyền luồng RTSP qua WebRTC và trực tiếp giám sát tiến trình Camera AI. AI nhận diện khuôn mặt nền và chỉ gửi nhãn khi có người xem video. AI dùng TensorFlow.js Node nên vẫn là tiến trình con, nhưng không cần cài service manager thứ hai. Thao tác cài đặt nằm tại [camera-ai/README.md](camera-ai/README.md).
+Hệ thống dùng hai dịch vụ nền độc lập với trình duyệt: **MediaMTX** phát RTSP sub-stream H.264 qua WebRTC/WHEP gần thời gian thực; **Camera Intelligence** đọc main-stream, dùng OpenVINO + YuNet/SFace để phát hiện, theo dõi và nhận diện nhiều khuôn mặt. Laravel chỉ nhận event, lưu lượt khách và trả lớp phủ tên cho giao diện. Vì vậy đóng trang web không dừng nhận diện.
 
-Trên Windows, cài Node.js 22 x64, chạy `cd camera-ai`, `npm ci`, rồi dùng lệnh `npm run setup` được tạo ở **Cài đặt → Khách hàng → Camera cửa**. Bản go2rtc QLBH đã biên dịch đi kèm dự án. Tại thư mục gốc, chạy ` .\deploy\camera-stack\install-windows.ps1`; một tác vụ chạy go2rtc ẩn khi đăng nhập và log được ghi ở `storage/logs/camera-stack/go2rtc.log`.
+Trước khi chạy, tạo `camera-intelligence/config.yaml` từ `config.example.yaml`, điền camera key lấy trong **Cài đặt → Khách hàng → Camera Platform**, hai URL RTSP và tên camera. Dùng main-stream cho `ai_rtsp_url`; dùng sub-stream H.264 cho `view_rtsp_url` để video mượt. Chép hai file model ONNX đã kiểm thử vào `camera-intelligence/models/` theo [hướng dẫn dịch vụ](camera-intelligence/README.md).
 
-Trên Linux, cài Docker Engine/Compose, cấu hình `camera-ai/.env` một lần, rồi chạy `cd deploy/go2rtc && sudo docker compose up -d --build`. Compose build một container go2rtc QLBH; go2rtc khởi chạy và giám sát Camera AI con. Model được gắn từ `public/models/human`.
+Trên Windows, cài Python 3.10–3.12 và FFmpeg vào PATH, sau đó chạy:
 
-Nhập RTSP, tài khoản và mật khẩu ở Cài đặt. AI lấy ảnh JPEG từ API nội bộ go2rtc. Giữ API quản trị `1984` và RTSP `8554` trong localhost/firewall nội bộ; mở TCP/UDP `8555` cho WebRTC. Nếu camera H.265 cần chuyển mã, cài FFmpeg trên máy chạy go2rtc. Đổi thông tin camera tại Cài đặt, dịch vụ tự đọc lại.
+    cd C:\laragon\www\QLBH\camera-intelligence
+    py -3.12 -m venv .venv
+    .\.venv\Scripts\python -m pip install -r requirements.txt
+    cd ..
+    .\deploy\camera-platform\install-windows.ps1
+
+Script tải MediaMTX, tạo tác vụ Windows `QLBH Camera Intelligence` tự chạy lúc đăng nhập, rồi chạy MediaMTX ẩn. Mở UDP/TCP `8189` và TCP `8889` trên LAN cho WebRTC; TCP 8189 là đường dự phòng nếu router hoặc firewall chặn UDP. Không cần Node, tfjs-node, go2rtc hoặc mở thêm cửa sổ terminal.
+
+Trên Ubuntu, cài Docker Engine + Compose, chuẩn bị `camera-intelligence/config.yaml` và `models/`, rồi chạy:
+
+    cd /duong-dan/QLBH/deploy/camera-platform
+    sudo docker compose up -d --build
+
+Với mỗi camera thêm một mục vào `cameras:` trong config rồi chạy lại script Windows hoặc `docker compose up -d`. MediaMTX chỉ phát sub-stream H.264 trực tiếp; nếu camera chỉ có H.265, hãy đổi cấu hình codec/sub-stream H.264 trong camera trước, tránh chuyển mã CPU gây trễ.
+
+Sau khi nền tảng báo **AI đang chạy**, đăng ký mẫu cho từng khách tại **Khách hàng → Đăng ký khuôn mặt**. Mẫu được tạo bằng đúng YuNet + SFace/OpenVINO của camera nền; ảnh chỉ gửi tạm vào dịch vụ nội bộ để sinh vector rồi bị bỏ, không lưu ảnh trong QLBH.
 
 ## 9. Chuyển máy hoặc nâng cấp server có dữ liệu
 
@@ -190,14 +206,13 @@ Không chạy /setup trên database có dữ liệu. Không tạo APP_KEY mới 
 | SQLSTATE / không kết nối DB | Kiểm tra DB_*, host/port, quyền user và chọn database trống khi cài mới. |
 | Thiếu Vite manifest | Chạy npm ci, npm run build; kiểm tra public/build/manifest.json. |
 | Lỗi ghi cache/session/log/upload | Cấp quyền ghi đúng cho storage/ và bootstrap/cache/. |
-| Browser không thấy camera cửa | Kiểm tra go2rtc chạy, URL camera RTSP và TCP/UDP 8555. Nếu log báo codec mismatch/H.265, cài FFmpeg vào PATH rồi khởi động lại go2rtc; H.264 chạy trực tiếp nhẹ hơn. Camera máy cần HTTPS hoặc localhost và quyền camera. |
-| Camera AI báo sai khóa hoặc không kết nối | Lấy lại lệnh cấu hình từ QLBH; kiểm tra URL API từ máy chủ và TLS certificate. |
-| tfjs_binding.node không có | Build lại tfjs-node; Windows cần MSVC C++ workload và Windows SDK. |
-| Camera AI không dò được camera RTSP | Kiểm tra trạng thái AI, go2rtc API và URL RTSP. Nếu dùng camera H.265, bảo đảm FFmpeg dùng được cho go2rtc; H.264 tránh chuyển mã. |
+| Browser không thấy camera cửa | Kiểm tra MediaMTX, URL `view_rtsp_url` và TCP 8889/UDP 8189. Dùng sub-stream H.264; camera H.265 không phát trực tiếp được trên đa số trình duyệt. |
+| Camera Intelligence sai khóa hoặc không kết nối | Kiểm tra `camera_key`, URL API Laravel trong `config.yaml`, firewall và trạng thái `http://127.0.0.1:9070/healthz`. |
+| Camera Intelligence không dò được RTSP | Kiểm tra `ai_rtsp_url`, FFmpeg trong PATH (native) và `last_error` trong `/healthz`. |
 
 ### Hai file môi trường
 
 - .env ở thư mục gốc: Laravel, APP_KEY, database, mail và tích hợp dịch vụ.
-- camera-ai/.env: API_URL, DOOR_CAMERA_KEY, TF_BACKEND, đường dẫn model và TLS pin.
+- camera-intelligence/config.yaml: camera key, URL API, thiết bị OpenVINO và các RTSP URL. Không đưa file này hoặc thư mục models lên Git.
 - Không ghi đè .env đang chạy bằng .env.example; rà lại cấu hình sau mỗi lần chuyển máy.
 

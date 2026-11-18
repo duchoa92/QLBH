@@ -15,12 +15,14 @@ final class FaceMatcher
 {
     public const HUMAN = 'human-v1';
     public const SFACE = 'sface-v1';
-    public const ENGINES = [self::HUMAN, self::SFACE];
+    public const ARCFACE = 'arcface-v1';
+    public const ENGINES = [self::HUMAN, self::SFACE, self::ARCFACE];
 
     /** Độ dài vector chấp nhận được của Human; SFace được kiểm tra chính xác ở validDescriptor(). */
     public const MIN_SIZE = 64;
     public const MAX_SIZE = 2048;
     public const SFACE_SIZE = 128;
+    public const ARCFACE_SIZE = 512;
     public const VALUE_LIMIT = 1000;
 
     private const HUMAN_MULTIPLIER = 25.0;
@@ -37,24 +39,31 @@ final class FaceMatcher
     {
         $count = count($descriptor);
 
-        return $engine === self::SFACE
-            ? $count === self::SFACE_SIZE
-            : $engine === self::HUMAN && $count >= self::MIN_SIZE && $count <= self::MAX_SIZE;
+        return match ($engine) {
+            self::SFACE => $count === self::SFACE_SIZE,
+            self::ARCFACE => $count === self::ARCFACE_SIZE,
+            self::HUMAN => $count >= self::MIN_SIZE && $count <= self::MAX_SIZE,
+            default => false,
+        };
     }
 
     /** Threshold is deliberately native to each engine; it is not an invented conversion between scores. */
     public static function threshold(string $engine): float
     {
-        return $engine === self::SFACE
-            ? (float) config('face.sface_match_cosine', 0.45)
-            : (float) config('face.match_similarity', 0.5);
+        return match ($engine) {
+            self::SFACE => (float) config('face.sface_match_cosine', 0.45),
+            self::ARCFACE => (float) config('face.arcface_match_cosine', 0.45),
+            default => (float) config('face.match_similarity', 0.5),
+        };
     }
 
     public static function margin(string $engine): float
     {
-        return $engine === self::SFACE
-            ? (float) config('face.sface_margin', 0.05)
-            : (float) config('face.margin', 0.03);
+        return match ($engine) {
+            self::SFACE => (float) config('face.sface_margin', 0.05),
+            self::ARCFACE => (float) config('face.arcface_margin', 0.05),
+            default => (float) config('face.margin', 0.03),
+        };
     }
 
     /**
@@ -68,7 +77,7 @@ final class FaceMatcher
             return 0.0;
         }
 
-        if ($engine === self::SFACE) {
+        if (in_array($engine, [self::SFACE, self::ARCFACE], true)) {
             return self::cosineSimilarity($a, $b);
         }
 

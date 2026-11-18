@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Api\DoorCameraController;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\Setting;
@@ -87,7 +86,11 @@ class SettingController extends Controller
                 'face_visit_tracking_enabled' => filter_var(setting('face_visit_tracking_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 'face_door_camera_enabled' => filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN),
                 'face_visit_retention_days' => min(365, max(1, (int) setting('face_visit_retention_days', 30))),
+                'face_camera_brand' => in_array(setting('face_camera_brand', 'custom'), ['hikvision', 'dahua', 'imou', 'ezviz', 'reolink', 'uniview', 'vigi', 'custom'], true) ? setting('face_camera_brand', 'custom') : 'custom',
+                'face_camera_host' => setting('face_camera_host', ''),
+                'face_camera_channel' => min(64, max(1, (int) setting('face_camera_channel', 1))),
                 'face_cctv_snapshot_url' => setting('face_cctv_snapshot_url', ''),
+                'face_cctv_view_rtsp_url' => setting('face_cctv_view_rtsp_url', ''),
                 'face_cctv_auth' => in_array(setting('face_cctv_auth', 'none'), ['none', 'basic', 'digest'], true) ? setting('face_cctv_auth', 'none') : 'none',
                 'face_cctv_username' => setting('face_cctv_username', ''),
                 // Không trả mật khẩu về trình duyệt, chỉ cho biết đã lưu hay chưa.
@@ -159,11 +162,22 @@ class SettingController extends Controller
             'face_visit_tracking_enabled' => ['sometimes', 'boolean'],
             'face_door_camera_enabled' => ['sometimes', 'boolean'],
             'face_visit_retention_days' => ['sometimes', 'integer', 'min:1', 'max:365'],
+            'face_camera_brand' => ['sometimes', 'in:hikvision,dahua,imou,ezviz,reolink,uniview,vigi,custom'],
+            'face_camera_host' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'face_camera_channel' => ['sometimes', 'integer', 'min:1', 'max:64'],
             'face_cctv_snapshot_url' => [
                 'sometimes', 'nullable', 'string', 'max:500',
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     if (filled($value) && self::parseCameraUrl((string) $value) === null) {
                         $fail('Địa chỉ camera phải bắt đầu bằng http://, https:// hoặc rtsp:// kèm địa chỉ máy (ví dụ rtsp://192.168.1.50:554/Streaming/Channels/101).');
+                    }
+                },
+            ],
+            'face_cctv_view_rtsp_url' => [
+                'sometimes', 'nullable', 'string', 'max:500',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (filled($value) && ! preg_match('#^rtsps?://#i', trim((string) $value))) {
+                        $fail('Luồng xem trực tiếp phải là URL rtsp:// hoặc rtsps:// (ưu tiên sub-stream H.264).');
                     }
                 },
             ],
@@ -261,6 +275,19 @@ class SettingController extends Controller
             }
         }
 
+        if (array_key_exists('face_cctv_view_rtsp_url', $data) && filled($data['face_cctv_view_rtsp_url'])) {
+            [$viewUrl, $cameraUser, $cameraPassword] = $this->splitCameraCredentials((string) $data['face_cctv_view_rtsp_url']);
+            $data['face_cctv_view_rtsp_url'] = $viewUrl;
+            // Credentials are shared with the main stream. Never return/store a
+            // plaintext password in the browser-visible stream URL.
+            if ($cameraUser !== null) {
+                $data['face_cctv_username'] = mb_substr($cameraUser, 0, 100);
+                if (filled($cameraPassword)) {
+                    $data['face_cctv_password'] = mb_substr($cameraPassword, 0, 200);
+                }
+            }
+        }
+
         foreach ($data as $key => $value) {
             if ($key === 'label_template') {
                 Setting::set($key, json_encode(\App\Support\LabelTemplate::normalize($value), JSON_UNESCAPED_UNICODE));
@@ -283,10 +310,7 @@ class SettingController extends Controller
             Setting::forget('face_cctv_password');
         }
 
-        // Đổi RTSP/tài khoản phải thay nguồn go2rtc ngay để mọi trang đang xem có thể nối lại đúng camera.
-        if (array_intersect(array_keys($data), ['face_cctv_snapshot_url', 'face_cctv_username', 'face_cctv_password']) !== []) {
-            app(DoorCameraController::class)->refreshStream();
-        }
+        // Camera Intelligence / MediaMTX đọc cấu hình riêng; không gọi hoặc khởi động tiến trình media từ request web.
 
         if (array_key_exists('bank_accounts', $data)) {
             $existingAccounts = collect(json_decode((string) setting('bank_accounts', '[]'), true) ?: [])->keyBy(fn ($account) => (string) ($account['id'] ?? ''));

@@ -228,6 +228,18 @@ export const makeThumbnail = (source, width = 96) => {
     return canvas.toDataURL('image/jpeg', 0.7)
 }
 
+/** A temporary JPEG sent once to the local OpenVINO enrolment service; it is never persisted by QLBH. */
+export const makeEnrollmentImage = (source, maxSide = 1280) => {
+    const sourceWidth = source.videoWidth || source.width
+    const sourceHeight = source.videoHeight || source.height
+    const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', 0.9)
+}
+
 export const faceStatusMessage = {
     none: 'Không thấy khuôn mặt trong ảnh.',
     multiple: 'Ảnh có nhiều khuôn mặt. Hãy dùng ảnh chỉ có một người (hoặc cắt ảnh).',

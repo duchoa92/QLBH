@@ -21,7 +21,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Nhận diện khách hàng bằng khuôn mặt (chỉ khi khách đã đồng ý).
  *
- * - Trình duyệt/worker tính vector đặc trưng theo từng engine (Human hoặc SFace), không gửi ảnh lên máy chủ.
+ * - Dịch vụ OpenVINO tạo vector SFace cho cả đăng ký lẫn camera nền.
  * - Máy chủ chỉ lưu vector, so khớp phía server nên vector của khách khác không bao giờ gửi xuống POS.
  */
 class CustomerFaceController extends Controller
@@ -44,18 +44,12 @@ class CustomerFaceController extends Controller
             'registered' => $profiles->isNotEmpty(),
             'samples' => $profiles->count(),
             'consented_at' => $profiles->max('consented_at')?->toIso8601String(),
-            'engines' => [
-                FaceMatcher::HUMAN => $profiles->where('engine', FaceMatcher::HUMAN)->count(),
-                FaceMatcher::SFACE => $profiles->where('engine', FaceMatcher::SFACE)->count(),
-            ],
-            'camera_engine' => FaceTuning::cameraEngine(),
-            'sface_enrollment' => DoorCameraController::sfaceEnrollmentStatus($customer->id),
+            'engines' => [FaceMatcher::SFACE => $profiles->where('engine', FaceMatcher::SFACE)->count()],
             // Có cấu hình camera an ninh (địa chỉ ảnh chụp) trong Cài đặt hay chưa.
             // Chỉ địa chỉ ảnh chụp http/https mới lấy được ảnh ở đây; địa chỉ RTSP dành cho worker camera cửa.
-            // Camera RTSP cũng dùng được khi đã bật chế độ camera cửa (worker gửi ảnh gốc lên máy chủ).
+            // RTSP được xử lý trực tiếp bởi Camera Intelligence; ảnh tĩnh chỉ dùng cho đăng ký thủ công.
             'cctv_configured' => (bool) preg_match('#^https?://#i', trim((string) setting('face_cctv_snapshot_url', '')))
-                || ((bool) preg_match('#^rtsps?://#i', trim((string) setting('face_cctv_snapshot_url', '')))
-                    && filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN)),
+                || false,
         ]);
     }
 
@@ -67,22 +61,33 @@ class CustomerFaceController extends Controller
 
         $data = $request->validate([
             'consent' => ['required', 'accepted'],
-            'descriptors' => ['required', 'array', 'min:1', 'max:'.self::MAX_SAMPLES],
-            'descriptors.*' => ['required', 'array', ...$this->sizeRules()],
-            'descriptors.*.*' => ['required', 'numeric', $this->valueRule()],
-            'engine' => ['nullable', 'in:human-v1,sface-v1'],
+            'images' => ['required', 'array', 'min:1', 'max:5'],
+            'images.*' => ['required', 'string', 'max:8388608'],
         ], [
             'consent.accepted' => 'Cần có sự đồng ý của khách hàng trước khi lưu dữ liệu khuôn mặt.',
         ]);
 
-        $engine = (string) ($data['engine'] ?? FaceMatcher::HUMAN);
-        $this->ensureDescriptors($data['descriptors'], $engine, 'descriptors');
+        $engine = FaceMatcher::SFACE;
+        try {
+            $response = Http::timeout(25)->withHeaders(['X-Camera-Key' => \App\Support\DoorCameraAccess::ensureKey()])
+                ->post(rtrim((string) config('camera_intelligence.service_url'), '/').'/enroll', ['images' => $data['images']]);
+        } catch (\Throwable) {
+            return response()->json(['message' => 'Không gọi được Camera Intelligence để đăng ký mẫu khuôn mặt.'], 503);
+        }
+        if (! $response->successful()) {
+            return response()->json(['message' => $response->json('detail') ?: 'Ảnh không đủ rõ hoặc dịch vụ nhận diện đang lỗi.'], $response->status() === 422 ? 422 : 503);
+        }
+        $descriptors = $response->json('descriptors', []);
+        if (! is_array($descriptors) || count($descriptors) !== count($data['images'])) {
+            return response()->json(['message' => 'Dịch vụ nhận diện trả dữ liệu mẫu không hợp lệ.'], 503);
+        }
+        $this->ensureDescriptors($descriptors, $engine, 'images');
 
-        DB::transaction(function () use ($data, $customer, $request, $engine): void {
-            // Đăng ký lại chỉ thay mẫu cùng engine; mẫu của engine kia được giữ để A/B test an toàn.
+        DB::transaction(function () use ($descriptors, $customer, $request, $engine): void {
+            // Đăng ký lại chỉ thay bộ vector SFace/OpenVINO đang dùng trong dịch vụ mới.
             CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->delete();
 
-            foreach ($data['descriptors'] as $descriptor) {
+            foreach ($descriptors as $descriptor) {
                 CustomerFaceProfile::query()->create([
                     'customer_id' => $customer->id,
                     'descriptor' => array_map('floatval', $descriptor),
@@ -94,7 +99,7 @@ class CustomerFaceController extends Controller
             }
         });
 
-        return response()->json(['registered' => true, 'samples' => count($data['descriptors'])]);
+        return response()->json(['registered' => true, 'samples' => count($descriptors)]);
     }
 
     /**
@@ -110,18 +115,7 @@ class CustomerFaceController extends Controller
         }
 
         $url = trim((string) setting('face_cctv_snapshot_url', ''));
-        if (preg_match('#^rtsps?://#i', $url)) {
-            // Camera RTSP: nhờ worker camera cửa gửi 1 ảnh gốc (máy chủ web không đọc được luồng RTSP).
-            if (! DoorCameraController::status()['online']) {
-                return response()->json(['message' => 'Camera AI chưa chạy nên chưa lấy được ảnh từ camera RTSP. Hãy kiểm tra trạng thái camera stack trong Cài đặt → Khách hàng → Camera cửa.'], 422);
-            }
-            $jpeg = DoorCameraController::freshSnapshot();
-            if ($jpeg === null) {
-                return response()->json(['message' => 'Worker chưa gửi được ảnh từ camera cửa. Kiểm tra worker đang chạy bản mới nhất rồi thử lại.'], 502);
-            }
-
-            return response($jpeg, 200, ['Content-Type' => 'image/jpeg', 'Cache-Control' => 'no-store']);
-        }
+        if (preg_match('#^rtsps?://#i', $url)) return response()->json(['message' => 'Đăng ký mẫu từ RTSP được thực hiện bởi Camera Intelligence; hãy dùng ảnh tải lên hoặc camera máy trong lúc cấu hình dịch vụ.'], 422);
         if ($url === '' || ! preg_match('#^https?://#i', $url)) {
             return response()->json(['message' => 'Chưa cấu hình địa chỉ ảnh chụp camera an ninh trong Thiết lập → Khách hàng.'], 422);
         }
@@ -176,9 +170,9 @@ class CustomerFaceController extends Controller
         $data = $request->validate([
             'descriptor' => ['required', 'array', ...$this->sizeRules()],
             'descriptor.*' => ['required', 'numeric', $this->valueRule()],
-            'engine' => ['nullable', 'in:human-v1,sface-v1'],
+            'engine' => ['nullable', 'in:sface-v1'],
         ]);
-        $engine = (string) ($data['engine'] ?? FaceMatcher::HUMAN);
+        $engine = FaceMatcher::SFACE;
         $this->ensureDescriptors([$data['descriptor']], $engine, 'descriptor');
         $probe = array_map('floatval', $data['descriptor']);
 
@@ -219,25 +213,6 @@ class CustomerFaceController extends Controller
         return response()->json(['registered' => false, 'samples' => 0]);
     }
 
-    /** Start a consented SFace-only enrollment from the door camera; Human profiles remain untouched. */
-    public function requestSfaceEnrollment(Request $request, Customer $customer): JsonResponse
-    {
-        if ($disabled = $this->ensureEnabled()) {
-            return $disabled;
-        }
-        $request->validate([
-            'consent' => ['required', 'accepted'],
-        ], ['consent.accepted' => 'Cần có sự đồng ý của khách hàng trước khi lưu dữ liệu khuôn mặt.']);
-
-        try {
-            $job = DoorCameraController::requestSfaceEnrollment($customer->id, $request->user()?->id);
-        } catch (\RuntimeException $error) {
-            return response()->json(['message' => $error->getMessage()], 422);
-        }
-
-        return response()->json(['queued' => true, 'expires_at' => $job['expires_at']], 202);
-    }
-
     /**
      * POS gửi vector của những người đang đứng trước camera, nhận lại khách khớp nhất cho từng người (nếu đủ chắc chắn).
      *
@@ -252,7 +227,10 @@ class CustomerFaceController extends Controller
         }
 
         $data = $request->validate([
-            'engine' => ['nullable', 'in:human-v1,sface-v1'],
+            'engine' => ['nullable', 'in:human-v1,sface-v1,arcface-v1'],
+            // Shadow matching is used only while comparing engines. It must never add
+            // auto-learned face profiles because it is not an operational decision.
+            'shadow' => ['sometimes', 'boolean'],
             'descriptor' => ['required_without:faces', 'array', ...$this->sizeRules()],
             'descriptor.*' => ['required', 'numeric', $this->valueRule()],
             'faces' => ['required_without:descriptor', 'array', 'min:1', 'max:'.self::MAX_FACES],
@@ -289,7 +267,7 @@ class CustomerFaceController extends Controller
             );
             $outcome = $this->matchFace($probes, $bank, $request->hasHeader('X-Camera-Key'), $engine);
             // Chỉ worker camera cửa (gửi X-Camera-Key, nhìn khách qua nhiều khung hình) mới tự học; POS học khi nhân viên bấm "Đúng".
-            if ($request->hasHeader('X-Camera-Key')) {
+            if ($request->hasHeader('X-Camera-Key') && ! ($data['shadow'] ?? false)) {
                 $this->learnFromMatch($probes, $outcome, $engine);
             }
             if (config('face.log_scores')) {
@@ -310,6 +288,11 @@ class CustomerFaceController extends Controller
         $results = array_map(function (array $outcome) use ($customers): array {
             $customer = isset($outcome['customer_id']) ? $customers->get($outcome['customer_id']) : null;
             $result = ['key' => $outcome['key'], 'matched' => $customer !== null];
+            if (array_key_exists('best', $outcome)) {
+                // Native score of the selected engine. Human and SFace scores must
+                // be read separately, never compared as if they had one scale.
+                $result['score'] = $outcome['best'];
+            }
             if ($customer !== null) {
                 $result['customer'] = $customer;
                 $result['confidence'] = $outcome['confidence'];

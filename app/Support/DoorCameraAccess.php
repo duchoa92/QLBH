@@ -69,7 +69,7 @@ final class DoorCameraAccess
         return false;
     }
 
-    /** @return array{snapshot_url: string, auth: string, username: string, password: string} */
+    /** @return array{snapshot_url: string, view_rtsp_url: string, auth: string, username: string, password: string} */
     public static function camera(): array
     {
         $password = '';
@@ -85,6 +85,7 @@ final class DoorCameraAccess
 
         return [
             'snapshot_url' => trim((string) setting('face_cctv_snapshot_url', '')),
+            'view_rtsp_url' => trim((string) setting('face_cctv_view_rtsp_url', '')),
             'auth' => in_array($auth, ['none', 'basic', 'digest'], true) ? $auth : 'none',
             'username' => (string) setting('face_cctv_username', ''),
             'password' => $password,

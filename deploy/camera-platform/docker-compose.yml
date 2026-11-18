@@ -1,0 +1,17 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.16.1
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+  intelligence:
+    build:
+      context: ../../camera-intelligence
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ../../camera-intelligence/config.yaml:/config/config.yaml:ro
+      - ../../camera-intelligence/models:/config/models:ro
+    depends_on:
+      - mediamtx

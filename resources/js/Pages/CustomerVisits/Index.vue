@@ -8,7 +8,7 @@ import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import api from '@/Services/api'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useFaceCheckIn } from '@/Modules/POS/Customer/Composables/useFaceCheckIn'
-import { useDoorWebrtc } from '@/Modules/POS/Customer/Composables/useDoorWebrtc'
+import { useCameraIntelligenceWebrtc } from '@/Modules/POS/Customer/Composables/useCameraIntelligenceWebrtc'
 
 defineOptions({ layout: AdminLayout })
 
@@ -67,7 +67,7 @@ onBeforeUnmount(() => {
 
 /* ---------------- camera xem trực tiếp + bắt khuôn mặt ---------------- */
 // Hai nguồn xem, đổi qua lại bằng hai nút trên đầu khung:
-//  - Camera cửa: video WebRTC từ go2rtc; khung mặt và nhãn từ worker được vẽ đè ở đây.
+//  - Camera cửa: video WebRTC từ MediaMTX; khung mặt và nhãn từ Camera Intelligence được vẽ đè ở đây.
 //  - Camera máy: camera của thiết bị đang mở trang này, bắt mặt ngay trên trình duyệt (đổi được camera trước/sau).
 const hasDoor = computed(() => !!props.doorCamera.enabled)
 const readFlag = (key, fallback) => { try { const value = localStorage.getItem(key); return value === null ? fallback : value } catch { return fallback } }
@@ -95,16 +95,16 @@ const {
     activeWhen: () => !showDoor.value && localOn.value,
 })
 
-const doorVideo = useDoorWebrtc(
+const doorVideo = useCameraIntelligenceWebrtc(
     computed(() => showDoor.value && faceFeatureOn.value),
     { sourceKey: computed(() => props.doorCamera.source_hash || '') },
 )
 const doorFaces = computed(() => (doorVideo.ok.value ? doorVideo.faces.value : []))
 const doorStatus = computed(() => {
     if (!props.doorCamera.online) {
-        return doorVideo.ok.value ? 'Video đang chạy · Worker AI mất kết nối' : 'Worker AI chưa kết nối'
+        return doorVideo.ok.value ? 'Video đang chạy · Camera Intelligence mất kết nối' : 'Camera Intelligence chưa kết nối'
     }
-    if (!props.doorCamera.camera_ok) return 'Worker AI không lấy được ảnh camera'
+    if (!props.doorCamera.camera_ok) return 'Camera Intelligence không lấy được ảnh camera'
     return doorFaces.value.length ? `Đang thấy ${doorFaces.value.length} người` : 'Đang xem camera cửa'
 })
 
@@ -341,7 +341,7 @@ const remove = (visit) => {
             </p>
         </div>
 
-        <!-- Trạng thái Camera AI nền (chỉ hiện khi đã bật chế độ camera cửa) -->
+        <!-- Trạng thái Camera Intelligence nền (chỉ hiện khi đã bật chế độ camera cửa) -->
         <div
             v-if="trackingEnabled && doorCamera.enabled"
             class="flex items-start gap-2 rounded-xl border p-3 text-sm"
@@ -350,11 +350,11 @@ const remove = (visit) => {
             <Camera v-if="doorCamera.online && doorCamera.camera_ok" class="mt-0.5 h-4 w-4 shrink-0" />
             <CameraOff v-else class="mt-0.5 h-4 w-4 shrink-0" />
             <p v-if="!doorCamera.online">
-                Video camera cửa có thể vẫn xem được, nhưng worker AI đã mất heartbeat nên chưa ghi nhận lượt khách mới.
-                Kiểm tra worker trong <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng → Camera cửa</Link>.
+                Video camera cửa có thể vẫn xem được, nhưng Camera Intelligence đã mất heartbeat nên chưa ghi nhận lượt khách mới.
+                Kiểm tra dịch vụ trong <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng → Camera cửa</Link>.
             </p>
-            <p v-else-if="!doorCamera.camera_ok">Worker AI đang chạy nhưng không lấy được ảnh từ camera{{ doorCamera.message ? ': ' + doorCamera.message : '' }}. Kiểm tra nguồn RTSP trong <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng → Camera cửa</Link>.</p>
-            <p v-else>Worker AI và camera cửa đang hoạt động.</p>
+            <p v-else-if="!doorCamera.camera_ok">Camera Intelligence đang chạy nhưng không lấy được ảnh từ camera{{ doorCamera.message ? ': ' + doorCamera.message : '' }}. Kiểm tra nguồn RTSP trong <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng → Camera cửa</Link>.</p>
+            <p v-else>Camera Intelligence và camera cửa đang hoạt động.</p>
         </div>
 
         <!-- Camera xem trực tiếp -->
@@ -407,8 +407,10 @@ const remove = (visit) => {
             <!-- Camera cửa: video WebRTC liên tục + lớp khung bắt mặt và nhãn -->
             <div v-else-if="showDoor" class="bg-slate-900 p-2">
                 <div class="relative mx-auto flex min-h-[10rem] items-center justify-center overflow-hidden rounded-lg bg-black" :style="stageStyle">
+                    <!-- Must stay mounted while WebRTC negotiates: the composable
+                         needs this element to attach the incoming MediaStream. -->
+                    <video :ref="doorVideo.setVideo" autoplay muted playsinline class="absolute inset-0 h-full w-full object-contain" aria-label="Video camera cửa" @loadedmetadata="onMeta"></video>
                     <div v-if="doorVideo.ok.value" class="absolute inset-0">
-                        <video :ref="doorVideo.setVideo" autoplay muted playsinline class="absolute inset-0 h-full w-full object-contain" aria-label="Video camera cửa" @loadedmetadata="onMeta"></video>
                         <div class="pointer-events-none absolute inset-0 overflow-hidden">
                             <div
                                 v-for="face in doorFaces"
@@ -421,8 +423,8 @@ const remove = (visit) => {
                             </div>
                         </div>
                     </div>
-                    <p v-else-if="doorVideo.loading.value" class="p-6 text-sm text-slate-300">Đang kết nối video WebRTC…</p>
-                    <p v-else class="p-6 text-center text-sm text-rose-300">
+                    <p v-if="!doorVideo.ok.value && doorVideo.loading.value" class="absolute inset-0 flex items-center justify-center p-6 text-sm text-slate-300">Đang kết nối video WebRTC…</p>
+                    <p v-else-if="!doorVideo.ok.value" class="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-rose-300">
                         {{ doorVideo.error.value || 'Chưa có luồng camera.' }}
                     </p>
                 </div>
@@ -562,6 +564,7 @@ const remove = (visit) => {
 
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5">
+                            <span v-if="visit.present" class="h-2 w-2 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.16)]" title="Đang ở cửa hàng" aria-label="Đang ở cửa hàng" />
                             <span class="truncate text-sm font-bold text-slate-900">{{ visit.customer ? visit.customer.full_name : 'Khách chưa có tên' }}</span>
                         </div>
                         <div v-if="visit.customer?.phone" class="truncate text-xs text-slate-500">{{ visit.customer.phone }}</div>
@@ -570,6 +573,8 @@ const remove = (visit) => {
                         </div>
                         <div class="mt-1 flex flex-wrap items-center gap-1.5">
                             <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1" :class="kindOf(visit).cls">{{ kindOf(visit).text }}</span>
+                            <span v-if="visit.visit_count > 1" class="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">{{ visit.visit_count }} lần ghé</span>
+                            <span v-if="visit.present" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Đang ở CH</span>
                             <span class="text-[11px] text-slate-400">{{ durationText(visit.minutes) }}</span>
                             <History class="ml-auto h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
                         </div>

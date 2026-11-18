@@ -19,6 +19,10 @@ return [
     'sface_match_cosine' => (float) env('SFACE_MATCH_COSINE', 0.45),
     'sface_margin' => (float) env('SFACE_MATCH_MARGIN', 0.05),
 
+    // ArcFace R100 emits a normalized 512-dimensional embedding; score is cosine similarity.
+    'arcface_match_cosine' => (float) env('ARCFACE_MATCH_COSINE', 0.45),
+    'arcface_margin' => (float) env('ARCFACE_MATCH_MARGIN', 0.05),
+
     // Tự học sau khi nhân viên xác nhận "Đúng": vector mới phải đủ giống khách đó nhưng chưa trùng hẳn mẫu đã có.
     'feedback_min_similarity' => (float) env('FACE_FEEDBACK_MIN_SIMILARITY', 0.45),
     'feedback_duplicate_similarity' => (float) env('FACE_FEEDBACK_DUPLICATE_SIMILARITY', 0.95),

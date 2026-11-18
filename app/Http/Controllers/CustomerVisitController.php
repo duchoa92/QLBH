@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Api\DoorCameraController;
+use App\Http\Controllers\Api\CameraIntelligenceController;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
 use App\Models\CustomerVisit;
@@ -75,22 +75,29 @@ class CustomerVisitController extends Controller
             }
         }
 
+        // Một khách đã xác định có thể ghé nhiều lần trong khoảng lọc, nhưng màn hình
+        // thống kê chỉ hiển thị một block. Khách chưa gán tên vẫn giữ từng block riêng
+        // vì chưa thể khẳng định hai khuôn mặt là cùng người sau khi dữ liệu đã hết hạn.
         $visits = (clone $base)
+            ->selectRaw('MIN(id) as id, customer_id, MAX(recognized) as recognized, MAX(thumb) as thumb, MIN(first_seen_at) as first_seen_at, MAX(last_seen_at) as last_seen_at, COUNT(*) as visit_count, MAX(CASE WHEN descriptor IS NOT NULL THEN 1 ELSE 0 END) as has_face')
             ->with('customer:id,code,full_name,phone')
             ->when($status === 'known', fn ($q) => $q->where('recognized', true))
             ->when($status === 'unknown', fn ($q) => $q->where('recognized', false)->whereNull('customer_id'))
             ->when($status === 'assigned', fn ($q) => $q->where('recognized', false)->whereNotNull('customer_id'))
-            ->orderByDesc('first_seen_at')
+            ->groupByRaw('CASE WHEN customer_id IS NULL THEN id ELSE -customer_id END, customer_id')
+            ->orderByDesc('last_seen_at')
             ->paginate($perPage)
             ->withQueryString()
             ->through(fn (CustomerVisit $visit) => [
                 'id' => $visit->id,
                 'recognized' => $visit->recognized,
                 'thumb' => $visit->thumb,
-                'has_face' => $visit->descriptor !== null,
+                'has_face' => (bool) $visit->has_face,
                 'first_seen_at' => $visit->first_seen_at?->toIso8601String(),
                 'last_seen_at' => $visit->last_seen_at?->toIso8601String(),
                 'minutes' => max(0, (int) round($visit->first_seen_at->diffInSeconds($visit->last_seen_at) / 60)),
+                'visit_count' => (int) $visit->visit_count,
+                'present' => $visit->last_seen_at?->gte(now()->subSeconds((int) config('door_camera.present_seconds', 20))) ?? false,
                 'customer' => $visit->customer ? [
                     'id' => $visit->customer->id,
                     'code' => $visit->customer->code,
@@ -120,7 +127,7 @@ class CustomerVisitController extends Controller
             'trackingEnabled' => $this->trackingEnabled(),
             'doorCamera' => [
                 'enabled' => filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN),
-            ] + DoorCameraController::status(),
+            ] + CameraIntelligenceController::status(),
             'retentionDays' => $this->retentionDays(),
             'canManage' => (bool) $request->user()?->can('customers.edit'),
             'canCreateCustomer' => (bool) $request->user()?->can('customers.create'),
@@ -230,7 +237,7 @@ class CustomerVisitController extends Controller
             ])
             ->values();
 
-        $status = DoorCameraController::status();
+        $status = CameraIntelligenceController::status();
 
         return response()->json([
             'visits' => $visits,
@@ -259,7 +266,7 @@ class CustomerVisitController extends Controller
 
         $data = $request->validate([
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
-            'engine' => ['nullable', 'in:human-v1,sface-v1'],
+            'engine' => ['nullable', 'in:human-v1,sface-v1,arcface-v1'],
             'descriptor' => ['nullable', 'array', 'min:'.FaceMatcher::MIN_SIZE, 'max:'.FaceMatcher::MAX_SIZE],
             'descriptor.*' => ['required', 'numeric', 'between:-'.FaceMatcher::VALUE_LIMIT.','.FaceMatcher::VALUE_LIMIT],
             'thumb' => ['nullable', 'string', 'max:30000', 'regex:/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/'],

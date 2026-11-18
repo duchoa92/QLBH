@@ -397,8 +397,9 @@ onBeforeUnmount(() => {
                         :class="faceFailed || !faceDoorOk ? 'ring-rose-400' : facePreviewRing"
                         :title="faceStatusText || 'Camera cửa'"
                     >
-                        <video v-if="faceDoorOk" :ref="setFaceDoorVideo" autoplay muted playsinline class="h-full w-full object-cover" aria-label="Camera cửa"></video>
-                        <ScanFace v-else class="h-5 w-5" :class="faceFailed ? 'text-rose-500' : 'text-slate-400'" />
+                        <!-- Keep the video element mounted during negotiation. -->
+                        <video :ref="setFaceDoorVideo" v-show="faceDoorOk" autoplay muted playsinline class="h-full w-full object-cover" aria-label="Camera cửa"></video>
+                        <ScanFace v-show="!faceDoorOk" class="h-5 w-5" :class="faceFailed ? 'text-rose-500' : 'text-slate-400'" />
                     </div>
 
                     <div class="relative min-w-0 flex-1">

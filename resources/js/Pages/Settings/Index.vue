@@ -16,7 +16,6 @@ import LabelTemplateEditor from './LabelTemplateEditor.vue'
 import SettingSwitch from './SettingSwitch.vue'
 import SettingCollapse from './SettingCollapse.vue'
 import DoorCameraSetup from './DoorCameraSetup.vue'
-import FaceTuningSettings from './FaceTuningSettings.vue'
 import { mergeLabelTemplate } from '@/utils/printLabels'
 import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
@@ -226,12 +225,39 @@ const faceCctvAuthOptions = [
     { value: 'basic', label: 'Tài khoản (Basic)' },
     { value: 'digest', label: 'Tài khoản (Digest, Hikvision/Dahua…)' },
 ]
+const cameraBrandOptions = [
+    { value: 'hikvision', label: 'Hikvision / HiLook' }, { value: 'dahua', label: 'Dahua' },
+    { value: 'imou', label: 'IMOU' }, { value: 'ezviz', label: 'EZVIZ' },
+    { value: 'reolink', label: 'Reolink' }, { value: 'uniview', label: 'Uniview / UNV' },
+    { value: 'vigi', label: 'TP-Link VIGI' }, { value: 'custom', label: 'Khác / tự nhập URL' },
+]
+const cameraPreset = (brand, host, channel) => {
+    const target = String(host || '').trim().replace(/^rtsps?:\/\//i, '').replace(/\/.*$/, '')
+    if (!target || brand === 'custom') return null
+    const c = Math.max(1, Number(channel) || 1)
+    const h = `${c}0`
+    return {
+        hikvision: [`rtsp://${target}:554/Streaming/Channels/${h}1`, `rtsp://${target}:554/Streaming/Channels/${h}2`],
+        dahua: [`rtsp://${target}:554/cam/realmonitor?channel=${c}&subtype=0`, `rtsp://${target}:554/cam/realmonitor?channel=${c}&subtype=1`],
+        imou: [`rtsp://${target}:554/cam/realmonitor?channel=${c}&subtype=0`, `rtsp://${target}:554/cam/realmonitor?channel=${c}&subtype=1`],
+        ezviz: [`rtsp://${target}:554/H.264/ch${c}/main/av_stream`, `rtsp://${target}:554/H.264/ch${c}/sub/av_stream`],
+        reolink: [`rtsp://${target}:554/h264Preview_${String(c).padStart(2, '0')}_main`, `rtsp://${target}:554/h264Preview_${String(c).padStart(2, '0')}_sub`],
+        uniview: [`rtsp://${target}:554/media/video${(c - 1) * 2 + 1}`, `rtsp://${target}:554/media/video${(c - 1) * 2 + 2}`],
+        vigi: [`rtsp://${target}:554/stream${(c - 1) * 2 + 1}`, `rtsp://${target}:554/stream${(c - 1) * 2 + 2}`],
+    }[brand] || null
+}
+const applyCameraPreset = () => {
+    const urls = cameraPreset(form.face_camera_brand, form.face_camera_host, form.face_camera_channel)
+    if (!urls) return
+    ;[form.face_cctv_snapshot_url, form.face_cctv_view_rtsp_url] = urls
+    form.face_cctv_auth = 'basic'
+}
 
 const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_camera_engine', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_camera_brand', 'face_camera_host', 'face_camera_channel', 'face_cctv_snapshot_url', 'face_cctv_view_rtsp_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_camera_engine', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -352,7 +378,11 @@ const buildFormValues = () => ({
         || liveSettings.value.face_door_camera_enabled === 1
         || liveSettings.value.face_door_camera_enabled === '1',
     face_visit_retention_days: Number(liveSettings.value.face_visit_retention_days) || 30,
+    face_camera_brand: liveSettings.value.face_camera_brand || 'custom',
+    face_camera_host: liveSettings.value.face_camera_host || '',
+    face_camera_channel: Number(liveSettings.value.face_camera_channel) || 1,
     face_cctv_snapshot_url: liveSettings.value.face_cctv_snapshot_url || '',
+    face_cctv_view_rtsp_url: liveSettings.value.face_cctv_view_rtsp_url || '',
     face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
     face_cctv_username: liveSettings.value.face_cctv_username || '',
     face_cctv_password: '', // không bao giờ nhận lại từ máy chủ; để trống = giữ mật khẩu đã lưu
@@ -769,10 +799,9 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled"
                             v-model="form.face_door_camera_enabled"
                             title="Dùng camera cửa (Camera AI chạy nền)"
-                            description="Camera AI nhận diện khuôn mặt liên tục kể cả khi không mở POS. POS hiển thị video go2rtc cùng nhãn nhận diện và danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
+                            description="Camera Intelligence nhận diện khuôn mặt liên tục kể cả khi không mở POS. POS hiển thị video MediaMTX cùng nhãn nhận diện và danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
                         />
                         <DoorCameraSetup v-if="form.face_door_camera_enabled && door_camera" :info="door_camera" />
-                        <FaceTuningSettings v-if="form.face_door_camera_enabled" :form="form" />
                         <div v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled" class="max-w-xs">
                             <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Giữ ảnh khách lạ (ngày)" />
                             <p class="mt-1 text-xs text-slate-500">Hết hạn, ảnh và dữ liệu nhận diện của khách lạ bị xóa tự động; số liệu thống kê vẫn được giữ.</p>
@@ -781,18 +810,21 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                         <div v-if="form.face_recognition_enabled" class="space-y-3 rounded-lg bg-slate-50 p-3">
                             <div>
                                 <h3 class="text-xs font-bold text-slate-800">{{ form.face_door_camera_enabled ? 'Camera cửa (bắt buộc)' : 'Camera an ninh (tùy chọn)' }}</h3>
-                                <p class="mt-0.5 text-xs text-slate-500">
-                                    Nhập địa chỉ camera, hỗ trợ hai kiểu:
-                                    <strong>RTSP</strong> (luồng video, ví dụ Hikvision <code>rtsp://IP:554/Streaming/Channels/101</code>,
-                                    Dahua <code>rtsp://IP:554/cam/realmonitor?channel=1&amp;subtype=0</code>) cho Camera AI, cần cài <code>ffmpeg</code> trên máy chạy go2rtc nếu camera chỉ phát H.265;
-                                    hoặc <strong>ảnh chụp tĩnh http</strong> (Hikvision <code>http://IP/ISAPI/Streaming/channels/101/picture</code>,
-                                    Dahua <code>http://IP/cgi-bin/snapshot.cgi</code>), dùng được cả khi đăng ký khuôn mặt từ camera.
-                                    Tài khoản/mật khẩu nhập ở ô bên dưới (hoặc dán nguyên link dạng <code>rtsp://tài-khoản:mật-khẩu@IP/...</code>, hệ thống tự tách và lưu mật khẩu được mã hóa).
-                                    Máy chủ chạy camera stack phải truy cập được camera trong mạng nội bộ.
-                                </p>
+                                <p class="mt-0.5 text-xs text-slate-500">Chọn hãng và nhập IP để tự điền hai luồng. Main-stream dùng cho AI; sub-stream phải H.264 để MediaMTX phát WebRTC mượt. Hãng hoặc firmware khác mẫu thì chọn <strong>Khác</strong> và tự sửa URL.</p>
                             </div>
-                            <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Địa chỉ camera (RTSP hoặc ảnh chụp http)" placeholder-text="rtsp://192.168.1.50:554/..." />
+                            <div class="grid gap-2 sm:grid-cols-3">
+                                <FloatingSelect v-model="form.face_camera_brand" name="face_camera_brand" label="Hãng camera" :options="cameraBrandOptions" :show-placeholder="false" />
+                                <FloatingInput v-model="form.face_camera_host" name="face_camera_host" label="IP / tên miền camera" placeholder-text="192.168.1.50" />
+                                <FloatingInput v-model.number="form.face_camera_channel" name="face_camera_channel" type="number" min="1" max="64" label="Kênh camera" />
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" :disabled="form.face_camera_brand === 'custom' || !form.face_camera_host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset">Điền URL theo hãng</button>
+                                <span class="text-[11px] text-slate-500">Có thể sửa từng URL trước khi lưu.</span>
+                            </div>
+                            <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Luồng chính cho AI (RTSP main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
                             <p v-if="form.errors.face_cctv_snapshot_url" class="text-xs text-rose-600">{{ form.errors.face_cctv_snapshot_url }}</p>
+                            <FloatingInput v-if="faceCctvIsRtsp" v-model="form.face_cctv_view_rtsp_url" name="face_cctv_view_rtsp_url" label="Luồng xem trực tiếp (RTSP sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub-stream..." />
+                            <p v-if="form.errors.face_cctv_view_rtsp_url" class="text-xs text-rose-600">{{ form.errors.face_cctv_view_rtsp_url }}</p>
                             <div v-if="form.face_cctv_snapshot_url" class="grid gap-2 sm:grid-cols-3">
                                 <FloatingSelect v-if="!faceCctvIsRtsp" v-model="form.face_cctv_auth" name="face_cctv_auth" label="Đăng nhập camera" :options="faceCctvAuthOptions" :show-placeholder="false" />
                                 <FloatingInput v-if="faceCctvIsRtsp || form.face_cctv_auth !== 'none'" v-model="form.face_cctv_username" name="face_cctv_username" label="Tài khoản" autocomplete="off" />

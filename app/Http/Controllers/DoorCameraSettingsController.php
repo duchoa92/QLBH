@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Api\DoorCameraController;
+use App\Http\Controllers\Api\CameraIntelligenceController;
 use App\Support\DoorCameraAccess;
 use Illuminate\Http\JsonResponse;
 
@@ -14,11 +14,11 @@ class DoorCameraSettingsController extends Controller
     /** Thông tin hiện trong Cài đặt (tự tạo khóa nếu chưa có). */
     public static function info(): array
     {
-        return DoorCameraController::status() + [
+        return CameraIntelligenceController::status() + [
             'key' => DoorCameraAccess::ensureKey(),
-            'api_url' => rtrim(url('/api'), '/'),
+            'api_url' => app()->environment('local') ? 'http://127.0.0.1/api' : rtrim(url('/api'), '/'),
             'camera_configured' => filled(setting('face_cctv_snapshot_url')),
-            'go2rtc' => DoorCameraController::streamStatus(),
+            'media_server' => ['ready' => false, 'message' => 'MediaMTX sẽ báo sẵn sàng sau khi cài camera platform.'],
             'server_os' => PHP_OS_FAMILY,
         ];
     }
@@ -26,9 +26,9 @@ class DoorCameraSettingsController extends Controller
     /** Trang Cài đặt hỏi mỗi vài giây để hiện worker đang chạy hay chưa. */
     public function status(): JsonResponse
     {
-        return response()->json(DoorCameraController::status() + [
+        return response()->json(CameraIntelligenceController::status() + [
             'camera_configured' => filled(setting('face_cctv_snapshot_url')),
-            'go2rtc' => DoorCameraController::streamStatus(),
+            'media_server' => ['ready' => false, 'message' => 'MediaMTX sẽ báo sẵn sàng sau khi cài camera platform.'],
             'server_os' => PHP_OS_FAMILY,
         ]);
     }

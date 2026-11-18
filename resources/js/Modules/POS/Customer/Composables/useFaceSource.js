@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useDoorQueue } from './useDoorQueue'
 import { useFaceCheckIn } from './useFaceCheckIn'
-import { useDoorWebrtc } from './useDoorWebrtc'
+import { useCameraIntelligenceWebrtc } from './useCameraIntelligenceWebrtc'
 
 /**
  * Nguồn nhận diện khách cho POS.
@@ -25,7 +25,7 @@ export const useFaceSource = (options = {}) => {
     const local = useFaceCheckIn({ ...options, activeWhen: () => usingLocal.value })
 
     // Camera cửa: video liên tục qua WebRTC, metadata nhận diện được vẽ riêng trên hình.
-    const live = useDoorWebrtc(
+    const live = useCameraIntelligenceWebrtc(
         computed(() => door.active.value && !usingLocal.value),
         { sourceKey: door.sourceHash },
     )

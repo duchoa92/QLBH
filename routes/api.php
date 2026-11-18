@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerFaceController;
-use App\Http\Controllers\Api\DoorCameraController;
+use App\Http\Controllers\Api\CameraIntelligenceController;
 use App\Http\Middleware\DoorCameraKey;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use App\Http\Controllers\CustomerVisitController;
@@ -21,18 +21,13 @@ use App\Http\Controllers\SettingController;
 
 Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class, 'receive'])->name('bank-payments.webhook');
 
-// Worker camera cửa (chạy nền, không đăng nhập): xác thực bằng khóa X-Camera-Key, dùng lại đúng logic so khớp/ghi lượt của POS.
-Route::middleware([DoorCameraKey::class, SubstituteBindings::class])->prefix('door-camera')->group(function () {
-    Route::post('/heartbeat', [DoorCameraController::class, 'heartbeat'])->middleware('throttle:120,1,door_heartbeat');
-    Route::get('/config', [DoorCameraController::class, 'config'])->middleware('throttle:60,1,door_config');
-    Route::post('/snapshot', [DoorCameraController::class, 'storeSnapshot'])->middleware('throttle:120,1,door_snapshot');
-    Route::post('/faces', [DoorCameraController::class, 'storeFaces'])->middleware('throttle:900,1,door_faces'); // metadata nhãn nhận diện cho video WebRTC
-    Route::post('/engine-metrics', [DoorCameraController::class, 'storeEngineMetrics'])->middleware('throttle:30,1,door_engine_metrics');
-    Route::post('/sface-enroll/{jobId}', [DoorCameraController::class, 'completeSfaceEnrollment'])->middleware('throttle:10,1,door_sface_enroll');
-    Route::post('/face-match', [CustomerFaceController::class, 'match'])->middleware('throttle:240,1');
-    Route::post('/visits', [CustomerVisitController::class, 'record'])->middleware('throttle:240,1');
-    Route::post('/visits/{visit}/seen', [CustomerVisitController::class, 'left'])->middleware('throttle:600,1');
-    Route::post('/visits/{visit}/link', [CustomerVisitController::class, 'link'])->middleware('throttle:60,1');
+// Nền tảng thay thế: service Python/OpenVINO chạy độc lập gửi metadata qua khóa riêng.
+Route::middleware([DoorCameraKey::class, SubstituteBindings::class])->prefix('camera-intelligence')->group(function () {
+    Route::post('/heartbeat', [CameraIntelligenceController::class, 'heartbeat'])->middleware('throttle:120,1,camera_intelligence_heartbeat');
+    Route::post('/faces', [CameraIntelligenceController::class, 'faces'])->middleware('throttle:900,1,camera_intelligence_faces');
+    Route::post('/match', [CameraIntelligenceController::class, 'match'])->middleware('throttle:240,1,camera_intelligence_match');
+    Route::post('/visits', [CustomerVisitController::class, 'record'])->middleware('throttle:240,1,camera_intelligence_visits');
+    Route::post('/visits/{visit}/seen', [CustomerVisitController::class, 'left'])->middleware('throttle:600,1,camera_intelligence_seen');
 });
 
 
@@ -96,22 +91,16 @@ Route::middleware(['web', 'auth'])->group(function ()
         ->middleware(['permission:pos.access', 'throttle:120,1']);
     Route::post('/customers/visits/{visit}/link', [CustomerVisitController::class, 'link'])
         ->middleware(['permission:pos.access|customers.edit', 'throttle:30,1']);
-    Route::get('/customers/door-camera/live', [DoorCameraController::class, 'live'])
-        ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,door_live']);
-    Route::get('/customers/door-camera/live-faces', [DoorCameraController::class, 'liveFaces'])
-        ->middleware(['permission:pos.access|customers.view', 'throttle:240,1,door_live_faces']);
-    Route::get('/customers/door-camera/engine-metrics', [DoorCameraController::class, 'engineMetrics'])
-        ->middleware(['permission:settings.edit', 'throttle:60,1,door_engine_metrics_view']);
-    Route::post('/customers/door-camera/webrtc-offer', [DoorCameraController::class, 'webrtcOffer'])
-        ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,door_webrtc']);
-    Route::get('/customers/face-cctv-snapshot', [CustomerFaceController::class, 'cctvSnapshot'])
-        ->middleware(['permission:customers.edit', 'throttle:20,1']);
+    Route::get('/customers/camera-intelligence/faces', [CameraIntelligenceController::class, 'liveFaces'])
+        ->middleware(['permission:pos.access|customers.view', 'throttle:240,1,camera_intelligence_live_faces']);
+    Route::get('/customers/camera-intelligence/live', [CameraIntelligenceController::class, 'live'])
+        ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,camera_intelligence_live']);
+    Route::post('/customers/camera-intelligence/webrtc-offer', [CameraIntelligenceController::class, 'webrtcOffer'])
+        ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,camera_intelligence_webrtc']);
     Route::get('/customers/{customer}/face', [CustomerFaceController::class, 'status'])
         ->middleware('permission:customers.view|customers.edit');
     Route::post('/customers/{customer}/face', [CustomerFaceController::class, 'store'])
         ->middleware('permission:customers.edit');
-    Route::post('/customers/{customer}/face-sface-enrollment', [CustomerFaceController::class, 'requestSfaceEnrollment'])
-        ->middleware(['permission:customers.edit', 'throttle:10,1,customer_sface_enrollment']);
     Route::delete('/customers/{customer}/face', [CustomerFaceController::class, 'destroy'])
         ->middleware('permission:customers.edit');
 

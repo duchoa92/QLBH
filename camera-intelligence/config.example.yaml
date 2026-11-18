@@ -1,0 +1,28 @@
+server:
+  host: 127.0.0.1
+  port: 9070
+  event_url: http://127.0.0.1/api
+  camera_key: CHANGE_ME_WITH_THE_KEY_FROM_QLBH
+  event_timeout_seconds: 4
+
+inference:
+  device: AUTO # AUTO, CPU, GPU (Intel), or a configured OpenVINO device
+  detector_model: models/face_detection_yunet_2023mar.onnx
+  recognizer_model: models/face_recognition_sface_2021dec.onnx
+  min_face_px: 60
+  detect_fps: 8
+  recognition_cooldown_seconds: 4
+  match_threshold: 0.72
+  match_margin: 0.08
+
+cameras:
+  - id: door-1
+    name: Camera cua
+    enabled: true
+    # Dung main stream cho AI khi can do phan giai cao. MediaMTX dung sub-stream H.264 rieng de phat WebRTC.
+    ai_rtsp_url: rtsp://user:password@192.168.1.50:554/cam/realmonitor?channel=1&subtype=0
+    # H.264 direct sub-stream for browser WebRTC. Do not use a server-side H.265-to-H.264 transcode here.
+    view_rtsp_url: rtsp://user:password@192.168.1.50:554/cam/realmonitor?channel=1&subtype=1
+    width: 1280
+    height: 720
+    zone: entrance
