@@ -16,11 +16,12 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Nhận diện khách hàng bằng khuôn mặt (chỉ khi khách đã đồng ý).
  *
- * - Trình duyệt và worker camera cửa tính vector đặc trưng bằng Human (không gửi ảnh lên máy chủ).
+ * - Trình duyệt/worker tính vector đặc trưng theo từng engine (Human hoặc SFace), không gửi ảnh lên máy chủ.
  * - Máy chủ chỉ lưu vector, so khớp phía server nên vector của khách khác không bao giờ gửi xuống POS.
  */
 class CustomerFaceController extends Controller
@@ -37,12 +38,18 @@ class CustomerFaceController extends Controller
 
     public function status(Customer $customer): JsonResponse
     {
-        $profiles = CustomerFaceProfile::query()->where('customer_id', $customer->id)->get(['id', 'consented_at']);
+        $profiles = CustomerFaceProfile::query()->where('customer_id', $customer->id)->get(['id', 'engine', 'consented_at']);
 
         return response()->json([
             'registered' => $profiles->isNotEmpty(),
             'samples' => $profiles->count(),
             'consented_at' => $profiles->max('consented_at')?->toIso8601String(),
+            'engines' => [
+                FaceMatcher::HUMAN => $profiles->where('engine', FaceMatcher::HUMAN)->count(),
+                FaceMatcher::SFACE => $profiles->where('engine', FaceMatcher::SFACE)->count(),
+            ],
+            'camera_engine' => FaceTuning::cameraEngine(),
+            'sface_enrollment' => DoorCameraController::sfaceEnrollmentStatus($customer->id),
             // Có cấu hình camera an ninh (địa chỉ ảnh chụp) trong Cài đặt hay chưa.
             // Chỉ địa chỉ ảnh chụp http/https mới lấy được ảnh ở đây; địa chỉ RTSP dành cho worker camera cửa.
             // Camera RTSP cũng dùng được khi đã bật chế độ camera cửa (worker gửi ảnh gốc lên máy chủ).
@@ -63,18 +70,23 @@ class CustomerFaceController extends Controller
             'descriptors' => ['required', 'array', 'min:1', 'max:'.self::MAX_SAMPLES],
             'descriptors.*' => ['required', 'array', ...$this->sizeRules()],
             'descriptors.*.*' => ['required', 'numeric', $this->valueRule()],
+            'engine' => ['nullable', 'in:human-v1,sface-v1'],
         ], [
             'consent.accepted' => 'Cần có sự đồng ý của khách hàng trước khi lưu dữ liệu khuôn mặt.',
         ]);
 
-        DB::transaction(function () use ($data, $customer, $request): void {
-            // Đăng ký lại = thay toàn bộ mẫu cũ.
-            CustomerFaceProfile::query()->where('customer_id', $customer->id)->delete();
+        $engine = (string) ($data['engine'] ?? FaceMatcher::HUMAN);
+        $this->ensureDescriptors($data['descriptors'], $engine, 'descriptors');
+
+        DB::transaction(function () use ($data, $customer, $request, $engine): void {
+            // Đăng ký lại chỉ thay mẫu cùng engine; mẫu của engine kia được giữ để A/B test an toàn.
+            CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->delete();
 
             foreach ($data['descriptors'] as $descriptor) {
                 CustomerFaceProfile::query()->create([
                     'customer_id' => $customer->id,
                     'descriptor' => array_map('floatval', $descriptor),
+                    'engine' => $engine,
                     'source' => 'enroll',
                     'consented_at' => now(),
                     'consented_by' => $request->user()?->id,
@@ -164,30 +176,34 @@ class CustomerFaceController extends Controller
         $data = $request->validate([
             'descriptor' => ['required', 'array', ...$this->sizeRules()],
             'descriptor.*' => ['required', 'numeric', $this->valueRule()],
+            'engine' => ['nullable', 'in:human-v1,sface-v1'],
         ]);
+        $engine = (string) ($data['engine'] ?? FaceMatcher::HUMAN);
+        $this->ensureDescriptors([$data['descriptor']], $engine, 'descriptor');
         $probe = array_map('floatval', $data['descriptor']);
 
-        $profiles = CustomerFaceProfile::query()->where('customer_id', $customer->id)->orderBy('id')->get();
+        $profiles = CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->orderBy('id')->get();
         if ($profiles->isEmpty()) {
             return response()->json(['added' => false, 'reason' => 'not_registered']);
         }
 
-        $best = $profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max();
+        $best = $profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor, $engine))->max();
         if ($best < (float) config('face.feedback_min_similarity') || $best >= (float) config('face.feedback_duplicate_similarity')) {
             return response()->json(['added' => false, 'reason' => $best >= (float) config('face.feedback_duplicate_similarity') ? 'duplicate' : 'too_far']);
         }
 
-        DB::transaction(function () use ($customer, $probe, $profiles): void {
+        DB::transaction(function () use ($customer, $probe, $profiles, $engine): void {
             CustomerFaceProfile::query()->create([
                 'customer_id' => $customer->id,
                 'descriptor' => $probe,
+                'engine' => $engine,
                 'source' => 'auto',
                 // Giữ nguyên thời điểm đồng ý ban đầu của khách.
                 'consented_at' => $profiles->max('consented_at'),
                 'consented_by' => null,
             ]);
 
-            $autoIds = CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('source', 'auto')->orderByDesc('id')->pluck('id');
+            $autoIds = CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->where('source', 'auto')->orderByDesc('id')->pluck('id');
             if ($autoIds->count() > self::MAX_AUTO_SAMPLES) {
                 CustomerFaceProfile::query()->whereIn('id', $autoIds->slice(self::MAX_AUTO_SAMPLES)->all())->delete();
             }
@@ -201,6 +217,25 @@ class CustomerFaceController extends Controller
         CustomerFaceProfile::query()->where('customer_id', $customer->id)->delete();
 
         return response()->json(['registered' => false, 'samples' => 0]);
+    }
+
+    /** Start a consented SFace-only enrollment from the door camera; Human profiles remain untouched. */
+    public function requestSfaceEnrollment(Request $request, Customer $customer): JsonResponse
+    {
+        if ($disabled = $this->ensureEnabled()) {
+            return $disabled;
+        }
+        $request->validate([
+            'consent' => ['required', 'accepted'],
+        ], ['consent.accepted' => 'Cần có sự đồng ý của khách hàng trước khi lưu dữ liệu khuôn mặt.']);
+
+        try {
+            $job = DoorCameraController::requestSfaceEnrollment($customer->id, $request->user()?->id);
+        } catch (\RuntimeException $error) {
+            return response()->json(['message' => $error->getMessage()], 422);
+        }
+
+        return response()->json(['queued' => true, 'expires_at' => $job['expires_at']], 202);
     }
 
     /**
@@ -217,6 +252,7 @@ class CustomerFaceController extends Controller
         }
 
         $data = $request->validate([
+            'engine' => ['nullable', 'in:human-v1,sface-v1'],
             'descriptor' => ['required_without:faces', 'array', ...$this->sizeRules()],
             'descriptor.*' => ['required', 'numeric', $this->valueRule()],
             'faces' => ['required_without:descriptor', 'array', 'min:1', 'max:'.self::MAX_FACES],
@@ -227,13 +263,18 @@ class CustomerFaceController extends Controller
         ]);
 
         $legacy = isset($data['descriptor']);
+        $engine = (string) ($data['engine'] ?? FaceMatcher::HUMAN);
         $faces = $legacy
             ? [['key' => 0, 'descriptors' => [$data['descriptor']]]]
             : $data['faces'];
 
         // Các mẫu đã đăng ký, gom theo khách: [customer_id => [vector, ...]]. Chỉ đọc 1 lần cho cả lô.
         $bank = [];
-        CustomerFaceProfile::query()->select(['id', 'customer_id', 'descriptor'])->chunkById(500, function ($profiles) use (&$bank): void {
+        foreach ($faces as $face) {
+            $this->ensureDescriptors($face['descriptors'] ?? [$face], $engine, 'faces');
+        }
+
+        CustomerFaceProfile::query()->where('engine', $engine)->select(['id', 'customer_id', 'descriptor'])->chunkById(500, function ($profiles) use (&$bank): void {
             foreach ($profiles as $profile) {
                 $bank[(int) $profile->customer_id][] = $profile->descriptor;
             }
@@ -246,13 +287,13 @@ class CustomerFaceController extends Controller
                 fn ($descriptor) => array_map('floatval', $descriptor),
                 $face['descriptors'] ?? [$face]
             );
-            $outcome = $this->matchFace($probes, $bank);
+            $outcome = $this->matchFace($probes, $bank, $request->hasHeader('X-Camera-Key'), $engine);
             // Chỉ worker camera cửa (gửi X-Camera-Key, nhìn khách qua nhiều khung hình) mới tự học; POS học khi nhân viên bấm "Đúng".
             if ($request->hasHeader('X-Camera-Key')) {
-                $this->learnFromMatch($probes, $outcome);
+                $this->learnFromMatch($probes, $outcome, $engine);
             }
             if (config('face.log_scores')) {
-                Log::info('face.match', ['key' => $face['key'], 'best_similarity' => $outcome['best'] ?? null, 'matched' => isset($outcome['customer_id']), 'ambiguous' => ! empty($outcome['ambiguous'])]);
+                Log::info('face.match', ['engine' => $engine, 'key' => $face['key'], 'best_similarity' => $outcome['best'] ?? null, 'matched' => isset($outcome['customer_id']), 'ambiguous' => ! empty($outcome['ambiguous'])]);
             }
             $outcome['key'] = $face['key'];
             $outcomes[] = $outcome;
@@ -298,9 +339,14 @@ class CustomerFaceController extends Controller
      * @param  array<int, array<int, array<int, float>>>  $bank
      * @return array{customer_id?: int, confidence?: float, ambiguous?: bool, best?: float, gap?: float}
      */
-    private function matchFace(array $probes, array $bank): array
+    private function matchFace(array $probes, array $bank, bool $cameraWorker = false, string $engine = FaceMatcher::HUMAN): array
     {
-        $keep = (int) ceil(count($probes) / 2);
+        $keep = $cameraWorker ? count($probes) : (int) ceil(count($probes) / 2);
+        $threshold = FaceMatcher::threshold($engine);
+        if ($engine === FaceMatcher::HUMAN && $cameraWorker) {
+            $threshold = max($threshold, count($probes) === 1 ? 0.68 : 0.62);
+        }
+        $support = [];
         $scores = [];
 
         foreach ($bank as $customerId => $samples) {
@@ -308,19 +354,18 @@ class CustomerFaceController extends Controller
             foreach ($probes as $probe) {
                 $best = 0.0;
                 foreach ($samples as $sample) {
-                    $best = max($best, FaceMatcher::similarity($probe, $sample));
+                    $best = max($best, FaceMatcher::similarity($probe, $sample, $engine));
                 }
                 $bestPerProbe[] = $best;
             }
             rsort($bestPerProbe);
             $scores[$customerId] = array_sum(array_slice($bestPerProbe, 0, $keep)) / $keep;
+            $support[$customerId] = count(array_filter($bestPerProbe, fn (float $score) => $score >= $threshold));
         }
 
         arsort($scores);
         $ids = array_keys($scores);
         $similarities = array_values($scores);
-        $threshold = (float) config('face.match_similarity');
-
         if ($ids === []) {
             return [];
         }
@@ -328,7 +373,13 @@ class CustomerFaceController extends Controller
             return ['best' => round($similarities[0], 3)];
         }
 
-        if (isset($similarities[1]) && ($similarities[0] - $similarities[1]) < (float) config('face.margin')) {
+        $requiredSupport = $cameraWorker ? min(count($probes), max(1, (int) ceil(count($probes) * 2 / 3))) : 1;
+        if ($support[$ids[0]] < $requiredSupport) {
+            return ['best' => round($similarities[0], 3)];
+        }
+
+        $margin = max(FaceMatcher::margin($engine), $cameraWorker ? ($engine === FaceMatcher::HUMAN ? 0.08 : 0.05) : 0.0);
+        if (isset($similarities[1]) && ($similarities[0] - $similarities[1]) < $margin) {
             return ['ambiguous' => true, 'best' => round($similarities[0], 3)];
         }
 
@@ -354,7 +405,7 @@ class CustomerFaceController extends Controller
      * @param  array<int, array<int, float>>  $probes  vector các khung hình, khung nét nhất đứng đầu
      * @param  array{customer_id?: int, best?: float, gap?: float}  $outcome
      */
-    private function learnFromMatch(array $probes, array $outcome): void
+    private function learnFromMatch(array $probes, array $outcome, string $engine): void
     {
         try {
             $customerId = (int) ($outcome['customer_id'] ?? 0);
@@ -365,7 +416,10 @@ class CustomerFaceController extends Controller
                 return;
             }
 
-            $minSimilarity = FaceTuning::int('face_auto_learn_min_percent') / 100;
+            // Auto-learning follows the native score of its engine. SFace is opt-in and only learns after a real match.
+            $minSimilarity = $engine === FaceMatcher::SFACE
+                ? max(FaceMatcher::threshold($engine) + 0.08, 0.65)
+                : FaceTuning::int('face_auto_learn_min_percent') / 100;
             if (($outcome['best'] ?? 0) < $minSimilarity || ($outcome['gap'] ?? 0) < FaceTuning::int('face_auto_learn_margin_percent') / 100) {
                 return;
             }
@@ -375,23 +429,23 @@ class CustomerFaceController extends Controller
                 return;
             }
 
-            $profiles = CustomerFaceProfile::query()->where('customer_id', $customerId)->orderBy('id')->get();
+            $profiles = CustomerFaceProfile::query()->where('customer_id', $customerId)->where('engine', $engine)->orderBy('id')->get();
             if ($profiles->isEmpty()) {
                 return;
             }
             $enrolled = $profiles->where('source', '!=', 'auto');
-            $anchorMin = (float) config('face.match_similarity', 0.5) + 0.05;
-            $duplicateAt = (float) config('face.auto_learn_duplicate_similarity', 0.93);
+            $anchorMin = FaceMatcher::threshold($engine) + 0.05;
+            $duplicateAt = $engine === FaceMatcher::SFACE ? 0.90 : (float) config('face.auto_learn_duplicate_similarity', 0.93);
 
             $candidate = null;
             foreach ($probes as $probe) {
-                if ($profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max() < $minSimilarity) {
+                if ($profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor, $engine))->max() < $minSimilarity) {
                     return;
                 }
-                if ($enrolled->isNotEmpty() && $enrolled->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max() < $anchorMin) {
+                if ($enrolled->isNotEmpty() && $enrolled->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor, $engine))->max() < $anchorMin) {
                     return;
                 }
-                if ($candidate === null && $profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor))->max() < $duplicateAt) {
+                if ($candidate === null && $profiles->map(fn ($profile) => FaceMatcher::similarity($probe, $profile->descriptor, $engine))->max() < $duplicateAt) {
                     $candidate = $probe;
                 }
             }
@@ -399,24 +453,25 @@ class CustomerFaceController extends Controller
                 return; // mọi khung đều giống hệt mẫu đã có: không có gì mới để học
             }
 
-            DB::transaction(function () use ($customerId, $candidate, $profiles): void {
+            DB::transaction(function () use ($customerId, $candidate, $profiles, $engine): void {
                 CustomerFaceProfile::query()->create([
                     'customer_id' => $customerId,
                     'descriptor' => $candidate,
+                    'engine' => $engine,
                     'source' => 'auto',
                     // Giữ nguyên thời điểm đồng ý ban đầu của khách.
                     'consented_at' => $profiles->max('consented_at'),
                     'consented_by' => null,
                 ]);
 
-                $autoIds = CustomerFaceProfile::query()->where('customer_id', $customerId)->where('source', 'auto')->orderByDesc('id')->pluck('id');
+                $autoIds = CustomerFaceProfile::query()->where('customer_id', $customerId)->where('engine', $engine)->where('source', 'auto')->orderByDesc('id')->pluck('id');
                 if ($autoIds->count() > self::MAX_AUTO_SAMPLES) {
                     CustomerFaceProfile::query()->whereIn('id', $autoIds->slice(self::MAX_AUTO_SAMPLES)->all())->delete();
                 }
             });
 
             Cache::put($cooldownKey, 1, now()->addMinutes(FaceTuning::int('face_auto_learn_cooldown_minutes')));
-            Log::info('face.auto_learn', ['customer_id' => $customerId, 'best_similarity' => $outcome['best'] ?? null, 'gap' => $outcome['gap'] ?? null]);
+            Log::info('face.auto_learn', ['engine' => $engine, 'customer_id' => $customerId, 'best_similarity' => $outcome['best'] ?? null, 'gap' => $outcome['gap'] ?? null]);
         } catch (\Throwable $e) {
             // Tự học chỉ là phần thêm: lỗi ở đây không được làm hỏng việc nhận diện.
             Log::warning('face.auto_learn_failed', ['message' => $e->getMessage()]);
@@ -442,5 +497,19 @@ class CustomerFaceController extends Controller
     private function valueRule(): string
     {
         return 'between:-'.FaceMatcher::VALUE_LIMIT.','.FaceMatcher::VALUE_LIMIT;
+    }
+
+    /** @param array<int, array<int, mixed>> $descriptors */
+    private function ensureDescriptors(array $descriptors, string $engine, string $field): void
+    {
+        if (! FaceMatcher::validEngine($engine)) {
+            throw ValidationException::withMessages([$field => 'Engine nhận diện không hợp lệ.']);
+        }
+        foreach ($descriptors as $descriptor) {
+            if (! is_array($descriptor) || ! FaceMatcher::validDescriptor($descriptor, $engine)) {
+                $need = $engine === FaceMatcher::SFACE ? FaceMatcher::SFACE_SIZE : 'từ '.FaceMatcher::MIN_SIZE.' đến '.FaceMatcher::MAX_SIZE;
+                throw ValidationException::withMessages([$field => "Vector {$engine} phải có {$need} số."]);
+            }
+        }
     }
 }

@@ -25,7 +25,10 @@ export const useFaceSource = (options = {}) => {
     const local = useFaceCheckIn({ ...options, activeWhen: () => usingLocal.value })
 
     // Camera cửa: video liên tục qua WebRTC, metadata nhận diện được vẽ riêng trên hình.
-    const live = useDoorWebrtc(computed(() => door.active.value && !usingLocal.value))
+    const live = useDoorWebrtc(
+        computed(() => door.active.value && !usingLocal.value),
+        { sourceKey: door.sourceHash },
+    )
 
     const source = () => (usingLocal.value ? local : door)
     const pick = key => computed(() => source()[key].value)

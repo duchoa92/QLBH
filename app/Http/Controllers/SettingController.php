@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Api\DoorCameraController;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\Setting;
@@ -280,6 +281,11 @@ class SettingController extends Controller
         if (array_key_exists('face_cctv_snapshot_url', $data) && blank($data['face_cctv_snapshot_url'])) {
             Setting::forget('face_cctv_username');
             Setting::forget('face_cctv_password');
+        }
+
+        // Đổi RTSP/tài khoản phải thay nguồn go2rtc ngay để mọi trang đang xem có thể nối lại đúng camera.
+        if (array_intersect(array_keys($data), ['face_cctv_snapshot_url', 'face_cctv_username', 'face_cctv_password']) !== []) {
+            app(DoorCameraController::class)->refreshStream();
         }
 
         if (array_key_exists('bank_accounts', $data)) {

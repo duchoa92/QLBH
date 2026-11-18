@@ -15,7 +15,7 @@ const waitForIceGathering = (peer, timeout = 1800) => new Promise(resolve => {
 })
 
 /** Camera RTSP qua go2rtc/WebRTC, metadata nhận diện được vẽ riêng trên video. */
-export const useDoorWebrtc = (enabled, { facesInterval = 500 } = {}) => {
+export const useDoorWebrtc = (enabled, { facesInterval = 500, sourceKey = null } = {}) => {
     const ok = ref(false)
     const loading = ref(true)
     const error = ref('')
@@ -117,7 +117,9 @@ export const useDoorWebrtc = (enabled, { facesInterval = 500 } = {}) => {
         }
     }
 
-    watch(enabled, value => { value ? start() : stop() }, { immediate: true })
+    // Khi Cài đặt đổi RTSP/tài khoản, nguồn go2rtc đổi theo. Peer WebRTC cũ không tự chuyển nguồn,
+    // vì vậy đóng peer cũ và tạo lại kết nối mà không cần người dùng tải lại trang.
+    watch([enabled, () => sourceKey?.value ?? sourceKey], ([value]) => { value ? start() : stop() }, { immediate: true })
     onBeforeUnmount(stop)
 
     return { ok, loading, error, faces, setVideo }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CustomerFaceProfile extends Model
 {
-    protected $fillable = ['customer_id', 'descriptor', 'source', 'consented_at', 'consented_by'];
+    protected $fillable = ['customer_id', 'descriptor', 'engine', 'source', 'consented_at', 'consented_by'];
 
     protected function casts(): array
     {

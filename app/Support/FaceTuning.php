@@ -37,6 +37,14 @@ final class FaceTuning
         return filter_var(setting('face_auto_learn_enabled', true), FILTER_VALIDATE_BOOLEAN);
     }
 
+    /** Human keeps the established flow; SFace can be selected directly or run in a non-authoritative compare mode. */
+    public static function cameraEngine(): string
+    {
+        $engine = (string) setting('face_camera_engine', 'human');
+
+        return in_array($engine, ['human', 'sface', 'compare'], true) ? $engine : 'human';
+    }
+
     /** @return array<string, int|bool> toàn bộ thông số hiện tại (đã chặn trong khoảng cho phép). */
     public static function all(): array
     {
@@ -45,6 +53,7 @@ final class FaceTuning
             $values[$key] = self::int($key);
         }
         $values['face_auto_learn_enabled'] = self::autoLearnEnabled();
+        $values['face_camera_engine'] = self::cameraEngine();
 
         return $values;
     }
@@ -52,7 +61,10 @@ final class FaceTuning
     /** @return array<string, array<int, string>> luật kiểm tra dữ liệu gửi lên từ trang Cài đặt. */
     public static function rules(): array
     {
-        $rules = ['face_auto_learn_enabled' => ['sometimes', 'boolean']];
+        $rules = [
+            'face_auto_learn_enabled' => ['sometimes', 'boolean'],
+            'face_camera_engine' => ['sometimes', 'in:human,sface,compare'],
+        ];
         foreach (self::NUMERIC as $key => [, $min, $max]) {
             $rules[$key] = ['sometimes', 'integer', 'min:'.$min, 'max:'.$max];
         }
@@ -82,6 +94,7 @@ final class FaceTuning
             'detect_fps' => self::int('face_detect_fps'),
             'detect_interval_ms' => self::int('face_detect_interval_ms'),
             'detect_roi' => self::roi(),
+            'camera_engine' => self::cameraEngine(),
         ];
     }
 }

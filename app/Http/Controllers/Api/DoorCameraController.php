@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FaceEngineMetric;
+use App\Models\CustomerFaceProfile;
 use App\Support\DoorCameraAccess;
+use App\Support\FaceMatcher;
 use App\Support\FaceTuning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Client\PendingRequest;
@@ -13,6 +16,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /** Nhịp báo "còn sống" của worker camera cửa; trả về cho worker biết có nên xử lý khung hình hay không. */
 class DoorCameraController extends Controller
@@ -26,6 +31,10 @@ class DoorCameraController extends Controller
     private const SNAPSHOT_WANTED_KEY = 'door_camera.snapshot_wanted';
 
     private const SNAPSHOT_MAX_BYTES = 3 * 1024 * 1024;
+
+    private const SFACE_ENROLLMENT_KEY = 'door_camera.sface_enrollment';
+
+    private const SFACE_ENROLLMENT_RESULT_PREFIX = 'door_camera.sface_enrollment.result.';
 
     private const LIVE_DIRECTORY = 'app/private/door-camera-live';
 
@@ -52,7 +61,156 @@ class DoorCameraController extends Controller
             'send_faces' => self::facesWanted(),
             // Có người cần ảnh gốc độ phân giải cao (đăng ký khuôn mặt từ camera cửa): worker gửi ảnh nguyên bản qua POST /door-camera/snapshot.
             'send_snapshot' => Cache::has(self::SNAPSHOT_WANTED_KEY),
+            // Chỉ worker có X-Camera-Key nhận được yêu cầu này; không có ảnh/vector nào nằm trong heartbeat.
+            'sface_enrollment' => self::sfaceEnrollmentForWorker(),
         ]);
+    }
+
+    /** Queue one consented SFace capture from the door camera. One camera worker handles one enrollment at a time. */
+    public static function requestSfaceEnrollment(int $customerId, ?int $userId): array
+    {
+        $existing = Cache::get(self::SFACE_ENROLLMENT_KEY);
+        if (is_array($existing) && ($existing['expires_at'] ?? 0) > now()->timestamp) {
+            if ((int) ($existing['customer_id'] ?? 0) === $customerId) return $existing;
+            throw new \RuntimeException('Camera cửa đang lấy mẫu SFace cho một khách khác. Hãy đợi hoàn tất rồi thử lại.');
+        }
+        if (! self::status()['online']) {
+            throw new \RuntimeException('Camera AI chưa chạy nên chưa thể lấy mẫu SFace. Hãy kiểm tra Camera cửa trước.');
+        }
+
+        $job = [
+            'id' => (string) Str::uuid(),
+            'customer_id' => $customerId,
+            'user_id' => $userId,
+            'expires_at' => now()->addSeconds(45)->timestamp,
+        ];
+        Cache::put(self::SFACE_ENROLLMENT_KEY, $job, 60);
+
+        return $job;
+    }
+
+    /** Status has no face data; it only lets the consent screen show capture progress. */
+    public static function sfaceEnrollmentStatus(int $customerId): array
+    {
+        $pending = Cache::get(self::SFACE_ENROLLMENT_KEY);
+        if (is_array($pending) && (int) ($pending['customer_id'] ?? 0) === $customerId && ($pending['expires_at'] ?? 0) >= now()->timestamp) {
+            return ['state' => 'pending', 'expires_at' => (int) $pending['expires_at']];
+        }
+        $result = Cache::get(self::SFACE_ENROLLMENT_RESULT_PREFIX.$customerId);
+        if (is_array($result)) {
+            return ['state' => 'completed', 'samples' => (int) ($result['samples'] ?? 0), 'at' => $result['at'] ?? null];
+        }
+
+        return ['state' => 'idle'];
+    }
+
+    /** Return a minimal job object to the worker only; never include staff/user data. */
+    private static function sfaceEnrollmentForWorker(): ?array
+    {
+        $job = Cache::get(self::SFACE_ENROLLMENT_KEY);
+        if (! is_array($job) || ($job['expires_at'] ?? 0) < now()->timestamp) {
+            Cache::forget(self::SFACE_ENROLLMENT_KEY);
+
+            return null;
+        }
+
+        return ['id' => $job['id'], 'expires_at' => $job['expires_at']];
+    }
+
+    /** Worker completes a queued enrollment using only SFace embeddings captured while exactly one face is visible. */
+    public function completeSfaceEnrollment(Request $request, string $jobId): JsonResponse
+    {
+        $job = Cache::get(self::SFACE_ENROLLMENT_KEY);
+        if (! is_array($job) || ! hash_equals((string) ($job['id'] ?? ''), $jobId) || ($job['expires_at'] ?? 0) < now()->timestamp) {
+            return response()->json(['message' => 'Yêu cầu lấy mẫu SFace đã hết hạn hoặc không còn tồn tại.'], 404);
+        }
+        $data = $request->validate([
+            'descriptors' => ['required', 'array', 'min:2', 'max:5'],
+            'descriptors.*' => ['required', 'array', 'size:'.FaceMatcher::SFACE_SIZE],
+            'descriptors.*.*' => ['required', 'numeric', 'between:-'.FaceMatcher::VALUE_LIMIT.','.FaceMatcher::VALUE_LIMIT],
+        ]);
+        foreach ($data['descriptors'] as $descriptor) {
+            if (! FaceMatcher::validDescriptor($descriptor, FaceMatcher::SFACE)) {
+                return response()->json(['message' => 'Vector SFace không hợp lệ.'], 422);
+            }
+        }
+
+        DB::transaction(function () use ($job, $data): void {
+            CustomerFaceProfile::query()
+                ->where('customer_id', $job['customer_id'])
+                ->where('engine', FaceMatcher::SFACE)
+                ->delete();
+            foreach ($data['descriptors'] as $descriptor) {
+                CustomerFaceProfile::query()->create([
+                    'customer_id' => $job['customer_id'],
+                    'descriptor' => array_map('floatval', $descriptor),
+                    'engine' => FaceMatcher::SFACE,
+                    'source' => 'enroll',
+                    'consented_at' => now(),
+                    'consented_by' => $job['user_id'],
+                ]);
+            }
+        });
+        Cache::forget(self::SFACE_ENROLLMENT_KEY);
+        Cache::put(self::SFACE_ENROLLMENT_RESULT_PREFIX.$job['customer_id'], [
+            'samples' => count($data['descriptors']),
+            'at' => now()->toIso8601String(),
+        ], 120);
+
+        return response()->json(['registered' => true, 'samples' => count($data['descriptors'])]);
+    }
+
+    /**
+     * Worker reports only aggregate timing/counts. No face vector, image, customer ID, or match result is retained here.
+     * This lets administrators compare Human and SFace on the same live camera without changing operational decisions.
+     */
+    public function storeEngineMetrics(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'metrics' => ['required', 'array', 'min:1', 'max:2'],
+            'metrics.*.engine' => ['required', 'in:human-v1,sface-v1'],
+            'metrics.*.frames' => ['required', 'integer', 'min:0', 'max:100000'],
+            'metrics.*.faces' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'metrics.*.processing_ms' => ['required', 'integer', 'min:0', 'max:100000000'],
+        ]);
+
+        foreach ($data['metrics'] as $metric) {
+            $row = FaceEngineMetric::query()->firstOrCreate([
+                'metric_date' => now()->toDateString(),
+                'engine' => $metric['engine'],
+            ]);
+            $row->increment('frames', (int) $metric['frames'], [
+                'faces' => $row->faces + (int) $metric['faces'],
+                'processing_ms' => $row->processing_ms + (int) $metric['processing_ms'],
+            ]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Compact, privacy-preserving comparison report for Settings. */
+    public function engineMetrics(): JsonResponse
+    {
+        $rows = FaceEngineMetric::query()
+            ->where('metric_date', '>=', now()->subDays(6)->toDateString())
+            ->orderBy('metric_date')
+            ->get(['metric_date', 'engine', 'frames', 'faces', 'processing_ms', 'updated_at']);
+
+        $summary = $rows->groupBy('engine')->map(function ($engineRows): array {
+            $frames = (int) $engineRows->sum('frames');
+            $faces = (int) $engineRows->sum('faces');
+            $milliseconds = (int) $engineRows->sum('processing_ms');
+
+            return [
+                'frames' => $frames,
+                'faces' => $faces,
+                'avg_ms' => $frames ? round($milliseconds / $frames) : null,
+                'faces_per_frame' => $frames ? round($faces / $frames, 2) : null,
+                'updated_at' => $engineRows->max('updated_at')?->toIso8601String(),
+            ];
+        });
+
+        return response()->json(['days' => 7, 'engines' => $summary]);
     }
 
     /**
@@ -425,7 +583,21 @@ class DoorCameraController extends Controller
             'camera_ok' => $online && ($beat['camera_ok'] ?? true),
             'message' => $online ? ($beat['message'] ?? null) : null,
             'seconds_ago' => is_array($beat) ? max(0, now()->timestamp - (int) ($beat['at'] ?? 0)) : null,
+            // Đổi địa chỉ/tài khoản camera phải khiến trình xem WebRTC tạo peer mới.
+            'source_hash' => DoorCameraAccess::sourceHash(),
         ];
+    }
+
+    /** Cập nhật ngay nguồn go2rtc sau khi lưu Camera cửa, thay vì chờ lần mở video kế tiếp. */
+    public function refreshStream(): bool
+    {
+        Cache::forget('door_camera.go2rtc.health');
+        $name = (string) config('door_camera.go2rtc_stream_name', 'qlbh_door_camera');
+        $transcoded = (string) config('door_camera.go2rtc_webrtc_stream_name', $name.'_webrtc');
+        Cache::forget('door_camera.go2rtc.source_hash.'.$name);
+        Cache::forget('door_camera.go2rtc.source_hash.'.$transcoded);
+
+        return $this->syncGo2rtcSource(true);
     }
 
     /** Health check for the Camera settings page; keep the go2rtc API host private. */

@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -142,12 +143,14 @@ class CustomerVisitController extends Controller
             $matchedBy = 'customer';
         } elseif ($visit->descriptor) {
             $probe = array_map('floatval', $visit->descriptor);
+            $engine = $visit->descriptor_engine ?: FaceMatcher::HUMAN;
             $ids = CustomerVisit::query()
                 ->whereNull('customer_id')
                 ->whereNotNull('descriptor')
+                ->where('descriptor_engine', $engine)
                 ->where('id', '!=', $visit->id)
                 ->get(['id', 'descriptor'])
-                ->filter(fn (CustomerVisit $other) => FaceMatcher::isSamePerson($probe, $other->descriptor))
+                ->filter(fn (CustomerVisit $other) => FaceMatcher::isSamePerson($probe, $other->descriptor, $engine))
                 ->pluck('id')
                 ->push($visit->id);
             $total = $ids->count();
@@ -233,6 +236,7 @@ class CustomerVisitController extends Controller
             'visits' => $visits,
             'worker_online' => $status['online'],
             'camera_ok' => $status['camera_ok'],
+            'source_hash' => $status['source_hash'],
         ]);
     }
 
@@ -255,6 +259,7 @@ class CustomerVisitController extends Controller
 
         $data = $request->validate([
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'engine' => ['nullable', 'in:human-v1,sface-v1'],
             'descriptor' => ['nullable', 'array', 'min:'.FaceMatcher::MIN_SIZE, 'max:'.FaceMatcher::MAX_SIZE],
             'descriptor.*' => ['required', 'numeric', 'between:-'.FaceMatcher::VALUE_LIMIT.','.FaceMatcher::VALUE_LIMIT],
             'thumb' => ['nullable', 'string', 'max:30000', 'regex:/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/'],
@@ -293,14 +298,20 @@ class CustomerVisitController extends Controller
         if (empty($data['descriptor'])) {
             return response()->json(['recorded' => false], 422);
         }
+        $engine = (string) ($data['engine'] ?? FaceMatcher::HUMAN);
+        if (! FaceMatcher::validDescriptor($data['descriptor'], $engine)) {
+            $need = $engine === FaceMatcher::SFACE ? FaceMatcher::SFACE_SIZE : 'từ '.FaceMatcher::MIN_SIZE.' đến '.FaceMatcher::MAX_SIZE;
+            throw ValidationException::withMessages(['descriptor' => "Vector {$engine} phải có {$need} số."]);
+        }
         $probe = array_map('floatval', $data['descriptor']);
 
         $existing = CustomerVisit::query()
             ->whereNull('customer_id')
             ->whereNotNull('descriptor')
+            ->where('descriptor_engine', $engine)
             ->where('last_seen_at', '>=', $now->copy()->subHours(self::UNKNOWN_WINDOW_HOURS))
             ->get(['id', 'descriptor'])
-            ->first(fn (CustomerVisit $visit) => FaceMatcher::isSamePerson($probe, $visit->descriptor));
+            ->first(fn (CustomerVisit $visit) => FaceMatcher::isSamePerson($probe, $visit->descriptor, $engine));
 
         if ($existing) {
             $existing->update(['last_seen_at' => $now]);
@@ -312,6 +323,7 @@ class CustomerVisitController extends Controller
             'customer_id' => null,
             'recognized' => false,
             'descriptor' => $probe,
+            'descriptor_engine' => $engine,
             'thumb' => $data['thumb'] ?? null,
             'user_id' => $request->user()?->id,
             'first_seen_at' => $now,
@@ -350,19 +362,22 @@ class CustomerVisitController extends Controller
 
             if ($descriptor) {
                 $probe = array_map('floatval', $descriptor);
+                $engine = $visit->descriptor_engine ?: FaceMatcher::HUMAN;
                 $related = $related->merge(
                     CustomerVisit::query()
                         ->whereNull('customer_id')
                         ->whereNotNull('descriptor')
+                        ->where('descriptor_engine', $engine)
                         ->where('id', '!=', $visit->id)
                         ->get(['id', 'descriptor'])
-                        ->filter(fn (CustomerVisit $other) => FaceMatcher::isSamePerson($probe, $other->descriptor))
+                        ->filter(fn (CustomerVisit $other) => FaceMatcher::isSamePerson($probe, $other->descriptor, $engine))
                 );
 
-                if ($consent && CustomerFaceProfile::query()->where('customer_id', $customer->id)->count() < self::MAX_PROFILE_SAMPLES) {
+                if ($consent && CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->count() < self::MAX_PROFILE_SAMPLES) {
                     CustomerFaceProfile::query()->create([
                         'customer_id' => $customer->id,
                         'descriptor' => $probe,
+                        'engine' => $engine,
                         'source' => 'visit',
                         'consented_at' => now(),
                         'consented_by' => $request->user()?->id,
@@ -373,7 +388,7 @@ class CustomerVisitController extends Controller
             // Đã gán tên thì không cần giữ vector nữa (kể cả khi khách không đồng ý đăng ký khuôn mặt).
             $linked = CustomerVisit::query()
                 ->whereIn('id', $related->pluck('id'))
-                ->update(['customer_id' => $customer->id, 'descriptor' => null]);
+                ->update(['customer_id' => $customer->id, 'descriptor' => null, 'descriptor_engine' => null]);
         });
 
         return response()->json(['linked' => $linked, 'customer_id' => $customer->id]);
@@ -401,7 +416,7 @@ class CustomerVisitController extends Controller
             CustomerVisit::query()
                 ->where('last_seen_at', '<', now()->subDays($this->retentionDays()))
                 ->where(fn ($q) => $q->whereNotNull('thumb')->orWhereNotNull('descriptor'))
-                ->update(['thumb' => null, 'descriptor' => null]);
+                ->update(['thumb' => null, 'descriptor' => null, 'descriptor_engine' => null]);
 
             return true;
         });

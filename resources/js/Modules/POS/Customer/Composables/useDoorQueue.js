@@ -28,6 +28,7 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
     const present = ref([])
     const workerOnline = ref(true)
     const cameraOk = ref(true)
+    const sourceHash = ref('')
     const requestFailed = ref(false)
     const unavailable = ref(false) // camera cửa không dùng được (worker không chạy / camera lỗi), có độ trễ để khỏi nhấp nháy
     let badStreak = 0
@@ -97,6 +98,7 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
             present.value = Array.isArray(data?.visits) ? data.visits : []
             workerOnline.value = !!data?.worker_online
             cameraOk.value = data?.camera_ok !== false
+            sourceHash.value = String(data?.source_hash || '')
             requestFailed.value = false
             // Chỉ tính khi máy chủ trả lời được: mất kết nối tới máy chủ thì camera máy cũng không nhận diện được.
             if (!workerOnline.value || !cameraOk.value) {
@@ -180,6 +182,7 @@ export const useDoorQueue = ({ paused = () => false, onConfirm = () => {}, curre
         facing: ref('user'),
         switching: ref(false),
         tone,
+        sourceHash,
         suggestions,
         queue,
         liveFaces: ref([]),

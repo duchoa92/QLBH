@@ -42,6 +42,9 @@ const consent = ref(true) // DEMO: mặc định đồng ý, sửa lại thành 
 const registered = ref(false)
 const consentedAt = ref('')
 const cctvConfigured = ref(false)
+const profileEngines = ref({ 'human-v1': 0, 'sface-v1': 0 })
+const sfaceEnrollment = ref({ state: 'idle' })
+const sfaceEnrolling = ref(false)
 const samples = ref([]) // { id, source, descriptors[], thumb, lowQuality }
 const autoCapture = ref(true) // camera tại quầy: tự quét và tự chụp
 const scanState = ref('idle') // idle | none | multiple | small | blurry | hold: màu viền khung camera
@@ -51,6 +54,7 @@ const message = ref('')
 const messageTone = ref('info')
 let stream = null
 let nextId = 1
+let sfaceStatusTimer = null
 
 const say = (text, tone = 'info') => { message.value = text; messageTone.value = tone }
 const toneClass = { info: 'text-slate-600', warn: 'text-amber-600', error: 'text-rose-600', ok: 'text-emerald-600' }
@@ -66,6 +70,18 @@ const loadStatus = async () => {
         registered.value = !!data.registered
         consentedAt.value = data.consented_at || ''
         cctvConfigured.value = !!data.cctv_configured
+        profileEngines.value = data.engines || { 'human-v1': 0, 'sface-v1': 0 }
+        sfaceEnrollment.value = data.sface_enrollment || { state: 'idle' }
+        if (sfaceEnrolling.value && sfaceEnrollment.value.state === 'completed') {
+            sfaceEnrolling.value = false
+            clearInterval(sfaceStatusTimer)
+            say(`Đã lưu ${sfaceEnrollment.value.samples || 0} mẫu YuNet + SFace từ camera cửa.`, 'ok')
+            toast.success('Đã thêm mẫu SFace để kiểm chứng.')
+        } else if (sfaceEnrolling.value && sfaceEnrollment.value.state === 'idle') {
+            sfaceEnrolling.value = false
+            clearInterval(sfaceStatusTimer)
+            say('Lấy mẫu SFace đã hết hạn. Hãy để một người nhìn camera rồi thử lại.', 'warn')
+        }
     } catch { /* vẫn cho đăng ký */ }
 }
 
@@ -76,6 +92,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     stopAuto()
     stopCctvScan()
+    clearInterval(sfaceStatusTimer)
     stopCamera(stream, video.value)
 })
 
@@ -273,6 +290,25 @@ const readRequestError = async (error) => {
 let cctvToken = 0
 const stopCctvScan = () => { cctvToken += 1; cctvScanning.value = false }
 
+/* ---------- Nguồn 4: YuNet + SFace trực tiếp từ Camera cửa ---------- */
+const startSfaceEnrollment = async () => {
+    if (busy.value || sfaceEnrolling.value) return
+    if (!consent.value) { say('Cần xác nhận khách đã đồng ý trước khi lấy mẫu SFace.', 'warn'); return }
+    busy.value = true
+    try {
+        await api.post(`/api/customers/${props.customer.id}/face-sface-enrollment`, { consent: true })
+        sfaceEnrolling.value = true
+        sfaceEnrollment.value = { state: 'pending' }
+        say('Đang lấy 3 mẫu YuNet + SFace từ Camera cửa. Mời một khách đứng nhìn camera trong vài giây.', 'info')
+        clearInterval(sfaceStatusTimer)
+        sfaceStatusTimer = setInterval(loadStatus, 1200)
+    } catch (error) {
+        say(error?.response?.data?.message || 'Không thể bắt đầu lấy mẫu SFace từ Camera cửa.', 'error')
+    } finally {
+        busy.value = false
+    }
+}
+
 const toggleCctvScan = async () => {
     if (cctvScanning.value) {
         stopCctvScan()
@@ -378,7 +414,7 @@ const remove = async () => {
 
             <template v-if="featureOn">
                 <!-- Chọn nguồn: dùng riêng từng nguồn hoặc kết hợp nhiều nguồn -->
-                <div class="grid gap-2 sm:grid-cols-3">
+                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <button type="button" class="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition" :class="cameraOn ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-700 hover:border-blue-300'" :disabled="cameraStarting" @click="toggleCamera">
                         <Video class="h-5 w-5 shrink-0" />
                         <span>{{ cameraStarting ? 'Đang mở camera…' : cameraOn ? 'Tắt camera' : 'Camera tại quầy' }}<small class="block text-[11px] font-normal text-slate-500">Tự quét và tự chụp khách đang đứng</small></span>
@@ -391,6 +427,11 @@ const remove = async () => {
                         <LoaderCircle v-if="cctvScanning" class="h-5 w-5 shrink-0 animate-spin" />
                         <Camera v-else class="h-5 w-5 shrink-0 text-violet-600" />
                         <span>{{ cctvScanning ? 'Đang quét… bấm để dừng' : 'Camera an ninh' }}<small class="block text-[11px] font-normal text-slate-500">{{ cctvConfigured ? 'Tự quét và tự chụp khi thấy khách' : 'Chưa cấu hình trong Thiết lập' }}</small></span>
+                    </button>
+                    <button type="button" class="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition disabled:opacity-50" :class="sfaceEnrolling ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-700 hover:border-indigo-300'" :disabled="busy || sfaceEnrolling || !cctvConfigured" :title="cctvConfigured ? '' : 'Cần cấu hình và bật Camera cửa trước'" @click="startSfaceEnrollment">
+                        <LoaderCircle v-if="sfaceEnrolling" class="h-5 w-5 shrink-0 animate-spin" />
+                        <ScanFace v-else class="h-5 w-5 shrink-0 text-indigo-600" />
+                        <span>{{ sfaceEnrolling ? 'Đang lấy mẫu SFace…' : 'YuNet + SFace' }}<small class="block text-[11px] font-normal text-slate-500">Lấy 3 mẫu riêng từ Camera cửa</small></span>
                     </button>
                 </div>
                 <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onFilesPicked" />
@@ -433,7 +474,8 @@ const remove = async () => {
                     Khách có thể yêu cầu xóa bất cứ lúc nào.
                 </span>
             </label>
-            <p v-if="registered && consentedAt" class="text-xs text-slate-400">Đồng ý lúc {{ new Date(consentedAt).toLocaleString('vi-VN') }}. Lưu mẫu mới sẽ thay toàn bộ mẫu cũ.</p>
+            <p v-if="registered && consentedAt" class="text-xs text-slate-400">Đồng ý lúc {{ new Date(consentedAt).toLocaleString('vi-VN') }}. Lưu mẫu Human mới chỉ thay mẫu Human; mẫu SFace được giữ riêng để kiểm chứng.</p>
+            <p v-if="registered && consentedAt" class="text-xs text-slate-400">Mẫu đang có: Human {{ profileEngines['human-v1'] || 0 }} · YuNet + SFace {{ profileEngines['sface-v1'] || 0 }}. Hai nhóm được lưu và so khớp riêng.</p>
         </div>
 
         <template #footer>

@@ -127,7 +127,7 @@ const badge = computed(() => {
 
         <ol class="space-y-2.5 text-xs leading-relaxed text-slate-700">
             <li>
-                <strong>1. Nhập camera:</strong> điền địa chỉ <strong>RTSP</strong> và tài khoản/mật khẩu nếu có ở mục camera bên dưới rồi bấm <strong>Lưu</strong>. Trên Windows, cần Node.js 22 và bản go2rtc QLBH tại <code>deploy/go2rtc/go2rtc.exe</code>. Trên Linux cần Docker Engine + Compose.
+                <strong>1. Nhập camera:</strong> điền địa chỉ <strong>RTSP</strong> và tài khoản/mật khẩu nếu có ở mục camera bên dưới rồi bấm <strong>Lưu</strong>. Trên Windows, cần Node.js 22 và bản go2rtc QLBH tại <code>deploy/go2rtc/go2rtc.exe</code>; chỉ cần FFmpeg trong <code>PATH</code> nếu go2rtc liên tục không tạo được JPEG từ luồng H.264/H.265. Trên Linux cần Docker Engine + Compose.
                 <span v-if="!status.camera_configured" class="font-semibold text-amber-700"> (Hiện chưa lưu địa chỉ camera nào.)</span>
             </li>
             <li>

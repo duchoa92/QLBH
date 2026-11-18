@@ -231,7 +231,7 @@ const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cctv_snapshot_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_camera_engine', 'face_min_face_px', 'face_detect_fps', 'face_detect_interval_ms', 'face_roi_left', 'face_roi_top', 'face_roi_width', 'face_roi_height', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -356,6 +356,7 @@ const buildFormValues = () => ({
     face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
     face_cctv_username: liveSettings.value.face_cctv_username || '',
     face_cctv_password: '', // không bao giờ nhận lại từ máy chủ; để trống = giữ mật khẩu đã lưu
+    face_camera_engine: ['human', 'sface', 'compare'].includes(liveSettings.value.face_camera_engine) ? liveSettings.value.face_camera_engine : 'human',
     // Tinh chỉnh nhận diện (mặc định khớp FaceTuning ở máy chủ)
     face_min_face_px: Number(liveSettings.value.face_min_face_px ?? 60),
     face_detect_fps: Number(liveSettings.value.face_detect_fps ?? 4),

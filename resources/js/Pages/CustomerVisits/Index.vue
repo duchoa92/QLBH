@@ -31,13 +31,24 @@ const confirmBox = useConfirm()
 const lastUpdated = ref(new Date())
 let reloadTimer = null
 let pollTimer = null
+let reloadInFlight = false
+let reloadQueued = false
 const reloadNow = () => {
-    if (document.hidden || target.value || historyOf.value) return
+    if (document.hidden) return
+    if (reloadInFlight) { reloadQueued = true; return }
+    reloadInFlight = true
     router.reload({
-        only: ['summary', 'hours', 'days', 'visits'],
+        only: ['summary', 'hours', 'days', 'visits', 'doorCamera'],
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => { lastUpdated.value = new Date() },
+        onFinish: () => {
+            reloadInFlight = false
+            if (reloadQueued && !document.hidden) {
+                reloadQueued = false
+                reloadTimer = setTimeout(reloadNow, 200)
+            }
+        },
     })
 }
 const scheduleReload = () => {
@@ -45,7 +56,7 @@ const scheduleReload = () => {
     reloadTimer = setTimeout(reloadNow, 1000)
 }
 onMounted(() => {
-    pollTimer = setInterval(reloadNow, props.doorCamera.enabled ? 5000 : 10000)
+    pollTimer = setInterval(reloadNow, 5000)
     document.addEventListener('visibilitychange', reloadNow)
 })
 onBeforeUnmount(() => {
@@ -84,11 +95,16 @@ const {
     activeWhen: () => !showDoor.value && localOn.value,
 })
 
-const doorVideo = useDoorWebrtc(computed(() => showDoor.value && faceFeatureOn.value))
+const doorVideo = useDoorWebrtc(
+    computed(() => showDoor.value && faceFeatureOn.value),
+    { sourceKey: computed(() => props.doorCamera.source_hash || '') },
+)
 const doorFaces = computed(() => (doorVideo.ok.value ? doorVideo.faces.value : []))
 const doorStatus = computed(() => {
-    if (!props.doorCamera.online) return 'Camera cửa chưa chạy'
-    if (!props.doorCamera.camera_ok) return 'Không lấy được ảnh camera cửa'
+    if (!props.doorCamera.online) {
+        return doorVideo.ok.value ? 'Video đang chạy · Worker AI mất kết nối' : 'Worker AI chưa kết nối'
+    }
+    if (!props.doorCamera.camera_ok) return 'Worker AI không lấy được ảnh camera'
     return doorFaces.value.length ? `Đang thấy ${doorFaces.value.length} người` : 'Đang xem camera cửa'
 })
 
@@ -333,9 +349,12 @@ const remove = (visit) => {
         >
             <Camera v-if="doorCamera.online && doorCamera.camera_ok" class="mt-0.5 h-4 w-4 shrink-0" />
             <CameraOff v-else class="mt-0.5 h-4 w-4 shrink-0" />
-            <p v-if="!doorCamera.online">Camera AI chưa chạy nên chưa có lượt khách mới. Xem hướng dẫn cài camera stack ở Cài đặt → Khách hàng → Camera cửa.</p>
-            <p v-else-if="!doorCamera.camera_ok">Camera AI đang chạy nhưng không lấy được ảnh từ camera{{ doorCamera.message ? ': ' + doorCamera.message : '' }}.</p>
-            <p v-else>Camera cửa đang hoạt động.</p>
+            <p v-if="!doorCamera.online">
+                Video camera cửa có thể vẫn xem được, nhưng worker AI đã mất heartbeat nên chưa ghi nhận lượt khách mới.
+                Kiểm tra worker trong <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng → Camera cửa</Link>.
+            </p>
+            <p v-else-if="!doorCamera.camera_ok">Worker AI đang chạy nhưng không lấy được ảnh từ camera{{ doorCamera.message ? ': ' + doorCamera.message : '' }}. Kiểm tra nguồn RTSP trong <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng → Camera cửa</Link>.</p>
+            <p v-else>Worker AI và camera cửa đang hoạt động.</p>
         </div>
 
         <!-- Camera xem trực tiếp -->
