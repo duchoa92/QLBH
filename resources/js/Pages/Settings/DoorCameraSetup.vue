@@ -36,11 +36,17 @@ const badge = computed(() => !cameraConfigured.value
             <span class="rounded-full px-2.5 py-1 text-[11px] font-bold" :class="badge.cls">{{ badge.text }}</span>
         </div>
         <div v-if="!cameraConfigured" class="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-relaxed text-amber-900">
-            <strong>Chưa có luồng camera để AI đọc.</strong> Cuộn lên phần <strong>Cấu hình camera</strong>, nhập RTSP chính và sub-stream H.264, rồi bấm <strong>Lưu cài đặt</strong> ở cuối hộp này. Hệ thống sẽ tự áp dụng cấu hình mới.
+            <strong>Chưa có luồng camera để AI đọc.</strong> Cuộn lên phần <strong>Danh sách camera</strong>, nhập RTSP chính và sub-stream H.264 cho ít nhất một camera, rồi bấm <strong>Lưu cài đặt</strong>. Hệ thống sẽ tự áp dụng cấu hình mới.
         </div>
         <p v-if="status.message" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">{{ status.message }}</p>
+        <div v-if="status.configured_cameras?.length" class="grid gap-1.5 sm:grid-cols-2">
+            <div v-for="camera in status.configured_cameras" :key="camera.id" class="rounded-md border px-2.5 py-2 text-xs" :class="camera.receiving ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'">
+                <div class="flex items-center justify-between gap-2"><strong class="truncate">{{ camera.name }}</strong><span class="shrink-0 font-semibold">{{ camera.receiving ? 'Đang nhận hình' : 'Chưa có hình' }}</span></div>
+                <p v-if="camera.message" class="mt-0.5 leading-relaxed">{{ camera.message }}</p>
+            </div>
+        </div>
         <ol class="space-y-2.5 text-xs leading-relaxed text-slate-700">
-            <li><strong>1. Khai báo camera:</strong> nhập và lưu hai RTSP ở phần <strong>Cấu hình camera</strong> ngay phía trên. AI và MediaMTX cùng dùng sub-stream H.264, nên hình đang xem và kết quả nhận diện là cùng một khung hình; không chuyển mã luồng trên máy chủ.</li>
+            <li><strong>1. Khai báo camera:</strong> thêm từng camera và lưu RTSP chính cùng sub-stream H.264 ở phần <strong>Danh sách camera</strong> ngay phía trên. AI và MediaMTX cùng dùng sub-stream H.264, nên hình đang xem và kết quả nhận diện là cùng một khung hình; không chuyển mã luồng trên máy chủ.</li>
             <li>
                 <strong>2. Cài tự động lần đầu:</strong> sau khi đã lưu RTSP ở bước 1, mở PowerShell tại thư mục gốc QLBH và chạy đúng một lệnh bên dưới. Script tự tạo môi trường Python riêng, cài thư viện, tải/kiểm tra YuNet + SFace và đăng ký dịch vụ nền. Từ lần sau, chỉ cần bấm <strong>Lưu cài đặt</strong>: RTSP, AI và video WebRTC sẽ tự làm mới.
                 <pre class="mt-1.5 overflow-x-auto rounded-md bg-slate-900 p-2.5 text-[11px] leading-5 text-slate-100">{{ installCommand }}</pre>

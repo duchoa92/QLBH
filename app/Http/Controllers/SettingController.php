@@ -99,6 +99,9 @@ class SettingController extends Controller
                 'face_cctv_username' => setting('face_cctv_username', ''),
                 // Không trả mật khẩu về trình duyệt, chỉ cho biết đã lưu hay chưa.
                 'face_cctv_has_password' => filled(setting('face_cctv_password')),
+                // Multi-camera is the canonical configuration. The legacy
+                // single-camera keys above remain present for older screens.
+                'face_cameras' => DoorCameraAccess::publicCameras(),
                 ...\App\Support\FaceTuning::all(),
                 'customer_points_amount_per_point' => max(1, (int) setting('customer_points_amount_per_point', 10000)),
                 'customer_points_basis' => in_array(setting('customer_points_basis', 'revenue'), ['revenue', 'profit'], true) ? setting('customer_points_basis', 'revenue') : 'revenue',
@@ -189,6 +192,32 @@ class SettingController extends Controller
             'face_cctv_auth' => ['sometimes', 'in:none,basic,digest'],
             'face_cctv_username' => ['sometimes', 'nullable', 'string', 'max:100'],
             'face_cctv_password' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'face_cameras' => ['sometimes', 'array', 'max:8'],
+            'face_cameras.*.id' => ['required_with:face_cameras', 'string', 'max:64', 'regex:/^[a-z][a-z0-9_-]{1,63}$/', 'distinct'],
+            'face_cameras.*.name' => ['required_with:face_cameras', 'string', 'max:120'],
+            'face_cameras.*.enabled' => ['sometimes', 'boolean'],
+            'face_cameras.*.brand' => ['nullable', 'in:hikvision,dahua,imou,ezviz,reolink,uniview,vigi,custom'],
+            'face_cameras.*.host' => ['nullable', 'string', 'max:255'],
+            'face_cameras.*.channel' => ['nullable', 'integer', 'min:1', 'max:64'],
+            'face_cameras.*.snapshot_url' => [
+                'nullable', 'string', 'max:500',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (filled($value) && self::parseCameraUrl((string) $value) === null) {
+                        $fail('Địa chỉ camera phải bắt đầu bằng http://, https:// hoặc rtsp:// kèm địa chỉ máy.');
+                    }
+                },
+            ],
+            'face_cameras.*.view_rtsp_url' => [
+                'nullable', 'string', 'max:500',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (filled($value) && ! preg_match('#^rtsps?://#i', trim((string) $value))) {
+                        $fail('Luồng AI và xem trực tiếp phải là URL rtsp:// hoặc rtsps://.');
+                    }
+                },
+            ],
+            'face_cameras.*.auth' => ['nullable', 'in:none,basic,digest'],
+            'face_cameras.*.username' => ['nullable', 'string', 'max:100'],
+            'face_cameras.*.password' => ['nullable', 'string', 'max:200'],
             'customer_points_amount_per_point' => ['sometimes', 'integer', 'min:1', 'max:1000000000'],
             'customer_points_basis' => ['sometimes', 'in:revenue,profit'],
             'customer_points_debt_enabled' => ['sometimes', 'boolean'],
@@ -258,9 +287,15 @@ class SettingController extends Controller
         }
         $data = array_intersect_key($data, array_flip($allowedKeys));
 
+        // The camera list is stored by DoorCameraAccess because it owns
+        // credential encryption and the compatibility mirror for old flows.
+        $cameraListChanged = array_key_exists('face_cameras', $data);
+        $cameraList = $cameraListChanged ? (array) $data['face_cameras'] : [];
+        unset($data['face_cameras']);
+
         // Dán nguyên link kiểu rtsp://admin:matkhau@ip/... thì tách tài khoản/mật khẩu ra lưu riêng (mật khẩu được mã hóa),
         // địa chỉ lưu lại không còn mật khẩu để khỏi lộ khi trả về trình duyệt.
-        if (array_key_exists('face_cctv_snapshot_url', $data) && filled($data['face_cctv_snapshot_url'])) {
+        if (! $cameraListChanged && array_key_exists('face_cctv_snapshot_url', $data) && filled($data['face_cctv_snapshot_url'])) {
             [$cleanUrl, $cameraUser, $cameraPassword] = $this->splitCameraCredentials((string) $data['face_cctv_snapshot_url']);
             $data['face_cctv_snapshot_url'] = $cleanUrl;
             if ($cameraUser !== null) {
@@ -271,7 +306,7 @@ class SettingController extends Controller
             }
         }
 
-        if (array_key_exists('face_cctv_view_rtsp_url', $data) && filled($data['face_cctv_view_rtsp_url'])) {
+        if (! $cameraListChanged && array_key_exists('face_cctv_view_rtsp_url', $data) && filled($data['face_cctv_view_rtsp_url'])) {
             [$viewUrl, $cameraUser, $cameraPassword] = $this->splitCameraCredentials((string) $data['face_cctv_view_rtsp_url']);
             $data['face_cctv_view_rtsp_url'] = $viewUrl;
             // Credentials are shared with the main stream. Never return/store a
@@ -284,7 +319,7 @@ class SettingController extends Controller
             }
         }
 
-        $cameraChanged = (bool) array_intersect([
+        $cameraChanged = $cameraListChanged || (bool) array_intersect([
             'face_door_camera_enabled', 'face_cctv_snapshot_url', 'face_cctv_view_rtsp_url',
             'face_cctv_auth', 'face_cctv_username', 'face_cctv_password',
             // These fields can cause the browser to auto-generate a new RTSP
@@ -308,8 +343,12 @@ class SettingController extends Controller
             }
         }
 
+        if ($cameraListChanged) {
+            DoorCameraAccess::storeCameras($cameraList);
+        }
+
         // Xóa địa chỉ camera thì xóa luôn tài khoản/mật khẩu đã lưu.
-        if (array_key_exists('face_cctv_snapshot_url', $data) && blank($data['face_cctv_snapshot_url'])) {
+        if (! $cameraListChanged && array_key_exists('face_cctv_snapshot_url', $data) && blank($data['face_cctv_snapshot_url'])) {
             Setting::forget('face_cctv_username');
             Setting::forget('face_cctv_password');
         }
@@ -410,7 +449,7 @@ class SettingController extends Controller
     /** Đồng bộ RTSP đã lưu sang worker và MediaMTX trước khi trả kết quả lưu. */
     private function applyDoorCameraConfiguration(): bool
     {
-        if (! filled(setting('face_cctv_snapshot_url')) || ! filled(setting('face_cctv_view_rtsp_url'))) {
+        if (DoorCameraAccess::configuredCameras() === []) {
             // Nothing is running yet, but saving an incomplete camera form is
             // still valid and must not be reported as a failed application.
             return true;

@@ -30,4 +30,18 @@ class FaceMatcherTest extends TestCase
         $this->assertFalse(FaceMatcher::validDescriptor($humanSized, FaceMatcher::SFACE));
         $this->assertSame(0.0, FaceMatcher::similarity($humanSized, $humanSized, FaceMatcher::SFACE));
     }
+
+    public function test_coherent_descriptors_remove_a_stray_enrollment_sample(): void
+    {
+        $same = array_fill(0, FaceMatcher::SFACE_SIZE, 0.0);
+        $same[0] = 1.0;
+        $stray = array_fill(0, FaceMatcher::SFACE_SIZE, 0.0);
+        $stray[1] = 1.0;
+
+        $result = FaceMatcher::coherentDescriptors([$same, $same, $stray], FaceMatcher::SFACE);
+
+        $this->assertCount(2, $result);
+        $this->assertSame($same, $result[0]);
+        $this->assertSame($same, $result[1]);
+    }
 }

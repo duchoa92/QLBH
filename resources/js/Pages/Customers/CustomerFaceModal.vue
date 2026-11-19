@@ -43,6 +43,8 @@ const registered = ref(false)
 const sfaceRegistered = ref(false)
 const consentedAt = ref('')
 const cctvConfigured = ref(false)
+const cctvCameras = ref([])
+const selectedCctvCamera = ref('door-1')
 const profileEngines = ref({ 'sface-v1': 0 })
 const samples = ref([]) // { id, source, descriptors[], thumb, lowQuality }
 const autoCapture = ref(true) // camera tại quầy: tự quét và tự chụp
@@ -68,6 +70,10 @@ const loadStatus = async () => {
         sfaceRegistered.value = !!data.sface_registered
         consentedAt.value = data.consented_at || ''
         cctvConfigured.value = !!data.cctv_configured
+        cctvCameras.value = Array.isArray(data.cctv_cameras) ? data.cctv_cameras : []
+        if (!cctvCameras.value.some(camera => camera.id === selectedCctvCamera.value)) {
+            selectedCctvCamera.value = cctvCameras.value[0]?.id || 'door-1'
+        }
         profileEngines.value = data.engines || { 'sface-v1': 0 }
     } catch { /* vẫn cho đăng ký */ }
 }
@@ -309,7 +315,10 @@ const toggleCctvScan = async () => {
     while (token === cctvToken && !isFull.value) {
         let delay = CCTV_GAP_MS
         try {
-            const response = await api.get('/api/customers/face-cctv-snapshot', { responseType: 'blob' })
+            const response = await api.get('/api/customers/face-cctv-snapshot', {
+                params: { camera: selectedCctvCamera.value },
+                responseType: 'blob',
+            })
             if (token !== cctvToken) break
             requestErrors = 0
             if (response.headers?.['x-face-engine'] === 'yunet-sface') {
@@ -356,7 +365,7 @@ const save = async () => {
     stopCctvScan()
     busy.value = true
     try {
-        await api.post(`/api/customers/${props.customer.id}/face`, {
+        const { data } = await api.post(`/api/customers/${props.customer.id}/face`, {
             consent: true,
             images: samples.value.map(sample => sample.image),
         })
@@ -366,8 +375,11 @@ const save = async () => {
         // Đã lưu xong: tắt camera để không tự chụp thêm mẫu mới khi danh sách mẫu vừa được làm trống.
         if (cameraOn.value) { stopCamera(stream, video.value); stream = null; cameraOn.value = false }
         samples.value = []
-        say('Đã lưu dữ liệu nhận diện cho khách.', 'ok')
-        toast.success('Đã đăng ký khuôn mặt khách hàng.')
+        const discarded = Number(data?.discarded_samples || 0)
+        say(discarded
+            ? `Đã lưu ${data.samples} mẫu đồng nhất; đã bỏ ${discarded} mẫu lệch để tránh nhận nhầm.`
+            : `Đã lưu ${data?.samples || 1} mẫu nhận diện cho khách.`, discarded ? 'warn' : 'ok')
+        toast.success(discarded ? 'Đã đăng ký và bỏ mẫu không đồng nhất.' : 'Đã đăng ký khuôn mặt khách hàng.')
         emit('updated')
     } catch (error) {
         const errors = error?.response?.data?.errors
@@ -404,6 +416,7 @@ const remove = async () => {
                 <span v-if="customer.phone" class="text-slate-500"> · {{ customer.phone }}</span>
                 <span v-if="sfaceRegistered" class="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">Đã đăng ký</span>
                 <span v-else-if="registered" class="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">Cần đăng ký lại</span>
+                <span v-if="sfaceRegistered" class="ml-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700">SFace {{ profileEngines['sface-v1'] || 0 }} mẫu</span>
             </div>
 
             <div v-if="!featureOn" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
@@ -432,6 +445,12 @@ const remove = async () => {
                         <span>{{ cctvScanning ? 'Đang quét… bấm để dừng' : 'Camera an ninh' }}<small class="block text-[11px] font-normal text-slate-500">{{ cctvConfigured ? 'Tự quét và tự chụp khi thấy khách' : 'Chưa cấu hình trong Thiết lập' }}</small></span>
                     </button>
                 </div>
+                <label v-if="cctvCameras.length > 1" class="flex max-w-xs items-center gap-2 text-xs font-semibold text-slate-600">
+                    Camera an ninh dùng để lấy mẫu
+                    <select v-model="selectedCctvCamera" :disabled="cctvScanning" class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none focus:border-violet-400 disabled:bg-slate-100">
+                        <option v-for="camera in cctvCameras" :key="camera.id" :value="camera.id">{{ camera.name }}</option>
+                    </select>
+                </label>
                 <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onFilesPicked" />
 
                 <div v-show="cameraOn" class="relative overflow-hidden rounded-2xl bg-slate-900 ring-4 transition" :class="{ 'ring-emerald-400': scanState === 'hold', 'ring-amber-400': ['none', 'multiple', 'small', 'blurry'].includes(scanState), 'ring-transparent': scanState === 'idle' }">

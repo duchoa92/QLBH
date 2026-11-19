@@ -34,6 +34,7 @@ class CameraIntelligenceController extends Controller
             'cameras.*.frames' => ['required', 'integer', 'min:0'],
             'cameras.*.detected_faces' => ['required', 'integer', 'min:0'],
             'cameras.*.last_error' => ['nullable', 'string', 'max:400'],
+            'cameras.*.last_frame_at' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         Cache::put(self::HEARTBEAT_KEY, ['at' => now()->timestamp, 'cameras' => $data['cameras']], 90);
@@ -142,9 +143,31 @@ class CameraIntelligenceController extends Controller
         $data = Cache::get(self::HEARTBEAT_KEY);
         $online = is_array($data) && ($data['at'] ?? 0) >= now()->timestamp - 30;
         $cameras = $online ? ($data['cameras'] ?? []) : [];
-        $ready = $online && collect($cameras)->contains(fn ($camera) => ($camera['running'] ?? false) && ($camera['inference_ready'] ?? false));
+        $runtime = collect($cameras)->keyBy(fn (array $camera) => (string) ($camera['id'] ?? ''));
         $error = collect($cameras)->pluck('last_error')->filter()->first();
-        $source = DoorCameraAccess::camera();
+        $sources = DoorCameraAccess::publicCameras();
+        $sourceSignature = collect($sources)->map(fn (array $camera) => implode('|', [
+            $camera['id'], $camera['enabled'] ? '1' : '0', $camera['snapshot_url'], $camera['view_rtsp_url'],
+        ]))->implode('\n');
+        $configuredCameras = array_values(array_map(function (array $camera) use ($runtime): array {
+            $worker = $runtime->get($camera['id'], []);
+            $lastFrameAt = (float) ($worker['last_frame_at'] ?? 0);
+            $receiving = (bool) ($worker['running'] ?? false)
+                && (bool) ($worker['inference_ready'] ?? false)
+                && $lastFrameAt >= now()->timestamp - 15;
+
+            return [
+                'id' => $camera['id'],
+                'name' => $camera['name'],
+                'receiving' => $receiving,
+                'frames' => (int) ($worker['frames'] ?? 0),
+                'message' => $worker['last_error'] ?? ($receiving ? null : 'Chưa nhận được khung hình từ RTSP.'),
+            ];
+        }, array_filter($sources, static fn (array $camera): bool => $camera['enabled'] && $camera['configured'])));
+        // The overall camera section remains usable if at least one camera is
+        // receiving frames. Each individual camera below carries its own state.
+        $ready = $online && collect($configuredCameras)->contains(fn (array $camera): bool => $camera['receiving']);
+        $error ??= collect($configuredCameras)->pluck('message')->filter()->first();
 
         return [
             'online' => $online,
@@ -152,10 +175,13 @@ class CameraIntelligenceController extends Controller
             'cameras' => $cameras,
             'message' => $error,
             'seconds_ago' => is_array($data) ? now()->timestamp - $data['at'] : null,
+            // Browser-safe list and individual runtime state for the camera
+            // switcher. RTSP URLs and credentials are never returned here.
+            'configured_cameras' => $configuredCameras,
             // Used by WebRTC consumers to decide whether a peer needs a fresh
-            // offer. It must only change when the RTSP source changes, never
-            // when heartbeat counters or frame counts advance.
-            'source_hash' => substr(hash('sha256', $source['snapshot_url'].'|'.$source['view_rtsp_url']), 0, 16),
+            // offer. It changes only when an RTSP source is added/changed,
+            // never when heartbeat counters or frame counts advance.
+            'source_hash' => substr(hash('sha256', $sourceSignature), 0, 16),
         ];
     }
 

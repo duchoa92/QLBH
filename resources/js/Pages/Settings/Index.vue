@@ -219,7 +219,7 @@ const closeModal = () => {
 
 // Mỗi mục chỉ gửi và lưu đúng các trường của mình, tránh ghi đè cài đặt khác bằng dữ liệu cũ của trang.
 // Địa chỉ RTSP (rtsp://...) do worker camera cửa đọc bằng ffmpeg; địa chỉ http là ảnh chụp tĩnh.
-const faceCctvIsRtsp = computed(() => /^rtsps?:\/\//i.test(String(form.face_cctv_snapshot_url || '').trim()))
+const isRtspCamera = camera => /^rtsps?:\/\//i.test(String(camera?.snapshot_url || '').trim())
 const faceCctvAuthOptions = [
     { value: 'none', label: 'Không cần đăng nhập' },
     { value: 'basic', label: 'Tài khoản (Basic)' },
@@ -246,18 +246,18 @@ const cameraPreset = (brand, host, channel) => {
         vigi: [`rtsp://${target}:554/stream${(c - 1) * 2 + 1}`, `rtsp://${target}:554/stream${(c - 1) * 2 + 2}`],
     }[brand] || null
 }
-const applyCameraPreset = () => {
-    const urls = cameraPreset(form.face_camera_brand, form.face_camera_host, form.face_camera_channel)
+const applyCameraPreset = camera => {
+    const urls = cameraPreset(camera.brand, camera.host, camera.channel)
     if (!urls) return
-    ;[form.face_cctv_snapshot_url, form.face_cctv_view_rtsp_url] = urls
-    form.face_cctv_auth = 'basic'
+    ;[camera.snapshot_url, camera.view_rtsp_url] = urls
+    camera.auth = 'basic'
 }
 
 const SECTION_KEYS = {
     system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
     printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
-    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_camera_brand', 'face_camera_host', 'face_camera_channel', 'face_cctv_snapshot_url', 'face_cctv_view_rtsp_url', 'face_cctv_auth', 'face_cctv_username', 'face_cctv_password', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
+    loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cameras', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
 }
 
@@ -311,6 +311,27 @@ const mapBankAccounts = () => (liveSettings.value.bank_accounts?.length
             ? Boolean(account.is_default)
             : index === 0,
     }))
+
+const mapFaceCameras = () => {
+    const saved = Array.isArray(liveSettings.value.face_cameras) && liveSettings.value.face_cameras.length
+        ? liveSettings.value.face_cameras
+        : [{
+            id: 'door-1', name: 'Camera cửa', enabled: true,
+            brand: liveSettings.value.face_camera_brand || 'custom', host: liveSettings.value.face_camera_host || '',
+            channel: Number(liveSettings.value.face_camera_channel) || 1,
+            snapshot_url: liveSettings.value.face_cctv_snapshot_url || '', view_rtsp_url: liveSettings.value.face_cctv_view_rtsp_url || '',
+            auth: liveSettings.value.face_cctv_auth || 'none', username: liveSettings.value.face_cctv_username || '',
+            has_password: Boolean(liveSettings.value.face_cctv_has_password),
+        }]
+    return saved.map((camera, index) => ({
+        id: camera.id || (index === 0 ? 'door-1' : `camera-${index + 1}`),
+        name: camera.name || (index === 0 ? 'Camera cửa' : `Camera ${index + 1}`),
+        enabled: camera.enabled !== false && camera.enabled !== 0 && camera.enabled !== '0',
+        brand: camera.brand || 'custom', host: camera.host || '', channel: Number(camera.channel) || 1,
+        snapshot_url: camera.snapshot_url || '', view_rtsp_url: camera.view_rtsp_url || '',
+        auth: camera.auth || 'none', username: camera.username || '', password: '', has_password: Boolean(camera.has_password),
+    }))
+}
 
 const buildFormValues = () => ({
     shop_name: liveSettings.value.shop_name || '',
@@ -378,14 +399,7 @@ const buildFormValues = () => ({
         || liveSettings.value.face_door_camera_enabled === 1
         || liveSettings.value.face_door_camera_enabled === '1',
     face_visit_retention_days: Number(liveSettings.value.face_visit_retention_days) || 30,
-    face_camera_brand: liveSettings.value.face_camera_brand || 'custom',
-    face_camera_host: liveSettings.value.face_camera_host || '',
-    face_camera_channel: Number(liveSettings.value.face_camera_channel) || 1,
-    face_cctv_snapshot_url: liveSettings.value.face_cctv_snapshot_url || '',
-    face_cctv_view_rtsp_url: liveSettings.value.face_cctv_view_rtsp_url || '',
-    face_cctv_auth: liveSettings.value.face_cctv_auth || 'none',
-    face_cctv_username: liveSettings.value.face_cctv_username || '',
-    face_cctv_password: '', // không bao giờ nhận lại từ máy chủ; để trống = giữ mật khẩu đã lưu
+    face_cameras: mapFaceCameras(),
     face_auto_learn_enabled: liveSettings.value.face_auto_learn_enabled !== false
         && liveSettings.value.face_auto_learn_enabled !== 0
         && liveSettings.value.face_auto_learn_enabled !== '0',
@@ -399,21 +413,18 @@ const buildFormValues = () => ({
 })
 const form = useForm(buildFormValues())
 
-// URLs filled by a known camera preset stay in sync with IP/channel changes.
-// A URL that was edited manually is intentionally preserved; choosing another
-// brand explicitly switches back to that brand's two generated streams.
-watch(
-    [() => form.face_camera_brand, () => form.face_camera_host, () => form.face_camera_channel],
-    ([brand, host, channel], [previousBrand, previousHost, previousChannel]) => {
-        const next = cameraPreset(brand, host, channel)
-        if (!next || !previousBrand) return
-        const previous = cameraPreset(previousBrand, previousHost, previousChannel)
-        const wasGenerated = previous
-            && form.face_cctv_snapshot_url === previous[0]
-            && form.face_cctv_view_rtsp_url === previous[1]
-        if (brand !== previousBrand || wasGenerated) applyCameraPreset()
-    },
-)
+const addCamera = () => {
+    if (form.face_cameras.length >= 8) return
+    const index = form.face_cameras.length + 1
+    form.face_cameras.push({
+        id: `camera-${index}`, name: `Camera ${index}`, enabled: true, brand: 'custom', host: '', channel: 1,
+        snapshot_url: '', view_rtsp_url: '', auth: 'basic', username: '', password: '', has_password: false,
+    })
+}
+const removeCamera = index => {
+    if (form.face_cameras.length <= 1) return
+    form.face_cameras.splice(index, 1)
+}
 
 watch(
     () => [props.settings.purchase_contract_title, props.settings.purchase_contract_content],
@@ -809,27 +820,41 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             description="Camera Intelligence nhận diện khuôn mặt liên tục kể cả khi không mở POS. POS hiển thị video MediaMTX cùng nhãn nhận diện và danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
                         />
                         <div v-if="form.face_recognition_enabled" class="space-y-3 rounded-lg bg-slate-50 p-3">
-                            <div>
-                                <h3 class="text-xs font-bold text-slate-800">{{ form.face_door_camera_enabled ? 'Camera cửa (bắt buộc)' : 'Camera an ninh (tùy chọn)' }}</h3>
-                                <p class="mt-0.5 text-xs text-slate-500">Chọn hãng và nhập IP để tự điền hai luồng. Sub-stream H.264 là luồng AI đang phân tích và phát WebRTC, nên khung hình bạn xem luôn trùng với khung AI nhận diện. Hãng hoặc firmware khác mẫu thì chọn <strong>Khác</strong> và tự sửa URL.</p>
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <h3 class="text-xs font-bold text-slate-800">Danh sách camera</h3>
+                                    <p class="mt-0.5 text-xs text-slate-500">Mỗi camera có luồng chính và sub-stream H.264 riêng. Sau khi lưu, AI, MediaMTX và danh sách xem trực tiếp tự đồng bộ toàn bộ camera đang bật.</p>
+                                </div>
+                                <button type="button" :disabled="form.face_cameras.length >= 8" class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50" @click="addCamera"><Plus :size="14" />Thêm camera</button>
                             </div>
-                            <div class="grid gap-2 sm:grid-cols-3">
-                                <FloatingSelect v-model="form.face_camera_brand" name="face_camera_brand" label="Hãng camera" :options="cameraBrandOptions" :show-placeholder="false" />
-                                <FloatingInput v-model="form.face_camera_host" name="face_camera_host" label="IP / tên miền camera" placeholder-text="192.168.1.50" />
-                                <FloatingInput v-model.number="form.face_camera_channel" name="face_camera_channel" type="number" min="1" max="64" label="Kênh camera" />
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <button type="button" :disabled="form.face_camera_brand === 'custom' || !form.face_camera_host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset">Điền URL theo hãng</button>
-                                <span class="text-[11px] text-slate-500">Đổi hãng, IP hoặc kênh sẽ tự cập nhật URL đang theo mẫu; URL tự sửa sẽ được giữ nguyên.</span>
-                            </div>
-                            <FloatingInput v-model="form.face_cctv_snapshot_url" name="face_cctv_snapshot_url" label="Luồng chính camera (RTSP main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
-                            <p v-if="form.errors.face_cctv_snapshot_url" class="text-xs text-rose-600">{{ form.errors.face_cctv_snapshot_url }}</p>
-                            <FloatingInput v-if="faceCctvIsRtsp" v-model="form.face_cctv_view_rtsp_url" name="face_cctv_view_rtsp_url" label="Luồng AI và xem trực tiếp (RTSP sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub-stream..." />
-                            <p v-if="form.errors.face_cctv_view_rtsp_url" class="text-xs text-rose-600">{{ form.errors.face_cctv_view_rtsp_url }}</p>
-                            <div v-if="form.face_cctv_snapshot_url" class="grid gap-2 sm:grid-cols-3">
-                                <FloatingSelect v-if="!faceCctvIsRtsp" v-model="form.face_cctv_auth" name="face_cctv_auth" label="Đăng nhập camera" :options="faceCctvAuthOptions" :show-placeholder="false" />
-                                <FloatingInput v-if="faceCctvIsRtsp || form.face_cctv_auth !== 'none'" v-model="form.face_cctv_username" name="face_cctv_username" label="Tài khoản" autocomplete="off" />
-                                <FloatingInput v-if="faceCctvIsRtsp || form.face_cctv_auth !== 'none'" v-model="form.face_cctv_password" name="face_cctv_password" type="password" autocomplete="new-password" :label="liveSettings.face_cctv_has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
+                            <div v-for="(camera, index) in form.face_cameras" :key="camera.id" class="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="min-w-0 flex-1 text-xs font-bold text-slate-800">{{ index === 0 ? 'Camera cửa mặc định' : `Camera bổ sung ${index}` }}</span>
+                                    <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600"><input v-model="camera.enabled" type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Hoạt động</label>
+                                    <button v-if="camera.id !== 'door-1'" type="button" class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700" @click="removeCamera(index)"><Trash2 :size="13" />Xóa</button>
+                                </div>
+                                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                                    <FloatingInput v-model="camera.name" :name="`face_cameras.${index}.name`" label="Tên hiển thị" placeholder-text="Camera lối vào" />
+                                    <FloatingInput v-model="camera.id" :name="`face_cameras.${index}.id`" label="Mã camera" :disabled="index === 0" placeholder-text="camera-2" />
+                                </div>
+                                <div class="grid gap-2 sm:grid-cols-3">
+                                    <FloatingSelect v-model="camera.brand" :name="`face_cameras.${index}.brand`" label="Hãng camera" :options="cameraBrandOptions" :show-placeholder="false" />
+                                    <FloatingInput v-model="camera.host" :name="`face_cameras.${index}.host`" label="IP / tên miền" placeholder-text="192.168.1.50" />
+                                    <FloatingInput v-model.number="camera.channel" :name="`face_cameras.${index}.channel`" type="number" min="1" max="64" label="Kênh" />
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button type="button" :disabled="camera.brand === 'custom' || !camera.host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset(camera)">Điền URL theo hãng</button>
+                                    <span class="text-[11px] text-slate-500">URL tự sửa sẽ được giữ nguyên; sub-stream phải là H.264.</span>
+                                </div>
+                                <FloatingInput v-model="camera.snapshot_url" :name="`face_cameras.${index}.snapshot_url`" label="Luồng chính (RTSP main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
+                                <p v-if="form.errors[`face_cameras.${index}.snapshot_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.snapshot_url`] }}</p>
+                                <FloatingInput v-if="isRtspCamera(camera)" v-model="camera.view_rtsp_url" :name="`face_cameras.${index}.view_rtsp_url`" label="Luồng AI và xem trực tiếp (RTSP sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub-stream..." />
+                                <p v-if="form.errors[`face_cameras.${index}.view_rtsp_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.view_rtsp_url`] }}</p>
+                                <div v-if="camera.snapshot_url" class="grid gap-2 sm:grid-cols-3">
+                                    <FloatingSelect v-if="!isRtspCamera(camera)" v-model="camera.auth" :name="`face_cameras.${index}.auth`" label="Đăng nhập" :options="faceCctvAuthOptions" :show-placeholder="false" />
+                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.username" :name="`face_cameras.${index}.username`" label="Tài khoản" autocomplete="off" />
+                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.password" :name="`face_cameras.${index}.password`" type="password" autocomplete="new-password" :label="camera.has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
+                                </div>
                             </div>
                         </div>
                         <DoorCameraSetup v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled && form.face_door_camera_enabled && door_camera" :info="door_camera" />

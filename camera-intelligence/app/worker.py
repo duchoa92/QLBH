@@ -4,7 +4,7 @@ import base64
 import logging
 import threading
 from dataclasses import dataclass, field
-from time import monotonic, sleep
+from time import monotonic, sleep, time
 
 import cv2
 import numpy as np
@@ -96,6 +96,7 @@ class CameraState:
     frames: int = 0
     detected_faces: int = 0
     last_error: str | None = None
+    stream_error: str | None = None
     last_frame_at: float | None = None
     inference_ready: bool = False
     # The frame is held only in RAM so the enrollment screen can take a
@@ -113,6 +114,7 @@ class CameraState:
         with self.frame_lock:
             self.latest_frame = frame
             self.latest_face_count = face_count
+            self.last_frame_at = time()
 
     def snapshot_jpeg(self) -> tuple[bytes, int] | None:
         with self.frame_lock:
@@ -138,6 +140,7 @@ class CameraWorker(threading.Thread):
         self.overlay_lock = threading.Lock()
         self.latest_overlay: list[dict[str, float | str]] = []
         self.overlay_thread: threading.Thread | None = None
+        self.stream_monitor: threading.Thread | None = None
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -163,6 +166,15 @@ class CameraWorker(threading.Thread):
                     self.state.last_error = None
             except Exception as error:
                 self.state.last_error = f'Cannot update overlays: {error}'
+
+    def monitor_stream(self, started_at: float) -> None:
+        """Surface an RTSP source that starts a worker but never yields a frame."""
+        while not self.stop_event.wait(1):
+            last_frame_at = self.state.last_frame_at
+            no_initial_frame = last_frame_at is None and monotonic() - started_at >= 8
+            stale_frame = last_frame_at is not None and time() - last_frame_at >= 12
+            if no_initial_frame or stale_frame:
+                self.state.stream_error = 'Chưa nhận được khung hình từ RTSP. Kiểm tra địa chỉ, tài khoản hoặc luồng H.264 của camera.'
 
     def match_and_record(self, track: Track, samples: list[tuple[float, list[float], str | None]]) -> None:
         """Resolve one SFace sample set without stalling live face boxes."""
@@ -213,6 +225,13 @@ class CameraWorker(threading.Thread):
                 daemon=True,
             )
             self.overlay_thread.start()
+            self.stream_monitor = threading.Thread(
+                target=self.monitor_stream,
+                args=(monotonic(),),
+                name=f'camera-stream-monitor-{self.camera.id}',
+                daemon=True,
+            )
+            self.stream_monitor.start()
         except Exception as error:
             self.state.last_error = str(error)
             LOG.exception("camera=%s cannot load approved inference models", self.camera.id)
@@ -235,6 +254,7 @@ class CameraWorker(threading.Thread):
                 started = monotonic()
                 boxes = engine.detect(frame)
                 self.state.update_snapshot(frame, len(boxes))
+                self.state.stream_error = None
                 tracks = self.tracker.update(boxes, started)
                 # Do not wait for a server round trip before publishing a box.
                 # The visual stage is real-time; identity work is dispatched
@@ -267,7 +287,6 @@ class CameraWorker(threading.Thread):
                 self.queue_overlay(overlay)
                 self.state.frames += 1
                 self.state.detected_faces += len(boxes)
-                self.state.last_frame_at = monotonic()
                 delay = interval - (monotonic() - started)
                 if delay > 0:
                     sleep(delay)
@@ -279,6 +298,8 @@ class CameraWorker(threading.Thread):
             self.overlay_event.set()
             if self.overlay_thread:
                 self.overlay_thread.join(timeout=0.2)
+            if self.stream_monitor:
+                self.stream_monitor.join(timeout=0.2)
             self.state.running = False
 
 
@@ -314,7 +335,8 @@ class WorkerSupervisor:
                 "inference_ready": state.inference_ready,
                 "frames": state.frames,
                 "detected_faces": state.detected_faces,
-                "last_error": state.last_error,
+                "last_error": state.last_error or state.stream_error,
+                "last_frame_at": state.last_frame_at,
             }
             for camera_id, state in self.states.items()
         }
@@ -322,6 +344,7 @@ class WorkerSupervisor:
     def heartbeat(self) -> None:
         self.publisher.post('/camera-intelligence/heartbeat', {'cameras': [
             {'id': camera_id, 'running': state.running, 'inference_ready': state.inference_ready, 'frames': state.frames,
-             'detected_faces': state.detected_faces, 'last_error': state.last_error}
+             'detected_faces': state.detected_faces, 'last_error': state.last_error or state.stream_error,
+             'last_frame_at': state.last_frame_at}
             for camera_id, state in self.states.items()
         ]})

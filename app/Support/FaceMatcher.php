@@ -121,4 +121,44 @@ final class FaceMatcher
     {
         return $b !== null && self::similarity($a, $b, $engine) >= self::threshold($engine);
     }
+
+    /**
+     * Retain the densest same-person cluster from one enrollment action.
+     * A stray image of another person must not become part of a customer's
+     * persistent face bank and later cause an incorrect name on the door feed.
+     *
+     * @param array<int, array<int, float|int|string>> $descriptors
+     * @return array<int, array<int, float|int|string>>
+     */
+    public static function coherentDescriptors(array $descriptors, string $engine): array
+    {
+        if (count($descriptors) < 2 || ! self::validEngine($engine)) {
+            return $descriptors;
+        }
+
+        $threshold = self::threshold($engine);
+        $bestIndex = 0;
+        $bestSupport = -1;
+        $bestScore = -INF;
+        foreach ($descriptors as $index => $candidate) {
+            $support = 0;
+            $score = 0.0;
+            foreach ($descriptors as $other) {
+                $similarity = self::similarity($candidate, $other, $engine);
+                if ($similarity >= $threshold) {
+                    $support++;
+                    $score += $similarity;
+                }
+            }
+            if ($support > $bestSupport || ($support === $bestSupport && $score > $bestScore)) {
+                $bestIndex = $index;
+                $bestSupport = $support;
+                $bestScore = $score;
+            }
+        }
+
+        $anchor = $descriptors[$bestIndex];
+
+        return array_values(array_filter($descriptors, fn (array $descriptor): bool => self::similarity($anchor, $descriptor, $engine) >= $threshold));
+    }
 }

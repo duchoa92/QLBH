@@ -13,12 +13,13 @@ const waitForIce = peer => new Promise(resolve => {
 export const useCameraIntelligenceWebrtc = (enabled, { camera = 'door-1', facesInterval = 250, sourceKey = null } = {}) => {
     const ok = ref(false), loading = ref(true), error = ref(''), faces = ref([]), videoElement = ref(null)
     let peer = null, facesTimer = null, retryTimer = null, frameTimer = null, retryAttempts = 0, generation = 0, lastFacesAt = 0, lastFacesChangedAt = 0
+    const currentCamera = () => typeof camera === 'function' ? camera() : (camera?.value ?? camera)
     const setVideo = element => { videoElement.value = element; if (element?.srcObject) element.play?.().catch(() => {}) }
     const stop = () => { generation += 1; clearInterval(facesTimer); clearTimeout(retryTimer); clearTimeout(frameTimer); peer?.close(); peer = null; facesTimer = null; frameTimer = null; lastFacesAt = 0; lastFacesChangedAt = 0; if (videoElement.value) videoElement.value.srcObject = null; ok.value = false; loading.value = true; error.value = ''; faces.value = [] }
     const retry = () => { clearTimeout(retryTimer); retryTimer = setTimeout(() => { if (enabled.value) start() }, Math.min(10000, 800 * (2 ** Math.min(retryAttempts++, 3)))) }
-    const getFaces = async run => {
+    const getFaces = async (run, selectedCamera) => {
         try {
-            const { data } = await api.get('/api/customers/camera-intelligence/faces', { params: { camera } })
+            const { data } = await api.get('/api/customers/camera-intelligence/faces', { params: { camera: selectedCamera } })
             if (run !== generation) return
             const at = Number(data?.at || 0)
             if (at && at !== lastFacesAt) { lastFacesAt = at; lastFacesChangedAt = Date.now() }
@@ -29,8 +30,10 @@ export const useCameraIntelligenceWebrtc = (enabled, { camera = 'door-1', facesI
     }
     const start = async () => {
         stop(); const run = generation
+        const selectedCamera = currentCamera()
+        if (!selectedCamera) return
         try {
-            const live = await api.get('/api/customers/camera-intelligence/live', { params: { camera } })
+            const live = await api.get('/api/customers/camera-intelligence/live', { params: { camera: selectedCamera } })
             if (!live.data?.ready) throw new Error(live.data?.message || 'Dịch vụ camera chưa sẵn sàng.')
             const connection = new RTCPeerConnection(); peer = connection; connection.addTransceiver('video', { direction: 'recvonly' })
             connection.ontrack = event => {
@@ -57,10 +60,10 @@ export const useCameraIntelligenceWebrtc = (enabled, { camera = 'door-1', facesI
             }
             connection.onconnectionstatechange = () => { if (run === generation && ['failed', 'closed', 'disconnected'].includes(connection.connectionState)) { ok.value = false; loading.value = false; error.value = 'Kết nối camera gián đoạn, đang tự kết nối lại…'; retry() } }
             await connection.setLocalDescription(await connection.createOffer()); await waitForIce(connection)
-            const answer = await api.post(`/api/customers/camera-intelligence/webrtc-offer?camera=${encodeURIComponent(camera)}`, connection.localDescription.sdp, { headers: { Accept: 'application/sdp', 'Content-Type': 'application/sdp' }, responseType: 'text' })
-            if (run !== generation) return; await connection.setRemoteDescription({ type: 'answer', sdp: answer.data }); facesTimer = setInterval(() => getFaces(run), facesInterval); getFaces(run)
+            const answer = await api.post(`/api/customers/camera-intelligence/webrtc-offer?camera=${encodeURIComponent(selectedCamera)}`, connection.localDescription.sdp, { headers: { Accept: 'application/sdp', 'Content-Type': 'application/sdp' }, responseType: 'text' })
+            if (run !== generation) return; await connection.setRemoteDescription({ type: 'answer', sdp: answer.data }); facesTimer = setInterval(() => getFaces(run, selectedCamera), facesInterval); getFaces(run, selectedCamera)
         } catch (cause) { if (run !== generation) return; loading.value = false; error.value = cause?.response?.data?.message || cause?.message || 'Không mở được luồng camera.'; retry() }
     }
-    watch([enabled, () => sourceKey?.value ?? sourceKey], ([value]) => value ? start() : stop(), { immediate: true }); onBeforeUnmount(stop)
+    watch([enabled, () => sourceKey?.value ?? sourceKey, currentCamera], ([value]) => value ? start() : stop(), { immediate: true }); onBeforeUnmount(stop)
     return { ok, loading, error, faces, setVideo }
 }

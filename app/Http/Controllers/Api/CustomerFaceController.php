@@ -13,7 +13,6 @@ use App\Support\FaceTuning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -49,7 +48,11 @@ class CustomerFaceController extends Controller
             'engines' => [FaceMatcher::SFACE => $profiles->where('engine', FaceMatcher::SFACE)->count()],
             // HTTP snapshots are proxied from the camera itself; RTSP streams
             // are proxied from Camera Intelligence's in-memory current frame.
-            'cctv_configured' => (bool) preg_match('#^(?:https?|rtsps?)://#i', trim((string) setting('face_cctv_snapshot_url', ''))),
+            'cctv_configured' => DoorCameraAccess::snapshotCameras() !== [],
+            'cctv_cameras' => array_values(array_map(static fn (array $camera): array => [
+                'id' => $camera['id'],
+                'name' => $camera['name'],
+            ], array_filter(DoorCameraAccess::publicCameras(), static fn (array $camera): bool => $camera['enabled'] && $camera['snapshot_configured']))),
         ]);
     }
 
@@ -82,6 +85,12 @@ class CustomerFaceController extends Controller
             return response()->json(['message' => 'Dịch vụ nhận diện trả dữ liệu mẫu không hợp lệ.'], 503);
         }
         $this->ensureDescriptors($descriptors, $engine, 'images');
+        $coherent = FaceMatcher::coherentDescriptors($descriptors, $engine);
+        if (count($descriptors) > 1 && count($coherent) < 2) {
+            return response()->json(['message' => 'Các mẫu không đủ giống nhau để chắc chắn là cùng một người. Giữ một người trong ảnh, nhìn thẳng camera và chụp lại ít nhất 2 mẫu rõ mặt.'], 422);
+        }
+        $discarded = count($descriptors) - count($coherent);
+        $descriptors = $coherent;
 
         DB::transaction(function () use ($descriptors, $customer, $request, $engine): void {
             // Đăng ký lại chỉ thay bộ vector SFace/OpenVINO đang dùng trong dịch vụ mới.
@@ -99,7 +108,7 @@ class CustomerFaceController extends Controller
             }
         });
 
-        return response()->json(['registered' => true, 'samples' => count($descriptors)]);
+        return response()->json(['registered' => true, 'samples' => count($descriptors), 'discarded_samples' => $discarded]);
     }
 
     /**
@@ -108,30 +117,32 @@ class CustomerFaceController extends Controller
      * cấu hình, người dùng không nhập được địa chỉ tùy ý nên không thể bắt máy chủ truy cập nơi khác.
      * Ảnh chỉ trả về trình duyệt để tính vector, không lưu trên máy chủ.
      */
-    public function cctvSnapshot()
+    public function cctvSnapshot(Request $request)
     {
         if ($disabled = $this->ensureEnabled()) {
             return $disabled;
         }
 
-        $url = trim((string) setting('face_cctv_snapshot_url', ''));
+        $cameraId = (string) $request->query('camera', DoorCameraAccess::DEFAULT_CAMERA_ID);
+        if (! preg_match('/^[a-z][a-z0-9_-]{1,63}$/', $cameraId)) {
+            return response()->json(['message' => 'Camera không hợp lệ.'], 422);
+        }
+        $camera = collect(DoorCameraAccess::cameras())->firstWhere('id', $cameraId);
+        if (! is_array($camera) || ! $camera['enabled']) {
+            return response()->json(['message' => 'Camera chưa được cấu hình hoặc đã tắt.'], 422);
+        }
+
+        $url = trim((string) $camera['snapshot_url']);
         if (preg_match('#^rtsps?://#i', $url)) {
-            return $this->cameraIntelligenceSnapshot();
+            return $this->cameraIntelligenceSnapshot($cameraId);
         }
         if ($url === '' || ! preg_match('#^https?://#i', $url)) {
             return response()->json(['message' => 'Chưa cấu hình địa chỉ ảnh chụp camera an ninh trong Thiết lập → Khách hàng.'], 422);
         }
 
-        $username = (string) setting('face_cctv_username', '');
-        $password = '';
-        if (filled($encrypted = setting('face_cctv_password'))) {
-            try {
-                $password = Crypt::decryptString($encrypted);
-            } catch (\Throwable) {
-                $password = '';
-            }
-        }
-        $auth = (string) setting('face_cctv_auth', 'none');
+        $username = $camera['username'];
+        $password = $camera['password'];
+        $auth = $camera['auth'];
 
         try {
             $request = Http::timeout(8)->withoutRedirecting()->accept('image/*');
@@ -163,12 +174,12 @@ class CustomerFaceController extends Controller
      * Ask the local worker for its latest decoded frame instead, so enrolment
      * and background recognition always use the same selected camera.
      */
-    private function cameraIntelligenceSnapshot()
+    private function cameraIntelligenceSnapshot(string $cameraId)
     {
         try {
             $response = Http::timeout(8)->accept('image/*')
                 ->withHeaders(['X-Camera-Key' => DoorCameraAccess::ensureKey()])
-                ->get(rtrim((string) config('camera_intelligence.service_url'), '/').'/snapshot', ['camera' => 'door-1']);
+                ->get(rtrim((string) config('camera_intelligence.service_url'), '/').'/snapshot', ['camera' => $cameraId]);
         } catch (\Throwable) {
             return response()->json(['message' => 'Không gọi được Camera Intelligence để lấy ảnh từ camera an ninh.'], 503);
         }

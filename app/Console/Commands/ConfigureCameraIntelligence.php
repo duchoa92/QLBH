@@ -23,7 +23,14 @@ class ConfigureCameraIntelligence extends Command
     {
         $path = base_path('camera-intelligence/config.yaml');
         $existing = is_file($path) ? (string) file_get_contents($path) : '';
-        $savedCamera = DoorCameraAccess::camera();
+        $camera = (string) $this->option('camera');
+        if (! preg_match('/^[a-z][a-z0-9_-]{1,63}$/', $camera)) {
+            $this->error('Camera id chỉ gồm chữ thường, số, gạch nối hoặc gạch dưới.');
+
+            return self::FAILURE;
+        }
+
+        $savedCamera = DoorCameraAccess::camera($camera);
         $savedRtsp = $this->cameraRtsp($savedCamera);
         $existingAi = $this->yamlValue($existing, 'ai_rtsp_url');
         $existingView = $this->yamlValue($existing, 'view_rtsp_url');
@@ -32,20 +39,37 @@ class ConfigureCameraIntelligence extends Command
         $aiRtsp = (string) ($this->option('ai-rtsp') ?: ($savedRtsp !== '' ? $savedRtsp : $existingAi));
         $viewRtsp = (string) ($this->option('view-rtsp') ?: ($savedCamera['view_rtsp_url'] !== '' ? $this->withCredentials($savedCamera['view_rtsp_url'], $savedCamera) : ($this->isExampleRtsp($existingView) ? $this->substreamUrl($aiRtsp) : $existingView)));
 
-        if (! str_starts_with($aiRtsp, 'rtsp://') && ! str_starts_with($aiRtsp, 'rtsps://')) {
-            $this->error('Thiếu --ai-rtsp hợp lệ. Ví dụ: --ai-rtsp "rtsp://user:pass@camera/main"');
+        $cameras = collect(DoorCameraAccess::configuredCameras())
+            ->mapWithKeys(fn (array $source): array => [$source['id'] => [
+                'id' => $source['id'],
+                'name' => $source['name'],
+                'ai_rtsp_url' => $this->cameraRtsp($source),
+                'view_rtsp_url' => $this->withCredentials($source['view_rtsp_url'], $source),
+            ]]);
 
-            return self::FAILURE;
+        // CLI options are retained for a headless/manual install. In normal
+        // operation Settings owns all camera records and this branch is unused.
+        if ($this->option('ai-rtsp') || $this->option('view-rtsp')) {
+            if (! str_starts_with($aiRtsp, 'rtsp://') && ! str_starts_with($aiRtsp, 'rtsps://')) {
+                $this->error('Thiếu --ai-rtsp hợp lệ. Ví dụ: --ai-rtsp "rtsp://user:pass@camera/main"');
+
+                return self::FAILURE;
+            }
+            if (! str_starts_with($viewRtsp, 'rtsp://') && ! str_starts_with($viewRtsp, 'rtsps://')) {
+                $this->error('Thiếu --view-rtsp H.264 hợp lệ. Ví dụ: --view-rtsp "rtsp://user:pass@camera/sub"');
+
+                return self::FAILURE;
+            }
+            $cameras[$camera] = [
+                'id' => $camera,
+                'name' => (string) $this->option('name'),
+                'ai_rtsp_url' => $aiRtsp,
+                'view_rtsp_url' => $viewRtsp,
+            ];
         }
-        if (! str_starts_with($viewRtsp, 'rtsp://') && ! str_starts_with($viewRtsp, 'rtsps://')) {
-            $this->error('Thiếu --view-rtsp H.264 hợp lệ. Ví dụ: --view-rtsp "rtsp://user:pass@camera/sub"');
 
-            return self::FAILURE;
-        }
-
-        $camera = (string) $this->option('camera');
-        if (! preg_match('/^[a-z][a-z0-9_-]{1,63}$/', $camera)) {
-            $this->error('Camera id chỉ gồm chữ thường, số, gạch nối hoặc gạch dưới.');
+        if ($cameras->isEmpty()) {
+            $this->error('Chưa có camera RTSP hoàn chỉnh. Vào Cài đặt → Khách hàng để thêm camera rồi lưu.');
 
             return self::FAILURE;
         }
@@ -73,15 +97,17 @@ class ConfigureCameraIntelligence extends Command
                 ."  recognition_cooldown_seconds: 4\n"
                 ."  match_threshold: 0.72\n"
                 ."  match_margin: 0.08\n\n"
-                ."cameras:\n"
-                ."  - id: ".$q($camera)."\n"
-                ."    name: ".$q((string) $this->option('name'))."\n"
-                ."    enabled: true\n"
-                ."    ai_rtsp_url: ".$q($aiRtsp)."\n"
-                ."    view_rtsp_url: ".$q($viewRtsp)."\n"
-                ."    width: 1280\n"
-                ."    height: 720\n"
-                ."    zone: entrance\n";
+                ."cameras:\n";
+            foreach ($cameras->values() as $source) {
+                $yaml .= "  - id: ".$q($source['id'])."\n"
+                    ."    name: ".$q($source['name'])."\n"
+                    ."    enabled: true\n"
+                    ."    ai_rtsp_url: ".$q($source['ai_rtsp_url'])."\n"
+                    ."    view_rtsp_url: ".$q($source['view_rtsp_url'])."\n"
+                    ."    width: 1280\n"
+                    ."    height: 720\n"
+                    ."    zone: entrance\n";
+            }
         } catch (\JsonException $exception) {
             throw new RuntimeException('Không thể tạo config an toàn: '.$exception->getMessage(), previous: $exception);
         }
@@ -90,7 +116,7 @@ class ConfigureCameraIntelligence extends Command
             mkdir(dirname($path), 0755, true);
         }
         file_put_contents($path, $yaml, LOCK_EX);
-        $this->info('Đã cập nhật camera-intelligence/config.yaml. RTSP và khóa không được in ra màn hình.');
+        $this->info('Đã cập nhật camera-intelligence/config.yaml cho '.$cameras->count().' camera. RTSP và khóa không được in ra màn hình.');
         $this->line('Chạy deploy/camera-platform/install-windows.ps1 trên Windows, hoặc docker compose up -d --build trên Ubuntu.');
 
         return self::SUCCESS;

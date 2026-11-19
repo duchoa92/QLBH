@@ -72,6 +72,15 @@ onBeforeUnmount(() => {
 const hasDoor = computed(() => !!props.doorCamera.enabled)
 const readFlag = (key, fallback) => { try { const value = localStorage.getItem(key); return value === null ? fallback : value } catch { return fallback } }
 const writeFlag = (key, value) => { try { localStorage.setItem(key, value) } catch { /* bỏ qua */ } }
+const doorCameras = computed(() => props.doorCamera.configured_cameras || [])
+const selectedDoorCamera = ref(readFlag('visits.doorCamera', doorCameras.value[0]?.id || 'door-1'))
+watch(doorCameras, cameras => {
+    if (!cameras.some(camera => camera.id === selectedDoorCamera.value)) {
+        selectedDoorCamera.value = cameras.find(camera => camera.receiving)?.id || cameras[0]?.id || 'door-1'
+    }
+}, { deep: true, immediate: true })
+const selectedDoorCameraInfo = computed(() => doorCameras.value.find(camera => camera.id === selectedDoorCamera.value) || null)
+const setDoorCamera = value => { selectedDoorCamera.value = value; writeFlag('visits.doorCamera', value) }
 const cameraSource = ref(hasDoor.value && readFlag('visits.cameraSource', 'door') !== 'local' ? 'door' : 'local')
 const localOn = ref(readFlag('visits.localCameraOn', '0') === '1')
 const showDoor = computed(() => hasDoor.value && cameraSource.value === 'door')
@@ -97,13 +106,14 @@ const {
 
 const doorVideo = useCameraIntelligenceWebrtc(
     computed(() => showDoor.value && faceFeatureOn.value),
-    { sourceKey: computed(() => props.doorCamera.source_hash || '') },
+    { camera: selectedDoorCamera, sourceKey: computed(() => `${props.doorCamera.source_hash || ''}:${selectedDoorCamera.value}`) },
 )
 const doorFaces = computed(() => (doorVideo.ok.value ? doorVideo.faces.value : []))
 const doorStatus = computed(() => {
     if (!props.doorCamera.online) {
         return doorVideo.ok.value ? 'Video đang chạy · Camera Intelligence mất kết nối' : 'Camera Intelligence chưa kết nối'
     }
+    if (selectedDoorCameraInfo.value && !selectedDoorCameraInfo.value.receiving) return `${selectedDoorCameraInfo.value.name}: ${selectedDoorCameraInfo.value.message || 'chưa nhận được khung hình'}`
     if (!props.doorCamera.camera_ok) return 'Camera Intelligence không lấy được ảnh camera'
     if (!doorFaces.value.length) return 'Đang dò khuôn mặt…'
     const scanning = doorFaces.value.filter(face => face.kind === 'scanning').length
@@ -368,6 +378,15 @@ const remove = (visit) => {
                 <div class="flex min-w-0 items-center gap-2">
                     <ScanFace class="h-4 w-4 shrink-0 text-blue-600" />
                     <h3 class="truncate text-sm font-bold text-slate-800">Camera ra vào</h3>
+                    <select
+                        v-if="showDoor && doorCameras.length > 1"
+                        :value="selectedDoorCamera"
+                        class="max-w-40 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-blue-400"
+                        aria-label="Chọn camera cửa"
+                        @change="setDoorCamera($event.target.value)"
+                    >
+                        <option v-for="camera in doorCameras" :key="camera.id" :value="camera.id">{{ camera.receiving ? '● ' : '○ ' }}{{ camera.name }}</option>
+                    </select>
                     <span v-if="faceFeatureOn && showDoor" class="truncate text-xs text-slate-500">{{ doorStatus }}</span>
                     <span v-else-if="faceFeatureOn && cameraActive" class="truncate text-xs text-slate-500">{{ cameraStatus }}</span>
                 </div>
