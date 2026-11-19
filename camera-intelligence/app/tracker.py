@@ -37,6 +37,9 @@ class Track:
     # make the visible box explain exactly where a face is in that flow.
     matching: bool = False
     match_checked: bool = False
+    # A face can be detected without being suitable for identity. Keep the
+    # latest reason so the live overlay never implies a side profile was used.
+    quality_note: str | None = None
     samples: list[tuple[float, list[float], str | None]] = field(default_factory=list)
 
 

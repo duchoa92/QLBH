@@ -73,6 +73,8 @@ def overlay_face(track: Track, frame: np.ndarray) -> dict[str, float | str] | No
         kind, label = 'scanning', 'Đã thấy khuôn mặt · đang đối chiếu…'
     elif track.match_checked:
         kind, label = 'unknown', 'Đã thấy khuôn mặt · chưa đăng ký'
+    elif track.quality_note:
+        kind, label = 'scanning', track.quality_note
     elif len(track.samples) < RECOGNITION_SAMPLE_COUNT:
         kind, label = 'scanning', f'Đã thấy khuôn mặt · lấy mẫu {len(track.samples)}/{RECOGNITION_SAMPLE_COUNT}'
     else:
@@ -194,6 +196,7 @@ class CameraWorker(threading.Thread):
             identity = matched_identity or track.identity
             self.publisher.post('/camera-intelligence/visits', {
                 'customer_id': identity.get('id') if identity else None,
+                'camera_id': self.camera.id,
                 'engine': 'sface-v1',
                 # Retain the sharpest normalized vector for an unknown-visit
                 # grouping. The other probes were only for robust matching.
@@ -244,7 +247,7 @@ class CameraWorker(threading.Thread):
         # in WebRTC while the worker was inspecting a different frame.  The
         # configured main stream remains available as a fallback for old/manual
         # configs that do not provide a view stream.
-        analysis_url = self.camera.view_rtsp_url or self.camera.ai_rtsp_url
+        analysis_url = self.camera.analysis_rtsp_url or self.camera.view_rtsp_url or self.camera.ai_rtsp_url
         reader = RtspFrames(analysis_url, self.camera.width, self.camera.height)
         self.state.running = True
         try:
@@ -263,7 +266,8 @@ class CameraWorker(threading.Thread):
                 for track in tracks:
                     if track.box and not track.matching and started - track.last_recognized_at >= self.config.inference.recognition_cooldown_seconds:
                         result = engine.recognize(frame, track.box)
-                        if result and result.quality >= 0.55:
+                        if result and result.identity_ready:
+                            track.quality_note = None
                             # Keep crops from exact accepted frames. Three
                             # samples take only a few live frames, but prevent
                             # a moving/blinking face from deciding identity.
@@ -280,6 +284,8 @@ class CameraWorker(threading.Thread):
                                     name=f'camera-match-{track.id[:8]}',
                                     daemon=True,
                                 ).start()
+                        elif result:
+                            track.quality_note = 'Đã thấy khuôn mặt · chờ mặt chính diện, đủ nét'
 
                     face = overlay_face(track, frame)
                     if face:

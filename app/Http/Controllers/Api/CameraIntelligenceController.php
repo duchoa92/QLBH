@@ -182,6 +182,10 @@ class CameraIntelligenceController extends Controller
             // offer. It changes only when an RTSP source is added/changed,
             // never when heartbeat counters or frame counts advance.
             'source_hash' => substr(hash('sha256', $sourceSignature), 0, 16),
+            // WHEP signalling is intentionally direct so a blocked/slow media
+            // negotiation can never occupy Laravel/PHP workers that receive
+            // the independent AI heartbeat and recognition events.
+            'webrtc_url' => (string) config('camera_intelligence.mediamtx_browser_webrtc_url'),
         ];
     }
 

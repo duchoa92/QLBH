@@ -68,13 +68,30 @@ class ConfigureCameraIntelligence extends Command
             ];
         }
 
+        // A background service must not be taken offline merely because an
+        // operator has not completed the newer Settings form yet. Retain a
+        // previously generated, valid local config as a safe migration
+        // fallback; Settings becomes canonical again as soon as it contains a
+        // complete camera record.
+        if ($cameras->isEmpty()
+            && (str_starts_with($existingAi, 'rtsp://') || str_starts_with($existingAi, 'rtsps://'))
+            && (str_starts_with($existingView, 'rtsp://') || str_starts_with($existingView, 'rtsps://'))) {
+            $cameras[$camera] = [
+                'id' => $camera,
+                'name' => (string) $this->option('name'),
+                'ai_rtsp_url' => $existingAi,
+                'view_rtsp_url' => $existingView,
+            ];
+            $this->warn('Chưa có camera hoàn chỉnh trong Cài đặt; đang giữ cấu hình RTSP cũ hợp lệ để dịch vụ không bị gián đoạn.');
+        }
+
         if ($cameras->isEmpty()) {
             $this->error('Chưa có camera RTSP hoàn chỉnh. Vào Cài đặt → Khách hàng để thêm camera rồi lưu.');
 
             return self::FAILURE;
         }
 
-        $q = static fn (string $value): string => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $q = static fn (mixed $value): string => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         try {
             $yaml = "server:\n"
                 ."  host: 127.0.0.1\n"
@@ -82,6 +99,7 @@ class ConfigureCameraIntelligence extends Command
                 ."  event_url: ".$q($this->apiUrl())."\n"
                 ."  camera_key: ".$q(DoorCameraAccess::ensureKey())."\n"
                 ."  event_timeout_seconds: 4\n\n"
+                ."  webrtc_additional_hosts: ".$q($this->webrtcHosts())."\n\n"
                 ."inference:\n"
                 ."  device: AUTO\n"
                 ."  detector_model: models/face_detection_yunet_2023mar.onnx\n"
@@ -104,6 +122,7 @@ class ConfigureCameraIntelligence extends Command
                     ."    enabled: true\n"
                     ."    ai_rtsp_url: ".$q($source['ai_rtsp_url'])."\n"
                     ."    view_rtsp_url: ".$q($source['view_rtsp_url'])."\n"
+                    ."    analysis_rtsp_url: ".$q('rtsp://127.0.0.1:8554/'.$source['id'].'-view')."\n"
                     ."    width: 1280\n"
                     ."    height: 720\n"
                     ."    zone: entrance\n";
@@ -180,9 +199,29 @@ class ConfigureCameraIntelligence extends Command
             return $provided;
         }
 
+        // The native Windows worker runs on the same Laragon machine. Calling
+        // the loopback HTTP vhost avoids a self-signed LAN HTTPS certificate
+        // that Python correctly refuses to trust. Docker/Linux deployments can
+        // retain APP_URL or pass --api-url explicitly for their private API.
+        if (PHP_OS_FAMILY === 'Windows') {
+            return 'http://127.0.0.1/api';
+        }
+
         // Resolve the route from APP_URL. Laragon commonly serves this project
         // from a subdirectory (for example /qlbh/public), which loopback /api
         // alone would miss and therefore return 404 to the background worker.
         return rtrim(url('/api'), '/');
+    }
+
+    /** @return array<int, string> */
+    private function webrtcHosts(): array
+    {
+        $host = parse_url((string) config('app.url'), PHP_URL_HOST);
+        $hosts = ['127.0.0.1'];
+        if (is_string($host) && $host !== '' && strtolower($host) !== 'localhost') {
+            $hosts[] = $host;
+        }
+
+        return array_values(array_unique($hosts));
     }
 }

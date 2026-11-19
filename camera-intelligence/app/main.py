@@ -149,8 +149,8 @@ def create_app(config_path: str) -> FastAPI:
                 if len(boxes) != 1:
                     raise ValueError("exactly one clear face is required")
                 result = engine.recognize(frame, boxes[0])
-                if result is None or result.quality < 0.55:
-                    raise ValueError("face is not clear enough")
+                if result is None or not result.identity_ready:
+                    raise ValueError("cần một khuôn mặt chính diện, đủ lớn và đủ nét")
                 descriptors.append(result.descriptor)
             # Bad uploads must be a client validation error; never let malformed
             # image bytes turn the internal enrolment endpoint into a 500.

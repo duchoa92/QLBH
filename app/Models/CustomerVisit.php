@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CustomerVisit extends Model
 {
     protected $fillable = [
-        'customer_id', 'recognized', 'descriptor', 'descriptor_engine', 'thumb', 'user_id', 'first_seen_at', 'last_seen_at', 'served_at', 'served_by',
+        'customer_id', 'recognized', 'descriptor', 'descriptor_engine', 'thumb', 'user_id', 'camera_id', 'first_seen_at', 'last_seen_at', 'served_at', 'served_by',
     ];
 
     protected function casts(): array

@@ -4,6 +4,8 @@ server:
   event_url: http://127.0.0.1/api
   camera_key: CHANGE_ME_WITH_THE_KEY_FROM_QLBH
   event_timeout_seconds: 4
+  # Add the LAN address/DNS that browsers use to reach this machine.
+  webrtc_additional_hosts: [127.0.0.1, 192.168.1.10]
 
 inference:
   device: AUTO # AUTO, CPU, GPU (Intel), or a configured OpenVINO device
@@ -22,9 +24,10 @@ cameras:
     # Luong chinh cua camera, giu de du phong/cau phat. AI phan tich view_rtsp_url de
     # nhan dien dung khung hinh dang hien tren WebRTC.
     ai_rtsp_url: rtsp://user:password@192.168.1.50:554/cam/realmonitor?channel=1&subtype=0
-    # H.264 direct sub-stream for both Camera Intelligence and browser WebRTC.
-    # Do not use a server-side H.265-to-H.264 transcode here.
+    # H.264 sub-stream collected once by MediaMTX for browser WebRTC.
     view_rtsp_url: rtsp://user:password@192.168.1.50:554/cam/realmonitor?channel=1&subtype=1
+    # AI reads MediaMTX's local restream, not the physical camera directly.
+    analysis_rtsp_url: rtsp://127.0.0.1:8554/door-1-view
     width: 1280
     height: 720
     zone: entrance

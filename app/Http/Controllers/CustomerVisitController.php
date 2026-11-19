@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CameraIntelligenceController;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
 use App\Models\CustomerVisit;
+use App\Support\DoorCameraAccess;
 use App\Support\FaceMatcher;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -48,6 +49,8 @@ class CustomerVisitController extends Controller
         $perPage = in_array((int) $request->query('per_page'), [10, 20, 50, 100], true) ? (int) $request->query('per_page') : 20;
 
         $base = CustomerVisit::query()->whereBetween('first_seen_at', [$from, $to]);
+        $cameraNames = collect(DoorCameraAccess::publicCameras())
+            ->mapWithKeys(fn (array $camera): array => [$camera['id'] => $camera['name']]);
 
         $summary = (clone $base)->selectRaw(
             'COUNT(*) as total,
@@ -79,7 +82,7 @@ class CustomerVisitController extends Controller
         // thống kê chỉ hiển thị một block. Khách chưa gán tên vẫn giữ từng block riêng
         // vì chưa thể khẳng định hai khuôn mặt là cùng người sau khi dữ liệu đã hết hạn.
         $visits = (clone $base)
-            ->selectRaw('MIN(id) as id, customer_id, MAX(recognized) as recognized, MAX(thumb) as thumb, MIN(first_seen_at) as first_seen_at, MAX(last_seen_at) as last_seen_at, COUNT(*) as visit_count, MAX(CASE WHEN descriptor IS NOT NULL THEN 1 ELSE 0 END) as has_face')
+            ->selectRaw('MIN(id) as id, customer_id, MAX(recognized) as recognized, MAX(thumb) as thumb, MIN(first_seen_at) as first_seen_at, MAX(last_seen_at) as last_seen_at, COUNT(*) as visit_count, MAX(CASE WHEN descriptor IS NOT NULL THEN 1 ELSE 0 END) as has_face, GROUP_CONCAT(DISTINCT camera_id) as camera_ids')
             ->with('customer:id,code,full_name,phone')
             ->when($status === 'known', fn ($q) => $q->where('recognized', true))
             ->when($status === 'unknown', fn ($q) => $q->where('recognized', false)->whereNull('customer_id'))
@@ -88,7 +91,10 @@ class CustomerVisitController extends Controller
             ->orderByDesc('last_seen_at')
             ->paginate($perPage)
             ->withQueryString()
-            ->through(fn (CustomerVisit $visit) => [
+            ->through(function (CustomerVisit $visit) use ($cameraNames): array {
+                $cameraIds = array_values(array_filter(array_unique(explode(',', (string) $visit->camera_ids))));
+
+                return [
                 'id' => $visit->id,
                 'recognized' => $visit->recognized,
                 'thumb' => $visit->thumb,
@@ -98,13 +104,15 @@ class CustomerVisitController extends Controller
                 'minutes' => max(0, (int) round($visit->first_seen_at->diffInSeconds($visit->last_seen_at) / 60)),
                 'visit_count' => (int) $visit->visit_count,
                 'present' => $visit->last_seen_at?->gte(now()->subSeconds((int) config('door_camera.present_seconds', 20))) ?? false,
+                'cameras' => array_map(fn (string $id): array => ['id' => $id, 'name' => $cameraNames->get($id, 'Camera '.$id)], $cameraIds),
                 'customer' => $visit->customer ? [
                     'id' => $visit->customer->id,
                     'code' => $visit->customer->code,
                     'full_name' => $visit->customer->full_name,
                     'phone' => $visit->customer->phone,
                 ] : null,
-            ]);
+            ];
+            });
 
         return Inertia::render('CustomerVisits/Index', [
             'filters' => [
@@ -197,6 +205,7 @@ class CustomerVisitController extends Controller
                 'first_seen_at' => $row->first_seen_at?->toIso8601String(),
                 'last_seen_at' => $row->last_seen_at?->toIso8601String(),
                 'minutes' => $minutesOf($row),
+                'camera' => $row->camera_id ? ['id' => $row->camera_id, 'name' => DoorCameraAccess::publicCameras() === [] ? $row->camera_id : collect(DoorCameraAccess::publicCameras())->firstWhere('id', $row->camera_id)['name'] ?? 'Camera '.$row->camera_id] : null,
             ])->values(),
             'truncated' => $total > $rows->count(),
         ]);
@@ -266,6 +275,7 @@ class CustomerVisitController extends Controller
 
         $data = $request->validate([
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'camera_id' => ['nullable', 'string', 'regex:/^[a-z][a-z0-9_-]{1,63}$/'],
             'engine' => ['nullable', 'in:human-v1,sface-v1,arcface-v1'],
             'descriptor' => ['nullable', 'array', 'min:'.FaceMatcher::MIN_SIZE, 'max:'.FaceMatcher::MAX_SIZE],
             'descriptor.*' => ['required', 'numeric', 'between:-'.FaceMatcher::VALUE_LIMIT.','.FaceMatcher::VALUE_LIMIT],
@@ -285,6 +295,9 @@ class CustomerVisitController extends Controller
 
             if ($visit) {
                 $changes = ['last_seen_at' => $now];
+                if (! empty($data['camera_id'])) {
+                    $changes['camera_id'] = $data['camera_id'];
+                }
                 // Older AI events had no thumbnail. Fill it on the first
                 // subsequent clear sighting instead of leaving the card as a
                 // generic silhouette forever.
@@ -301,6 +314,7 @@ class CustomerVisitController extends Controller
                 'recognized' => true,
                 'thumb' => $data['thumb'] ?? null,
                 'user_id' => $request->user()?->id,
+                'camera_id' => $data['camera_id'] ?? null,
                 'first_seen_at' => $now,
                 'last_seen_at' => $now,
             ]);
@@ -329,6 +343,9 @@ class CustomerVisitController extends Controller
 
         if ($existing) {
             $changes = ['last_seen_at' => $now];
+            if (! empty($data['camera_id'])) {
+                $changes['camera_id'] = $data['camera_id'];
+            }
             if ($existing->thumb === null && ! empty($data['thumb'])) {
                 $changes['thumb'] = $data['thumb'];
             }
@@ -344,6 +361,7 @@ class CustomerVisitController extends Controller
             'descriptor_engine' => $engine,
             'thumb' => $data['thumb'] ?? null,
             'user_id' => $request->user()?->id,
+            'camera_id' => $data['camera_id'] ?? null,
             'first_seen_at' => $now,
             'last_seen_at' => $now,
         ]);

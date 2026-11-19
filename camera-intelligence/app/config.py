@@ -13,6 +13,10 @@ class ServerConfig(BaseModel):
     event_url: HttpUrl
     camera_key: str = Field(min_length=24)
     event_timeout_seconds: float = Field(default=4, ge=1, le=15)
+    # Addresses advertised in WebRTC ICE candidates. Explicit values are
+    # required on some Windows/Laragon/VPN combinations where interface
+    # discovery advertises an unreachable virtual adapter instead of the LAN.
+    webrtc_additional_hosts: list[str] = Field(default_factory=list)
 
 
 class InferenceConfig(BaseModel):
@@ -32,6 +36,10 @@ class CameraConfig(BaseModel):
     enabled: bool = True
     ai_rtsp_url: str = Field(pattern=r"^rtsps?://")
     view_rtsp_url: str = Field(pattern=r"^rtsps?://")
+    # MediaMTX is the sole RTSP client of the physical camera. The worker
+    # consumes this local restream so video and recognition stay in lockstep
+    # and cameras with a one-client RTSP limit do not go black in WebRTC.
+    analysis_rtsp_url: str | None = Field(default=None, pattern=r"^rtsps?://")
     width: int = Field(default=1280, ge=160, le=7680)
     height: int = Field(default=720, ge=120, le=4320)
     zone: str = Field(default="default", max_length=80)

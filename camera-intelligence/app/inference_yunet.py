@@ -22,6 +22,42 @@ SFACE_TEMPLATE = np.asarray(
 class Recognition:
     descriptor: list[float]
     quality: float
+    identity_ready: bool
+    pose_quality: float
+    sharpness: float
+
+
+def identity_quality(frame: np.ndarray, box: Box) -> tuple[float, float, bool]:
+    """Score only the evidence needed to identify a person, not just detect one.
+
+    YuNet can correctly locate a profile, a face partly hidden by a cap or a
+    blurred moving person. Such a detection is useful for a live box, but it
+    must never create an embedding or become the visit-card photo.
+    """
+    if len(box.landmarks) != 5:
+        return 0.0, 0.0, False
+    right_eye, left_eye, nose, right_mouth, left_mouth = (np.asarray(point, dtype=np.float32) for point in box.landmarks)
+    eye_mid, mouth_mid = (right_eye + left_eye) / 2, (right_mouth + left_mouth) / 2
+    eye_distance = float(np.linalg.norm(right_eye - left_eye))
+    vertical_span = float(np.linalg.norm(mouth_mid - eye_mid))
+    if eye_distance < 1 or vertical_span < 1:
+        return 0.0, 0.0, False
+    # Nose close to the midpoint between eyes + level eyes is a robust,
+    # inexpensive frontal-face guard for a fixed CCTV camera.
+    yaw_offset = abs(float(nose[0] - eye_mid[0])) / (eye_distance * 0.5)
+    roll = abs(float(right_eye[1] - left_eye[1])) / eye_distance
+    vertical_offset = abs(float((nose[1] - eye_mid[1]) / vertical_span) - 0.50)
+    pose = float(np.clip(1.0 - 0.85 * yaw_offset - 0.65 * roll - 0.75 * vertical_offset, 0.0, 1.0))
+
+    padding = int(max(box.width, box.height) * 0.12)
+    left, top = max(0, int(box.x) - padding), max(0, int(box.y) - padding)
+    right, bottom = min(frame.shape[1], int(box.x + box.width) + padding), min(frame.shape[0], int(box.y + box.height) + padding)
+    crop = frame[top:bottom, left:right]
+    if crop.size == 0:
+        return pose, 0.0, False
+    sharpness = float(np.clip(cv2.Laplacian(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var() / 90.0, 0.0, 1.0))
+    sufficiently_large = min(box.width, box.height) >= 80
+    return pose, sharpness, sufficiently_large and pose >= 0.72 and sharpness >= 0.35
 
 
 def nchw(image: np.ndarray, *, swap_rb: bool = False) -> np.ndarray:
@@ -148,5 +184,10 @@ class YuNetSFaceEngine:
         norm = np.linalg.norm(raw)
         if norm <= 1e-8:
             return None
-        quality = min(1.0, box.score * min(box.width, box.height) / max(1, self.min_face_px * 2))
-        return Recognition(descriptor=(raw / norm).tolist(), quality=float(quality))
+        pose, sharpness, identity_ready = identity_quality(frame, box)
+        size_quality = min(1.0, min(box.width, box.height) / 140.0)
+        quality = box.score * size_quality * pose * (0.5 + 0.5 * sharpness)
+        return Recognition(
+            descriptor=(raw / norm).tolist(), quality=float(quality), identity_ready=identity_ready,
+            pose_quality=pose, sharpness=sharpness,
+        )

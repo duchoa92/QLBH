@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import threading
 from collections.abc import Iterator
+from time import monotonic
 
 import numpy as np
 
@@ -21,6 +22,7 @@ class RtspFrames:
         self.process: subprocess.Popen[bytes] | None = None
         self._latest: np.ndarray | None = None
         self._sequence = 0
+        self._last_frame_at = 0.0
         self._stopping = threading.Event()
         self._frame_ready = threading.Condition()
         self._reader: threading.Thread | None = None
@@ -37,6 +39,7 @@ class RtspFrames:
         with self._frame_ready:
             self._latest = None
             self._sequence = 0
+            self._last_frame_at = monotonic()
         self._reader = threading.Thread(target=self._read_frames, name='rtsp-frame-reader', daemon=True)
         self._reader.start()
 
@@ -77,6 +80,7 @@ class RtspFrames:
             with self._frame_ready:
                 self._latest = frame
                 self._sequence += 1
+                self._last_frame_at = monotonic()
                 self._frame_ready.notify_all()
 
         with self._frame_ready:
@@ -95,9 +99,13 @@ class RtspFrames:
                     timeout=3,
                 )
                 if self._sequence == sequence or self._latest is None:
-                    # FFmpeg ended or has not decoded yet.  Restart on the
-                    # next pass rather than yielding a stale frame.
-                    if self.process is None or self.process.poll() is not None:
+                    # An RTSP TCP connection can remain open after a camera
+                    # or MediaMTX restart while never returning another RTP
+                    # packet. Treat eight seconds without a complete frame
+                    # as a dead reader, then reopen it. This keeps AI alive
+                    # without requiring the operator to restart Python.
+                    stalled = monotonic() - self._last_frame_at >= 8
+                    if self.process is None or self.process.poll() is not None or stalled:
                         self.stop()
                     continue
                 sequence = self._sequence

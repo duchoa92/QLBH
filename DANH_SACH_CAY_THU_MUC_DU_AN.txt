@@ -1,0 +1,1183 @@
+DANH SACH CAY THU MUC - DU AN QLBH
+Tao luc: 2026-11-19 21:11:09 +07:00
+Day la cay ma nguon, cau hinh, tai lieu va tai nguyen duoc theo doi trong du an.
+Khong liet ke noi dung sinh ra/co the tai lai: .git, %SystemDrive% (thu muc cache he thong ngoai pham vi ma nguon), node_modules, vendor, camera-intelligence/.venv, deploy/camera-platform/runtime, storage/framework, storage/logs, public/build.
+
+.
+|-- app\
+|   |-- Console\
+|   |   +-- Commands\
+|   |       |-- AuditStockBatches.php
+|   |       |-- ConfigureCameraIntelligence.php
+|   |       |-- PruneExportFiles.php
+|   |       |-- PruneWorkShiftHistory.php
+|   |       |-- RunScheduledBackup.php
+|   |       |-- SendDebtReminders.php
+|   |       |-- SendScheduledReminders.php
+|   |       +-- SyncImeiStock.php
+|   |-- Exports\
+|   |   |-- ImportErrorExport.php
+|   |   |-- ProductImportGuideSheet.php
+|   |   |-- ProductReferenceSheet.php
+|   |   |-- ProductsDataExport.php
+|   |   |-- ProductsTemplateExport.php
+|   |   |-- ProductsTemplateSheet.php
+|   |   |-- TaxDeclarationExport.php
+|   |   +-- TaxDeclarationSheet.php
+|   |-- Http\
+|   |   |-- Controllers\
+|   |   |   |-- Api\
+|   |   |   |   |-- AdministrativeUnitController.php
+|   |   |   |   |-- CameraIntelligenceController.php
+|   |   |   |   |-- CategoryController.php
+|   |   |   |   |-- CustomerController.php
+|   |   |   |   |-- CustomerFaceController.php
+|   |   |   |   |-- GlobalSearchController.php
+|   |   |   |   |-- PosScanController.php
+|   |   |   |   |-- ProductApiController.php
+|   |   |   |   |-- ProductController.php
+|   |   |   |   |-- ReferenceDataController.php
+|   |   |   |   +-- SaleController.php
+|   |   |   |-- Auth\
+|   |   |   |   |-- AuthenticatedSessionController.php
+|   |   |   |   |-- ConfirmablePasswordController.php
+|   |   |   |   |-- EmailVerificationNotificationController.php
+|   |   |   |   |-- EmailVerificationPromptController.php
+|   |   |   |   |-- NewPasswordController.php
+|   |   |   |   |-- PasswordController.php
+|   |   |   |   |-- PasswordResetLinkController.php
+|   |   |   |   +-- VerifyEmailController.php
+|   |   |   |-- Setup\
+|   |   |   |   +-- InstallerController.php
+|   |   |   |-- BackupCloudOAuthController.php
+|   |   |   |-- BackupController.php
+|   |   |   |-- BankTransferWebhookController.php
+|   |   |   |-- BrandController.php
+|   |   |   |-- CategoryAttributeController.php
+|   |   |   |-- CategoryAttributeValueController.php
+|   |   |   |-- CategoryController.php
+|   |   |   |-- Controller.php
+|   |   |   |-- CustomerController.php
+|   |   |   |-- CustomerVisitController.php
+|   |   |   |-- DashboardController.php
+|   |   |   |-- DebtPaymentController.php
+|   |   |   |-- DoorCameraSettingsController.php
+|   |   |   |-- ExpenseController.php
+|   |   |   |-- NotificationController.php
+|   |   |   |-- PosController.php
+|   |   |   |-- ProductController.php
+|   |   |   |-- ProductImageController.php
+|   |   |   |-- ProductImeiController.php
+|   |   |   |-- ProfileController.php
+|   |   |   |-- RecordDetailController.php
+|   |   |   |-- RepairController.php
+|   |   |   |-- ReportController.php
+|   |   |   |-- RoleManagementController.php
+|   |   |   |-- SaleController.php
+|   |   |   |-- SaleReceiptController.php
+|   |   |   |-- SettingController.php
+|   |   |   |-- StockImportController.php
+|   |   |   |-- SupplierController.php
+|   |   |   |-- SystemCleanupController.php
+|   |   |   |-- TaxDeclarationController.php
+|   |   |   |-- UnitController.php
+|   |   |   |-- UserController.php
+|   |   |   +-- WorkShiftController.php
+|   |   |-- Middleware\
+|   |   |   |-- DoorCameraKey.php
+|   |   |   |-- EnsureInstalled.php
+|   |   |   +-- HandleInertiaRequests.php
+|   |   +-- Requests\
+|   |       |-- Auth\
+|   |       |   +-- LoginRequest.php
+|   |       |-- Brand\
+|   |       |   |-- StoreBrandRequest.php
+|   |       |   +-- UpdateBrandRequest.php
+|   |       |-- Category\
+|   |       |   |-- StoreCategoryRequest.php
+|   |       |   +-- UpdateCategoryRequest.php
+|   |       |-- Product\
+|   |       |   |-- StoreProductRequest.php
+|   |       |   +-- UpdateProductRequest.php
+|   |       |-- User\
+|   |       |   |-- StoreUserRequest.php
+|   |       |   +-- UpdateUserRequest.php
+|   |       |-- ProfileUpdateRequest.php
+|   |       +-- RepairRequest.php
+|   |-- Jobs\
+|   |   +-- ExportProductsJob.php
+|   |-- Models\
+|   |   |-- BackupCloudConnection.php
+|   |   |-- BankPaymentIntent.php
+|   |   |-- BankPaymentTransaction.php
+|   |   |-- Brand.php
+|   |   |-- Category.php
+|   |   |-- CategoryAttribute.php
+|   |   |-- CategoryAttributeValue.php
+|   |   |-- Customer.php
+|   |   |-- CustomerDebt.php
+|   |   |-- CustomerDevice.php
+|   |   |-- CustomerFaceProfile.php
+|   |   |-- CustomerImage.php
+|   |   |-- CustomerLog.php
+|   |   |-- CustomerPoint.php
+|   |   |-- CustomerVisit.php
+|   |   |-- Expense.php
+|   |   |-- ExportHistory.php
+|   |   |-- Product.php
+|   |   |-- ProductImei.php
+|   |   |-- ProductImeiHistory.php
+|   |   |-- ProductStockBatch.php
+|   |   |-- ProductVariant.php
+|   |   |-- RecurringExpense.php
+|   |   |-- RecurringExpensePayment.php
+|   |   |-- Repair.php
+|   |   |-- RepairImage.php
+|   |   |-- RepairPart.php
+|   |   |-- RepairTimeline.php
+|   |   |-- Sale.php
+|   |   |-- SaleItem.php
+|   |   |-- SaleItemGift.php
+|   |   |-- SaleItemStockBatch.php
+|   |   |-- Setting.php
+|   |   |-- StockImport.php
+|   |   |-- StockImportItem.php
+|   |   |-- Supplier.php
+|   |   |-- SupplierDebt.php
+|   |   |-- Unit.php
+|   |   |-- User.php
+|   |   +-- WorkShift.php
+|   |-- Notifications\
+|   |   +-- SystemNotification.php
+|   |-- Providers\
+|   |   +-- AppServiceProvider.php
+|   |-- Repositories\
+|   |   |-- Base\
+|   |   |   +-- BaseRepository.php
+|   |   |-- Brand\
+|   |   |   +-- BrandRepository.php
+|   |   |-- Product\
+|   |   |   +-- ProductRepository.php
+|   |   +-- User\
+|   |       +-- UserRepository.php
+|   |-- Services\
+|   |   |-- Base\
+|   |   |   +-- BaseService.php
+|   |   |-- Brand\
+|   |   |   +-- BrandService.php
+|   |   |-- Lookup\
+|   |   |   +-- EntityLookupService.php
+|   |   |-- Product\
+|   |   |   +-- ProductService.php
+|   |   |-- Stock\
+|   |   |   |-- ImeiStockSynchronizer.php
+|   |   |   |-- OpeningStockBatchService.php
+|   |   |   |-- StockBatchAllocator.php
+|   |   |   +-- StockImportService.php
+|   |   |-- User\
+|   |   |   +-- UserService.php
+|   |   |-- BackupOperationProgress.php
+|   |   |-- BackupRestoreService.php
+|   |   |-- BackupService.php
+|   |   |-- CloudBackupStorage.php
+|   |   |-- CustomerImageService.php
+|   |   |-- CustomerPointService.php
+|   |   |-- CustomerService.php
+|   |   |-- PosCheckoutService.php
+|   |   |-- ProductImportException.php
+|   |   |-- ProductImportImageStore.php
+|   |   |-- ProductImportService.php
+|   |   +-- SystemCleanupService.php
+|   |-- Support\
+|   |   |-- DefaultPurchaseContract.php
+|   |   |-- DoorCameraAccess.php
+|   |   |-- FaceMatcher.php
+|   |   |-- FaceTuning.php
+|   |   |-- FuzzyMatcher.php
+|   |   |-- LabelTemplate.php
+|   |   |-- NotificationRecipients.php
+|   |   |-- PosTotals.php
+|   |   |-- PosVatCalculator.php
+|   |   |-- ProductImportColumns.php
+|   |   |-- ProductImportOptions.php
+|   |   |-- ProductSheetStyle.php
+|   |   |-- SafeSpreadsheetValues.php
+|   |   |-- Searchable.php
+|   |   +-- WarrantyDuration.php
+|   |-- Traits\
+|   |   +-- PreventDeleteIfHasRelations.php
+|   +-- helpers.php
+|-- bootstrap\
+|   |-- cache\
+|   |   |-- .gitignore
+|   |   |-- packages.php
+|   |   +-- services.php
+|   |-- app.php
+|   +-- providers.php
+|-- camera-intelligence\
+|   |-- app\
+|   |   |-- __pycache__\
+|   |   |   |-- __init__.cpython-310.pyc
+|   |   |   |-- config.cpython-310.pyc
+|   |   |   |-- events.cpython-310.pyc
+|   |   |   |-- inference_yunet.cpython-310.pyc
+|   |   |   |-- inference.cpython-310.pyc
+|   |   |   |-- main.cpython-310.pyc
+|   |   |   |-- stream.cpython-310.pyc
+|   |   |   |-- tracker.cpython-310.pyc
+|   |   |   +-- worker.cpython-310.pyc
+|   |   |-- __init__.py
+|   |   |-- config.py
+|   |   |-- events.py
+|   |   |-- inference_yunet.py
+|   |   |-- main.py
+|   |   |-- stream.py
+|   |   |-- tracker.py
+|   |   +-- worker.py
+|   |-- models\
+|   |   |-- face-detection-retail-0004\
+|   |   |   +-- FP16\
+|   |   |       |-- face-detection-retail-0004.bin
+|   |   |       +-- face-detection-retail-0004.xml
+|   |   |-- face-reidentification-retail-0095\
+|   |   |   +-- FP16\
+|   |   |       |-- face-reidentification-retail-0095.bin
+|   |   |       +-- face-reidentification-retail-0095.xml
+|   |   |-- face_detection_yunet_2023mar.onnx
+|   |   |-- face_recognition_sface_2021dec.onnx
+|   |   +-- manifest.json
+|   |-- tests\
+|   |   |-- __pycache__\
+|   |   |   +-- test_inference_yunet.cpython-310.pyc
+|   |   +-- test_inference_yunet.py
+|   |-- tools\
+|   |   |-- __pycache__\
+|   |   |   +-- generate_mediamtx_config.cpython-310.pyc
+|   |   |-- fetch_models.py
+|   |   +-- generate_mediamtx_config.py
+|   |-- .gitignore
+|   |-- config.example.yaml
+|   |-- config.yaml
+|   |-- Dockerfile
+|   |-- README.md
+|   |-- requirements.txt
+|   +-- run-windows.ps1
+|-- config\
+|   |-- app.php
+|   |-- auth.php
+|   |-- banking.php
+|   |-- cache.php
+|   |-- camera_intelligence.php
+|   |-- database.php
+|   |-- debugbar.php
+|   |-- door_camera.php
+|   |-- face.php
+|   |-- filesystems.php
+|   |-- logging.php
+|   |-- mail.php
+|   |-- permission.php
+|   |-- permissions.php
+|   |-- queue.php
+|   |-- sanctum.php
+|   |-- services.php
+|   +-- session.php
+|-- database\
+|   |-- factories\
+|   |   +-- UserFactory.php
+|   |-- migrations\
+|   |   |-- 0001_01_01_000000_create_users_table.php
+|   |   |-- 0001_01_01_000001_create_cache_table.php
+|   |   |-- 0001_01_01_000002_create_jobs_table.php
+|   |   |-- 2026_05_07_140452_create_permission_tables.php
+|   |   |-- 2026_05_22_082551_create_customers_table.php
+|   |   |-- 2026_05_22_082552_create_customer_devices_table.php
+|   |   |-- 2026_05_22_082553_create_customer_debts_table.php
+|   |   |-- 2026_05_22_082553_create_customer_points_table.php
+|   |   |-- 2026_05_22_082557_create_customer_logs_table.php
+|   |   |-- 2026_05_22_091156_create_customer_images_table.php
+|   |   |-- 2026_05_23_145920_create_suppliers_table.php
+|   |   |-- 2026_05_23_145930_create_categories_table.php
+|   |   |-- 2026_05_23_145940_create_brands_table.php
+|   |   |-- 2026_05_23_145950_create_units_table.php
+|   |   |-- 2026_05_23_145960_create_products_table.php
+|   |   |-- 2026_05_23_145980_create_sales_table.php
+|   |   |-- 2026_05_23_145983_create_product_variants_table.php
+|   |   |-- 2026_05_23_145985_create_product_imeis_table.php
+|   |   |-- 2026_05_23_145990_create_sale_items_table.php
+|   |   |-- 2026_05_23_145995_create_sale_item_gifts_table.php
+|   |   |-- 2026_05_23_146100_create_repairs_table.php
+|   |   |-- 2026_05_23_146110_create_repair_images_table.php
+|   |   |-- 2026_05_23_146120_create_repair_timelines_table.php
+|   |   |-- 2026_05_25_123656_create_hold_sales_table.php
+|   |   |-- 2026_05_25_151943_create_personal_access_tokens_table.php
+|   |   |-- 2026_07_22_235536_create_export_histories_table.php
+|   |   |-- 2026_08_01_233827_create_settings_table.php
+|   |   |-- 2026_08_06_143848_create_category_attributes_table.php
+|   |   |-- 2026_08_06_143940_create_category_attribute_values_table.php
+|   |   |-- 2026_08_17_232234_create_stock_imports_table.php
+|   |   |-- 2026_08_17_232315_create_stock_import_items_table.php
+|   |   |-- 2026_09_20_000330_create_product_imei_histories_table.php
+|   |   |-- 2026_09_26_000101_backfill_unit_conversion_quantities.php
+|   |   |-- 2026_09_26_000102_align_product_conversion_with_import_units.php
+|   |   |-- 2026_10_02_000000_create_notifications_table.php
+|   |   |-- 2026_10_02_000003_create_repair_parts_table.php
+|   |   |-- 2026_10_09_000001_create_supplier_debts_table.php
+|   |   |-- 2026_10_09_000003_create_backup_cloud_connections_table.php
+|   |   |-- 2026_10_09_000006_expand_application_permissions.php
+|   |   |-- 2026_10_09_000007_add_payment_account_permission.php
+|   |   |-- 2026_10_09_000008_normalize_super_admin_and_admin_role.php
+|   |   |-- 2026_10_13_000001_add_sales_edit_permission.php
+|   |   |-- 2026_10_13_000002_grant_sales_edit_to_sales_view_roles.php
+|   |   |-- 2026_10_13_000003_grant_sales_edit_to_direct_sales_view_users.php
+|   |   |-- 2026_10_18_000001_create_expenses_table.php
+|   |   |-- 2026_10_18_000002_add_expense_permissions.php
+|   |   |-- 2026_10_18_000003_create_recurring_expenses_tables.php
+|   |   |-- 2026_10_18_110000_create_work_shifts_table.php
+|   |   |-- 2026_10_20_120000_create_bank_payment_intents_table.php
+|   |   |-- 2026_11_03_000006_create_product_stock_batches_tables.php
+|   |   |-- 2026_11_08_000002_create_brand_category_table.php
+|   |   |-- 2026_11_12_000002_add_repair_part_to_sale_item_stock_batches.php
+|   |   |-- 2026_11_13_000001_add_is_used_to_product_stock_batches.php
+|   |   |-- 2026_11_14_000001_add_interval_to_recurring_expenses.php
+|   |   |-- 2026_11_14_000002_backfill_customer_devices_from_imei_sales.php
+|   |   |-- 2026_11_14_000003_create_customer_face_profiles_table.php
+|   |   |-- 2026_11_15_000001_add_source_to_customer_face_profiles.php
+|   |   |-- 2026_11_16_000001_create_customer_visits_table.php
+|   |   |-- 2026_11_17_000001_add_served_to_customer_visits.php
+|   |   |-- 2026_11_18_000001_reset_face_descriptors_for_human.php
+|   |   |-- 2026_11_18_000002_add_engine_to_face_data.php
+|   |   |-- 2026_11_18_000003_create_face_engine_metrics_table.php
+|   |   +-- 2026_11_19_000001_add_camera_id_to_customer_visits.php
+|   |-- seeders\
+|   |   |-- AdminSeeder.php
+|   |   |-- DatabaseSeeder.php
+|   |   +-- RolePermissionSeeder.php
+|   +-- .gitignore
+|-- deploy\
+|   +-- camera-platform\
+|       |-- docker-compose.yml
+|       |-- install-windows.ps1
+|       |-- mediamtx.example.yml
+|       |-- mediamtx.yml
+|       |-- refresh-windows.ps1
+|       +-- register-windows-task.ps1
+|-- file ngoai\
+|   |-- CSDL\
+|   |   |-- Backup.sql
+|   |   |-- data only.sql
+|   |   |-- data quan.sql
+|   |   |-- gemi.sql
+|   |   +-- no data.sql
+|   |-- Codex
+|   |-- codex-switcher-full.cswf
+|   |-- Database.txt
+|   +-- quanlybanhangaseller.com.url
+|-- lang\
+|   |-- en\
+|   |   |-- auth.php
+|   |   |-- pagination.php
+|   |   |-- passwords.php
+|   |   +-- validation.php
+|   +-- vi\
+|       |-- auth.php
+|       |-- pagination.php
+|       |-- passwords.php
+|       +-- validation.php
+|-- public\
+|   |-- certs\
+|   |   |-- README.txt
+|   |   +-- rootCA.cer
+|   |-- models\
+|   |   +-- human\
+|   |       |-- blazeface.bin
+|   |       |-- blazeface.json
+|   |       |-- facemesh.bin
+|   |       |-- facemesh.json
+|   |       |-- faceres.bin
+|   |       +-- faceres.json
+|   |-- storage\
+|   |-- .htaccess
+|   |-- favicon.ico
+|   |-- hot
+|   |-- huong-dan.html
+|   |-- index.php
+|   |-- manifest.webmanifest
+|   |-- offline.html
+|   |-- qlbh-lan-ca.mobileconfig
+|   |-- robots.txt
+|   |-- service-worker.js
+|   +-- setup.php
+|-- resources\
+|   |-- css\
+|   |   +-- app.css
+|   |-- js\
+|   |   |-- Components\
+|   |   |   |-- Charts\
+|   |   |   |   +-- SimpleBarChart.vue
+|   |   |   |-- Detail\
+|   |   |   |   |-- DebtLedger.vue
+|   |   |   |   |-- DetailAvatar.vue
+|   |   |   |   |-- DetailShell.vue
+|   |   |   |   |-- DetailTabs.vue
+|   |   |   |   |-- InfoItem.vue
+|   |   |   |   |-- StatCard.vue
+|   |   |   |   +-- TransactionList.vue
+|   |   |   |-- Search\
+|   |   |   |   |-- RepairSearchModal.vue
+|   |   |   |   +-- SaleSearchModal.vue
+|   |   |   |-- UI\
+|   |   |   |   |-- ActionButton.vue
+|   |   |   |   |-- AdministrativeUnitAutocomplete.vue
+|   |   |   |   |-- BaseModal.vue
+|   |   |   |   |-- BaseTable.vue
+|   |   |   |   |-- DataPanel.vue
+|   |   |   |   |-- DateRangeFilter.vue
+|   |   |   |   |-- DetailModal.vue
+|   |   |   |   |-- FloatingInput.vue
+|   |   |   |   |-- FloatingSelect.vue
+|   |   |   |   |-- FormattedNumberInput.vue
+|   |   |   |   |-- HighlightText.vue
+|   |   |   |   |-- ListFilterSelect.vue
+|   |   |   |   |-- ListToolbar.vue
+|   |   |   |   |-- PageHeader.vue
+|   |   |   |   |-- PaginationBar.vue
+|   |   |   |   |-- SearchableReferenceSelect.vue
+|   |   |   |   |-- SearchHighlight.vue
+|   |   |   |   |-- SortHeader.vue
+|   |   |   |   |-- TagBadge.vue
+|   |   |   |   |-- Tooltip.vue
+|   |   |   |   +-- UnitInput.vue
+|   |   |   |-- ApplicationLogo.vue
+|   |   |   |-- BarcodeCameraButton.vue
+|   |   |   |-- CatalogTabs.vue
+|   |   |   |-- Checkbox.vue
+|   |   |   |-- ConfirmBox.vue
+|   |   |   |-- CustomerIdCardScanner.vue
+|   |   |   |-- GlobalSearch.vue
+|   |   |   |-- InputError.vue
+|   |   |   |-- InputLabel.vue
+|   |   |   |-- InvoiceDetailModal.vue
+|   |   |   |-- ModalRoot.vue
+|   |   |   |-- NotificationBell.vue
+|   |   |   |-- OfflineStatus.vue
+|   |   |   |-- PatternLock.vue
+|   |   |   |-- PrimaryButton.vue
+|   |   |   |-- PrintPreviewModal.vue
+|   |   |   |-- RecordDetailModal.vue
+|   |   |   |-- SaleEditModal.vue
+|   |   |   |-- Sidebar.vue
+|   |   |   |-- TextInput.vue
+|   |   |   |-- TrashModal.vue
+|   |   |   |-- WorkShiftAutoOpen.vue
+|   |   |   |-- WorkShiftCountForm.vue
+|   |   |   +-- WorkShiftOpenModal.vue
+|   |   |-- Composables\
+|   |   |   |-- useAutocompleteKeyboard.js
+|   |   |   |-- useConfirm.js
+|   |   |   |-- useEventBus.js
+|   |   |   |-- useLiveList.js
+|   |   |   |-- useLocalStorage.js
+|   |   |   |-- useRecordDetail.js
+|   |   |   |-- useRepairAccess.js
+|   |   |   |-- useSilentRefresh.js
+|   |   |   +-- useUrlState.js
+|   |   |-- Directives\
+|   |   |   +-- clickOutside.js
+|   |   |-- Layouts\
+|   |   |   |-- AdminLayout.vue
+|   |   |   |-- AuthenticatedLayout.vue
+|   |   |   +-- GuestLayout.vue
+|   |   |-- Modules\
+|   |   |   +-- POS\
+|   |   |       |-- Cart\
+|   |   |       |   |-- Components\
+|   |   |       |   |   |-- CartItem.vue
+|   |   |       |   |   |-- CartItemGiftList.vue
+|   |   |       |   |   |-- CartItemHeader.vue
+|   |   |       |   |   |-- CartItemPrice.vue
+|   |   |       |   |   |-- CartItemPromotion.vue
+|   |   |       |   |   |-- CartItemQuantity.vue
+|   |   |       |   |   |-- CartPromotionDiscount.vue
+|   |   |       |   |   |-- CartPromotionGift.vue
+|   |   |       |   |   +-- CartTable.vue
+|   |   |       |   +-- Composables\
+|   |   |       |       |-- useCart.js
+|   |   |       |       |-- useCartDiscount.js
+|   |   |       |       |-- useCartGift.js
+|   |   |       |       +-- useCartTotals.js
+|   |   |       |-- Core\
+|   |   |       |   |-- Components\
+|   |   |       |   |   |-- CartTabs.vue
+|   |   |       |   |   |-- PosMainPanel.vue
+|   |   |       |   |   +-- PosSidebar.vue
+|   |   |       |   |-- Composables\
+|   |   |       |   |   +-- useKeyboardShortcuts.js
+|   |   |       |   +-- Layouts\
+|   |   |       |       +-- PosLayout.vue
+|   |   |       |-- Customer\
+|   |   |       |   |-- Components\
+|   |   |       |   |   |-- CreateCustomerModal.vue
+|   |   |       |   |   |-- CustomerDebtModal.vue
+|   |   |       |   |   |-- CustomerSection.vue
+|   |   |       |   |   |-- FaceDetectedModal.vue
+|   |   |       |   |   +-- FaceSuggestionPanel.vue
+|   |   |       |   |-- Composables\
+|   |   |       |   |   |-- useCameraIntelligenceWebrtc.js
+|   |   |       |   |   |-- useCustomerSearch.js
+|   |   |       |   |   |-- useDoorQueue.js
+|   |   |       |   |   |-- useFaceCheckIn.js
+|   |   |       |   |   +-- useFaceSource.js
+|   |   |       |   +-- Services\
+|   |   |       |       |-- customerDebtService.js
+|   |   |       |       +-- customerService.js
+|   |   |       |-- Payment\
+|   |   |       |   |-- Components\
+|   |   |       |   |   |-- CheckoutModal.vue
+|   |   |       |   |   |-- PaymentMethodSelect.vue
+|   |   |       |   |   |-- PaymentPanel.vue
+|   |   |       |   |   +-- QrPayment.vue
+|   |   |       |   |-- Composables\
+|   |   |       |   |   +-- useCheckout.js
+|   |   |       |   |-- Services\
+|   |   |       |   |   +-- paymentService.js
+|   |   |       |   +-- Utils\
+|   |   |       |       |-- checkoutPayload.js
+|   |   |       |       |-- paymentAlerts.js
+|   |   |       |       |-- qrThemes.js
+|   |   |       |       +-- vietQr.js
+|   |   |       |-- Product\
+|   |   |       |   |-- Components\
+|   |   |       |   |   |-- ProductSearch.vue
+|   |   |       |   |   +-- SelectProductModal.vue
+|   |   |       |   |-- Composables\
+|   |   |       |   |   |-- useBarcodeScanner.js
+|   |   |       |   |   +-- useProductSearch.js
+|   |   |       |   +-- Services\
+|   |   |       |       |-- productBarcodeLookup.js
+|   |   |       |       +-- productService.js
+|   |   |       +-- Sale\
+|   |   |           |-- Components\
+|   |   |           |   |-- InvoiceList.vue
+|   |   |           |   +-- SaleHistoryModal.vue
+|   |   |           |-- Composables\
+|   |   |           |   +-- useSaleHistory.js
+|   |   |           +-- Services\
+|   |   |               +-- saleService.js
+|   |   |-- Pages\
+|   |   |   |-- Auth\
+|   |   |   |   |-- ConfirmPassword.vue
+|   |   |   |   |-- ForgotPassword.vue
+|   |   |   |   |-- Login.vue
+|   |   |   |   |-- ResetPassword.vue
+|   |   |   |   +-- VerifyEmail.vue
+|   |   |   |-- Backups\
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Brands\
+|   |   |   |   |-- Form.vue
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Categories\
+|   |   |   |   |-- Form.vue
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Customers\
+|   |   |   |   |-- Partials\
+|   |   |   |   |   |-- CustomerForm.vue
+|   |   |   |   |   +-- CustomerTabs.vue
+|   |   |   |   |-- Create.vue
+|   |   |   |   |-- CustomerDetailModal.vue
+|   |   |   |   |-- CustomerFaceModal.vue
+|   |   |   |   |-- CustomerFormModal.vue
+|   |   |   |   |-- Edit.vue
+|   |   |   |   |-- Index.vue
+|   |   |   |   +-- Show.vue
+|   |   |   |-- CustomerVisits\
+|   |   |   |   |-- Components\
+|   |   |   |   |   +-- DoorCameraStream.vue
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Debts\
+|   |   |   |   |-- Index.vue
+|   |   |   |   +-- SupplierPaymentModal.vue
+|   |   |   |-- Expenses\
+|   |   |   |   |-- ExpenseDetailModal.vue
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Pos\
+|   |   |   |   +-- Index.vue
+|   |   |   |-- ProductImeis\
+|   |   |   |   |-- Index.vue
+|   |   |   |   |-- Lookup.vue
+|   |   |   |   |-- LookupSuggestionItem.vue
+|   |   |   |   |-- PriceFormModal.vue
+|   |   |   |   +-- Show.vue
+|   |   |   |-- Products\
+|   |   |   |   |-- BulkPriceUpdateModal.vue
+|   |   |   |   |-- ExportModal.vue
+|   |   |   |   |-- Form.vue
+|   |   |   |   |-- ImportExportModal.vue
+|   |   |   |   |-- ImportModal.vue
+|   |   |   |   |-- Index.vue
+|   |   |   |   |-- PrintLabelsModal.vue
+|   |   |   |   |-- ProductDetailModal.vue
+|   |   |   |   |-- ProductImeisModal.vue
+|   |   |   |   |-- ReferenceCreateModal.vue
+|   |   |   |   +-- Show.vue
+|   |   |   |-- Profile\
+|   |   |   |   |-- Partials\
+|   |   |   |   |   |-- UpdatePasswordForm.vue
+|   |   |   |   |   +-- UpdateProfileInformationForm.vue
+|   |   |   |   +-- Edit.vue
+|   |   |   |-- Records\
+|   |   |   |   +-- Show.vue
+|   |   |   |-- Repairs\
+|   |   |   |   |-- Index.vue
+|   |   |   |   |-- RepairCompletionModal.vue
+|   |   |   |   |-- RepairDetailModal.vue
+|   |   |   |   |-- RepairFormModal.vue
+|   |   |   |   |-- RepairPartsPicker.vue
+|   |   |   |   |-- RepairProgressModal.vue
+|   |   |   |   +-- RepairStatusProgress.vue
+|   |   |   |-- Reports\
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Sales\
+|   |   |   |   |-- Edit.vue
+|   |   |   |   |-- Index.vue
+|   |   |   |   +-- Receipt.vue
+|   |   |   |-- Settings\
+|   |   |   |   |-- DoorCameraSetup.vue
+|   |   |   |   |-- Index.vue
+|   |   |   |   |-- LabelTemplateEditor.vue
+|   |   |   |   |-- SettingCollapse.vue
+|   |   |   |   +-- SettingSwitch.vue
+|   |   |   |-- Setup\
+|   |   |   |   +-- Index.vue
+|   |   |   |-- StockImports\
+|   |   |   |   |-- Composables\
+|   |   |   |   |   +-- useSupplierSearch.js
+|   |   |   |   |-- CustomerBuybackPaymentModal.vue
+|   |   |   |   |-- List.vue
+|   |   |   |   |-- ReplenishmentListModal.vue
+|   |   |   |   |-- StockImportDetailModal.vue
+|   |   |   |   |-- StockImportFormModal.vue
+|   |   |   |   |-- StockImportProductModal.vue
+|   |   |   |   |-- SupplierPaymentModal.vue
+|   |   |   |   +-- SupplierSection.vue
+|   |   |   |-- Suppliers\
+|   |   |   |   |-- Partials\
+|   |   |   |   |   +-- SupplierFormFields.vue
+|   |   |   |   |-- Create.vue
+|   |   |   |   |-- Edit.vue
+|   |   |   |   |-- Form.vue
+|   |   |   |   |-- Index.vue
+|   |   |   |   +-- SupplierDetailModal.vue
+|   |   |   |-- Taxes\
+|   |   |   |   +-- Index.vue
+|   |   |   |-- Users\
+|   |   |   |   |-- Create.vue
+|   |   |   |   |-- Edit.vue
+|   |   |   |   |-- FormModal.vue
+|   |   |   |   |-- Index.vue
+|   |   |   |   |-- RoleManagementDialog.vue
+|   |   |   |   |-- RoleManagementModal.vue
+|   |   |   |   +-- UserDetailModal.vue
+|   |   |   |-- WorkShifts\
+|   |   |   |   +-- History.vue
+|   |   |   +-- Dashboard.vue
+|   |   |-- Services\
+|   |   |   |-- api.js
+|   |   |   +-- partialFetch.js
+|   |   |-- Stores\
+|   |   |   |-- modal.js
+|   |   |   +-- referenceData.js
+|   |   |-- utils\
+|   |   |   |-- appPaths.js
+|   |   |   |-- faceRecognition.js
+|   |   |   |-- format.js
+|   |   |   |-- highlight.js
+|   |   |   |-- imageUrl.js
+|   |   |   |-- inertiaFetch.js
+|   |   |   |-- insecureNotice.js
+|   |   |   |-- mobileTables.js
+|   |   |   |-- offlinePos.js
+|   |   |   |-- pos.js
+|   |   |   |-- printLabels.js
+|   |   |   |-- receiptPrint.js
+|   |   |   |-- repairStatus.js
+|   |   |   |-- searchHelper.js
+|   |   |   |-- vietnameseIdCard.js
+|   |   |   |-- viewportFix.js
+|   |   |   +-- warranty.js
+|   |   |-- app.js
+|   |   +-- bootstrap.js
+|   +-- views\
+|       |-- prints\
+|       |   +-- repair.blade.php
+|       |-- stock-imports\
+|       |   +-- contract.blade.php
+|       +-- app.blade.php
+|-- routes\
+|   |-- api.php
+|   |-- auth.php
+|   |-- console.php
+|   +-- web.php
+|-- scripts\
+|   |-- copy-face-models.mjs
+|   +-- install-windows-scheduler.ps1
+|-- storage\
+|   |-- app\
+|   |   |-- backup-progress\
+|   |   |   |-- 1_0085e3d1-66d2-44e5-a622-a886ab7b01da.json
+|   |   |   |-- 1_021623cd-b4f7-4733-b210-3f22e8393628.json
+|   |   |   |-- 1_0240af2d-650e-446f-acbc-24e6871c53f7.json
+|   |   |   |-- 1_026dab79-20f1-490a-8457-6a3900e284b0.json
+|   |   |   |-- 1_02ebb62b-347b-41b5-b052-e6c60f8c4ac5.json
+|   |   |   |-- 1_047120b1-f803-4813-b893-d1f65ea2dd36.json
+|   |   |   |-- 1_058cd51e-cb07-4d8d-9fca-78f2aa25d7a0.json
+|   |   |   |-- 1_079cd923-d559-4f3e-97dd-5263cc75f9f2.json
+|   |   |   |-- 1_081f29b2-d348-4629-902a-2462a0a599da.json
+|   |   |   |-- 1_09be5077-16a9-40cd-8c18-960085d6c9cc.json
+|   |   |   |-- 1_0b238b3c-62ef-4cf8-8cba-a14dea7222b1.json
+|   |   |   |-- 1_0c1fe092-1aa4-41a3-b0bc-e56bb3bdbc77.json
+|   |   |   |-- 1_1088aa28-2af1-4e67-a5d0-68c19929a45d.json
+|   |   |   |-- 1_10d070dd-c7c2-4bd5-b2a5-45153b041c78.json
+|   |   |   |-- 1_13af2ac6-d675-48ba-80b2-686e592aeecd.json
+|   |   |   |-- 1_155cc3b4-66e3-4930-9f75-eae1f7a6e79d.json
+|   |   |   |-- 1_17bc1a03-682e-47e0-8e51-671bf3a67788.json
+|   |   |   |-- 1_18d7ff08-8a1a-4a40-914f-bb99e71e4b75.json
+|   |   |   |-- 1_1a864c9b-a678-430c-bad6-df71b0f009ee.json
+|   |   |   |-- 1_1c8b36d4-4d41-4da2-8a1f-032ccc346677.json
+|   |   |   |-- 1_1e220365-c76c-4cbc-865f-d4fe14064aef.json
+|   |   |   |-- 1_1e7236e6-832e-40ca-a197-4409c74e924c.json
+|   |   |   |-- 1_1f3f1336-0daa-4dd4-ba31-ec828665a681.json
+|   |   |   |-- 1_1fc4b1e4-2cdf-4280-aece-cbcde03082d4.json
+|   |   |   |-- 1_23574940-25eb-4e40-b228-3ba5cd3b250d.json
+|   |   |   |-- 1_2381724c-1ecf-4782-bf4f-80704ce9d6b1.json
+|   |   |   |-- 1_266210f9-697a-4673-82bf-64d5a38d16cb.json
+|   |   |   |-- 1_289de9e5-653d-4a98-82e0-682de9591de6.json
+|   |   |   |-- 1_28b0ef40-3ac9-4700-ba49-00b08a8665ec.json
+|   |   |   |-- 1_29097964-77a9-4f34-a3d8-ead7d5f317b8.json
+|   |   |   |-- 1_2b057220-3e3d-49a0-a3a5-adb560609454.json
+|   |   |   |-- 1_2b35cee3-66d9-465a-a7d9-060c86ec6b20.json
+|   |   |   |-- 1_2bb4fc28-39b3-4d38-831b-58e379cdb716.json
+|   |   |   |-- 1_2bd6fe59-6975-41da-b089-884fc84c19aa.json
+|   |   |   |-- 1_2c3ddc21-aa94-48d4-a7fe-045fc41cb75e.json
+|   |   |   |-- 1_2d89f5ea-bd32-4c79-83ca-92693f0a10a7.json
+|   |   |   |-- 1_2e935d3d-c42c-45af-8947-89ac0b69da3e.json
+|   |   |   |-- 1_30b50b92-fa9d-4bd2-a94d-077989d8a92b.json
+|   |   |   |-- 1_32e41e40-84b9-401d-a078-11224d02e380.json
+|   |   |   |-- 1_370ca98f-25da-42be-97f0-61b614874bb7.json
+|   |   |   |-- 1_37bdfe16-883c-4867-92a7-05dbeccfaade.json
+|   |   |   |-- 1_37dfac53-90bc-468b-aab2-33d494655f2f.json
+|   |   |   |-- 1_388fd967-9641-4152-8322-5a162e322462.json
+|   |   |   |-- 1_39b15e73-5974-4bca-aefb-246531ebc79a.json
+|   |   |   |-- 1_4005f3b7-39e2-4b41-8f18-42deb23ce7de.json
+|   |   |   |-- 1_43c9b225-5b92-4344-9f82-75fecf1adb39.json
+|   |   |   |-- 1_44e97330-4b94-40b0-95ce-ce4ed77dce7b.json
+|   |   |   |-- 1_48a47307-cc4b-4755-a974-fd318d6fd8a9.json
+|   |   |   |-- 1_48d10cb1-cbfb-45ef-9f1b-3997fc952815.json
+|   |   |   |-- 1_4ae3e6fa-6ff8-494a-97ff-decb6ca5766d.json
+|   |   |   |-- 1_4b827655-f522-44a1-9b79-b91406f22bea.json
+|   |   |   |-- 1_4b8b8dd2-2750-4a40-b414-8ea62ace0562.json
+|   |   |   |-- 1_4f4a830d-b0eb-42cb-816c-97d41ae21627.json
+|   |   |   |-- 1_4f72c750-be7e-4406-96be-d76356c60c55.json
+|   |   |   |-- 1_511d904f-5b9a-4459-bb4f-3c0b5657f822.json
+|   |   |   |-- 1_53930fea-2bdc-4d46-a636-d3484f625efd.json
+|   |   |   |-- 1_5597771a-b9c0-4d72-95cc-45e246857017.json
+|   |   |   |-- 1_5df81ac0-02b8-4d7d-b140-edb2d047b262.json
+|   |   |   |-- 1_611102af-952d-4441-861d-2206443433b5.json
+|   |   |   |-- 1_615e7e46-b0c8-479e-be0e-7f2fc7eb45b5.json
+|   |   |   |-- 1_64b21b97-0126-4e18-b30f-0790599e11d9.json
+|   |   |   |-- 1_64bc538d-12d8-439b-a998-c20cf667939d.json
+|   |   |   |-- 1_6853551d-3bf6-46cc-9d76-d16e0d4d9d22.json
+|   |   |   |-- 1_6855560a-25b3-46c4-9658-797e7a472682.json
+|   |   |   |-- 1_6943ddc5-61d1-4518-b20a-d355f5a850ac.json
+|   |   |   |-- 1_6a72bc7a-394b-4775-9804-754057b13705.json
+|   |   |   |-- 1_6ac7ca3e-a2a8-4098-b097-d7b56a2c7ebf.json
+|   |   |   |-- 1_6dea0fd7-310d-4e87-a619-9576b2335883.json
+|   |   |   |-- 1_6ec421df-846f-48ca-9c35-732dd5698aa2.json
+|   |   |   |-- 1_710108e0-906b-4a9c-9573-a11509d9e9f1.json
+|   |   |   |-- 1_737e3c98-1f58-4615-9037-1ff1fc2c0f60.json
+|   |   |   |-- 1_76f3c5a2-09de-4090-9681-7aa99faf1156.json
+|   |   |   |-- 1_790c11a2-a11a-4a2d-8281-168e5b715968.json
+|   |   |   |-- 1_794b47ff-9696-4de5-9396-cd9a7eb9cc31.json
+|   |   |   |-- 1_796f8fac-5832-4cb4-a2b4-1e416f6d6ec6.json
+|   |   |   |-- 1_79e3594b-fc26-4dfc-979a-6e914518ab54.json
+|   |   |   |-- 1_79fab8fd-977b-4ad8-bce5-d7ea5835eac9.json
+|   |   |   |-- 1_7df9aff6-0b19-4978-a2fb-510418cc2aa2.json
+|   |   |   |-- 1_7e4d0ae0-4a05-49ff-815d-4402911df6af.json
+|   |   |   |-- 1_7f0228ea-2996-466e-9e81-a924a1548da3.json
+|   |   |   |-- 1_800ef6df-304a-4636-8682-fab4d55fc341.json
+|   |   |   |-- 1_8022de8e-aa29-4d58-b551-8aeaa0a49a45.json
+|   |   |   |-- 1_81c95b85-57d0-4bd6-a382-ddcc62b4c1e5.json
+|   |   |   |-- 1_83ac8d57-d7a6-46b9-9cf6-3750eb657fba.json
+|   |   |   |-- 1_879e87d5-6ac1-412a-9d52-d4d0b541fb70.json
+|   |   |   |-- 1_87a71b95-5d32-40b8-b1ae-51c67848a924.json
+|   |   |   |-- 1_8b923576-530c-4b44-a777-21e16b52d8f6.json
+|   |   |   |-- 1_8f6c18a7-89c0-44a8-8fb9-ea764149d612.json
+|   |   |   |-- 1_905c3c3f-0638-45bc-a20f-4ec2752de3c1.json
+|   |   |   |-- 1_9286b0e0-b40e-451e-ae49-81fe1c185be2.json
+|   |   |   |-- 1_95322079-2ce4-4efd-b699-efd44fabd558.json
+|   |   |   |-- 1_95802f93-ef6c-47fd-97f5-a8dba1b5debe.json
+|   |   |   |-- 1_975b52de-b7a8-4d5e-9527-6c4529372e46.json
+|   |   |   |-- 1_997b0e0f-46f2-43f1-94e0-17317ef78748.json
+|   |   |   |-- 1_99b4e185-2e10-4ff1-bf99-e8fac58b314c.json
+|   |   |   |-- 1_9c2a8edf-8355-4c60-ae5f-b7d820b234bc.json
+|   |   |   |-- 1_9cc73ce6-d8f6-43ea-8b9f-ee312b326608.json
+|   |   |   |-- 1_9d66a2d8-e28d-4d4d-a240-e6badf0e1e3d.json
+|   |   |   |-- 1_9de35d5c-e300-4e3e-935b-b25ccfe374e1.json
+|   |   |   |-- 1_a441f275-d9fa-4b46-834c-fff5f4eb2341.json
+|   |   |   |-- 1_a5914507-ca34-4dbe-b815-fcb02e0ff86c.json
+|   |   |   |-- 1_a7d5d9a6-e4aa-40bf-9eea-ac5b050f4c7a.json
+|   |   |   |-- 1_a9d29558-01a3-4a60-8539-8ea5043c30c0.json
+|   |   |   |-- 1_aa4078d4-19b2-40ac-a56a-65e08cc37e5c.json
+|   |   |   |-- 1_acdd695d-aad8-4353-96f9-92ab3b504947.json
+|   |   |   |-- 1_acde64b3-9256-4378-b2fb-ae7882e06914.json
+|   |   |   |-- 1_afcf4044-676c-49af-ac8c-ad4ccd88d818.json
+|   |   |   |-- 1_afef33c6-4e51-4441-b589-edb8d334ed2e.json
+|   |   |   |-- 1_b09c1a66-5a5a-4677-9947-a65868fc4fb4.json
+|   |   |   |-- 1_b27e6ce5-9fe4-4460-962a-3a5cf17b3082.json
+|   |   |   |-- 1_b44b1b4d-84e8-4216-ae73-c6c922b1e7c7.json
+|   |   |   |-- 1_b7a1beb9-398a-4cd5-b4d7-70a630145a39.json
+|   |   |   |-- 1_ba06598e-d51b-4d75-a7a1-5989cb6fd347.json
+|   |   |   |-- 1_ba424228-fa30-43f9-9a05-5baab5a3dc48.json
+|   |   |   |-- 1_bc778884-4a5b-4705-acb8-d3a8e4167865.json
+|   |   |   |-- 1_bf8c20ba-5bee-41fc-943c-73fdbec5614b.json
+|   |   |   |-- 1_bfdd4fba-8eb1-47ff-9ad3-072825ab7be3.json
+|   |   |   |-- 1_c08df283-fcc3-492b-ba86-421a3b105100.json
+|   |   |   |-- 1_c33d1799-5866-4a64-844a-42e73b998759.json
+|   |   |   |-- 1_c4286dd6-6b28-48a5-85ca-f621c014dd50.json
+|   |   |   |-- 1_c57b0b76-2874-4d52-8cf6-5a2b2f4746f2.json
+|   |   |   |-- 1_c612272b-b13a-4b75-9b6a-e656dd475ff8.json
+|   |   |   |-- 1_c62a0d8a-287f-4da3-8854-2bf6ace8b76a.json
+|   |   |   |-- 1_c8c8a1d9-409d-4770-81fd-011cbfc22a86.json
+|   |   |   |-- 1_c9bc7900-2584-48d9-a76b-07230024b342.json
+|   |   |   |-- 1_d17df525-6c29-4226-a4d8-e51ebbd684b5.json
+|   |   |   |-- 1_d58aaf1a-ba89-44e9-918a-418326fee715.json
+|   |   |   |-- 1_d60f11d4-75bd-4532-8a21-0fdcc129db38.json
+|   |   |   |-- 1_d791d516-154f-476a-8672-34d8c69d260f.json
+|   |   |   |-- 1_d928bd1b-c931-49c6-bb1b-44942a0c8361.json
+|   |   |   |-- 1_d98215c5-cafe-4ed9-ba67-c2d9405536b5.json
+|   |   |   |-- 1_dcbf43d8-13eb-4eda-a769-b7dbcfe4cc74.json
+|   |   |   |-- 1_dda83cdf-81ba-4ed8-be26-ac02c5500dc8.json
+|   |   |   |-- 1_e104ee63-3f90-48fb-976b-0491bdac4e7f.json
+|   |   |   |-- 1_e11792dc-2f76-42f0-b4a3-886b5adfbe7c.json
+|   |   |   |-- 1_e125d16a-3e77-43dd-98f7-b3f149063ddf.json
+|   |   |   |-- 1_e5b17b2d-25fe-43c7-af29-09bfb61bf85e.json
+|   |   |   |-- 1_e8a25986-1e95-4534-b2f1-981cf56a63a9.json
+|   |   |   |-- 1_e9b8a3d8-6bb4-4532-a3b1-94ee44cce2ba.json
+|   |   |   |-- 1_ea0f3cb6-34eb-4273-b746-119833b2fe12.json
+|   |   |   |-- 1_ea710ad4-e443-4a84-af9b-67f63fc6d8ce.json
+|   |   |   |-- 1_edb1c351-4ae8-4d75-8da3-f0ed2e2b68f5.json
+|   |   |   |-- 1_edff9967-bba9-4620-8043-b5a110725740.json
+|   |   |   |-- 1_eede89d8-3a3e-44c6-869c-a1b1ececeacc.json
+|   |   |   |-- 1_f3254825-138e-4074-9c67-0a78a4e34aea.json
+|   |   |   |-- 1_f34dc52d-3ce7-48b0-a64a-812122437b2a.json
+|   |   |   |-- 1_f5997d75-c592-4b16-aecf-66d916f87280.json
+|   |   |   |-- 1_f635e054-ffc6-405c-87aa-6b9691393950.json
+|   |   |   |-- 1_f8215ee9-47ea-452b-9998-d5af37f9ad76.json
+|   |   |   +-- 1_fcb4a9e4-b42d-4774-aa53-abe9fe67c5a2.json
+|   |   |-- backups\
+|   |   |   |-- backup_2026-11-13_02-13-40-732338.zip
+|   |   |   |-- backup_2026-11-13_02-38-35-462205.zip
+|   |   |   |-- sao-luu-thu-cong_2026-11-13_09-49-00-431505.zip
+|   |   |   |-- sao-luu-truoc-khi-khoi-phuc_2026-11-13_09-52-44-481273.zip
+|   |   |   +-- sao-luu-truoc-khi-xoa_2026-11-13_09-49-27-752059.zip
+|   |   |-- private\
+|   |   |   |-- door-camera-live\
+|   |   |   |   |-- faces.json
+|   |   |   |   +-- viewers.lease
+|   |   |   |-- exports\
+|   |   |   |   |-- products_20261112_125813_1.xlsx
+|   |   |   |   |-- products_20261113_104641_2.zip
+|   |   |   |   |-- products_20261113_142602_3.zip
+|   |   |   |   +-- products_20261114_141929_4.zip
+|   |   |   |-- import-tmp\
+|   |   |   |   |-- 3e50c000-b6d9-404c-a60e-f1d0999babc9\
+|   |   |   |   |   |-- 080znhcd1sayqsntzqel.jpg
+|   |   |   |   |   |-- 228gsyvhlox12i2k3baw.jpg
+|   |   |   |   |   |-- 8xxacrsr9tozw4yjdwsf.webp
+|   |   |   |   |   |-- avcn57jrtlowxksfrbib.jpg
+|   |   |   |   |   |-- bsbrw7pmbbly5jfkxtcf.jpg
+|   |   |   |   |   |-- dnzfqtiihxebeh2jrd7m.jpg
+|   |   |   |   |   |-- gou7p3hneg608ysvvxom.jpg
+|   |   |   |   |   |-- j008dracleqfsvkgts41.jpg
+|   |   |   |   |   |-- lb43lbitfhxwaf74smhz.webp
+|   |   |   |   |   |-- lyrk2s0igxwplleeooii.jpg
+|   |   |   |   |   |-- lziwkmjqa1bgkfawaq5x.jpg
+|   |   |   |   |   |-- manifest.json
+|   |   |   |   |   |-- myvvsyhhgwb6reuy1hl9.jpg
+|   |   |   |   |   |-- oddxrae8ssxp0jpm4sve.jpg
+|   |   |   |   |   |-- otzdn31g4k9pqmrtp3go.jpg
+|   |   |   |   |   |-- qrdsgyotccnkucgkbndx.jpg
+|   |   |   |   |   |-- rdsecmbh46uzw4dxjcpr.webp
+|   |   |   |   |   |-- rwcqftk68uaqgfjvd7jy.jpg
+|   |   |   |   |   |-- tc5ztmg9yixtmqb0t7jd.jpg
+|   |   |   |   |   |-- uahd1hoetl6ii6tqfsom.webp
+|   |   |   |   |   |-- uncbewhqxeplxmdtpw8h.jpg
+|   |   |   |   |   |-- wxsf1bcxaczqlnahjtuc.jpg
+|   |   |   |   |   |-- xzwzrlvoyg7hluvsjl3y.jpg
+|   |   |   |   |   |-- y93i0k5qvtm81fqrm25k.jpg
+|   |   |   |   |   +-- ymngvhd8vbvovqrmism5.jpg
+|   |   |   |   |-- 620f7b11-392b-4539-af22-a9c91dcf884e\
+|   |   |   |   |   |-- 0stpt8534t9nkjknmscl.webp
+|   |   |   |   |   |-- 19o7umcwexzeswam0kas.jpg
+|   |   |   |   |   |-- 1afgshzmqrgbi7iesu23.jpg
+|   |   |   |   |   |-- 3ttao7baqyoy4m5miun6.jpg
+|   |   |   |   |   |-- 4gchx6bjsx4ome11dslq.jpg
+|   |   |   |   |   |-- 74lrhscc7itboqhshqtt.jpg
+|   |   |   |   |   |-- 7gdoxypehygdrh3qcjng.jpg
+|   |   |   |   |   |-- 9calzbcy1gzrv7yhhuh3.jpg
+|   |   |   |   |   |-- auxn6i61ex5qkglnzarj.jpg
+|   |   |   |   |   |-- hsdn6icsxuqza0n8fl6v.jpg
+|   |   |   |   |   |-- l3rjff6mzafbkmfhd4xi.jpg
+|   |   |   |   |   |-- manifest.json
+|   |   |   |   |   |-- mvfnzzsf9jubkrz9vght.webp
+|   |   |   |   |   |-- nsnabqh4aqrxhs5stzss.jpg
+|   |   |   |   |   |-- of0xykpq8wdndzcqrrvd.jpg
+|   |   |   |   |   |-- orjrx7aknninl3obybkb.jpg
+|   |   |   |   |   |-- ozfldwotwvykabyfhnpm.jpg
+|   |   |   |   |   |-- qchqqkmojvqtoahlpox6.jpg
+|   |   |   |   |   |-- r1cgenvqdkii2qoeqdne.webp
+|   |   |   |   |   |-- rgyg9csdr5pq5vszklgn.jpg
+|   |   |   |   |   |-- taka6dptnrcrsdnadiak.jpg
+|   |   |   |   |   |-- xdpknk16qrgbxuewmkat.webp
+|   |   |   |   |   |-- xqm6q5azoufcfvzmytd2.jpg
+|   |   |   |   |   |-- xx6smqnh0n5c5pubc0jd.jpg
+|   |   |   |   |   +-- zie1dwlvt9pczo6fzyru.jpg
+|   |   |   |   |-- aecca674-35b1-48a1-83ae-69eff3e9f647\
+|   |   |   |   |   |-- 1avqpc1mngus1kz3frvc.jpg
+|   |   |   |   |   |-- 3qqwh8nabjxn2wakky2e.jpg
+|   |   |   |   |   |-- 7lepqgcwkdxokkvfumvb.jpg
+|   |   |   |   |   |-- 9lgagsticieewnf8bbvy.jpg
+|   |   |   |   |   |-- a8np5urh1xrrzwtfajmr.jpg
+|   |   |   |   |   |-- alcimye0cbih21itf4t4.jpg
+|   |   |   |   |   |-- alf7cf8aoj9eph2ptppt.jpg
+|   |   |   |   |   |-- bbfrcoxwr5fm4pzk4scq.jpg
+|   |   |   |   |   |-- cxtsbxvplpszwjunlo0d.jpg
+|   |   |   |   |   |-- dfiizprzgscm9pjqoloi.webp
+|   |   |   |   |   |-- gdfnt0b6j6kmyv0wqk96.jpg
+|   |   |   |   |   |-- iey3pkyhplyolamucr9t.jpg
+|   |   |   |   |   |-- kbxn9kpg2kbv7urhubp1.jpg
+|   |   |   |   |   |-- kdbavqmlcut9ejamo6js.webp
+|   |   |   |   |   |-- kzcedi7bfxfa7htkmcnk.jpg
+|   |   |   |   |   |-- l1djc1y9hd1jxhijy4gn.jpg
+|   |   |   |   |   |-- manifest.json
+|   |   |   |   |   |-- rhgmlqh0dlpyv4bdnmam.webp
+|   |   |   |   |   |-- syfathnbaxshbokszmuv.jpg
+|   |   |   |   |   |-- twggaalmxm4gpjvcoh9w.webp
+|   |   |   |   |   |-- wo9gvkl6eswdni0olszf.jpg
+|   |   |   |   |   |-- wvavso4h2iq2sqr4nn7v.jpg
+|   |   |   |   |   |-- xh4krkocechratp3oz8f.jpg
+|   |   |   |   |   |-- xwfpkljnhdxg6xd5wrh8.jpg
+|   |   |   |   |   +-- yazlvx49lri0oagvgwjd.jpg
+|   |   |   |   +-- bcc1279d-33e5-4df1-b807-e8d458535458\
+|   |   |   |       |-- 23wkcktqjqgswzy40y59.webp
+|   |   |   |       |-- 3c8ujm6bu3fnwonocang.jpg
+|   |   |   |       |-- 7e0cixq2neaw889xgvor.jpg
+|   |   |   |       |-- 7n56np8lrodunedvmgwn.jpg
+|   |   |   |       |-- cnrulwolfr0u2uquwrzu.jpg
+|   |   |   |       |-- ctd7oimwzzbdrflqju7r.jpg
+|   |   |   |       |-- d5h5kjpjnuky0678lldx.jpg
+|   |   |   |       |-- hh8ah6hrbnxoulbgpim7.jpg
+|   |   |   |       |-- judckm5jsjifbckdbagm.webp
+|   |   |   |       |-- kb9ohz3rdta28oscmz2r.jpg
+|   |   |   |       |-- kjdnvl6rx9s17myxcbu4.jpg
+|   |   |   |       |-- manifest.json
+|   |   |   |       |-- mk8kz32jxuixy2nstqiy.jpg
+|   |   |   |       |-- nw6ogcf2dtupdxv6rtgb.jpg
+|   |   |   |       |-- og3jpzk64lulynwdpb77.jpg
+|   |   |   |       |-- oxvm6qtjptbb8insywlc.jpg
+|   |   |   |       |-- qloecybdnpnxxeowsm8g.jpg
+|   |   |   |       |-- rajcka3o0v5yxav6qtr1.jpg
+|   |   |   |       |-- rulednttxfceqwol5yga.jpg
+|   |   |   |       |-- segi7brybthuueccgcgk.webp
+|   |   |   |       |-- sfvbdrw0fxcmdszthion.jpg
+|   |   |   |       |-- ue9wmjyisk2gqvyslvvp.webp
+|   |   |   |       |-- v6jgxmr2tjfk7ehm7vu1.jpg
+|   |   |   |       |-- vwzvgk1dqmdrpeubkqj3.jpg
+|   |   |   |       +-- zmjudjjthsb24roriail.jpg
+|   |   |   +-- .gitignore
+|   |   |-- public\
+|   |   |   |-- avatars\
+|   |   |   |   +-- j8RDQRBgEeA5f2lYTUIU1yLPb2hmIYfoYSAhcMky.jpg
+|   |   |   |-- customers\
+|   |   |   |   |-- 1\
+|   |   |   |   |-- 2\
+|   |   |   |   +-- 3\
+|   |   |   |-- products\
+|   |   |   |   |-- 9b4iNggjXFw1NEU3BONg2066pOlgmSfgPjS95c39.jpg
+|   |   |   |   |-- cam-tpl-0002_pfittwrhtl.jpg
+|   |   |   |   |-- cPpJHqZGWAdX4K97JbI2vfz8mTZ4HFCJQxq2y1m0.jpg
+|   |   |   |   |-- dm-vh-0001_74bok9kwsc.jpg
+|   |   |   |   |-- dt-sam-0001_egx3trzvwg.jpg
+|   |   |   |   |-- dt-sam-0002_omlclsy78e.jpg
+|   |   |   |   |-- dt-sam-0003_hlzqvr463e.jpg
+|   |   |   |   |-- dt-sam-0004_kd6arti7jr.jpg
+|   |   |   |   |-- dt-sam-0005_ip3jfixtoh.jpg
+|   |   |   |   |-- dt-sam-0006_y9zndggfdx.jpg
+|   |   |   |   |-- FNHmw5LvSglO8nvI0hOP1H5jqYLYHfN9XZ6h7d5K.jpg
+|   |   |   |   |-- GLNcjcP6lZPRg7rJVf9p4LquqIJcDeN6vsayMoXP.jpg
+|   |   |   |   |-- igncnAe4rPy71vsBMPwjcEDfnlQZWFYJG2OEB24X.webp
+|   |   |   |   |-- jF7boawzRnPWIVGavEzgG2qJ17ea9ss3Pqgr35PB.jpg
+|   |   |   |   |-- kXHM7JcUWgKSy2jfhqqjOMTHwla65p6XLJ6iAY4P.jpg
+|   |   |   |   |-- lk-0001_hnbp7buaue.jpg
+|   |   |   |   |-- lk-app-0001_d868uxwndm.jpg
+|   |   |   |   |-- lk-oem-0001_b5ut5fdms7.webp
+|   |   |   |   |-- MnNOfc57oKSdoct3JD7ZoKyfTb9ycc2Xy6uVdFFO.webp
+|   |   |   |   |-- pk-oem-0001_ueqds3hsfv.webp
+|   |   |   |   |-- PT6hmdFeBDVMWhLmVx2KcuvGHfAYzpmLxja5dMVj.jpg
+|   |   |   |   |-- Rq6YqWK27Pfol7u2FHZ4fzAvoafutEs7LLyWipu9.jpg
+|   |   |   |   |-- zlZEZlOQoHFz0Xx9dqlpBxDPykCIb9arZhDL7i0e.jpg
+|   |   |   |   +-- Zzgmhj2MUrl5IhmTp7PMogrA08tjAKDkJ35ccvJ1.jpg
+|   |   |   |-- repairs\
+|   |   |   |   |-- 5WVCVD7sUgBfupOp5yyEyKNppMahP9MoW8pDEdg6.jpg
+|   |   |   |   |-- 7stfD1YkZP95uCra0wyrYnUd4DnfQOPFqkzgFyQm.webp
+|   |   |   |   |-- iSX6knEadWwgAsE6AoiATnQYFKm2M7yKruhb9ygi.jpg
+|   |   |   |   +-- s7akVEOfiGZnjsRacW8aBGxKdA5qcgdt5PO4QQO0.jpg
+|   |   |   +-- .gitignore
+|   |   |-- ssl\
+|   |   |   |-- ca.cer
+|   |   |   |-- ca.crt
+|   |   |   |-- ca.key
+|   |   |   |-- ca.srl
+|   |   |   |-- qlbh-lan.crt
+|   |   |   +-- qlbh-lan.key
+|   |   |-- .gitignore
+|   |   +-- installed
+|   +-- debugbar\
+|       |-- 01M66AR4WQ9MCDZ3H2W10W5WPE.json
+|       |-- 01M66AR7TTRK2A289KN6V99BX2.json
+|       |-- 01M66ARN3NMGNDB9MNR4WJGMXQ.json
+|       |-- 01M66ARP39SB39F2ZD7RG8B23D.json
+|       |-- 01M66AS0WSN9X0MPGDWCPXR1SX.json
+|       |-- 01M66AS5XB8P7YPDTQV1VHXDPF.json
+|       |-- 01M66AS824RFZMJMWPZZE61PP4.json
+|       |-- 01M66ASFBPAP891MX0H664KCVM.json
+|       |-- 01M66AT28SA9379TMF3A14A5BC.json
+|       |-- 01M66AT2EGBT36YNZ0BRPBAWC8.json
+|       |-- 01M66AT2MV80NH8ZBKVY4R9P83.json
+|       |-- 01M66AT7SGD76QC0XDX1CNNGAF.json
+|       |-- 01M66AT8WHGBSGESJEDAZ18VRG.json
+|       |-- 01M66AV2AMDW9XQ6C5APCV6SAV.json
+|       |-- 01M66AVRD806TD4KKKJ4JWK5B8.json
+|       |-- 01M66AWWN92XAB3P20JZ5A0F4Q.json
+|       |-- 01M66AX9A7H58JBSCDB6QC4H41.json
+|       |-- 01M66AXF8Z0D91V4XKK65JYTD3.json
+|       |-- 01M66AXJ8HM9APCHZ4E01MBG4K.json
+|       |-- 01M66AXJX7951M5KNSF8K1KYVX.json
+|       |-- 01M66AYQ6GJT51C57ZEDGTKDTB.json
+|       |-- 01M66AZBMGF3QCSY21P64F63MW.json
+|       |-- 01M66AZCWCX5E2EGF1NBHTBT2B.json
+|       |-- 01M66AZEMRMZ8SEYD6NC262HSR.json
+|       |-- 01M66AZG8QMR4ENXVR683K7GNE.json
+|       |-- 01M66AZKVZNZAT0F2QPGV179PA.json
+|       |-- 01M66AZNEYHBVSS2DR2FWGFHCT.json
+|       |-- 01M66AZNQKYQK00V8SGCT5032G.json
+|       |-- 01M66AZNXS2MVBG1EW0VKATFAY.json
+|       |-- 01M66AZP2C359FPVBNNA8A6WMF.json
+|       |-- 01M66AZPBMS2BY803H5CQ2H5J0.json
+|       |-- 01M66AZQ5MJSTGTD4A0RXXN91Y.json
+|       |-- 01M66AZQ68YBMQA68EY643KPZS.json
+|       |-- 01M66AZQGSPRYV0SCYZM8PFCK3.json
+|       |-- 01M66AZQYW3ZPVXWN7Z8ZFKV1A.json
+|       |-- 01M66AZR7Z3TYK0D8VFYQKYJ4N.json
+|       |-- 01M66AZR92MZHTTNJTENME70FZ.json
+|       |-- 01M66AZRHXTRN5ZZH7M0PFSDMH.json
+|       |-- 01M66AZRK13C4MCRE89RKBC97K.json
+|       |-- 01M66AZTRTS0GZSSE1P3FE816B.json
+|       |-- 01M66AZXS296G3QEYX6D4MBYEC.json
+|       |-- 01M66B00F3V78VTSV49M8BFW3B.json
+|       |-- 01M66B03HC3GBCM689B0028Z4W.json
+|       |-- 01M66B06BCBHJBPVXY5CQ2Y745.json
+|       |-- 01M66B09ADY4H0CC402KFE5Y7C.json
+|       |-- 01M66B0C9A7P791TSD5C1J38QS.json
+|       |-- 01M66B0F45H5DTBS7E2124KBFM.json
+|       |-- 01M66B0J2JN9EV7CQ6QPCPBN8Q.json
+|       |-- 01M66B0N1640NKP94KRASJ1KFF.json
+|       |-- 01M66B0QZX2XJM4NTEW7Y7P3NZ.json
+|       |-- 01M66B0TVNYR44C3KEWCY9HG3S.json
+|       |-- 01M66B0XRSJX2BBJ7TCG9E4JT1.json
+|       |-- 01M66B10P936AVMRDE51QAYXX7.json
+|       |-- 01M66B13PHMEP0WT408HQPD2A5.json
+|       |-- 01M66B16J2WK5C50DNQXBCPN9H.json
+|       |-- 01M66B19MGY5X7VZNZC8THF6C0.json
+|       |-- 01M66B1APJ7MEZM02JTWBZF42Z.json
+|       |-- 01M66B1CHMJR57A5M7JGQ230E7.json
+|       |-- 01M66B1FBHFGMVYZ4EY22GQK2S.json
+|       |-- 01M66B1J92QY7XSRKC8F90S5D4.json
+|       |-- 01M66B1N6PPBB2J3PSKB33FQZW.json
+|       |-- 01M66B1R6DF474MG8ZXZTDHA68.json
+|       |-- 01M66B1V2V3EQF513D29ST0EPQ.json
+|       |-- 01M66B1Y080BTWM3FKBXTFHTC7.json
+|       |-- 01M66B20YX4SBPT1J28NRYDMQG.json
+|       |-- 01M66B23VVV88GY0H71XPA9F0Q.json
+|       |-- 01M66B26VAQE6T2QAT8EVEE0H8.json
+|       |-- 01M66B29QVF9NXK0784R2D8C3T.json
+|       |-- 01M66B2CMCDENT1AZM9CAYQKB3.json
+|       |-- 01M66B2FK5489BZ3AXVF8P1WFC.json
+|       |-- 01M66B2JHJNFPEMQ2JVZRZE5GQ.json
+|       |-- 01M66B2NFYQ3SP4HFTTKWYDK7Y.json
+|       |-- 01M66B2RDF1Q2XDB73PJV33TE1.json
+|       |-- 01M66B2VAX88FYR0SJJ90K7Y9Z.json
+|       |-- 01M66B2Y89GKGRRE1GZC12X3QB.json
+|       |-- 01M66B3162PC2J4NFTF9M98PEH.json
+|       |-- 01M66B345TYTEQCTSJPMG1R7VG.json
+|       |-- 01M66B359KR2W5C3YNXVBSJH64.json
+|       |-- 01M66B3764SZSRH42HTK52T6DJ.json
+|       |-- 01M66B39Z29ZB4RCFN8AZCNJPZ.json
+|       |-- 01M66B3CZN67ZMYXZWHK1B5CJX.json
+|       |-- 01M66B3FTMCGCYDTXM0SW0CQF5.json
+|       |-- 01M66B3JVR1YBMBDE44QDDQJ2Y.json
+|       |-- 01M66B3NPVB1S8DGKQ2D67JGGG.json
+|       |-- 01M66B3RRSMZM4HTCFWDF0GE5Y.json
+|       |-- 01M66B3VKH121MZ0EEQXJEHSTG.json
+|       |-- 01M66B3YJ3748XS5WRDNC9YFSY.json
+|       |-- 01M66B41P3ZGFC0P9SJE4F0QBH.json
+|       |-- 01M66B42HA3EDNWMVFKENCXAHW.json
+|       |-- 01M66B42N453XYPWCWXVVHM34Z.json
+|       |-- 01M66B45A26MJKX7PPRTCJNWTJ.json
+|       |-- 01M66B45BJS8AQE1YKN7Z4F4QG.json
+|       |-- 01M66B46FZDDAEFP9N0QMNEQAD.json
+|       |-- 01M66B486YWZ7Z8BSGKK13TE2S.json
+|       |-- 01M66B4BHTV07250P1W5A0ZB9F.json
+|       |-- 01M66B4E39H73DPVPCE36FE606.json
+|       |-- 01M66B4ED765RKG0A7FG2F8CN3.json
+|       |-- 01M66B4H4JR7TSPR7G65183PHF.json
+|       |-- 01M66B4KX3V7EHNW3C6C4KP414.json
+|       |-- 01M66B4PVHBG4ANHBKZKZN9HZY.json
+|       |-- 01M66B4QGBGX3FJ9ENXQMKKP5Z.json
+|       |-- 01M66B4SW5T5JWZCGW10XVZGB2.json
+|       |-- 01M66B50D8XNH041H9GES31SR4.json
+|       |-- 01M66B6TJG1X4CNRK8C2DNN0RE.json
+|       |-- 01M66B8PWB5SA429NRB3GQVFJA.json
+|       |-- 01M66BAG3SYMXQMY1K3JYHVEVD.json
+|       +-- 01M66BCAC7FN8CJXHXZHDF9H9S.json
+|-- tests\
+|   |-- Feature\
+|   |   |-- Auth\
+|   |   |   |-- AuthenticationTest.php
+|   |   |   |-- EmailVerificationTest.php
+|   |   |   |-- PasswordConfirmationTest.php
+|   |   |   |-- PasswordResetTest.php
+|   |   |   +-- PasswordUpdateTest.php
+|   |   |-- DoorCameraAccessTest.php
+|   |   +-- ProfileTest.php
+|   |-- Unit\
+|   |   +-- FaceMatcherTest.php
+|   +-- TestCase.php
+|-- .editorconfig
+|-- .env
+|-- .env.example
+|-- .gitattributes
+|-- .gitignore
+|-- artisan
+|-- composer.json
+|-- composer.lock
+|-- DANH_SACH_CAY_THU_MUC_DU_AN.txt
+|-- HUONG_DAN_CAI_DAT_VA_TRIEN_KHAI.md
+|-- jsconfig.json
+|-- package-lock.json
+|-- package.json
+|-- phpunit.xml
+|-- postcss.config.js
+|-- README_NHAN_DIEN_KHUON_MAT.md
+|-- README.md
+|-- tailwind.config.js
++-- vite.config.js

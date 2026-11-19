@@ -8,7 +8,7 @@ import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import api from '@/Services/api'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useFaceCheckIn } from '@/Modules/POS/Customer/Composables/useFaceCheckIn'
-import { useCameraIntelligenceWebrtc } from '@/Modules/POS/Customer/Composables/useCameraIntelligenceWebrtc'
+import DoorCameraStream from './Components/DoorCameraStream.vue'
 
 defineOptions({ layout: AdminLayout })
 
@@ -73,7 +73,18 @@ const hasDoor = computed(() => !!props.doorCamera.enabled)
 const readFlag = (key, fallback) => { try { const value = localStorage.getItem(key); return value === null ? fallback : value } catch { return fallback } }
 const writeFlag = (key, value) => { try { localStorage.setItem(key, value) } catch { /* bỏ qua */ } }
 const doorCameras = computed(() => props.doorCamera.configured_cameras || [])
-const selectedDoorCamera = ref(readFlag('visits.doorCamera', doorCameras.value[0]?.id || 'door-1'))
+const receivingDoorCameras = computed(() => doorCameras.value.filter(camera => camera.receiving))
+const rememberedDoorCamera = readFlag('visits.doorCamera', '')
+// Do not reopen a camera that has lost its RTSP source just because it was the
+// previous browser selection. Prefer a currently receiving camera; operators
+// can still explicitly choose another camera from the selector.
+const selectedDoorCamera = ref(
+    doorCameras.value.find(camera => camera.id === rememberedDoorCamera && camera.receiving)?.id
+    || doorCameras.value.find(camera => camera.receiving)?.id
+    || rememberedDoorCamera
+    || doorCameras.value[0]?.id
+    || 'door-1',
+)
 watch(doorCameras, cameras => {
     if (!cameras.some(camera => camera.id === selectedDoorCamera.value)) {
         selectedDoorCamera.value = cameras.find(camera => camera.receiving)?.id || cameras[0]?.id || 'door-1'
@@ -104,23 +115,13 @@ const {
     activeWhen: () => !showDoor.value && localOn.value,
 })
 
-const doorVideo = useCameraIntelligenceWebrtc(
-    computed(() => showDoor.value && faceFeatureOn.value),
-    { camera: selectedDoorCamera, sourceKey: computed(() => `${props.doorCamera.source_hash || ''}:${selectedDoorCamera.value}`) },
-)
-const doorFaces = computed(() => (doorVideo.ok.value ? doorVideo.faces.value : []))
 const doorStatus = computed(() => {
     if (!props.doorCamera.online) {
-        return doorVideo.ok.value ? 'Video đang chạy · Camera Intelligence mất kết nối' : 'Camera Intelligence chưa kết nối'
+        return 'Camera Intelligence chưa kết nối'
     }
-    if (selectedDoorCameraInfo.value && !selectedDoorCameraInfo.value.receiving) return `${selectedDoorCameraInfo.value.name}: ${selectedDoorCameraInfo.value.message || 'chưa nhận được khung hình'}`
+    if (!receivingDoorCameras.value.length) return selectedDoorCameraInfo.value ? `${selectedDoorCameraInfo.value.name}: ${selectedDoorCameraInfo.value.message || 'chưa nhận được khung hình'}` : 'Chưa nhận được khung hình'
     if (!props.doorCamera.camera_ok) return 'Camera Intelligence không lấy được ảnh camera'
-    if (!doorFaces.value.length) return 'Đang dò khuôn mặt…'
-    const scanning = doorFaces.value.filter(face => face.kind === 'scanning').length
-    const known = doorFaces.value.filter(face => face.kind === 'known').length
-    if (scanning) return `Đã phát hiện ${doorFaces.value.length} khuôn mặt · đang phân tích ${scanning}`
-    if (known) return `Đã nhận ra ${known} khách · đang thấy ${doorFaces.value.length} khuôn mặt`
-    return `Đã thấy ${doorFaces.value.length} khuôn mặt chưa đăng ký`
+    return `Đang phát và dò khuôn mặt tại ${receivingDoorCameras.value.length}/${doorCameras.value.length} camera`
 })
 
 const videoRatio = ref(4 / 3)
@@ -378,15 +379,7 @@ const remove = (visit) => {
                 <div class="flex min-w-0 items-center gap-2">
                     <ScanFace class="h-4 w-4 shrink-0 text-blue-600" />
                     <h3 class="truncate text-sm font-bold text-slate-800">Camera ra vào</h3>
-                    <select
-                        v-if="showDoor && doorCameras.length > 1"
-                        :value="selectedDoorCamera"
-                        class="max-w-40 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-blue-400"
-                        aria-label="Chọn camera cửa"
-                        @change="setDoorCamera($event.target.value)"
-                    >
-                        <option v-for="camera in doorCameras" :key="camera.id" :value="camera.id">{{ camera.receiving ? '● ' : '○ ' }}{{ camera.name }}</option>
-                    </select>
+                    <span v-if="showDoor && doorCameras.length > 1" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">{{ receivingDoorCameras.length }}/{{ doorCameras.length }} camera</span>
                     <span v-if="faceFeatureOn && showDoor" class="truncate text-xs text-slate-500">{{ doorStatus }}</span>
                     <span v-else-if="faceFeatureOn && cameraActive" class="truncate text-xs text-slate-500">{{ cameraStatus }}</span>
                 </div>
@@ -428,35 +421,10 @@ const remove = (visit) => {
                 Chưa bật nhận diện khuôn mặt. Bật trong <Link href="/settings" class="font-semibold text-blue-600 underline">Cài đặt → Khách hàng</Link> để xem camera tại đây.
             </p>
 
-            <!-- Camera cửa: video WebRTC liên tục + lớp khung bắt mặt và nhãn -->
+            <!-- Mỗi camera có peer WebRTC riêng; AI nhận diện chúng song song. -->
             <div v-else-if="showDoor" class="bg-slate-900 p-2">
-                <div class="relative mx-auto flex min-h-[10rem] items-center justify-center overflow-hidden rounded-lg bg-black" :style="stageStyle">
-                    <!-- Must stay mounted while WebRTC negotiates: the composable
-                         needs this element to attach the incoming MediaStream. -->
-                    <video :ref="doorVideo.setVideo" autoplay muted playsinline class="absolute inset-0 h-full w-full object-contain" aria-label="Video camera cửa" @loadedmetadata="onMeta"></video>
-                    <div v-if="doorVideo.ok.value" class="absolute inset-0">
-                        <div class="pointer-events-none absolute inset-0 overflow-hidden">
-                            <div
-                                v-for="face in doorFaces"
-                                :key="face.id"
-                                class="absolute rounded-md border-2 shadow-[0_0_0_1px_rgba(15,23,42,0.65)] transition-all duration-150"
-                                :class="boxTone[face.kind]"
-                                :style="boxStyle(face)"
-                            >
-                                <span class="absolute max-w-[12rem] truncate rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none" :class="[labelTone[face.kind], labelPos(face)]">{{ face.label }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <p v-if="!doorVideo.ok.value && doorVideo.loading.value" class="absolute inset-0 flex items-center justify-center p-6 text-sm text-slate-300">Đang kết nối video WebRTC…</p>
-                    <p v-else-if="!doorVideo.ok.value" class="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-rose-300">
-                        {{ doorVideo.error.value || 'Chưa có luồng camera.' }}
-                    </p>
-                </div>
-                <div v-if="doorFaces.length" class="mt-2 flex flex-wrap gap-1.5">
-                    <span v-for="face in doorFaces" :key="face.id" class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-100">
-                        <span class="h-2 w-2 shrink-0 rounded-full" :class="dotTone[face.kind]"></span>
-                        <span class="truncate">{{ face.label }}</span>
-                    </span>
+                <div class="grid gap-2" :class="doorCameras.length > 1 ? 'md:grid-cols-2' : 'grid-cols-1'">
+                    <DoorCameraStream v-for="camera in doorCameras" :key="camera.id" :camera="camera" :enabled="faceFeatureOn && showDoor" :source-hash="doorCamera.source_hash || ''" :webrtc-url="doorCamera.webrtc_url || ''" />
                 </div>
             </div>
 
@@ -599,6 +567,15 @@ const remove = (visit) => {
                             <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1" :class="kindOf(visit).cls">{{ kindOf(visit).text }}</span>
                             <span v-if="visit.visit_count > 1" class="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">{{ visit.visit_count }} lần ghé</span>
                             <span v-if="visit.present" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Đang ở CH</span>
+                            <span
+                                v-for="camera in visit.cameras"
+                                :key="camera.id"
+                                class="inline-flex max-w-32 items-center gap-1 truncate rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 ring-1 ring-sky-200"
+                                :title="`Ghi nhận từ ${camera.name}`"
+                            >
+                                <Video class="h-3 w-3 shrink-0" />
+                                <span class="truncate">{{ camera.name }}</span>
+                            </span>
                             <span class="text-[11px] text-slate-400">{{ durationText(visit.minutes) }}</span>
                             <History class="ml-auto h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
                         </div>
@@ -680,7 +657,12 @@ const remove = (visit) => {
                                     <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"><User class="h-4 w-4" /></span>
                                     <div class="min-w-0 flex-1">
                                         <div class="font-semibold text-slate-800 tabular-nums">{{ timeText(item.first_seen_at) }}<span v-if="item.minutes"> – {{ timeText(item.last_seen_at) }}</span></div>
-                                        <div class="text-xs text-slate-500">{{ durationText(item.minutes) }}</div>
+                                        <div class="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                                            <span>{{ durationText(item.minutes) }}</span>
+                                            <span v-if="item.camera" class="inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 ring-1 ring-sky-200">
+                                                <Video class="h-3 w-3" />{{ item.camera.name }}
+                                            </span>
+                                        </div>
                                     </div>
                                     <span v-if="item.current" class="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">Lượt đang xem</span>
                                 </div>
