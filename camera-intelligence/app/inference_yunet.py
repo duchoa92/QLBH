@@ -56,8 +56,8 @@ def identity_quality(frame: np.ndarray, box: Box) -> tuple[float, float, bool]:
     if crop.size == 0:
         return pose, 0.0, False
     sharpness = float(np.clip(cv2.Laplacian(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var() / 90.0, 0.0, 1.0))
-    sufficiently_large = min(box.width, box.height) >= 80
-    return pose, sharpness, sufficiently_large and pose >= 0.72 and sharpness >= 0.35
+    sufficiently_large = min(box.width, box.height) >= 60
+    return pose, sharpness, sufficiently_large and pose >= 0.65 and sharpness >= 0.20
 
 
 def nchw(image: np.ndarray, *, swap_rb: bool = False) -> np.ndarray:
@@ -148,7 +148,7 @@ class YuNetSFaceEngine:
             # 0.65 removes weak texture/door-frame false positives while the
             # validated door-camera face scores around 0.9.  Track stability
             # below supplies the second guard against a one-frame false hit.
-            detector_path, '', (INPUT, INPUT), 0.65, 0.3, 5000,
+            detector_path, '', (INPUT, INPUT), 0.50, 0.3, 5000,
         )
         self.recognizer = core.compile_model(recognizer_path, device)
         self.recognizer_input = self.recognizer.input(0)

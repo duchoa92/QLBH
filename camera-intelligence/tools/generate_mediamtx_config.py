@@ -17,10 +17,9 @@ HEADER = {
     # avoids a stale prior MediaMTX process on port 9998 preventing the video
     # server itself from starting after an update or Windows logon.
     'metrics': False,
-    # Camera Intelligence deliberately reads the same MediaMTX *view* path
-    # over local RTSP. Keep that listener local and TCP-only: it needs no UDP
-    # RTP/RTCP ports (which are often occupied by a former camera stack), yet
-    # it still gives AI and WebRTC one canonical low-resolution stream.
+    # Keep the RTSP listener local and TCP-only. It is only used for the
+    # MediaMTX relay itself and diagnostics: Camera Intelligence reads each
+    # camera's view sub-stream directly to avoid stale-frame buffering.
     'rtsp': True,
     'rtspAddress': '127.0.0.1:8554',
     'rtspTransports': ['tcp'],

@@ -24,7 +24,7 @@ Route::post('/webhooks/bank-transactions', [BankTransferWebhookController::class
 // Nền tảng thay thế: service Python/OpenVINO chạy độc lập gửi metadata qua khóa riêng.
 Route::middleware([DoorCameraKey::class, SubstituteBindings::class])->prefix('camera-intelligence')->group(function () {
     Route::post('/heartbeat', [CameraIntelligenceController::class, 'heartbeat'])->middleware('throttle:120,1,camera_intelligence_heartbeat');
-    Route::post('/faces', [CameraIntelligenceController::class, 'faces'])->middleware('throttle:900,1,camera_intelligence_faces');
+    Route::post('/faces', [CameraIntelligenceController::class, 'faces'])->middleware('throttle:6000,1,camera_intelligence_faces');
     Route::post('/match', [CameraIntelligenceController::class, 'match'])->middleware('throttle:240,1,camera_intelligence_match');
     Route::post('/visits', [CustomerVisitController::class, 'record'])->middleware('throttle:240,1,camera_intelligence_visits');
     Route::post('/visits/{visit}/seen', [CustomerVisitController::class, 'left'])->middleware('throttle:600,1,camera_intelligence_seen');
@@ -92,7 +92,7 @@ Route::middleware(['web', 'auth'])->group(function ()
     Route::post('/customers/visits/{visit}/link', [CustomerVisitController::class, 'link'])
         ->middleware(['permission:pos.access|customers.edit', 'throttle:30,1']);
     Route::get('/customers/camera-intelligence/faces', [CameraIntelligenceController::class, 'liveFaces'])
-        ->middleware(['permission:pos.access|customers.view', 'throttle:240,1,camera_intelligence_live_faces']);
+        ->middleware(['permission:pos.access|customers.view', 'throttle:3000,1,camera_intelligence_live_faces']);
     Route::get('/customers/camera-intelligence/live', [CameraIntelligenceController::class, 'live'])
         ->middleware(['permission:pos.access|customers.view', 'throttle:30,1,camera_intelligence_live']);
     Route::post('/customers/camera-intelligence/webrtc-offer', [CameraIntelligenceController::class, 'webrtcOffer'])

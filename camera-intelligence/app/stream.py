@@ -8,6 +8,9 @@ from time import monotonic
 import numpy as np
 
 
+STREAM_REFRESH_SECONDS = 4.0
+
+
 class RtspFrames:
     """FFmpeg reader that exposes only the newest decoded frame.
 
@@ -19,10 +22,18 @@ class RtspFrames:
 
     def __init__(self, url: str, width: int, height: int) -> None:
         self.url, self.width, self.height = url, width, height
+        # TCP is reliable but several CCTV firmware versions retain decoded
+        # frames in a long TCP queue.  For local cameras UDP receives the most
+        # recent RTP packets instead, which removes the 20–30 second lag seen
+        # by the detector.  A camera/network that blocks UDP automatically
+        # falls back to the previous TCP behaviour below.
+        self._transport = 'udp'
+        self._attempted_udp = False
         self.process: subprocess.Popen[bytes] | None = None
         self._latest: np.ndarray | None = None
         self._sequence = 0
         self._last_frame_at = 0.0
+        self._session_started_at = 0.0
         self._stopping = threading.Event()
         self._frame_ready = threading.Condition()
         self._reader: threading.Thread | None = None
@@ -31,8 +42,9 @@ class RtspFrames:
         self.stop()
         self._stopping.clear()
         self.process = subprocess.Popen([
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp",
-            "-fflags", "nobuffer", "-flags", "low_delay", "-analyzeduration", "0", "-probesize", "32",
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-rtsp_transport", self._transport,
+            "-fflags", "nobuffer+discardcorrupt", "-flags", "low_delay", "-avioflags", "direct",
+            "-analyzeduration", "0", "-probesize", "32", "-max_delay", "0",
             "-i", self.url, "-an", "-vf", f"scale={self.width}:{self.height}", "-pix_fmt", "bgr24",
             "-f", "rawvideo", "pipe:1",
         ], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
@@ -40,6 +52,7 @@ class RtspFrames:
             self._latest = None
             self._sequence = 0
             self._last_frame_at = monotonic()
+            self._session_started_at = self._last_frame_at
         self._reader = threading.Thread(target=self._read_frames, name='rtsp-frame-reader', daemon=True)
         self._reader.start()
 
@@ -89,7 +102,26 @@ class RtspFrames:
     def frames(self) -> Iterator[np.ndarray]:
         sequence = 0
         while True:
+            # Some DVR/camera firmware starts a new RTSP client near live but
+            # then steadily serves an internal replay queue.  No FFmpeg flag
+            # can discard frames the camera has not marked stale.  Reopening
+            # this inexpensive H.264 sub-stream before that queue grows keeps
+            # face boxes within a few seconds of the browser's WebRTC view.
+            # The worker retains only the newest decoded frame, so the brief
+            # reconnect never creates a backlog in Python either.
+            if self.process is not None and monotonic() - self._session_started_at >= STREAM_REFRESH_SECONDS:
+                self.stop()
+                sequence = 0
+                continue
             if self.process is None or self.process.poll() is not None:
+                # A UDP-less camera normally exits before delivering a full
+                # frame.  Try TCP once so a restrictive router cannot make a
+                # camera disappear merely because low-latency transport is
+                # unavailable.
+                if self._transport == 'udp' and self._attempted_udp and self._sequence == 0:
+                    self._transport = 'tcp'
+                if self._transport == 'udp':
+                    self._attempted_udp = True
                 self.start()
                 sequence = 0
 
@@ -106,6 +138,8 @@ class RtspFrames:
                     # without requiring the operator to restart Python.
                     stalled = monotonic() - self._last_frame_at >= 8
                     if self.process is None or self.process.poll() is not None or stalled:
+                        if self._transport == 'udp' and self._sequence == 0:
+                            self._transport = 'tcp'
                         self.stop()
                     continue
                 sequence = self._sequence

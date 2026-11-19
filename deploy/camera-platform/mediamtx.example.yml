@@ -11,6 +11,7 @@ webrtcAddress: :8889
 webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8189
 webrtcIPsFromInterfaces: true
+webrtcAdditionalHosts: []
 webrtcIPsFromInterfacesList: []
 pathDefaults:
   rtspTransport: tcp

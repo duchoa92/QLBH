@@ -122,7 +122,6 @@ class ConfigureCameraIntelligence extends Command
                     ."    enabled: true\n"
                     ."    ai_rtsp_url: ".$q($source['ai_rtsp_url'])."\n"
                     ."    view_rtsp_url: ".$q($source['view_rtsp_url'])."\n"
-                    ."    analysis_rtsp_url: ".$q('rtsp://127.0.0.1:8554/'.$source['id'].'-view')."\n"
                     ."    width: 1280\n"
                     ."    height: 720\n"
                     ."    zone: entrance\n";
@@ -201,16 +200,21 @@ class ConfigureCameraIntelligence extends Command
 
         // The native Windows worker runs on the same Laragon machine. Calling
         // the loopback HTTP vhost avoids a self-signed LAN HTTPS certificate
-        // that Python correctly refuses to trust. Docker/Linux deployments can
-        // retain APP_URL or pass --api-url explicitly for their private API.
+        // that Python correctly refuses to trust.  Keep the path generated
+        // from APP_URL, though: Laragon can serve QLBH from a subdirectory
+        // (for example /qlbh/public), where a bare http://127.0.0.1/api is the
+        // wrong virtual-host path and returns 404 for every face overlay.
+        $route = rtrim(url('/api'), '/');
         if (PHP_OS_FAMILY === 'Windows') {
-            return 'http://127.0.0.1/api';
+            $path = (string) (parse_url($route, PHP_URL_PATH) ?: '/api');
+            $port = parse_url($route, PHP_URL_PORT);
+
+            return 'http://127.0.0.1'.(is_int($port) ? ':'.$port : '').'/'.ltrim($path, '/');
         }
 
-        // Resolve the route from APP_URL. Laragon commonly serves this project
-        // from a subdirectory (for example /qlbh/public), which loopback /api
-        // alone would miss and therefore return 404 to the background worker.
-        return rtrim(url('/api'), '/');
+        // Docker/Linux deployments can retain APP_URL or pass --api-url
+        // explicitly for their private API.
+        return $route;
     }
 
     /** @return array<int, string> */

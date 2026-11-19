@@ -21,6 +21,16 @@ RECOGNITION_SAMPLE_COUNT = 3
 THUMB_MAX_CHARACTERS = 29_000
 
 
+def analysis_stream_url(camera: CameraConfig) -> str:
+    """Choose a current, low-latency stream for inference.
+
+    ``view_rtsp_url`` is the camera's H.264 sub-stream.  It is also the
+    source MediaMTX publishes to WebRTC, but reading it directly avoids the
+    replay server's TCP backlog becoming an unintended inference queue.
+    """
+    return camera.view_rtsp_url or camera.analysis_rtsp_url or camera.ai_rtsp_url
+
+
 def make_face_thumb(frame: np.ndarray, box: "Box") -> str | None:
     """Return a small, bounded JPEG crop for the customer-visit card.
 
@@ -168,6 +178,7 @@ class CameraWorker(threading.Thread):
                     self.state.last_error = None
             except Exception as error:
                 self.state.last_error = f'Cannot update overlays: {error}'
+            self.stop_event.wait(0.2)
 
     def monitor_stream(self, started_at: float) -> None:
         """Surface an RTSP source that starts a worker but never yields a frame."""
@@ -241,13 +252,16 @@ class CameraWorker(threading.Thread):
             return
 
         interval = 1 / self.config.inference.detect_fps
-        # Analyse the same H.264 sub-stream that MediaMTX sends to the web
-        # page.  A camera main-stream and sub-stream are frequently different
-        # encodes (and, on some devices, can drift), which made a person visible
-        # in WebRTC while the worker was inspecting a different frame.  The
-        # configured main stream remains available as a fallback for old/manual
-        # configs that do not provide a view stream.
-        analysis_url = self.camera.analysis_rtsp_url or self.camera.view_rtsp_url or self.camera.ai_rtsp_url
+        # Read the H.264 sub-stream directly from the camera.  MediaMTX still
+        # owns WebRTC playback, but its local RTSP restream can retain a large
+        # TCP buffer after a brief camera/network stall.  That made YuNet see a
+        # face from tens of seconds ago while the browser was already showing
+        # the current person.  The direct sub-stream is the same low-resolution
+        # encode as WebRTC, starts from its newest keyframe and keeps the
+        # recognition overlay in real time.  ``analysis_rtsp_url`` is retained
+        # only to read older config files; it is a fallback for a legacy config
+        # that has no view stream.
+        analysis_url = analysis_stream_url(self.camera)
         reader = RtspFrames(analysis_url, self.camera.width, self.camera.height)
         self.state.running = True
         try:

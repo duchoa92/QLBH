@@ -36,9 +36,9 @@ class CameraConfig(BaseModel):
     enabled: bool = True
     ai_rtsp_url: str = Field(pattern=r"^rtsps?://")
     view_rtsp_url: str = Field(pattern=r"^rtsps?://")
-    # MediaMTX is the sole RTSP client of the physical camera. The worker
-    # consumes this local restream so video and recognition stay in lockstep
-    # and cameras with a one-client RTSP limit do not go black in WebRTC.
+    # Compatibility-only field from the first MediaMTX integration.  Current
+    # workers prefer ``view_rtsp_url`` directly, because the local restream can
+    # retain stale RTSP frames after a temporary network stall.
     analysis_rtsp_url: str | None = Field(default=None, pattern=r"^rtsps?://")
     width: int = Field(default=1280, ge=160, le=7680)
     height: int = Field(default=720, ge=120, le=4320)

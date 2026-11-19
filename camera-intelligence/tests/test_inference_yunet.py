@@ -5,11 +5,25 @@ import unittest
 import numpy as np
 
 from app.inference_yunet import SFACE_TEMPLATE, align_sface, nchw, similarity_matrix
+from app.config import CameraConfig
+from app.stream import STREAM_REFRESH_SECONDS, RtspFrames
 from app.tracker import Box, Track
-from app.worker import DISPLAY_TRACK_FRAMES, THUMB_MAX_CHARACTERS, make_face_thumb, overlay_face
+from app.worker import DISPLAY_TRACK_FRAMES, THUMB_MAX_CHARACTERS, analysis_stream_url, make_face_thumb, overlay_face
 
 
 class InferenceTests(unittest.TestCase):
+    def test_rtsp_reader_prefers_udp_for_low_latency(self) -> None:
+        reader = RtspFrames('rtsp://camera/sub', 1280, 720)
+        self.assertEqual(reader._transport, 'udp')
+        self.assertLessEqual(STREAM_REFRESH_SECONDS, 5)
+
+    def test_analysis_uses_direct_view_stream_not_buffered_mediamtx_restream(self) -> None:
+        camera = CameraConfig(
+            id='door-1', name='Door', ai_rtsp_url='rtsp://camera/main',
+            view_rtsp_url='rtsp://camera/sub', analysis_rtsp_url='rtsp://127.0.0.1:8554/door-1-view',
+        )
+        self.assertEqual(analysis_stream_url(camera), 'rtsp://camera/sub')
+
     def test_similarity_matrix_keeps_canonical_landmarks_stable(self) -> None:
         matrix = similarity_matrix(SFACE_TEMPLATE)
         self.assertIsNotNone(matrix)
