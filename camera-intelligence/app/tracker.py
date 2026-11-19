@@ -43,7 +43,7 @@ class Track:
 class MultiFaceTracker:
     """Deterministic IoU tracker. It is intentionally small and has no global state across cameras."""
 
-    def __init__(self, expire_seconds: float = 2.0, min_iou: float = 0.15) -> None:
+    def __init__(self, expire_seconds: float = 2.0, min_iou: float = 0.25) -> None:
         self.expire_seconds = expire_seconds
         self.min_iou = min_iou
         self.tracks: dict[str, Track] = {}
