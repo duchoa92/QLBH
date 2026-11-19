@@ -5,8 +5,8 @@ import unittest
 import numpy as np
 
 from app.inference_yunet import SFACE_TEMPLATE, align_sface, nchw, similarity_matrix
-from app.tracker import Box
-from app.worker import THUMB_MAX_CHARACTERS, make_face_thumb
+from app.tracker import Box, Track
+from app.worker import DISPLAY_TRACK_FRAMES, THUMB_MAX_CHARACTERS, make_face_thumb, overlay_face
 
 
 class InferenceTests(unittest.TestCase):
@@ -35,6 +35,24 @@ class InferenceTests(unittest.TestCase):
         assert thumb is not None
         self.assertTrue(thumb.startswith('data:image/jpeg;base64,'))
         self.assertLessEqual(len(thumb), THUMB_MAX_CHARACTERS)
+
+    def test_overlay_explains_confirmed_face_before_identity_is_known(self) -> None:
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        track = Track(box=Box(400, 180, 180, 180, 0.95), frames=DISPLAY_TRACK_FRAMES)
+        scanning = overlay_face(track, frame)
+        self.assertEqual(scanning['kind'], 'scanning')
+        self.assertIn('Đã thấy khuôn mặt', scanning['label'])
+
+        track.matching = True
+        resolving = overlay_face(track, frame)
+        self.assertEqual(resolving['kind'], 'scanning')
+        self.assertIn('đối chiếu', resolving['label'])
+
+        track.matching = False
+        track.match_checked = True
+        unknown = overlay_face(track, frame)
+        self.assertEqual(unknown['kind'], 'unknown')
+        self.assertIn('chưa đăng ký', unknown['label'])
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ inference:
   detector_model: models/face_detection_yunet_2023mar.onnx
   recognizer_model: models/face_recognition_sface_2021dec.onnx
   min_face_px: 40
-detect_fps: 10
+  detect_fps: 10
   recognition_cooldown_seconds: 4
   match_threshold: 0.72
   match_margin: 0.08

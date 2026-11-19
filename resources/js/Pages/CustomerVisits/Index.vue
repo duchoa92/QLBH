@@ -105,7 +105,12 @@ const doorStatus = computed(() => {
         return doorVideo.ok.value ? 'Video đang chạy · Camera Intelligence mất kết nối' : 'Camera Intelligence chưa kết nối'
     }
     if (!props.doorCamera.camera_ok) return 'Camera Intelligence không lấy được ảnh camera'
-    return doorFaces.value.length ? `Đang thấy ${doorFaces.value.length} người` : 'Đang xem camera cửa'
+    if (!doorFaces.value.length) return 'Đang dò khuôn mặt…'
+    const scanning = doorFaces.value.filter(face => face.kind === 'scanning').length
+    const known = doorFaces.value.filter(face => face.kind === 'known').length
+    if (scanning) return `Đã phát hiện ${doorFaces.value.length} khuôn mặt · đang phân tích ${scanning}`
+    if (known) return `Đã nhận ra ${known} khách · đang thấy ${doorFaces.value.length} khuôn mặt`
+    return `Đã thấy ${doorFaces.value.length} khuôn mặt chưa đăng ký`
 })
 
 const videoRatio = ref(4 / 3)
@@ -415,7 +420,7 @@ const remove = (visit) => {
                             <div
                                 v-for="face in doorFaces"
                                 :key="face.id"
-                                class="absolute rounded-md border-2 transition-all duration-200"
+                                class="absolute rounded-md border-2 shadow-[0_0_0_1px_rgba(15,23,42,0.65)] transition-all duration-150"
                                 :class="boxTone[face.kind]"
                                 :style="boxStyle(face)"
                             >

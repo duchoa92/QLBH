@@ -10,7 +10,7 @@ const waitForIce = peer => new Promise(resolve => {
 })
 
 /** MediaMTX/WHEP player and AI metadata overlay. */
-export const useCameraIntelligenceWebrtc = (enabled, { camera = 'door-1', facesInterval = 350, sourceKey = null } = {}) => {
+export const useCameraIntelligenceWebrtc = (enabled, { camera = 'door-1', facesInterval = 250, sourceKey = null } = {}) => {
     const ok = ref(false), loading = ref(true), error = ref(''), faces = ref([]), videoElement = ref(null)
     let peer = null, facesTimer = null, retryTimer = null, frameTimer = null, retryAttempts = 0, generation = 0, lastFacesAt = 0, lastFacesChangedAt = 0
     const setVideo = element => { videoElement.value = element; if (element?.srcObject) element.play?.().catch(() => {}) }

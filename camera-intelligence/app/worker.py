@@ -13,10 +13,11 @@ from .config import AppConfig, CameraConfig
 from .events import EventPublisher
 from .inference_yunet import YuNetSFaceEngine
 from .stream import RtspFrames
-from .tracker import MultiFaceTracker
+from .tracker import Box, MultiFaceTracker, Track
 
 LOG = logging.getLogger(__name__)
-STABLE_TRACK_FRAMES = 3
+DISPLAY_TRACK_FRAMES = 2
+RECOGNITION_SAMPLE_COUNT = 3
 THUMB_MAX_CHARACTERS = 29_000
 
 
@@ -51,6 +52,41 @@ def make_face_thumb(frame: np.ndarray, box: "Box") -> str | None:
         if len(value) <= THUMB_MAX_CHARACTERS:
             return value
     return None
+
+
+def overlay_face(track: Track, frame: np.ndarray) -> dict[str, float | str] | None:
+    """Describe one confirmed face for the WebRTC overlay.
+
+    A box becomes visible after two adjacent YuNet hits.  It remains cyan while
+    samples are collected or the server compares SFace vectors, emerald only
+    after a confident known-customer match, and amber only after an explicit
+    no-match.  This prevents the UI from implying that a single detector hit
+    is a recognised customer.
+    """
+    box = track.box
+    if box is None or track.frames < DISPLAY_TRACK_FRAMES:
+        return None
+
+    if track.identity:
+        kind, label = 'known', str(track.identity.get('full_name') or 'Khách quen đã nhận ra')
+    elif track.matching:
+        kind, label = 'scanning', 'Đã thấy khuôn mặt · đang đối chiếu…'
+    elif track.match_checked:
+        kind, label = 'unknown', 'Đã thấy khuôn mặt · chưa đăng ký'
+    elif len(track.samples) < RECOGNITION_SAMPLE_COUNT:
+        kind, label = 'scanning', f'Đã thấy khuôn mặt · lấy mẫu {len(track.samples)}/{RECOGNITION_SAMPLE_COUNT}'
+    else:
+        kind, label = 'scanning', 'Đã thấy khuôn mặt · đang phân tích…'
+
+    return {
+        'id': str(track.id),
+        'x': float(round(float(box.x) / frame.shape[1], 5)),
+        'y': float(round(float(box.y) / frame.shape[0], 5)),
+        'w': float(round(float(box.width) / frame.shape[1], 5)),
+        'h': float(round(float(box.height) / frame.shape[0], 5)),
+        'kind': kind,
+        'label': label,
+    }
 
 
 @dataclass
@@ -95,9 +131,72 @@ class CameraWorker(threading.Thread):
         self.publisher = publisher
         self.stop_event = threading.Event()
         self.tracker = MultiFaceTracker()
+        # Posting overlay metadata must never make the detector wait for a
+        # PHP/HTTP round-trip.  Keep one latest payload; when the server is
+        # briefly busy the publisher skips stale boxes and sends the newest.
+        self.overlay_event = threading.Event()
+        self.overlay_lock = threading.Lock()
+        self.latest_overlay: list[dict[str, float | str]] = []
+        self.overlay_thread: threading.Thread | None = None
 
     def stop(self) -> None:
         self.stop_event.set()
+        self.overlay_event.set()
+
+    def queue_overlay(self, faces: list[dict[str, float | str]]) -> None:
+        with self.overlay_lock:
+            self.latest_overlay = faces
+        self.overlay_event.set()
+
+    def publish_overlays(self) -> None:
+        """Send only the newest boxes in a separate, bounded-latency thread."""
+        while not self.stop_event.is_set():
+            self.overlay_event.wait(timeout=0.5)
+            self.overlay_event.clear()
+            if self.stop_event.is_set():
+                break
+            with self.overlay_lock:
+                faces = self.latest_overlay
+            try:
+                self.publisher.post('/camera-intelligence/faces', {'camera_id': self.camera.id, 'faces': faces})
+                if self.state.last_error and self.state.last_error.startswith('Cannot update overlays:'):
+                    self.state.last_error = None
+            except Exception as error:
+                self.state.last_error = f'Cannot update overlays: {error}'
+
+    def match_and_record(self, track: Track, samples: list[tuple[float, list[float], str | None]]) -> None:
+        """Resolve one SFace sample set without stalling live face boxes."""
+        try:
+            # Keep the sharpest sample first and submit several independent
+            # frames. Laravel aggregates them per person, which is markedly
+            # less prone to an accidental one-frame identity than one vector.
+            ordered = sorted(samples, key=lambda sample: sample[0], reverse=True)
+            descriptors = [sample[1] for sample in ordered]
+            thumb = next((sample[2] for sample in ordered if sample[2]), None)
+            match = self.publisher.post('/camera-intelligence/match', {'descriptors': descriptors})
+            matched_identity = match.get('customer') if match.get('matched') else None
+            # A known person stays known while an occasional blurred probe is
+            # below the server threshold.  Only a new positive match can
+            # replace that identity; a transient no-match cannot turn a green
+            # box into an anonymous amber one.
+            identity = matched_identity or track.identity
+            self.publisher.post('/camera-intelligence/visits', {
+                'customer_id': identity.get('id') if identity else None,
+                'engine': 'sface-v1',
+                # Retain the sharpest normalized vector for an unknown-visit
+                # grouping. The other probes were only for robust matching.
+                'descriptor': descriptors[0],
+                'thumb': thumb,
+            })
+            if matched_identity:
+                track.identity = matched_identity
+            track.match_checked = True
+            self.state.last_error = None
+        except Exception as error:
+            self.state.last_error = f'Cannot match with QLBH: {error}'
+            LOG.warning('camera=%s cannot resolve face track=%s: %s', self.camera.id, track.id, error)
+        finally:
+            track.matching = False
 
     def run(self) -> None:
         try:
@@ -108,6 +207,12 @@ class CameraWorker(threading.Thread):
                 self.config.inference.min_face_px,
             )
             self.state.inference_ready = True
+            self.overlay_thread = threading.Thread(
+                target=self.publish_overlays,
+                name=f'camera-overlay-{self.camera.id}',
+                daemon=True,
+            )
+            self.overlay_thread.start()
         except Exception as error:
             self.state.last_error = str(error)
             LOG.exception("camera=%s cannot load approved inference models", self.camera.id)
@@ -131,54 +236,35 @@ class CameraWorker(threading.Thread):
                 boxes = engine.detect(frame)
                 self.state.update_snapshot(frame, len(boxes))
                 tracks = self.tracker.update(boxes, started)
-                # Only recognise a stable track; the descriptor is matched by QLBH
-                # so customer profiles never have to be copied to this service.
+                # Do not wait for a server round trip before publishing a box.
+                # The visual stage is real-time; identity work is dispatched
+                # separately after several high-quality SFace samples.
                 overlay = []
                 for track in tracks:
-                    # A single detector hit is not enough to publish a box,
-                    # create a visit or attach a customer's identity.  Requiring
-                    # three adjacent frames prevents a door edge/texture from
-                    # briefly becoming a named person in the UI.
-                    if track.frames < STABLE_TRACK_FRAMES:
-                        continue
-                    if track.box and started - track.last_recognized_at >= self.config.inference.recognition_cooldown_seconds:
+                    if track.box and not track.matching and started - track.last_recognized_at >= self.config.inference.recognition_cooldown_seconds:
                         result = engine.recognize(frame, track.box)
                         if result and result.quality >= 0.55:
-                            # Keep the crop from the exact accepted frame. A
-                            # later frame may already show another person or
-                            # no face at all by the time QLBH handles the POST.
-                            thumb = make_face_thumb(frame, track.box)
-                            track.last_recognized_at = started
-                            try:
-                                match = self.publisher.post('/camera-intelligence/match', {'descriptors': [result.descriptor]})
-                                track.identity = match.get('customer') if match.get('matched') else None
-                                self.publisher.post('/camera-intelligence/visits', {
-                                    'customer_id': track.identity.get('id') if track.identity else None,
-                                    'engine': 'sface-v1',
-                                    'descriptor': result.descriptor,
-                                    'thumb': thumb,
-                                })
-                                self.state.last_error = None
-                            except Exception as error:
-                                self.state.last_error = f'Cannot match with QLBH: {error}'
-                    box = track.box
-                    if box:
-                        overlay.append({
-                            'id': str(track.id),
-                            # NumPy scalars are not JSON serialisable by urllib.
-                            'x': float(round(float(box.x) / frame.shape[1], 5)),
-                            'y': float(round(float(box.y) / frame.shape[0], 5)),
-                            'w': float(round(float(box.width) / frame.shape[1], 5)),
-                            'h': float(round(float(box.height) / frame.shape[0], 5)),
-                            'kind': 'known' if track.identity else 'unknown',
-                            'label': track.identity.get('full_name') if track.identity else 'Khách chưa có tên',
-                        })
-                try:
-                    self.publisher.post('/camera-intelligence/faces', {'camera_id': self.camera.id, 'faces': overlay})
-                    if self.state.last_error and self.state.last_error.startswith('Cannot update overlays:'):
-                        self.state.last_error = None
-                except Exception as error:
-                    self.state.last_error = f'Cannot update overlays: {error}'
+                            # Keep crops from exact accepted frames. Three
+                            # samples take only a few live frames, but prevent
+                            # a moving/blinking face from deciding identity.
+                            track.samples.append((result.quality, result.descriptor, make_face_thumb(frame, track.box)))
+                            track.samples = sorted(track.samples, key=lambda sample: sample[0], reverse=True)[:RECOGNITION_SAMPLE_COUNT]
+                            if len(track.samples) >= RECOGNITION_SAMPLE_COUNT:
+                                samples = track.samples
+                                track.samples = []
+                                track.matching = True
+                                track.last_recognized_at = started
+                                threading.Thread(
+                                    target=self.match_and_record,
+                                    args=(track, samples),
+                                    name=f'camera-match-{track.id[:8]}',
+                                    daemon=True,
+                                ).start()
+
+                    face = overlay_face(track, frame)
+                    if face:
+                        overlay.append(face)
+                self.queue_overlay(overlay)
                 self.state.frames += 1
                 self.state.detected_faces += len(boxes)
                 self.state.last_frame_at = monotonic()
@@ -190,6 +276,9 @@ class CameraWorker(threading.Thread):
             LOG.exception("camera=%s pipeline failed", self.camera.id)
         finally:
             reader.stop()
+            self.overlay_event.set()
+            if self.overlay_thread:
+                self.overlay_thread.join(timeout=0.2)
             self.state.running = False
 
 

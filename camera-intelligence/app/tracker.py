@@ -33,12 +33,17 @@ class Track:
     last_recognized_at: float = 0.0
     frames: int = 0
     identity: dict | None = None
+    # Recognition is dispatched without blocking the RTSP loop.  These fields
+    # make the visible box explain exactly where a face is in that flow.
+    matching: bool = False
+    match_checked: bool = False
+    samples: list[tuple[float, list[float], str | None]] = field(default_factory=list)
 
 
 class MultiFaceTracker:
     """Deterministic IoU tracker. It is intentionally small and has no global state across cameras."""
 
-    def __init__(self, expire_seconds: float = 2.0, min_iou: float = 0.25) -> None:
+    def __init__(self, expire_seconds: float = 2.0, min_iou: float = 0.15) -> None:
         self.expire_seconds = expire_seconds
         self.min_iou = min_iou
         self.tracks: dict[str, Track] = {}
