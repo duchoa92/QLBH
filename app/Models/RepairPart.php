@@ -12,12 +12,13 @@ class RepairPart extends Model
 {
     protected $fillable = [
         'repair_id', 'product_id', 'variant_id', 'product_name', 'sku',
-        'quantity', 'unit_price', 'subtotal',
+        'quantity', 'unit_price', 'cost_price', 'subtotal',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
         'unit_price' => 'decimal:2',
+        'cost_price' => 'decimal:2',
         'subtotal' => 'decimal:2',
     ];
 

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Banknote, Building2, CalendarDays, CreditCard, Landmark, Paperclip, Pencil, Receipt, StickyNote, Trash2, UserRound, Users, Wifi, Zap } from 'lucide-vue-next'
+import { Banknote, Building2, CalendarDays, CreditCard, Landmark, Paperclip, SquarePen, Receipt, StickyNote, Trash2, UserRound, Users, Wifi, Zap } from 'lucide-vue-next'
 import { formatMoney } from '@/utils/format'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import InfoItem from '@/Components/Detail/InfoItem.vue'
@@ -60,7 +60,7 @@ const updatedAt = computed(() => props.expense.updated_at && props.expense.updat
         <template v-if="canManage" #footer>
             <div class="flex justify-end gap-2">
                 <button type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50" @click="emit('delete')"><Trash2 :size="15" /> Xóa</button>
-                <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700" @click="emit('edit')"><Pencil :size="15" /> Sửa</button>
+                <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700" @click="emit('edit')"><SquarePen :size="15" /> Sửa</button>
             </div>
         </template>
     </BaseModal>

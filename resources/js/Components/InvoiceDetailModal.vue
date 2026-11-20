@@ -6,7 +6,7 @@ import {
     CheckCircle2,
     Gift,
     Printer,
-    Pencil,
+    SquarePen,
     Undo2,
     XCircle,
     X,
@@ -568,7 +568,7 @@ const cancelReason = computed(() =>
                         aria-label="Sửa hóa đơn"
                         @click="emit('edit', invoice)"
                     >
-                        <Pencil :size="14" />
+                        <SquarePen :size="14" />
                         <span class="hidden sm:inline">Sửa</span>
                     </button>
 

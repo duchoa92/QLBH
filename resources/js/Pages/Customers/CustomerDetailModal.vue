@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { Cake, CreditCard, Mail, MapPin, Phone, ShoppingBag, Smartphone, Star, StickyNote, Wallet } from 'lucide-vue-next'
+import { Cake, CreditCard, Mail, MapPin, Phone, ShoppingBag, Smartphone, Star, StickyNote, TrendingUp, Wallet } from 'lucide-vue-next'
 import { formatMoney } from '@/utils/format'
 import { useRecordDetail } from '@/Composables/useRecordDetail'
 import SearchHighlight from '@/Components/UI/SearchHighlight.vue'
@@ -52,7 +52,7 @@ const pay = (order) => {
 </script>
 
 <template>
-    <DetailShell size="xl" :loading="loading" :error="error" @close="emit('close')">
+    <DetailShell size="xl" :loading="loading" :error="error" :stats-columns="5" @close="emit('close')">
         <template #header>
             <div class="flex items-center gap-4">
                 <DetailAvatar :name="data?.name || ''" />
@@ -71,6 +71,7 @@ const pay = (order) => {
         <template v-if="data" #stats>
             <StatCard label="Công nợ" :value="formatMoney(data.stats.debt_balance)" :tone="owing ? 'danger' : 'success'" :icon="Wallet" :hint="owing ? 'Cần thu' : 'Không còn nợ'" />
             <StatCard label="Tổng chi tiêu" :value="formatMoney(data.stats.total_spent)" tone="success" :icon="ShoppingBag" />
+            <StatCard v-if="data.stats.total_profit !== null" label="Lợi nhuận" :value="formatMoney(data.stats.total_profit)" :tone="data.stats.total_profit >= 0 ? 'success' : 'danger'" :icon="TrendingUp" hint="Bán hàng và sửa chữa" />
             <StatCard label="Số đơn hàng" :value="data.stats.total_orders" tone="info" :icon="ShoppingBag" :hint="data.stats.last_order_at ? 'Gần nhất ' + data.stats.last_order_at : 'Chưa mua lần nào'" />
             <StatCard label="Điểm tích lũy" :value="Number(data.stats.point_balance).toLocaleString('vi-VN')" tone="warning" :icon="Star" />
         </template>

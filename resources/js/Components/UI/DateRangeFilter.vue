@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 // Bộ lọc khoảng ngày — tách từ trang Hóa đơn bán hàng để các trang khác dùng chung.
@@ -32,6 +32,8 @@ const datePreset = ref(props.from || props.to || !props.allowAll ? 'custom' : 'a
 const pickerStart = ref('')
 const pickerEnd = ref('')
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+const calendarView = ref('days') // days | years | months
+const yearListRef = ref(null)
 
 const dateInputValue = (date) => {
     const year = date.getFullYear()
@@ -88,6 +90,31 @@ const applyDatePreset = (preset) => {
     commit(range.from, range.to)
 }
 const monthLabel = month => new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(month)
+const yearOptions = computed(() => {
+    const current = new Date().getFullYear()
+    const selected = calendarMonth.value.getFullYear()
+    const start = Math.min(current - 100, selected - 8)
+    const end = Math.max(current + 10, selected + 8)
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+})
+const monthOptions = computed(() => Array.from({ length: 12 }, (_, index) => ({
+    value: index,
+    label: new Intl.DateTimeFormat('vi-VN', { month: 'long' }).format(new Date(2020, index, 1)),
+})))
+const selectYear = year => {
+    calendarMonth.value = new Date(Number(year), calendarMonth.value.getMonth(), 1)
+    calendarView.value = 'months'
+}
+const showYearPicker = async () => {
+    calendarView.value = 'years'
+    await nextTick()
+    const selectedYear = yearListRef.value?.querySelector('[data-selected-year="true"]')
+    selectedYear?.scrollIntoView({ block: 'center' })
+}
+const selectMonth = month => {
+    calendarMonth.value = new Date(calendarMonth.value.getFullYear(), Number(month), 1)
+    calendarView.value = 'days'
+}
 const calendarCells = computed(() => {
     const month = calendarMonth.value
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
@@ -118,9 +145,15 @@ const openPicker = () => {
     pickerEnd.value = props.to
     const anchor = dateFromInput(pickerStart.value) || new Date()
     calendarMonth.value = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    calendarView.value = 'days'
     open.value = true
 }
 const moveMonth = amount => { calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + amount, 1) }
+const moveYearPage = amount => {
+    const currentIndex = yearOptions.value.indexOf(calendarMonth.value.getFullYear())
+    const nextYear = yearOptions.value[Math.max(0, Math.min(yearOptions.value.length - 1, currentIndex + amount * 12))]
+    if (nextYear) calendarMonth.value = new Date(nextYear, calendarMonth.value.getMonth(), 1)
+}
 const selectDate = (key) => {
     datePreset.value = 'custom'
 
@@ -164,14 +197,24 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
                 </aside>
                 <section class="min-w-0 flex-1 p-2.5 sm:p-3">
                     <header class="mb-2 flex items-center justify-between gap-2">
-                        <button type="button" class="grid h-10 w-10 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:h-8 sm:w-8" aria-label="Tháng trước" @click="moveMonth(-1)"><ChevronLeft class="h-4 w-4" /></button>
-                        <div class="min-w-0 flex-1 text-center text-xs font-bold capitalize text-slate-800">{{ monthLabel(calendarMonth) }}</div>
-                        <button type="button" class="grid h-10 w-10 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:h-8 sm:w-8" aria-label="Tháng sau" @click="moveMonth(1)"><ChevronRight class="h-4 w-4" /></button>
+                        <button type="button" class="grid h-10 w-10 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:h-8 sm:w-8" :aria-label="calendarView === 'days' ? 'Tháng trước' : 'Năm trước'" @click="calendarView === 'days' ? moveMonth(-1) : moveYearPage(-1)"><ChevronLeft class="h-4 w-4" /></button>
+                        <button type="button" class="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-center text-xs font-bold capitalize text-slate-800 transition hover:bg-slate-100" :aria-label="calendarView === 'days' ? 'Chọn năm và tháng' : calendarView === 'years' ? 'Chọn năm' : 'Chọn tháng'" @click="showYearPicker">
+                            {{ calendarView === 'years' ? 'Chọn năm' : calendarView === 'months' ? `${calendarMonth.getFullYear()} · Chọn tháng` : monthLabel(calendarMonth) }}
+                        </button>
+                        <button type="button" class="grid h-10 w-10 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 sm:h-8 sm:w-8" :aria-label="calendarView === 'days' ? 'Tháng sau' : 'Năm sau'" @click="calendarView === 'days' ? moveMonth(1) : moveYearPage(1)"><ChevronRight class="h-4 w-4" /></button>
                     </header>
+                    <div v-if="calendarView === 'years'" ref="yearListRef" class="grid max-h-64 grid-cols-3 gap-1 overflow-y-auto sm:grid-cols-4">
+                        <button v-for="year in yearOptions" :key="year" type="button" :data-selected-year="year === calendarMonth.getFullYear() ? 'true' : 'false'" class="rounded-lg px-2 py-3 text-sm font-semibold transition" :class="year === calendarMonth.getFullYear() ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700'" @click="selectYear(year)">{{ year }}</button>
+                    </div>
+                    <div v-else-if="calendarView === 'months'" class="grid grid-cols-3 gap-2 py-2">
+                        <button v-for="month in monthOptions" :key="month.value" type="button" class="rounded-lg px-2 py-3 text-xs font-semibold capitalize transition" :class="month.value === calendarMonth.getMonth() ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700'" @click="selectMonth(month.value)">{{ month.label }}</button>
+                    </div>
+                    <template v-else>
                     <div class="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400"><span v-for="day in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']" :key="day" class="py-1">{{ day }}</span></div>
                     <div class="grid grid-cols-7">
                         <button v-for="cell in calendarCells" :key="cell.key" type="button" class="relative mx-auto my-px grid h-9 w-9 place-items-center sm:h-8 sm:w-8 rounded-md text-[11px] transition" :class="isPickerSelected(cell.key) ? 'bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700' : isPickerInRange(cell.key) ? 'rounded-none bg-blue-100 text-blue-800 hover:bg-blue-200' : cell.currentMonth ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100'" @click="selectDate(cell.key)">{{ cell.day }}</button>
                     </div>
+                    </template>
                 </section>
             </div>
             <footer class="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/50 px-3 py-2.5">

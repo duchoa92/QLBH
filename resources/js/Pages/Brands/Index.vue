@@ -4,7 +4,7 @@ import { router, usePage } from '@inertiajs/vue3'
 import { ref, watch, onMounted, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import BrandForm from './Form.vue'
-import { FilePlus, SquarePen, Trash2 } from 'lucide-vue-next'
+import { Plus, SquarePen, Trash2 } from 'lucide-vue-next'
 import TrashModal from '@/Components/TrashModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { openModal, registerUrlModal } from '@/Stores/modal'
@@ -193,7 +193,7 @@ useSilentRefresh(['brands'])
     />
 
     <CatalogTabs>
-        <ActionButton @click="openCreate"><FilePlus :size="16" />Thêm</ActionButton>
+        <ActionButton @click="openCreate"><Plus :size="16" />Thêm</ActionButton>
         <ActionButton variant="danger" @click="openTrash"><Trash2 :size="16" />Thùng rác ({{ trashCount }})</ActionButton>
     </CatalogTabs>
 
@@ -275,31 +275,34 @@ useSilentRefresh(['brands'])
 
             </template>
 
-            <!-- Thẻ trên điện thoại: có công tắc trạng thái và nút xóa -->
-            <template #mobile-actions="{ row }">
-                <div class="flex items-center justify-between gap-3 pl-6" @click.stop>
-                    <button
-                        type="button"
-                        @click="toggleStatus(row.id)"
-                        :disabled="loadingStatus === row.id"
-                        role="switch"
-                        :aria-checked="!!row.is_active"
-                        aria-label="Bật/tắt trạng thái"
-                        class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                        :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'"
-                    >
-                        <span
-                            class="inline-block h-4 w-4 transform rounded-full bg-white transition"
-                            :class="row.is_active ? 'translate-x-6' : 'translate-x-1'"
-                        />
-                    </button>
-                    <div class="flex items-center gap-1">
-                        <button type="button" @click="openEdit(row)" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa">
-                            <SquarePen class="h-5 w-5" />
+            <template #mobile-body="{ row }">
+                <div class="border-t border-slate-100 pt-2.5">
+                    <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Danh mục liên kết</div>
+                    <div v-if="row.categories?.length" class="mt-1.5 flex flex-wrap gap-1.5">
+                        <span v-for="category in row.categories" :key="category.id" class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{{ category.name }}</span>
+                    </div>
+                    <div v-else class="mt-1 text-xs text-slate-400">Chưa liên kết danh mục</div>
+                </div>
+            </template>
+
+            <template #mobile-title="{ row }">
+                <div class="flex min-w-0 items-center justify-between gap-3">
+                    <span class="min-w-0 break-words text-sm font-bold text-slate-900"><HighlightText :text="row.name" :keyword="search" /></span>
+                    <div class="flex shrink-0 items-center gap-1" @click.stop>
+                        <button
+                            type="button"
+                            @click="toggleStatus(row.id)"
+                            :disabled="loadingStatus === row.id"
+                            role="switch"
+                            :aria-checked="!!row.is_active"
+                            :aria-label="row.is_active ? 'Ngừng thương hiệu' : 'Kích hoạt thương hiệu'"
+                            class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition"
+                            :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'"
+                        >
+                            <span class="inline-block h-4 w-4 transform rounded-full bg-white transition" :class="row.is_active ? 'translate-x-6' : 'translate-x-1'" />
                         </button>
-                        <button type="button" @click="destroy(row.id)" class="app-row-action app-row-action--danger" title="Chuyển vào thùng rác" aria-label="Chuyển vào thùng rác">
-                            <Trash2 class="h-5 w-5" />
-                        </button>
+                        <button type="button" @click="openEdit(row)" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa"><SquarePen class="h-5 w-5" /></button>
+                        <button type="button" @click="destroy(row.id)" class="app-row-action app-row-action--danger" title="Chuyển vào thùng rác" aria-label="Chuyển vào thùng rác"><Trash2 class="h-5 w-5" /></button>
                     </div>
                 </div>
             </template>

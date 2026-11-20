@@ -2,7 +2,7 @@
 import { formatCurrency } from '@/utils/format'
 import { imageUrl } from '@/utils/imageUrl'
 import { useForm, Link, router } from '@inertiajs/vue3';
-import { Pencil } from 'lucide-vue-next';
+import { SquarePen } from 'lucide-vue-next';
 import { openModal } from '@/Stores/modal';
 import PriceFormModal from './PriceFormModal.vue';
 
@@ -200,7 +200,7 @@ const openPriceEditor = (imei) => {
                                     title="Sửa giá bán"
                                     @click="openPriceEditor(imei)"
                                 >
-                                    <Pencil class="h-4 w-4" />
+                                    <SquarePen class="h-4 w-4" />
                                 </button>
                             </div>
                         </td>

@@ -8,7 +8,7 @@ import api from '@/Services/api'
 import { formatCurrency, formatDate as formatConfiguredDate } from '@/utils/format'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
-import { ChevronRight, FileText, Hash, Pencil, Printer, Truck, UserRound, Wallet, X, XCircle } from 'lucide-vue-next'
+import { ChevronRight, FileText, Hash, SquarePen, Printer, Truck, UserRound, Wallet, X, XCircle } from 'lucide-vue-next'
 
 defineOptions({ inheritAttrs: false })
 
@@ -460,7 +460,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
                         <div class="flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm md:col-span-6">
                             <div>
-                                <div class="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500"><Pencil class="h-3.5 w-3.5" /> Ghi chú đơn nhập</div>
+                                <div class="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500"><SquarePen class="h-3.5 w-3.5" /> Ghi chú đơn nhập</div>
                                 <div class="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm" :class="detailImport.note ? 'text-slate-600' : 'italic text-slate-400'">
                                     {{ detailImport.note || 'Không có ghi chú.' }}
                                 </div>
@@ -506,7 +506,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))
                             class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
                             @click="editImport(detailImport)"
                         >
-                            <Pencil class="h-4 w-4" /> Sửa phiếu
+                            <SquarePen class="h-4 w-4" /> Sửa phiếu
                         </button>
                     </div>
 

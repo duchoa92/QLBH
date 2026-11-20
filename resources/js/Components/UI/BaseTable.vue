@@ -43,7 +43,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
 </script>
 
 <template>
-<div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+<div class="base-table-shell overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div class="hidden overflow-x-auto md:block">
         <table class="app-data-table w-full min-w-[500px] border-collapse text-left text-xs">
 
@@ -121,9 +121,9 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
         </table>
     </div>
 
-    <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+    <div class="space-y-2.5 md:hidden">
         <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 rounded-xl border border-slate-200 border-l-4 border-l-slate-300 bg-white p-3.5 shadow-sm transition active:bg-slate-50" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
-            <div class="flex items-start gap-2">
+            <div class="flex items-start gap-2 border-b border-slate-100 pb-3">
                 <input v-if="selectable" type="checkbox" class="mt-1 shrink-0" :checked="selectedIds.includes(row.id)" @click.stop @change="$emit('toggleOne', row.id)" />
                 <div class="min-w-0 flex-1">
                     <slot name="mobile-title" :row="row">
@@ -131,6 +131,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                     </slot>
                 </div>
             </div>
+            <div class="border-b border-slate-100 pb-3">
             <slot name="mobile-body" :row="row">
             <div class="grid grid-cols-2 gap-x-3 gap-y-2 pl-6 text-xs">
                 <template v-for="col in columns.slice(1)" :key="col.key">
@@ -141,7 +142,10 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                 </template>
             </div>
             </slot>
-            <slot name="mobile-actions" :row="row" />
+            </div>
+            <div class="pt-0.5">
+                <slot name="mobile-actions" :row="row" />
+            </div>
         </article>
         <div v-if="rows.length === 0" class="p-10 text-center">
             <FileText class="mx-auto mb-3 h-9 w-9 text-slate-300" />

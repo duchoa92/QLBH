@@ -361,29 +361,30 @@ const productStockDisplay = (row) => {
             ? row.variants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
             : Number(row.stock || 0)
  
-    return `${quantity} ${productUnitName(row)}`
+    return quantity
 }
  
 const productSellPriceLabel = (row) => {
-    // POS allocates stock FIFO, so the catalog must show the same price as the next item to sell.
-    const nextBatch = (row.stock_batches || [])
-        .filter(batch => Number(batch.remaining_quantity || 0) > 0 && Number(batch.sell_price || 0) > 0)
-        .sort((left, right) => {
-            const byDate = String(left.imported_at || '').localeCompare(String(right.imported_at || ''))
-            return byDate || Number(left.id) - Number(right.id)
-        })
-        .at(0)
-
-    if (nextBatch) return formatMoney(nextBatch.sell_price)
-
-    const nextImeiPrice = (row.imeis || [])
-        .filter(imei => imei.status === 'in_stock' && Number(imei.sell_price || 0) > 0)
-        .at(0)
-    if (nextImeiPrice) return formatMoney(nextImeiPrice.sell_price)
-
-    const nextVariant = (row.variants || [])
-        .find(variant => Number(variant.stock || 0) > 0 && Number(variant.sell_price || 0) > 0)
-    return formatMoney(nextVariant?.sell_price || row.sell_price)
+    // Đồng bộ POS: giá hiển thị là khoảng giá bán của tồn kho hiện có.
+    const batchPrices = (row.stock_batches || [])
+        .filter(batch => Number(batch.remaining_quantity || 0) > 0)
+        .map(batch => Number(batch.sell_price || 0))
+        .filter(price => price > 0)
+    const imeiPrices = (row.imeis || [])
+        .filter(imei => imei.status === 'in_stock')
+        .map(imei => Number(imei.sell_price || 0))
+        .filter(price => price > 0)
+    const variantPrices = (row.variants || [])
+        .filter(variant => Number(variant.stock || 0) > 0)
+        .map(variant => Number(variant.sell_price || 0))
+        .filter(price => price > 0)
+    const prices = batchPrices.length ? batchPrices : imeiPrices.length ? imeiPrices : variantPrices
+    if (prices.length) {
+        const min = Math.min(...prices)
+        const max = Math.max(...prices)
+        return min === max ? formatMoney(min) : `${formatMoney(min)} - ${formatMoney(max)}`
+    }
+    return formatMoney(row.sell_price)
 }
  
 const openImeiList = (row) => {
@@ -559,13 +560,16 @@ useSilentRefresh(['products'])
  
         </template>
         <template #mobile-title="{ row }">
-            <div class="flex items-center gap-2.5">
+            <div class="flex min-w-0 items-center gap-2.5">
                 <img v-if="imageUrl(row.image_url ?? row.image)" :src="imageUrl(row.image_url ?? row.image)" class="h-11 w-11 shrink-0 rounded-lg object-cover" />
                 <div v-else class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-400">SP</div>
-                <div class="min-w-0">
+                <div class="min-w-0 flex-1">
                     <div class="break-words text-sm font-bold text-slate-900">{{ row.name }}</div>
                     <div v-if="row.sku" class="text-[11px] font-medium text-slate-400">{{ row.sku }}</div>
                 </div>
+                <button type="button" role="switch" :aria-checked="!!row.is_active" aria-label="Bật/tắt trạng thái" :disabled="loadingStatus === row.id" class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50" :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'" @click.stop="toggleStatus(row.id)">
+                    <span class="inline-block h-5 w-5 transform rounded-full bg-white transition" :class="row.is_active ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
             </div>
         </template>
         <template #mobile-body="{ row }">
@@ -580,9 +584,6 @@ useSilentRefresh(['products'])
                 <button type="button" title="Giá" aria-label="Giá" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 active:bg-emerald-100" @click="openPriceUpdate([row])"><DollarSign class="h-5 w-5" /></button>
                 <button type="button" :disabled="!canPrintLabels(row)" title="In tem" aria-label="In tem" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 active:bg-slate-200 disabled:opacity-40" @click="printOne(row)"><Printer class="h-5 w-5" /></button>
                 <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" @click="destroy(row.id)"><Trash2 class="h-5 w-5" /></button>
-                <button type="button" role="switch" :aria-checked="!!row.is_active" aria-label="Bật/tắt trạng thái" :disabled="loadingStatus === row.id" class="relative ml-auto inline-flex h-7 w-12 shrink-0 items-center rounded-full transition" :class="row.is_active ? 'bg-green-500' : 'bg-gray-300'" @click="toggleStatus(row.id)">
-                    <span class="inline-block h-5 w-5 transform rounded-full bg-white transition" :class="row.is_active ? 'translate-x-6' : 'translate-x-1'" />
-                </button>
             </div>
         </template>
     </BaseTable>

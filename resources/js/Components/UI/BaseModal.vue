@@ -57,7 +57,7 @@ onBeforeUnmount(() => {
         <div :class="bodyClass"><slot /></div>
     </template>
     <Teleport v-else to="body">
-    <div class="fixed inset-0 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-5 modal-scrollbar" :class="layerClass">
+    <div class="base-modal-layer fixed inset-0 flex items-center justify-center overflow-y-auto p-0 sm:p-5 modal-scrollbar" :class="layerClass">
         <div
             class="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
             @click="$emit('close')"
@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
         <section
             role="dialog"
             aria-modal="true"
-            class="base-modal-sheet relative flex min-h-0 max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-xl"
+            class="base-modal-sheet relative flex min-h-0 max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-xl"
             :class="[modalClass, {
                 'max-w-md': size === 'sm',
                 'max-w-xl': size === 'md',
@@ -76,7 +76,7 @@ onBeforeUnmount(() => {
             }]"
         >
             <!-- HEADER -->
-            <div class="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3" :class="headerClass">
+            <div class="base-modal-header flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3" :class="headerClass">
                 <slot name="header">
                     <h2 class="text-base font-bold text-slate-900">{{ title }}</h2>
                     <button
@@ -91,7 +91,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- BODY -->
-            <div class="min-h-0 flex-1 overflow-y-auto bg-white modal-scrollbar" :class="bodyClass">
+            <div class="base-modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white modal-scrollbar" :class="bodyClass">
                 <slot />
             </div>
 
@@ -106,7 +106,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Mobile: hộp thoại dạng "bottom sheet" trượt từ dưới lên, chừa vùng an toàn của tai thỏ/thanh Home. */
+/* Mobile: bình thường căn giữa; khi bàn phím mở, quy tắc kb-open bên dưới sẽ bám lên đầu. */
 @media (max-width: 639px) {
     .base-modal-sheet {
         animation: base-modal-sheet-in 180ms ease-out;
@@ -114,6 +114,38 @@ onBeforeUnmount(() => {
 
     .base-modal-footer {
         padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+}
+
+/* Khi bàn phím chiếm nửa màn hình: modal dùng toàn bộ phần còn nhìn thấy, chỉ phần thân
+   cuộn; tiêu đề và nút lưu/đóng không bị ép lẫn vào nội dung. */
+:global(html.kb-open) .base-modal-sheet {
+    /* Ghi đè cả modal có height riêng (chẳng hạn h-[min(88dvh,820px)]).
+       Không chừa khoảng đầu/cuối: khi bàn phím mở cần dùng hết vùng nhìn thấy. */
+    height: var(--vv-h, 100dvh) !important;
+    max-height: var(--vv-h, 100dvh) !important;
+    border-radius: 0 !important;
+}
+
+:global(html.kb-open) .base-modal-layer {
+    align-items: flex-start !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+:global(html.kb-open) .base-modal-body {
+    overscroll-behavior: contain;
+}
+
+@media (max-width: 639px) {
+    :global(html.kb-open) .base-modal-header {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+
+    :global(html.kb-open) .base-modal-footer {
+        padding-top: 0.5rem;
+        padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
     }
 }
 

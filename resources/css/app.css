@@ -371,9 +371,43 @@ html.kb-open .fixed.inset-0 {
     height: var(--vv-h, 100dvh);
 }
 
-html.kb-open .base-modal-sheet,
-html.kb-open [role="dialog"] {
-    max-height: calc(var(--vv-h, 100dvh) - 0.75rem) !important;
+html.kb-open .base-modal-layer {
+    align-items: flex-start !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+html.kb-open .base-modal-sheet {
+    height: var(--vv-h, 100dvh) !important;
+    max-height: var(--vv-h, 100dvh) !important;
+    border-radius: 0 !important;
+}
+
+/* Các hộp thoại cũ chưa dùng BaseModal cũng bám lên đầu khi đang nhập liệu.
+   :has() đã có trên Safari iOS 15.4+, Chrome Android và các trình duyệt hiện hành. */
+html.kb-open .fixed.inset-0:has([role="dialog"]) {
+    align-items: flex-start !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+html.kb-open [role="dialog"]:not(.base-modal-sheet) {
+    height: var(--vv-h, 100dvh) !important;
+    max-height: var(--vv-h, 100dvh) !important;
+}
+
+/* Modal viết riêng cũng được phủ bởi quy tắc này ngay lúc một ô nhập nhận focus.
+   Không cần phải đổi từng màn hình sang BaseModal mới tránh được việc sót form. */
+html.kb-open .fixed.inset-0:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) {
+    align-items: flex-start !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+html.kb-open .fixed.inset-0:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) > :not(.absolute) {
+    height: var(--vv-h, 100dvh) !important;
+    max-height: var(--vv-h, 100dvh) !important;
+    border-radius: 0 !important;
 }
 
 /* POS toàn màn hình: khóa cuộn trang nền, không kéo giãn/nảy làm lộ thanh trình duyệt. */
@@ -415,6 +449,20 @@ summary,
     input[type="radio"] {
         width: 1.125rem;
         height: 1.125rem;
+    }
+}
+
+/* Nhóm nút chức năng ngoài ListToolbar (ví dụ tab Danh mục, Phiếu nhập).
+   Khi điện thoại quá hẹp thì chỉ để lại biểu tượng, tránh đẩy nút sang nhiều hàng. */
+@media (max-width: 540px) {
+    .app-mobile-icon-actions > button,
+    .app-mobile-icon-actions > a {
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        gap: 0;
+        justify-content: center;
+        font-size: 0;
     }
 }
 
@@ -466,6 +514,25 @@ summary,
 |--------------------------------------------------------------------------
 */
 @media screen and (max-width: 767px) {
+    /* Danh sách dạng thẻ: bỏ khung viền bao bên ngoài, chỉ giữ viền của từng thẻ. */
+    .base-table-shell,
+    .overflow-hidden:has(> table.m-cards),
+    .overflow-hidden:has(> .overflow-x-auto > table.m-cards),
+    .overflow-hidden:has(> .hidden > table.m-cards),
+    .overflow-hidden:has(> .md\:hidden) {
+        overflow: visible !important;
+        border-color: transparent !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+
+    .base-table-shell > .md\:hidden {
+        padding: 0 !important;
+        background: transparent !important;
+    }
+
     table.m-cards,
     table.m-cards tbody,
     table.m-cards tfoot {
@@ -481,13 +548,13 @@ summary,
 
     /* Mỗi dòng là một block riêng (giống danh sách Tiếp nhận sửa): nền xám nhạt, thẻ trắng viền + vạch trái + đổ bóng nhẹ. */
     table.m-cards tbody {
-        padding: 0.25rem 0;
-        background: rgb(248 250 252 / 0.7) !important;
+        padding: 0;
+        background: transparent !important;
     }
 
     table.m-cards tr {
         display: block;
-        margin: 0.625rem;
+        margin: 0 0 0.625rem;
         padding: 0.5rem 0.875rem;
         border: 1px solid #e2e8f0;
         border-left: 4px solid #cbd5e1;
@@ -499,6 +566,10 @@ summary,
     table.m-cards tbody tr:hover,
     table.m-cards tbody tr:nth-child(even) {
         background: #fff !important;
+    }
+
+    table.m-cards tbody tr:last-child {
+        margin-bottom: 0;
     }
 
     table.m-cards tfoot tr {

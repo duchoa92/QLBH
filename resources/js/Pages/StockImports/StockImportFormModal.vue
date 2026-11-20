@@ -32,7 +32,7 @@ import {
     X,
     Package,
     Plus,
-    Pencil,
+    SquarePen,
     Trash2,
 } from 'lucide-vue-next'
 
@@ -1522,7 +1522,7 @@ const confirm = (payment = {}) => {
                             </div>
                             <div class="flex shrink-0 items-center gap-1">
                                 <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg text-blue-600 hover:bg-blue-50" title="Chỉnh sửa cấu hình" aria-label="Chỉnh sửa cấu hình" @click="productModal = { open: true, item }">
-                                    <Pencil class="h-4 w-4" />
+                                    <SquarePen class="h-4 w-4" />
                                 </button>
                                 <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg text-red-500 hover:bg-red-50" title="Xóa sản phẩm" aria-label="Xóa sản phẩm" @click="removeItem(itemIndex)">
                                     <Trash2 class="h-4 w-4" />
@@ -1776,7 +1776,7 @@ const confirm = (payment = {}) => {
                                             title="Chỉnh sửa cấu hình"
                                             class="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
                                         >
-                                            <Pencil
+                                            <SquarePen
                                                 class="h-4 w-4"
                                             />
                                         </button>
@@ -1831,56 +1831,24 @@ const confirm = (payment = {}) => {
 
         <!-- FOOTER -->
         <template #footer>
-            <div
-                class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-            >
-                <div
-                    class="text-center text-xs text-slate-500 sm:text-left sm:text-sm"
+            <div class="grid grid-cols-2 gap-2 sm:ml-auto sm:flex">
+                <button
+                    type="button"
+                    @click="emit('close')"
+                    class="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                    <span
-                        class="font-semibold text-slate-700"
-                    >
-                        {{
-                            selectedItems.length
-                        }}
-                    </span>
-                    dòng /
+                    {{ isEditingImport ? 'Hủy chỉnh sửa' : 'Hủy' }}
+                </button>
 
-                    <span
-                        class="font-semibold text-slate-700"
-                    >
-                        {{
-                            totalQuantity
-                        }}
-                    </span>
-                    sản phẩm
-                </div>
-
-                <div
-                    class="grid grid-cols-2 gap-2 sm:ml-auto sm:flex"
+                <button
+                    type="button"
+                    @click="handlePaymentAction"
+                    :disabled="form.processing"
+                    class="min-h-11 rounded-lg px-5 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-wait disabled:opacity-60"
+                    :class="isEditingImport ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'"
                 >
-                    <button
-                        type="button"
-                        @click="
-                            emit('close')
-                        "
-                        class="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                        {{ isEditingImport ? 'Hủy chỉnh sửa' : 'Hủy' }}
-                    </button>
-
-                    <button
-                        type="button"
-                        @click="handlePaymentAction"
-                        :disabled="
-                            form.processing
-                        "
-                        class="min-h-11 rounded-lg px-5 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-wait disabled:opacity-60"
-                        :class="isEditingImport ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'"
-                    >
-                        {{ form.processing ? 'Đang cập nhật...' : (isEditingImport ? 'Lưu cập nhật phiếu' : 'Thanh toán') }}
-                    </button>
-                </div>
+                    {{ form.processing ? 'Đang cập nhật...' : (isEditingImport ? 'Lưu cập nhật phiếu' : 'Thanh toán') }}
+                </button>
             </div>
         </template>
 

@@ -401,13 +401,15 @@ class ReportController extends Controller
     public function profit(): JsonResponse
     {
         [$from, $to] = $this->dateRange();
+        $source = in_array(request('source'), ['sales', 'repair'], true) ? request('source') : 'all';
 
         $base = SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
-            ->tap(fn ($query) => $this->applyProfitFilters($query));
+            ->tap(fn ($query) => $this->applyProfitFilters($query))
+            ->when($source === 'repair', fn ($query) => $query->whereRaw('1 = 0'));
 
         $summaryRow = (clone $base)
             ->selectRaw('
@@ -417,17 +419,43 @@ class ReportController extends Controller
             ')
             ->first();
 
-        $revenue = (float) $summaryRow->revenue;
+        // Repair revenue is the amount charged to the customer; part cost is the
+        // FIFO cost captured when the parts left stock, plus labor/surcharge revenue.
+        $repairDate = 'COALESCE(returned_at, completed_at, updated_at)';
+        $repairs = Repair::query()
+            ->whereIn('status', ['done', 'returned'])
+            ->whereRaw("{$repairDate} BETWEEN ? AND ?", [$from, $to])
+            ->when($source === 'sales', fn ($query) => $query->whereRaw('1 = 0'))
+            ->when((int) request('user_id') > 0, fn ($query) => $query->where('technician_id', (int) request('user_id')));
+        $repairRevenue = (float) (clone $repairs)->sum(DB::raw('COALESCE(final_cost, estimated_cost, 0)'));
+        $repairPartBase = DB::table('repair_parts')
+            ->join('repairs', 'repairs.id', '=', 'repair_parts.repair_id')
+            ->join('products', 'products.id', '=', 'repair_parts.product_id')
+            ->whereIn('repairs.status', ['done', 'returned'])
+            ->whereRaw("COALESCE(repairs.returned_at, repairs.completed_at, repairs.updated_at) BETWEEN ? AND ?", [$from, $to])
+            ->when($source === 'sales', fn ($query) => $query->whereRaw('1 = 0'))
+            ->when((int) request('user_id') > 0, fn ($query) => $query->where('repairs.technician_id', (int) request('user_id')))
+            ->when(trim((string) request('search', '')) !== '', fn ($query) => $query->where('products.name', 'like', '%' . trim((string) request('search')) . '%'))
+            ->when((int) request('category_id') > 0, fn ($query) => $query->where('products.category_id', (int) request('category_id')));
+        $repairCost = (float) (clone $repairPartBase)->sum(DB::raw('repair_parts.cost_price * repair_parts.quantity'));
+        $repairRevenue = (float) $repairRevenue;
+        // When filtering by product/category, attribute only the matching part revenue.
+        if (trim((string) request('search', '')) !== '' || (int) request('category_id') > 0) {
+            $repairRevenue = (float) (clone $repairPartBase)->sum('repair_parts.subtotal');
+        }
+
+        $revenue = (float) $summaryRow->revenue + $repairRevenue;
         $giftCost = SaleItemGift::query()
             ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
+            ->when($source === 'repair', fn ($query) => $query->whereRaw('1 = 0'))
             ->tap(fn ($query) => $this->applyProfitFilters($query))
             ->selectRaw('COALESCE(SUM((CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END)), 0) as cost')
             ->value('cost');
-        $cost = (float) $summaryRow->cost + (float) $giftCost;
+        $cost = (float) $summaryRow->cost + (float) $giftCost + $repairCost;
         $profit = $revenue - $cost;
 
         $giftCostsByDay = SaleItemGift::query()
@@ -436,6 +464,7 @@ class ReportController extends Controller
             ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
             ->where('sales.status', '!=', 'cancelled')
             ->whereBetween('sales.created_at', [$from, $to])
+            ->when($source === 'repair', fn ($query) => $query->whereRaw('1 = 0'))
             ->tap(fn ($query) => $this->applyProfitFilters($query))
             ->selectRaw('DATE(sales.created_at) as date, SUM((CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END)) as cost')
             ->groupBy('date')
@@ -457,6 +486,27 @@ class ReportController extends Controller
                 $row->profit = $row->revenue - $row->cost;
                 return $row;
             });
+
+        $repairDaily = (clone $repairs)
+            ->selectRaw("DATE({$repairDate}) as date, SUM(COALESCE(final_cost, estimated_cost, 0)) as revenue")
+            ->groupBy('date')->get()->keyBy('date');
+        $repairCostDaily = (clone $repairPartBase)
+            ->selectRaw("DATE(COALESCE(repairs.returned_at, repairs.completed_at, repairs.updated_at)) as date, SUM(repair_parts.cost_price * repair_parts.quantity) as cost")
+            ->groupBy('date')->get()->keyBy('date');
+        if (trim((string) request('search', '')) !== '' || (int) request('category_id') > 0) {
+            $repairDaily = (clone $repairPartBase)->selectRaw("DATE(COALESCE(repairs.returned_at, repairs.completed_at, repairs.updated_at)) as date, SUM(repair_parts.subtotal) as revenue")->groupBy('date')->get()->keyBy('date');
+        }
+        foreach ($repairDaily as $date => $repairRow) {
+            $row = $daily->firstWhere('date', $date);
+            if ($row) {
+                $row->revenue += (float) $repairRow->revenue;
+                $row->cost += (float) ($repairCostDaily[$date]->cost ?? 0);
+                $row->profit = $row->revenue - $row->cost;
+            } else {
+                $daily->push((object) ['date' => $date, 'revenue' => (float) $repairRow->revenue, 'cost' => (float) ($repairCostDaily[$date]->cost ?? 0), 'profit' => (float) $repairRow->revenue - (float) ($repairCostDaily[$date]->cost ?? 0)]);
+            }
+        }
+        $daily = $daily->sortBy('date')->values();
 
         $byProduct = (clone $base)
             ->selectRaw('
@@ -482,6 +532,20 @@ class ReportController extends Controller
             ->selectRaw('products.id, products.name, SUM(sale_item_gifts.quantity) as qty_sold, SUM((CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END)) as cost')
             ->groupBy('products.id', 'products.name')
             ->get();
+
+        $repairPartsByProduct = (clone $repairPartBase)
+            ->selectRaw('products.id, products.name, SUM(repair_parts.quantity) as qty_sold, SUM(repair_parts.subtotal) as revenue, SUM(repair_parts.cost_price * repair_parts.quantity) as cost')
+            ->groupBy('products.id', 'products.name')->get();
+
+        foreach ($repairPartsByProduct as $repairRow) {
+            if ($byProduct->has($repairRow->id)) {
+                $byProduct[$repairRow->id]->revenue = (float) $byProduct[$repairRow->id]->revenue + (float) $repairRow->revenue;
+                $byProduct[$repairRow->id]->cost = (float) $byProduct[$repairRow->id]->cost + (float) $repairRow->cost;
+                $byProduct[$repairRow->id]->qty_sold = (int) $byProduct[$repairRow->id]->qty_sold + (int) $repairRow->qty_sold;
+            } else {
+                $byProduct->put($repairRow->id, (object) ['id' => $repairRow->id, 'name' => $repairRow->name, 'qty_sold' => (int) $repairRow->qty_sold, 'revenue' => (float) $repairRow->revenue, 'cost' => (float) $repairRow->cost]);
+            }
+        }
 
         foreach ($giftCostsByProduct as $giftRow) {
             if ($byProduct->has($giftRow->id)) {

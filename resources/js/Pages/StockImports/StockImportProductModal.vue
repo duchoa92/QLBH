@@ -24,7 +24,7 @@ import { formatNumber, formatDateTime } from '@/utils/format'
 import {
     Plus,
     Trash2,
-    Pencil,
+    SquarePen,
     Check,
     X,
     QrCode,
@@ -1147,7 +1147,7 @@ onBeforeUnmount(() => {
                                 <td class="px-2 text-center">
                                     <div class="flex items-center justify-center gap-0.5">
                                         <button type="button" class="p-1 text-slate-400 hover:text-blue-600" title="Sửa" @click.stop="selectImeiEntry(index)">
-                                            <Pencil class="h-4 w-4" />
+                                            <SquarePen class="h-4 w-4" />
                                         </button>
                                         <button
                                             type="button"
@@ -1180,7 +1180,7 @@ onBeforeUnmount(() => {
                             </div>
                             <div class="flex shrink-0 items-center">
                                 <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600" aria-label="Sửa IMEI" @click.stop="selectImeiEntry(index)">
-                                    <Pencil class="h-4 w-4" />
+                                    <SquarePen class="h-4 w-4" />
                                 </button>
                                 <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa IMEI" @click.stop="removeImei(entryModal.item, index)">
                                     <Trash2 class="h-4 w-4" />
@@ -1282,7 +1282,7 @@ onBeforeUnmount(() => {
                                 <td class="px-2 text-center">
                                     <div class="flex items-center justify-center gap-0.5">
                                         <button type="button" class="p-1 text-slate-400 hover:text-blue-600" title="Sửa" @click.stop="selectVariantEntry(index)">
-                                            <Pencil class="h-4 w-4" />
+                                            <SquarePen class="h-4 w-4" />
                                         </button>
                                         <button
                                             type="button"
@@ -1315,7 +1315,7 @@ onBeforeUnmount(() => {
                             </div>
                             <div class="flex shrink-0 items-center">
                                 <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600" aria-label="Sửa biến thể" @click.stop="selectVariantEntry(index)">
-                                    <Pencil class="h-4 w-4" />
+                                    <SquarePen class="h-4 w-4" />
                                 </button>
                                 <button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Xóa biến thể" @click.stop="removeVariantRow(entryModal.item, index)">
                                     <Trash2 class="h-4 w-4" />

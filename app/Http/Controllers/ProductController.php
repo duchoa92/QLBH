@@ -121,6 +121,11 @@ class ProductController extends Controller
             'brand',
             'imeis',
             'variants',
+            'stockBatches' => fn ($query) => $query
+                ->where('remaining_quantity', '>', 0)
+                ->with('variant:id,product_id,sku,attributes')
+                ->orderBy('imported_at')
+                ->orderBy('id'),
         ]);
 
         if (request()->expectsJson()) {

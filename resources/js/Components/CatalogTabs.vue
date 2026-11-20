@@ -30,7 +30,7 @@ const isActive = (tab) => tab.paths.some(path => currentPath.value.startsWith(pa
                 {{ tab.label }}
             </Link>
         </nav>
-        <div class="flex shrink-0 items-center gap-2 pb-1">
+        <div class="app-mobile-icon-actions flex shrink-0 items-center gap-2 pb-1">
             <slot />
         </div>
     </div>

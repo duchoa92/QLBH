@@ -105,4 +105,15 @@ const toggleFilters = () => { manualOpen.value = !filtersOpen.value }
 .app-list-toolbar__filters { @apply grid w-full grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 sm:flex sm:flex-wrap sm:items-center; }
 .app-list-toolbar__actions { @apply flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto; }
 .app-list-toolbar__expanded { @apply w-full border-t border-slate-200 pt-2.5; }
+
+/* Ở điện thoại hẹp, chữ trên các nút thao tác đầu danh sách chiếm quá nhiều chỗ.
+   Chỉ thu nút trong toolbar về biểu tượng; text vẫn tồn tại cho trình đọc màn hình. */
+@media (max-width: 540px) {
+    .app-list-toolbar__actions { @apply gap-1.5; }
+    .app-list-toolbar__actions :deep(button),
+    .app-list-toolbar__actions :deep(a) {
+        @apply h-[42px] w-[42px] shrink-0 justify-center gap-0 px-0;
+        font-size: 0;
+    }
+}
 </style>

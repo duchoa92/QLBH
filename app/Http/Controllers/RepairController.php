@@ -306,11 +306,33 @@ class RepairController extends Controller
             'per_page' => $perPage,
         ];
 
+        // Dùng toàn bộ lịch sử hủy để gợi ý nhất quán, không bị giới hạn bởi trang/lọc hiện tại.
+        $cancelReasonSuggestions = RepairTimeline::query()
+            ->where('status', 'cancelled')
+            ->whereNotNull('description')
+            ->whereRaw("TRIM(description) <> ''")
+            ->selectRaw('TRIM(description) as reason, COUNT(*) as usage_count')
+            ->groupByRaw('TRIM(description)')
+            ->orderByDesc('usage_count')
+            ->orderBy('reason')
+            ->limit(20)
+            ->get()
+            ->map(fn (RepairTimeline $timeline): array => [
+                'reason' => $timeline->reason,
+                'usage_count' => (int) $timeline->usage_count,
+            ])
+            ->values();
+
         if ($request->expectsJson()) {
             return response()->json([
                 'repairs' => $repairs,
                 'stats' => $stats,
                 'filters' => $filters,
+                'cancelReasonSuggestions' => $cancelReasonSuggestions,
+            ], 200, [
+                // Trạng thái phiếu có thể vừa đổi bởi thao tác hủy, không dùng lại phản hồi danh sách cũ.
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma' => 'no-cache',
             ]);
         }
 
@@ -324,6 +346,7 @@ class RepairController extends Controller
                 'createdRepairId' => $createdRepairId,
                 'stats' => $stats,
                 'filters' => $filters,
+                'cancelReasonSuggestions' => $cancelReasonSuggestions,
             ]
         );
 
@@ -1024,7 +1047,7 @@ class RepairController extends Controller
      */
     public function store(
         RepairRequest $request
-    ): RedirectResponse {
+    ): RedirectResponse|JsonResponse {
 
         $customerInput = $request->only([
             'customer_id', 'customer_conflict_action', 'customer_name', 'customer_phone', 'contact_phone', 'identity_card',
@@ -1300,7 +1323,7 @@ class RepairController extends Controller
     public function updateStatus(
         Request $request,
         Repair $repair
-    ): RedirectResponse {
+    ): RedirectResponse|JsonResponse {
 
         $request->validate([
             'status' => ['sometimes', 'required', 'in:repairing,cancelled'],
@@ -1394,6 +1417,10 @@ class RepairController extends Controller
             ? 'đã hủy phiếu'
             : ($waitingMode === 'parts' ? 'đang chờ linh kiện' : ($waitingMode === 'wait_repair' ? 'tạm chờ sửa' : 'đang sửa'));
         $this->notifyRepairEvent($repair, 'Cập nhật phiếu sửa ' . $repair->code, 'Phiếu ' . $repair->code . ' chuyển sang trạng thái ' . $statusLabel . '.', $status === 'cancelled' ? 'warning' : 'repair');
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true]);
+        }
 
         return back();
     }
@@ -1510,12 +1537,16 @@ class RepairController extends Controller
                     'sku' => $variant?->sku ?: $product->sku,
                     'quantity' => $line['quantity'],
                     'unit_price' => $unitPrice,
+                    'cost_price' => 0,
                     'subtotal' => $subtotal,
                 ]);
 
                 // Trừ lô FIFO cùng lúc với cột tồn, để tồn theo lô không lệch với tồn tổng.
                 // Hàng chưa có lô nào thì allocate() không làm gì và vẫn chỉ trừ cột tồn.
-                $batchAllocator->allocate($repairPart, (int) $product->id, $variant?->id, (int) $line['quantity']);
+                $allocation = $batchAllocator->allocate($repairPart, (int) $product->id, $variant?->id, (int) $line['quantity']);
+                $fallbackCost = (float) ($variant?->cost_price ?? $product->cost_price ?? 0);
+                $unallocatedQuantity = max(0, (int) $line['quantity'] - $allocation['allocated_quantity']);
+                $repairPart->update(['cost_price' => round(($allocation['total_cost'] + $unallocatedQuantity * $fallbackCost) / (int) $line['quantity'], 2)]);
             }
 
             $labor = (float) $data['labor_cost'];
@@ -1649,6 +1680,45 @@ class RepairController extends Controller
         $repair->refresh();
         $this->notifyRepairEvent($repair, 'Đã trả máy cho khách', 'Phiếu ' . $repair->code . ' (' . $repair->device_name . ') đã thanh toán và trả khách.');
 
+        return response()->json(['success' => true]);
+    }
+
+    /** Hủy phiếu đã hoàn tất/trả khách, đảo kho và công nợ để báo cáo không ghi nhận giao dịch này. */
+    public function cancelCompleted(Request $request, Repair $repair): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:1000']]);
+        DB::transaction(function () use ($repair, $data): void {
+            $locked = Repair::query()->lockForUpdate()->findOrFail($repair->id);
+            if (! in_array($locked->status, ['done', 'returned'], true)) {
+                throw ValidationException::withMessages(['status' => 'Chỉ phiếu đã hoàn tất hoặc đã trả khách mới được hủy tại đây.']);
+            }
+            $dependent = Repair::query()->where('warranty_source_type', 'repair')->where('warranty_source_id', $locked->id)->where('id', '!=', $locked->id)->whereNull('deleted_at')->first(['code']);
+            if ($dependent) {
+                throw ValidationException::withMessages(['status' => "Phiếu {$locked->code} đang là căn cứ bảo hành cho {$dependent->code}, chưa thể hủy."]);
+            }
+            foreach ($locked->parts()->get() as $part) {
+                app(StockBatchAllocator::class)->restore($part);
+                if ($part->variant_id) ProductVariant::query()->lockForUpdate()->find($part->variant_id)?->increment('stock', (int) $part->quantity);
+                if ($part->product_id) Product::withTrashed()->lockForUpdate()->find($part->product_id)?->increment('stock', (int) $part->quantity);
+            }
+            $debtRows = CustomerDebt::query()->where('source_type', Repair::class)->where('source_id', $locked->id)->get();
+            if ($debtRows->isNotEmpty() && $locked->customer_id) {
+                $net = (float) $debtRows->where('type', 'increase')->sum('amount') - (float) $debtRows->where('type', 'decrease')->sum('amount');
+                $customer = Customer::withTrashed()->lockForUpdate()->find($locked->customer_id);
+                if ($customer && abs($net) > 0) $customer->forceFill(['debt_balance' => max(0, (float) $customer->debt_balance - $net)])->save();
+            }
+            CustomerDebt::query()->where('source_type', Repair::class)->where('source_id', $locked->id)->delete();
+            $locked->update(['status' => 'cancelled', 'repair_warranty_voided_at' => now(), 'repair_warranty_void_reason' => $data['reason']]);
+            RepairTimeline::query()->create([
+                'repair_id' => $locked->id,
+                'user_id' => auth()->id(),
+                'status' => 'cancelled',
+                'title' => 'Hủy phiếu đã hoàn tất · Đã hoàn kho và đảo công nợ',
+                'description' => $data['reason'],
+            ]);
+        });
+        $repair->refresh();
+        $this->notifyRepairEvent($repair, 'Đã hủy phiếu sửa ' . $repair->code, 'Phiếu ' . $repair->code . ' đã hủy; linh kiện đã hoàn kho.', 'warning');
         return response()->json(['success' => true]);
     }
 

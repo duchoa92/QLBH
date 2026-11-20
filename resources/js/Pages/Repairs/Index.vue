@@ -7,6 +7,7 @@ import ListToolbar from '@/Components/UI/ListToolbar.vue';
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue';
 import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue';
 import ActionButton from '@/Components/UI/ActionButton.vue';
+import BaseModal from '@/Components/UI/BaseModal.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
 import RepairDetailModal from './RepairDetailModal.vue';
@@ -16,13 +17,14 @@ import { toast } from 'vue-sonner';
 import api from '@/Services/api';
 import CheckoutModal from '@/Modules/POS/Payment/Components/CheckoutModal.vue';
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue';
-import { FileText, Plus, UserRound, Smartphone, Wrench, RotateCcw, Play } from 'lucide-vue-next';
+import { AlertTriangle, ClipboardList, FileText, Plus, UserRound, Smartphone, Wrench, RotateCcw, Play, XCircle } from 'lucide-vue-next';
 import { REPAIR_STATUS_CLASSES, REPAIR_STATUS_LABELS } from '@/utils/repairStatus';
 
 const props = defineProps({
     repairs: Object,
     filters: Object,
     stats: Object,
+    cancelReasonSuggestions: { type: Array, default: () => [] },
 });
 const repairsData = ref(props.repairs);
 const statsData = ref(props.stats || {});
@@ -45,6 +47,11 @@ const detailCredentials = ref(null);
 const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
+const cancelRepairModalOpen = ref(false);
+const repairToCancel = ref(null);
+const cancelReason = ref('');
+const cancelSubmitting = ref(false);
+const cancelReasonSuggestions = ref(props.cancelReasonSuggestions || []);
 const reload = () => {
     router.reload({ only: ['repairs', 'stats'], preserveScroll: true });
 };
@@ -77,7 +84,7 @@ const syncFilterUrl = (filters) => {
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 };
 
-const requestRepairs = async (pageNumber = 1) => {
+const requestRepairs = async (pageNumber = 1, { fresh = false } = {}) => {
     repairsRequestController?.abort();
     const requestId = ++repairsRequestId;
     repairsRequestController = new AbortController();
@@ -91,6 +98,7 @@ const requestRepairs = async (pageNumber = 1) => {
         sort_order: sortOrder.value,
         per_page: perPage.value,
         page: pageNumber,
+        ...(fresh ? { _: Date.now() } : {}),
     };
 
     try {
@@ -101,10 +109,11 @@ const requestRepairs = async (pageNumber = 1) => {
         if (requestId !== repairsRequestId) return;
         repairsData.value = data.repairs;
         statsData.value = data.stats || {};
+        cancelReasonSuggestions.value = data.cancelReasonSuggestions || cancelReasonSuggestions.value;
         currentPage.value = Number(data.repairs?.current_page ?? pageNumber);
         if (!data.repairs?.data?.length && currentPage.value > 1) {
             currentPage.value -= 1;
-            return requestRepairs(currentPage.value);
+            return requestRepairs(currentPage.value, { fresh });
         }
         syncFilterUrl(data.filters || params);
     } catch (error) {
@@ -136,6 +145,7 @@ watch(() => props.repairs, (value) => {
     currentPage.value = Number(value?.current_page ?? 1);
 });
 watch(() => props.stats, (value) => { statsData.value = value || {}; });
+watch(() => props.cancelReasonSuggestions, (value) => { cancelReasonSuggestions.value = value || []; });
 watch(() => props.filters, (value) => {
     if (!value) return;
     search.value = value.search ?? '';
@@ -178,10 +188,16 @@ const openRepairFromQuery = () => {
     const repairId = Number(url.searchParams.get('open_repair'));
     if (!repairId) { detailRepair.value = null; detailCredentials.value = null; return; }
     const repair = repairsData.value?.data?.find(item => Number(item.id) === repairId) || null;
-    if (Number(detailRepair.value?.id) !== repairId) {
+    if (repair) {
+        const isDifferentRepair = Number(detailRepair.value?.id) !== repairId;
         detailRepair.value = repair;
+        if (isDifferentRepair) {
+            detailCredentials.value = null;
+            loadDetailCredentials(repair);
+        }
+    } else if (Number(detailRepair.value?.id) !== repairId) {
+        detailRepair.value = null;
         detailCredentials.value = null;
-        loadDetailCredentials(repair);
     }
 };
 
@@ -220,6 +236,32 @@ const openRepairDetail = (repair) => {
     router.push({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true });
     detailRepair.value = repair;
     loadDetailCredentials(repair);
+    refreshRepairDetail(repair.id);
+};
+
+// Mỗi lần mở chi tiết đều lấy lại bản ghi đích từ máy chủ. Điều này tránh mở lại
+// một đối tượng cũ trong danh sách ngay sau khi trạng thái vừa thay đổi (như hủy phiếu).
+const refreshRepairDetail = async (repairId) => {
+    try {
+        const { data } = await api.get(route('repairs.index'), {
+            params: { open_repair: repairId, per_page: 10, _: Date.now() },
+            headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        });
+        const latestRepair = data.repairs?.data?.find((item) => Number(item.id) === Number(repairId));
+        if (!latestRepair) return null;
+
+        if (repairsData.value?.data) {
+            repairsData.value = {
+                ...repairsData.value,
+                data: repairsData.value.data.map((item) => Number(item.id) === Number(repairId) ? latestRepair : item),
+            };
+        }
+        if (Number(detailRepair.value?.id) === Number(repairId)) detailRepair.value = latestRepair;
+        return latestRepair;
+    } catch {
+        // Vẫn giữ dữ liệu đang có để người dùng không bị đóng modal chỉ vì một lần tải lại thất bại.
+        return null;
+    }
 };
 
 window.addEventListener('popstate', openRepairFromQuery);
@@ -261,6 +303,110 @@ const removeRepair = (repair) => removeRepairWithConfirm(repair, () => {
     return requestRepairs(currentPage.value);
 });
 
+const openCancelRepair = (repair) => {
+    if (!repair?.id || repair.status === 'cancelled' || !can('repairs.edit')) return;
+    repairToCancel.value = repair;
+    cancelReason.value = '';
+    cancelRepairModalOpen.value = true;
+};
+const closeCancelRepairModal = () => {
+    if (cancelSubmitting.value) return;
+    cancelRepairModalOpen.value = false;
+    repairToCancel.value = null;
+    cancelReason.value = '';
+};
+
+const repairStatusCountKey = {
+    pending: 'pending_count',
+    repairing: 'repairing_count',
+    done: 'done_count',
+    returned: 'returned_count',
+    cancelled: 'cancelled_count',
+};
+
+const markRepairCancelled = (repair, reason) => {
+    const now = new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const updatedRepair = {
+        ...repair,
+        status: 'cancelled',
+        waiting_for_parts: false,
+        waiting_mode: 'repair_now',
+        parts_needed: null,
+        expected_days: null,
+        timelines: [{
+            id: `cancelled-${repair.id}-${Date.now()}`,
+            title: ['done', 'returned'].includes(repair.status)
+                ? 'Hủy phiếu đã hoàn tất · Đã hoàn kho và đảo công nợ'
+                : 'Đã hủy phiếu sửa',
+            description: reason,
+            status: 'cancelled',
+            issue: [],
+            waiting_for_parts: false,
+            waiting_mode: 'repair_now',
+            parts_needed: null,
+            expected_days: null,
+            images: [],
+            created_at: now,
+            user: 'Bạn',
+        }, ...(repair.timelines || [])],
+    };
+
+    if (repairsData.value?.data) {
+        repairsData.value = {
+            ...repairsData.value,
+            data: repairsData.value.data.map((item) => Number(item.id) === Number(repair.id) ? updatedRepair : item),
+        };
+    }
+    if (Number(detailRepair.value?.id) === Number(repair.id)) detailRepair.value = updatedRepair;
+
+    const previousCountKey = repairStatusCountKey[repair.status];
+    if (previousCountKey && repair.status !== 'cancelled') {
+        statsData.value = {
+            ...statsData.value,
+            [previousCountKey]: Math.max(0, Number(statsData.value?.[previousCountKey] || 0) - 1),
+            cancelled_count: Number(statsData.value?.cancelled_count || 0) + 1,
+        };
+    }
+};
+
+const cancelRepair = async () => {
+    const repair = repairToCancel.value;
+    const reason = cancelReason.value.trim();
+    if (!repair || reason.length < 5) {
+        toast.error('Vui lòng nhập lý do hủy tối thiểu 5 ký tự.');
+        return;
+    }
+    cancelSubmitting.value = true;
+    try {
+        if (['done', 'returned'].includes(repair.status)) {
+            await axios.post(route('repairs.cancel-completed', repair.id), { reason });
+            toast.success('Đã hủy phiếu, hoàn kho linh kiện và đảo công nợ.');
+        } else {
+            await axios.patch(route('repairs.update-status', repair.id), {
+                status: 'cancelled',
+                description: reason,
+            });
+            toast.success('Đã hủy phiếu sửa chữa.');
+        }
+        cancelRepairModalOpen.value = false;
+        repairToCancel.value = null;
+        cancelReason.value = '';
+        // Phản hồi ngay trên danh sách và modal chi tiết; lần tải sau là để đồng bộ dữ liệu chuẩn từ server.
+        markRepairCancelled(repair, reason);
+        await refreshRepairDetail(repair.id);
+        await requestRepairs(currentPage.value, { fresh: true });
+    } catch (error) {
+        toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể hủy phiếu sửa');
+    } finally {
+        cancelSubmitting.value = false;
+    }
+};
+
+const cancelReasonOptions = computed(() => cancelReasonSuggestions.value
+    .filter((item) => String(item?.reason || '').trim())
+    .slice()
+    .sort((a, b) => Number(b.usage_count || 0) - Number(a.usage_count || 0) || String(a.reason).localeCompare(String(b.reason), 'vi')));
+
 const detailProgressLabel = computed(() => progressLabel(detailRepair.value));
 
 const toggleSort = (field) => {
@@ -279,7 +425,7 @@ const quickStatuses = [
     { value: 'repairing', label: 'Đang sửa', countKey: 'repairing_count' },
     { value: 'done', label: 'Hoàn tất sửa', countKey: 'done_count' },
     { value: 'returned', label: 'Đã trả khách', countKey: 'returned_count' },
-    { value: 'cancelled', label: 'Hủy', countKey: 'cancelled_count' },
+    { value: 'cancelled', label: 'Đã hủy', countKey: 'cancelled_count' },
 ];
 const statusOptions = computed(() => quickStatuses.map(item => ({ value: item.value, label: `${item.label} (${statsData.value?.[item.countKey] ?? 0})` })));
 const repairIssueText = (repair) => Array.isArray(repair.issue)
@@ -370,12 +516,13 @@ const confirmPayment = async (payment) => {
                                 <td class="px-3.5 py-2.5"><button type="button" class="font-bold text-emerald-700 hover:text-emerald-900 hover:underline"><template v-for="(segment, index) in highlightedSearchSegments(`#${repair.code}`)" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></button></td>
                                 <td class="px-3.5 py-2.5"><div class="font-bold text-slate-900"><template v-for="(segment, index) in highlightedSearchSegments(repair.customer?.name || repair.customer_name || 'Khách lẻ')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div><div class="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400"><UserRound class="h-3 w-3" /><template v-for="(segment, index) in highlightedSearchSegments(repair.customer?.phone || repair.contact_phone || '—')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div></td>
                                 <td class="px-3.5 py-2.5"><div class="font-bold text-slate-800"><template v-for="(segment, index) in highlightedSearchSegments(repair.device_name)" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div><div class="mt-0.5 flex items-center gap-1 font-mono text-[10px] text-slate-400"><Smartphone class="h-3 w-3" /><template v-for="(segment, index) in highlightedSearchSegments(repair.imei || repair.serial || 'Không IMEI')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div></td>
-                                <td class="max-w-[220px] px-3.5 py-2.5"><span v-if="repairIssueText(repair)" class="block truncate text-[11px] text-rose-700" :title="repairIssueText(repair)"><template v-for="(segment, index) in highlightedSearchSegments(repairIssueText(repair))" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></span><span v-else class="text-[11px] text-slate-400">Chưa ghi nhận lỗi</span></td>
+                                <td class="max-w-[220px] px-3.5 py-2.5"><span v-if="repairIssueText(repair)" class="block truncate text-[11px] text-slate-600" :title="repairIssueText(repair)"><template v-for="(segment, index) in highlightedSearchSegments(repairIssueText(repair))" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></span><span v-else class="text-[11px] text-slate-400">Chưa ghi nhận tình trạng</span></td>
                                 <td class="whitespace-nowrap px-3.5 py-2.5 text-[11px] text-slate-600">{{ repair.received_at || repair.created_at || '—' }}</td>
                                 <td class="px-3 py-2"><div class="flex min-w-[190px] items-center justify-center gap-2">
                                     <span :class="['inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-bold', repairStatusClass(repair)]"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ repairStatusLabel(repair) }}</span>
                                     <span v-if="repair.waiting_for_parts && repair.waiting_mode !== 'wait_repair'" class="max-w-[120px] truncate text-[9px] font-semibold text-amber-700" :title="`Chờ ${repair.parts_needed || 'linh kiện'}`">Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · {{ repair.expected_days }} ngày</span></span>
                                     <button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm transition hover:bg-blue-700" @click.stop="openRepairWorkflow(repair)"><Play v-if="repair.status === 'pending'" class="h-3 w-3 fill-current" /><Wrench v-else-if="repair.status === 'repairing'" class="h-3 w-3" /><RotateCcw v-else class="h-3 w-3" />Tiếp tục</button>
+                                    <button v-if="repair.status !== 'cancelled' && can('repairs.edit')" type="button" class="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100" title="Hủy phiếu sửa" @click.stop="openCancelRepair(repair)"><XCircle class="h-3.5 w-3.5" />Hủy phiếu</button>
                                 </div></td>
                             </tr>
                             <tr v-if="!repairsData?.data?.length"><td colspan="6" class="px-4 py-12 text-center"><FileText class="mx-auto mb-3 h-10 w-10 text-slate-300" /><p class="text-sm font-bold text-slate-700">Không tìm thấy phiếu sửa nào</p><p class="mt-1 text-xs text-slate-400">Thử thay đổi bộ lọc hoặc từ khóa</p></td></tr>
@@ -383,11 +530,11 @@ const confirmPayment = async (payment) => {
                     </table>
                 </div>
 
-                <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+                <div class="space-y-2.5 md:hidden">
                     <article v-for="repair in repairsData?.data" :key="`mobile-${repair.id}`" class="space-y-3 rounded-xl border border-slate-200 border-l-4 bg-white p-3.5 shadow-sm transition hover:border-slate-300 hover:shadow-md active:bg-slate-50" :class="repair.status === 'pending' ? 'border-l-amber-400' : repair.status === 'repairing' ? 'border-l-violet-500' : repair.status === 'done' ? 'border-l-emerald-500' : repair.status === 'returned' ? 'border-l-slate-400' : 'border-l-rose-400'" @click="openRepairDetail(repair)">
-                        <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2"><button type="button" class="min-w-0 truncate text-left text-sm font-extrabold text-emerald-700" @click.stop="openRepairDetail(repair)">#{{ repair.code }}</button><div class="flex shrink-0 items-center gap-2"><span :class="['rounded-full border px-2 py-1 text-[10px] font-bold', repairStatusClass(repair)]">{{ repairStatusLabel(repair) }}</span><button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-blue-700" @click.stop="openRepairWorkflow(repair)"><Play v-if="repair.status === 'pending'" class="h-3 w-3 fill-current" /><Wrench v-else-if="repair.status === 'repairing'" class="h-3 w-3" /><RotateCcw v-else class="h-3 w-3" />Tiếp tục</button></div></div>
+                        <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2"><button type="button" class="min-w-0 truncate text-left text-sm font-extrabold text-emerald-700" @click.stop="openRepairDetail(repair)">#{{ repair.code }}</button><div class="flex shrink-0 items-center gap-2"><span :class="['rounded-full border px-2 py-1 text-[10px] font-bold', repairStatusClass(repair)]">{{ repairStatusLabel(repair) }}</span><button v-if="['pending', 'repairing', 'done'].includes(repair.status) && canProgress(repair)" type="button" class="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-blue-700" @click.stop="openRepairWorkflow(repair)"><Play v-if="repair.status === 'pending'" class="h-3 w-3 fill-current" /><Wrench v-else-if="repair.status === 'repairing'" class="h-3 w-3" /><RotateCcw v-else class="h-3 w-3" />Tiếp tục</button><button v-if="repair.status !== 'cancelled' && can('repairs.edit')" type="button" class="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 text-[10px] font-bold text-rose-700 active:bg-rose-100" @click.stop="openCancelRepair(repair)"><XCircle class="h-3.5 w-3.5" />Hủy</button></div></div>
                         <div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="truncate text-sm font-bold text-slate-900"><template v-for="(segment, index) in highlightedSearchSegments(repair.customer?.name || repair.customer_name || 'Khách lẻ')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div><div class="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><UserRound class="h-3 w-3" /><template v-for="(segment, index) in highlightedSearchSegments(repair.customer?.phone || repair.contact_phone || '—')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div></div><div class="min-w-0 text-right"><div class="truncate text-xs font-bold text-slate-800"><template v-for="(segment, index) in highlightedSearchSegments(repair.device_name)" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div><div class="mt-0.5 flex truncate font-mono text-[10px] text-slate-500">IMEI: <template v-for="(segment, index) in highlightedSearchSegments(repair.imei || repair.serial || '—')" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></div></div></div>
-                        <div class="rounded-lg border border-rose-100 bg-rose-50/60 px-2.5 py-2 text-[10px]" :class="repairIssueText(repair) ? 'text-rose-800' : 'text-slate-500'"><span class="font-bold">Lỗi máy: </span><template v-if="repairIssueText(repair)"><template v-for="(segment, index) in highlightedSearchSegments(repairIssueText(repair))" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></template><span v-else>Chưa ghi nhận lỗi</span></div>
+                        <div class="flex items-start gap-1.5 rounded-lg border border-sky-100 bg-sky-50/70 px-2.5 py-2 text-[10px] text-slate-600"><ClipboardList class="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-600" /><div class="min-w-0"><span class="font-bold text-sky-800">Tình trạng tiếp nhận: </span><template v-if="repairIssueText(repair)"><template v-for="(segment, index) in highlightedSearchSegments(repairIssueText(repair))" :key="index"><mark v-if="segment.match" class="rounded bg-amber-200 px-0.5 font-bold text-amber-950">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></template><span v-else class="text-slate-400">Chưa ghi nhận tình trạng</span></div></div>
                         <div v-if="repair.waiting_for_parts && repair.waiting_mode !== 'wait_repair'" class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-800">Chờ {{ repair.parts_needed || 'linh kiện' }}<span v-if="repair.expected_days !== null"> · Dự kiến {{ repair.expected_days }} ngày</span></div>
                         <div class="border-t border-slate-100 pt-2 text-[10px] text-slate-500">Ngày nhận: {{ repair.received_at || repair.created_at || '—' }}</div>
                     </article>
@@ -410,10 +557,39 @@ const confirmPayment = async (payment) => {
             :status-classes="statusClasses"
             @close="closeRepairDetail"
             @delete="removeRepair(detailRepair)"
+            @cancel-completed="openCancelRepair(detailRepair)"
             @print="printPreviewUrl = route('repairs.print', detailRepair.id)"
             @edit="openWorkflowFromDetail('intake')"
             @progress="openWorkflowFromDetail('repair')"
         />
+        <BaseModal v-if="cancelRepairModalOpen" title="Hủy phiếu sửa chữa" size="md" @close="closeCancelRepairModal">
+            <div class="space-y-4 p-1">
+                <div class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                    <p class="text-xs leading-relaxed text-amber-900">
+                        <template v-if="['done', 'returned'].includes(repairToCancel?.status)">Hủy phiếu <strong>{{ repairToCancel?.code }}</strong> sẽ hoàn kho linh kiện và đảo công nợ/thanh toán liên quan.</template>
+                        <template v-else>Phiếu <strong>{{ repairToCancel?.code }}</strong> sẽ chuyển sang trạng thái đã hủy và không thể tiếp tục quy trình sửa.</template>
+                    </p>
+                </div>
+                <div>
+                    <label for="repair_cancel_reason" class="mb-1.5 block text-xs font-bold text-slate-700">Lý do hủy phiếu <span class="text-rose-600">*</span></label>
+                    <textarea id="repair_cancel_reason" v-model="cancelReason" rows="3" :disabled="cancelSubmitting" placeholder="Nhập lý do hủy phiếu..." class="w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-100 disabled:bg-slate-50" />
+                    <p class="mt-1 text-[11px] text-slate-500">Tối thiểu 5 ký tự. Lý do được lưu vào lịch sử phiếu.</p>
+                </div>
+                <div v-if="cancelReasonOptions.length" class="space-y-1.5">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Lý do đã dùng · ưu tiên dùng nhiều nhất</p>
+                    <div class="flex max-h-32 flex-wrap content-start gap-1.5 overflow-y-auto pr-1">
+                        <button v-for="item in cancelReasonOptions" :key="item.reason" type="button" :disabled="cancelSubmitting" class="rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-medium transition" :class="cancelReason === item.reason ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50'" @click="cancelReason = item.reason">
+                            {{ item.reason }}
+                        </button>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                    <button type="button" :disabled="cancelSubmitting" class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50" @click="closeCancelRepairModal">Quay lại</button>
+                    <button type="button" :disabled="cancelSubmitting || cancelReason.trim().length < 5" class="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50" @click="cancelRepair"><XCircle class="h-3.5 w-3.5" />{{ cancelSubmitting ? 'Đang hủy...' : 'Xác nhận hủy phiếu' }}</button>
+                </div>
+            </div>
+        </BaseModal>
         <CheckoutModal
             v-if="paymentRepair"
             :key="paymentRepair.id"

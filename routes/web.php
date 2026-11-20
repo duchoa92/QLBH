@@ -307,6 +307,7 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('/repairs/{repair}/warranty/decline', [RepairController::class, 'declineWarranty'])->middleware('permission:repairs.edit')->name('repairs.warranty-decline');
     Route::post('/repairs/{repair}/complete', [RepairController::class, 'complete'])->middleware('permission:repairs.complete')->name('repairs.complete');
     Route::post('/repairs/{repair}/return', [RepairController::class, 'returnToCustomer'])->middleware('permission:repairs.return')->name('repairs.return');
+    Route::post('/repairs/{repair}/cancel-completed', [RepairController::class, 'cancelCompleted'])->middleware('permission:repairs.edit')->name('repairs.cancel-completed');
     Route::get('/repairs/{repair}/print', [RepairController::class, 'print'])->middleware('permission:repairs.view')->name('repairs.print');
     Route::get('/repairs', [RepairController::class, 'index'])->middleware('permission:repairs.view')->name('repairs.index');
     Route::post('/repairs', [RepairController::class, 'store'])->middleware('permission:repairs.create')->name('repairs.store');

@@ -17,7 +17,7 @@ import SettingSwitch from './SettingSwitch.vue'
 import SettingCollapse from './SettingCollapse.vue'
 import DoorCameraSetup from './DoorCameraSetup.vue'
 import { mergeLabelTemplate } from '@/utils/printLabels'
-import { Pencil, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
+import { SquarePen, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
@@ -1255,7 +1255,7 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                                                     title="Sửa"
                                                     @click="editUnit(unit)"
                                                 >
-                                                    <Pencil :size="16" />
+                                                    <SquarePen :size="16" />
                                                 </button>
 
                                                 <button

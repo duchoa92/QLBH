@@ -4,7 +4,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue';
 import PatternLock from '@/Components/PatternLock.vue';
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/format';
 import {
-    AlertTriangle, Check, CreditCard, Cpu, Eye, EyeOff, KeyRound, Pencil,
+    AlertTriangle, Check, ChevronsDown, ChevronsUp, CreditCard, Cpu, Eye, EyeOff, KeyRound, SquarePen,
     Phone, Printer, Shield, ShieldCheck, Smartphone, Trash2, X, ZoomIn,
 } from 'lucide-vue-next';
 
@@ -23,7 +23,7 @@ const props = defineProps({
     statusClasses: { type: Object, default: () => ({}) },
 });
 
-const emit = defineEmits(['close', 'print', 'edit', 'progress', 'delete']);
+const emit = defineEmits(['close', 'print', 'edit', 'progress', 'delete', 'cancel-completed']);
 
 /* ---------- Trạng thái hiển thị ---------- */
 const statusDot = {
@@ -85,11 +85,20 @@ const estimateStruck = computed(() => showEstimate.value
 
 /* ---------- Bảo mật: che mặc định, bấm mới hiện ---------- */
 const revealSecrets = ref(false);
-watch(() => props.repair.id, () => { revealSecrets.value = false; });
+const historyExpanded = ref(false);
+watch(() => props.repair.id, () => {
+    revealSecrets.value = false;
+    historyExpanded.value = false;
+});
 const mask = (value) => value ? (revealSecrets.value ? value : '••••••') : '-';
 const hasCredentialData = computed(() => {
     const c = props.credentials;
     return Boolean(c && (c.screen_password || c.screen_pattern || c.account_type || c.account_email || c.account_password));
+});
+
+const visibleTimelines = computed(() => {
+    const timelines = props.repair.timelines || [];
+    return historyExpanded.value ? timelines : timelines.slice(0, 1);
 });
 
 /* ---------- Lightbox ảnh ---------- */
@@ -253,6 +262,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                     </div>
                 </div>
 
+                <!-- Linh kiện thay thế -->
+                <div class="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3.5 py-2 text-[11px] font-bold uppercase text-slate-600">
+                        <span class="flex items-center gap-1.5">
+                            <Cpu class="h-3.5 w-3.5 text-indigo-600" />
+                            Linh kiện thay thế
+                        </span>
+                        <span class="text-[10px] text-slate-400">{{ repair.parts?.length || 0 }} món</span>
+                    </div>
+                    <div class="divide-y divide-slate-100 bg-white text-xs">
+                        <div v-for="part in repair.parts || []" :key="part.id" class="flex items-center justify-between gap-3 p-3">
+                            <div class="min-w-0">
+                                <div class="truncate font-semibold text-slate-800">{{ part.product_name }}</div>
+                                <div v-if="part.sku" class="font-mono text-[10px] text-slate-400">{{ part.sku }}</div>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-3">
+                                <span class="font-mono text-slate-500">x{{ part.quantity }}</span>
+                                <span class="font-mono font-bold text-slate-700">{{ money(part.subtotal) }}</span>
+                            </div>
+                        </div>
+                        <div v-if="!repair.parts?.length" class="p-3 text-slate-400">Không thay linh kiện</div>
+                    </div>
+                </div>
+
                 <!-- Bảo mật & mật khẩu -->
                 <div v-if="canViewCredentials && hasCredentialData" class="space-y-3 rounded-xl border border-amber-200/70 bg-amber-50/50 p-4 text-xs">
                     <div class="flex items-center justify-between gap-2 border-b border-amber-200/50 pb-2">
@@ -377,30 +410,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                     </div>
                 </div>
 
-                <!-- Linh kiện -->
-                <div class="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3.5 py-2 text-[11px] font-bold uppercase text-slate-600">
-                        <span class="flex items-center gap-1.5">
-                            <Cpu class="h-3.5 w-3.5 text-indigo-600" />
-                            Linh kiện thay thế
-                        </span>
-                        <span class="text-[10px] text-slate-400">{{ repair.parts?.length || 0 }} món</span>
-                    </div>
-                    <div class="divide-y divide-slate-100 bg-white text-xs">
-                        <div v-for="part in repair.parts || []" :key="part.id" class="flex items-center justify-between gap-3 p-3">
-                            <div class="min-w-0">
-                                <div class="truncate font-semibold text-slate-800">{{ part.product_name }}</div>
-                                <div v-if="part.sku" class="font-mono text-[10px] text-slate-400">{{ part.sku }}</div>
-                            </div>
-                            <div class="flex shrink-0 items-center gap-3">
-                                <span class="font-mono text-slate-500">x{{ part.quantity }}</span>
-                                <span class="font-mono font-bold text-slate-700">{{ money(part.subtotal) }}</span>
-                            </div>
-                        </div>
-                        <div v-if="!repair.parts?.length" class="p-3 text-slate-400">Không thay linh kiện</div>
-                    </div>
-                </div>
-
                 <!-- Timeline -->
                 <div class="space-y-3">
                     <div class="flex items-center justify-between">
@@ -412,7 +421,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                         v-if="repair.timelines?.length"
                         class="relative space-y-4 pl-5 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-0.5 before:bg-slate-200"
                     >
-                        <div v-for="timeline in repair.timelines" :key="timeline.id" class="relative">
+                        <div v-for="timeline in visibleTimelines" :key="timeline.id" class="relative">
                             <div :class="['absolute -left-[17px] top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full text-white ring-4 ring-white', statusDot[timeline.status] || 'bg-slate-400']">
                                 <Check v-if="timeline.status === 'returned'" class="h-2.5 w-2.5" />
                             </div>
@@ -441,6 +450,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                             </div>
                         </div>
                     </div>
+                    <button
+                        v-if="(repair.timelines?.length || 0) > 1"
+                        type="button"
+                        :aria-label="historyExpanded ? 'Thu gọn lịch sử' : 'Xem toàn bộ lịch sử'"
+                        :title="historyExpanded ? 'Thu gọn lịch sử' : `Xem thêm ${repair.timelines.length - 1} nhật ký`"
+                        class="group mx-auto flex h-7 w-12 items-center justify-center rounded-full border border-indigo-100 bg-indigo-50 text-indigo-500 transition hover:border-indigo-300 hover:bg-indigo-100 hover:text-indigo-700"
+                        @click="historyExpanded = !historyExpanded"
+                    >
+                        <ChevronsUp v-if="historyExpanded" class="h-4 w-4 transition-transform group-hover:-translate-y-0.5" />
+                        <ChevronsDown v-else class="h-4 w-4 transition-transform group-hover:translate-y-0.5" />
+                    </button>
                     <p v-else class="text-xs text-slate-400">Chưa có nhật ký tiến trình.</p>
                 </div>
             </div>
@@ -461,6 +481,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                     </button>
                 </div>
                 <div class="flex w-full flex-wrap items-center justify-end gap-2.5 sm:w-auto">
+                    <button
+                        v-if="canEdit && ['done', 'returned'].includes(repair.status)"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                        @click="emit('cancel-completed')"
+                    >
+                        <X class="h-3.5 w-3.5" />
+                        Hủy hóa đơn
+                    </button>
                     <button
                         v-if="canDelete"
                         type="button"
@@ -486,7 +515,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onLightboxKey, true)
                         class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
                         @click="emit('edit')"
                     >
-                        <Pencil class="h-3.5 w-3.5 text-slate-500" />
+                        <SquarePen class="h-3.5 w-3.5 text-slate-500" />
                         Sửa phiếu
                     </button>
                     <button

@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Models\WorkShift;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -80,6 +81,36 @@ class RecordDetailController extends Controller
         $customer = Customer::with('devices:id,customer_id,brand,model,imei,color')->findOrFail($id);
         $saleColumns = ['id', 'code', 'status', 'grand_total', 'paid_amount', 'created_at'];
 
+        // Dùng cùng cách tính với báo cáo lợi nhuận: giá vốn đã lưu tại thời điểm bán,
+        // tính cả hàng tặng; phần sửa chữa lấy doanh thu trừ giá vốn linh kiện.
+        $profit = null;
+        if ($viewer->can('sales.view')) {
+            $salesProfit = DB::table('sale_items')
+                ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+                ->join('products', 'products.id', '=', 'sale_items.product_id')
+                ->where('sales.customer_id', $id)
+                ->where('sales.status', '!=', 'cancelled')
+                ->selectRaw('COALESCE(SUM(sale_items.subtotal), 0) - COALESCE(SUM(CASE WHEN sale_items.unit_cost IS NOT NULL THEN sale_items.unit_cost * sale_items.quantity ELSE COALESCE(sale_items.base_quantity, sale_items.quantity) * products.cost_price END), 0) as profit')
+                ->value('profit');
+            $giftCost = DB::table('sale_item_gifts')
+                ->join('sale_items', 'sale_items.id', '=', 'sale_item_gifts.sale_item_id')
+                ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+                ->join('products', 'products.id', '=', 'sale_item_gifts.product_id')
+                ->where('sales.customer_id', $id)
+                ->where('sales.status', '!=', 'cancelled')
+                ->selectRaw('COALESCE(SUM(CASE WHEN sale_item_gifts.unit_cost IS NOT NULL THEN sale_item_gifts.unit_cost * sale_item_gifts.quantity ELSE COALESCE(sale_item_gifts.base_quantity, sale_item_gifts.quantity) * products.cost_price END), 0) as cost')
+                ->value('cost');
+            $profit = (float) $salesProfit - (float) $giftCost;
+        }
+        if ($viewer->can('repairs.view')) {
+            $repairRevenue = Repair::query()->where('customer_id', $id)->whereIn('status', ['done', 'returned'])
+                ->sum(DB::raw('COALESCE(final_cost, estimated_cost, 0)'));
+            $repairCost = DB::table('repair_parts')->join('repairs', 'repairs.id', '=', 'repair_parts.repair_id')
+                ->where('repairs.customer_id', $id)->whereIn('repairs.status', ['done', 'returned'])
+                ->sum(DB::raw('repair_parts.cost_price * repair_parts.quantity'));
+            $profit = ($profit ?? 0.0) + (float) $repairRevenue - (float) $repairCost;
+        }
+
         $sales = $viewer->can('sales.view')
             ? Sale::query()->where('customer_id', $id)->where('status', '!=', 'cancelled')
                 ->latest()->limit(10)->get($saleColumns)
@@ -124,6 +155,7 @@ class RecordDetailController extends Controller
                 'debt_balance' => (float) $customer->debt_balance,
                 'point_balance' => (float) $customer->point_balance,
                 'total_spent' => (float) $customer->total_spent,
+                'total_profit' => $profit,
                 'total_orders' => (int) $customer->total_orders,
                 'last_order_at' => $this->date($customer->last_order_at),
             ],

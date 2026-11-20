@@ -170,7 +170,7 @@ const profit = reactive({
     by_product: [],
 })
 
-const profitFilters = reactive({ search: '', category_id: '', user_id: '' })
+const profitFilters = reactive({ search: '', category_id: '', user_id: '', source: '' })
 
 const loadProfit = async () => {
     loading.value = true
@@ -183,6 +183,7 @@ const loadProfit = async () => {
                 search: profitFilters.search.trim() || undefined,
                 category_id: profitFilters.category_id || undefined,
                 user_id: profitFilters.user_id || undefined,
+                source: profitFilters.source || undefined,
             },
         })
 
@@ -386,7 +387,7 @@ watch(() => [revenueFilters.source, revenueFilters.payment_method, revenueFilter
     if (activeTab.value === 'revenue') loadRevenue()
 })
 
-watch(() => [profitFilters.category_id, profitFilters.user_id], () => {
+watch(() => [profitFilters.category_id, profitFilters.user_id, profitFilters.source], () => {
     if (activeTab.value === 'profit') loadProfit()
 })
 
@@ -561,6 +562,7 @@ onMounted(() => {
                 <ListToolbar v-model="profitFilters.search" placeholder="Tìm sản phẩm theo tên...">
                     <template #filters>
                         <DateRangeFilter v-model:from="filters.from" v-model:to="filters.to" :allow-all="false" align="left" />
+                        <ListFilterSelect v-model="profitFilters.source" label="Tất cả nguồn thu" :show-placeholder="false" :options="sourceOptions" />
                         <ListFilterSelect v-model="profitFilters.category_id" label="Danh mục" :show-placeholder="false" :options="categoryOptions" />
                         <ListFilterSelect v-model="profitFilters.user_id" label="Nhân viên" :show-placeholder="false" :options="staffOptions" />
                     </template>

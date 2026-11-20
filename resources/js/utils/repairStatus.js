@@ -4,7 +4,8 @@ export const REPAIR_STATUS_CLASSES = {
     repairing: 'bg-purple-50 text-purple-700 border-purple-200',
     done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     returned: 'bg-slate-100 text-slate-600 border-slate-200',
-    cancelled: 'bg-rose-50 text-rose-700 border-rose-200',
+    // Trạng thái đã kết thúc, dùng tông slate trung tính để không bị nhầm với nút hành động Hủy phiếu màu đỏ.
+    cancelled: 'bg-slate-200/80 text-slate-700 border-slate-300',
 }
 
 export const REPAIR_STATUS_LABELS = {
@@ -12,5 +13,5 @@ export const REPAIR_STATUS_LABELS = {
     repairing: 'Đang sửa',
     done: 'Hoàn tất sửa',
     returned: 'Đã trả khách',
-    cancelled: 'Hủy',
+    cancelled: 'Đã hủy',
 }

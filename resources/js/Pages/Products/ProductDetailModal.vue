@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import {
     Barcode, Check, ChevronRight, CircleCheck, Clock, Copy, Eye, EyeOff,
-    Info, Layers, LayoutGrid, Package, Pencil, Printer, Search, Smartphone,
+    Info, Layers, LayoutGrid, Package, SquarePen, Printer, Search, Smartphone,
     TriangleAlert, Undo2, Wrench, X,
 } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -66,6 +66,7 @@ const typeMeta = computed(() => ({
 /* ================= TABS ================= */
 const tabs = computed(() => [
     { key: 'overview', label: 'Tổng quan', icon: LayoutGrid },
+    (product.value?.stock_batches || []).length > 0 && { key: 'batches', label: 'Lô hàng', icon: Package, count: product.value.stock_batches.length },
     hasVariants.value && { key: 'variants', label: 'Biến thể', icon: Layers, count: product.value.variants.length },
     hasImei.value && { key: 'imei', label: 'IMEI / Serial', icon: Barcode, count: (product.value.imeis || []).length },
 ].filter(Boolean))
@@ -117,15 +118,27 @@ const stockState = computed(() => {
 
 const sellPrice = computed(() => Number(product.value?.sell_price ?? product.value?.price ?? 0))
 
-// Có biến thể -> hiện khoảng giá min – max
 const priceText = computed(() => {
-    if (!hasVariants.value) return formatCurrency(sellPrice.value)
-    const prices = product.value.variants.map(v => Number(v.sell_price || 0)).filter(Boolean)
+    const batches = (product.value?.stock_batches || []).filter(batch => Number(batch.remaining_quantity || 0) > 0)
+    const batchPrices = batches.map(batch => Number(batch.sell_price || 0)).filter(Boolean)
+    const imeiPrices = (product.value?.imeis || [])
+        .filter(isInStock)
+        .map(imei => Number(imei.sell_price || product.value?.sell_price || 0))
+        .filter(Boolean)
+    const variantPrices = (product.value?.variants || [])
+        .filter(variant => Number(variant.stock || 0) > 0)
+        .map(variant => Number(variant.sell_price || 0))
+        .filter(Boolean)
+    const prices = batchPrices.length ? batchPrices : imeiPrices.length ? imeiPrices : variantPrices
     if (!prices.length) return formatCurrency(sellPrice.value)
     const min = Math.min(...prices)
     const max = Math.max(...prices)
     return min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`
 })
+
+const batchVariantName = (batch) => batch.variant
+    ? variantName(batch.variant)
+    : 'Sản phẩm chung'
 
 const margin = computed(() => {
     const cost = Number(product.value?.cost_price || 0)
@@ -313,12 +326,12 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
 
             <!-- ========== NỘI DUNG THEO TAB ========== -->
             <section class="min-w-0 bg-white">
-                <div class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div class="sticky top-0 z-10 flex h-[54px] items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-slate-200 bg-white px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <button
                         v-for="tab in tabs"
                         :key="tab.key"
                         type="button"
-                        class="-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition"
+                        class="-mb-px flex h-[46px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition"
                         :class="activeTab === tab.key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
                         @click="activeTab = tab.key"
                     >
@@ -358,6 +371,33 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                     <div v-if="product.description" class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5 text-xs">
                         <span class="mb-1 flex items-center gap-1.5 font-bold text-indigo-900"><Info class="h-3.5 w-3.5 text-indigo-600" /> Mô tả sản phẩm</span>
                         <p class="whitespace-pre-line leading-relaxed text-slate-600">{{ product.description }}</p>
+                    </div>
+                </div>
+
+                <!-- TAB: LÔ HÀNG -->
+                <div v-else-if="activeTab === 'batches'" class="overflow-x-auto">
+                    <table class="m-cards w-full min-w-[640px] border-collapse text-left text-xs">
+                        <thead>
+                            <tr class="border-b border-slate-200 bg-slate-50 font-semibold uppercase tracking-wider text-slate-500">
+                                <th class="px-4 py-3">Lô / ngày nhập</th>
+                                <th class="px-4 py-3">Biến thể</th>
+                                <th class="px-4 py-3 text-right">Còn lại</th>
+                                <th v-if="showCostPrice" class="px-4 py-3 text-right">Giá nhập</th>
+                                <th class="px-4 py-3 text-right">Giá bán</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr v-for="batch in product.stock_batches" :key="batch.id" class="text-slate-700 transition hover:bg-slate-50">
+                                <td class="px-4 py-3 font-medium text-slate-800">Lô #{{ batch.id }}<div class="mt-0.5 text-[11px] text-slate-400">{{ formatDate(batch.imported_at) || 'Không rõ ngày nhập' }}</div></td>
+                                <td class="px-4 py-3">{{ batchVariantName(batch) }}</td>
+                                <td class="px-4 py-3 text-right font-bold tabular-nums text-emerald-700">{{ batch.remaining_quantity }} {{ unitName }}</td>
+                                <td v-if="showCostPrice" class="px-4 py-3 text-right font-medium tabular-nums text-amber-700">{{ formatCurrency(batch.cost_price) }}</td>
+                                <td class="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{{ formatCurrency(batch.sell_price) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="border-t border-slate-100 bg-slate-50 px-4 py-3 text-right text-xs font-semibold text-slate-600">
+                        Tổng còn lại: {{ product.stock_batches.reduce((sum, batch) => sum + Number(batch.remaining_quantity || 0), 0) }} {{ unitName }}
                     </div>
                 </div>
 
@@ -511,7 +551,7 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                     class="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-500 disabled:opacity-50"
                     @click="onEdit(product)"
                 >
-                    <Pencil class="h-4 w-4" /> Chỉnh sửa sản phẩm
+                    <SquarePen class="h-4 w-4" /> Chỉnh sửa sản phẩm
                 </button>
                 <button
                     type="button"

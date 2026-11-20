@@ -3,7 +3,7 @@
 import { onMounted, ref, computed, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 import { usePage } from '@inertiajs/vue3'
-import { Pencil, Undo2, X, CircleCheck, CircleX, Clock3, Copy, Printer, ChevronLeft, ChevronRight, Banknote, CreditCard } from 'lucide-vue-next'
+import { SquarePen, Undo2, X, CircleCheck, CircleX, Clock3, Copy, Printer, ChevronLeft, ChevronRight, Banknote, CreditCard } from 'lucide-vue-next'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -243,7 +243,7 @@ const refreshInvoices = () => {
                                 <Printer class="h-4 w-4" />
                             </button>
                             <button v-if="canEditSales" type="button" class="rounded-md p-1 text-amber-600 hover:bg-amber-50" title="Sửa hóa đơn" aria-label="Sửa hóa đơn" @click="openEdit(invoice)">
-                                <Pencil class="h-4 w-4" />
+                                <SquarePen class="h-4 w-4" />
                             </button>
                             <button v-if="canCancelSales && invoice.status !== 'cancelled'" type="button" class="rounded-md p-1 text-rose-600 hover:bg-rose-50" title="Hủy hóa đơn và hoàn kho" aria-label="Hủy hóa đơn và hoàn kho" @click="confirmCancel(invoice)">
                                 <Undo2 class="h-4 w-4" />

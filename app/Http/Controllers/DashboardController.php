@@ -72,6 +72,13 @@ class DashboardController extends Controller
             ->sum('bank_received_amount');
         $bankAmount += (float) (clone $salesToday)->where('payment_method', 'card')->sum('paid_amount');
 
+        // Tiền sửa chữa chỉ phát sinh khi thu/trả máy; ghi nhận theo ngày thu, không theo ngày hoàn tất.
+        $repairsPaidToday = Repair::query()
+            ->where('status', 'returned')
+            ->whereBetween('returned_at', [$todayStart, $todayEnd]);
+        $cashAmount += (float) (clone $repairsPaidToday)->where('payment_method', 'cash')->sum('paid_amount');
+        $bankAmount += (float) (clone $repairsPaidToday)->whereIn('payment_method', ['bank', 'card'])->sum('paid_amount');
+
         /*
         |--------------------------------------------------------------------------
         | Công nợ khách hàng
@@ -176,8 +183,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Lợi nhuận gộp ước tính: (giá bán - giá vốn) cho hàng POS
-     * + toàn bộ tiền công sửa chữa (chưa tách được giá vốn linh kiện).
+     * Lợi nhuận gộp: doanh thu trừ giá vốn hàng bán và linh kiện sửa chữa.
      */
     private function profitBetween(Carbon $from, Carbon $to): float
     {
@@ -203,7 +209,7 @@ class DashboardController extends Controller
 
         $posProfit = (float) $posRow->revenue - (float) $posRow->cost - (float) $giftCost;
 
-        $repairProfit = (float) Repair::query()
+        $repairRevenue = (float) Repair::query()
             ->whereIn('status', self::REPAIR_REVENUE_STATUSES)
             ->whereRaw(
                 'COALESCE(returned_at, completed_at, updated_at) BETWEEN ? AND ?',
@@ -212,7 +218,13 @@ class DashboardController extends Controller
             ->selectRaw('COALESCE(SUM(COALESCE(final_cost, estimated_cost, 0)), 0) as total')
             ->value('total');
 
-        return $posProfit + $repairProfit;
+        $repairCost = (float) \Illuminate\Support\Facades\DB::table('repair_parts')
+            ->join('repairs', 'repairs.id', '=', 'repair_parts.repair_id')
+            ->whereIn('repairs.status', self::REPAIR_REVENUE_STATUSES)
+            ->whereRaw('COALESCE(repairs.returned_at, repairs.completed_at, repairs.updated_at) BETWEEN ? AND ?', [$from, $to])
+            ->sum(\Illuminate\Support\Facades\DB::raw('repair_parts.cost_price * repair_parts.quantity'));
+
+        return $posProfit + $repairRevenue - $repairCost;
     }
 
     /**
@@ -256,11 +268,19 @@ class DashboardController extends Controller
             ->groupBy('date')
             ->pluck('revenue', 'date');
 
+        $repairCostsByDay = \Illuminate\Support\Facades\DB::table('repair_parts')
+            ->join('repairs', 'repairs.id', '=', 'repair_parts.repair_id')
+            ->whereIn('repairs.status', self::REPAIR_REVENUE_STATUSES)
+            ->whereRaw('COALESCE(repairs.returned_at, repairs.completed_at, repairs.updated_at) BETWEEN ? AND ?', [$from, $to])
+            ->selectRaw('DATE(COALESCE(repairs.returned_at, repairs.completed_at, repairs.updated_at)) as date, SUM(repair_parts.cost_price * repair_parts.quantity) as cost')
+            ->groupBy('date')->pluck('cost', 'date');
+
         $labels = [];
         $revenue = [];
         $profit = [];
         $salesRevenue = [];
         $repairRevenue = [];
+        $repairProfit = [];
         $salesProfit = [];
 
         for ($cursor = $from->copy(); $cursor->lte($to); $cursor->addDay()) {
@@ -270,12 +290,14 @@ class DashboardController extends Controller
             $posRevenueDay = (float) ($salesByDay[$key] ?? 0);
             $costDay = (float) ($costByDay[$key] ?? 0) + (float) ($giftCostsByDay[$key] ?? 0);
             $repairRevenueDay = (float) ($repairsByDay[$key] ?? 0);
+            $repairCostDay = (float) ($repairCostsByDay[$key] ?? 0);
 
             $labels[] = $cursor->format('d/m');
             $revenue[] = $posRevenueDay + $repairRevenueDay;
-            $profit[] = ($posRevenueDay - $costDay) + $repairRevenueDay;
+            $profit[] = ($posRevenueDay - $costDay) + $repairRevenueDay - $repairCostDay;
             $salesRevenue[] = $posRevenueDay;
             $repairRevenue[] = $repairRevenueDay;
+            $repairProfit[] = $repairRevenueDay - $repairCostDay;
             $salesProfit[] = $posRevenueDay - $costDay;
         }
 
@@ -290,7 +312,7 @@ class DashboardController extends Controller
             'salesRevenue' => $salesRevenue,
             'repairRevenue' => $repairRevenue,
             'salesProfit' => $salesProfit,
-            'repairProfit' => $repairRevenue,
+            'repairProfit' => $repairProfit,
         ];
     }
 

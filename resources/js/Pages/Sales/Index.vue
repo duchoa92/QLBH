@@ -12,7 +12,7 @@ import {
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
-    Pencil,
+    SquarePen,
     LoaderCircle,
     Clock,
     Phone,
@@ -669,7 +669,7 @@ const highlightedSearchSegments = (value) => {
                                         :title="sale.status === 'cancelled' ? 'Hóa đơn đã hủy, không thể sửa' : 'Sửa hóa đơn'"
                                         @click.stop="editSale = sale"
                                     >
-                                        <Pencil class="h-4 w-4" />
+                                        <SquarePen class="h-4 w-4" />
                                     </button>
                                     <button
                                         type="button"
@@ -708,7 +708,7 @@ const highlightedSearchSegments = (value) => {
                 </table>
                 </div>
 
-                <div class="space-y-2.5 bg-slate-50/70 p-2.5 md:hidden">
+                <div class="space-y-2.5 md:hidden">
                     <article v-for="sale in sortedSalesData" :key="`mobile-${sale.id}`" class="cursor-pointer space-y-2.5 rounded-xl border border-slate-200 border-l-4 bg-white p-3.5 shadow-sm transition active:bg-slate-50" :class="sale.status === 'cancelled' ? 'border-l-rose-400' : saleHasDebt(sale) ? 'border-l-amber-400' : 'border-l-emerald-500'" @click="openSaleDetail(sale)">
                         <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
                             <div class="text-sm font-bold text-slate-900">
@@ -751,7 +751,7 @@ const highlightedSearchSegments = (value) => {
                         <div class="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
                             <span class="min-w-0 truncate">{{ formatDateTime(sale.created_at) }}</span>
                             <div class="flex shrink-0 items-center gap-1" @click.stop>
-                                <button v-if="canEditSales" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-40" :disabled="sale.status === 'cancelled'" title="Sửa hóa đơn" aria-label="Sửa hóa đơn" @click="editSale = sale"><Pencil class="h-5 w-5" /></button>
+                                <button v-if="canEditSales" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-40" :disabled="sale.status === 'cancelled'" title="Sửa hóa đơn" aria-label="Sửa hóa đơn" @click="editSale = sale"><SquarePen class="h-5 w-5" /></button>
                                 <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 active:bg-emerald-100" title="In hóa đơn" aria-label="In hóa đơn" @click="openPrintWindow(sale.id)"><Printer class="h-5 w-5" /></button>
                                 <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100 disabled:opacity-40" :disabled="!canCancelSales || sale.status === 'cancelled'" title="Trả hàng / Hủy hóa đơn" aria-label="Trả hàng / Hủy hóa đơn" @click="confirmCancel(sale)"><Undo2 class="h-5 w-5" /></button>
                             </div>

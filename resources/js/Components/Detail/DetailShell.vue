@@ -7,6 +7,7 @@ defineProps({
     size: { type: String, default: 'lg' },
     loading: { type: Boolean, default: false },
     error: { type: String, default: '' },
+    statsColumns: { type: Number, default: 4 },
 })
 
 defineEmits(['close'])
@@ -32,7 +33,7 @@ defineEmits(['close'])
         <div v-if="loading" class="py-16 text-center text-sm text-slate-500">Đang tải chi tiết…</div>
         <div v-else-if="error" class="m-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ error }}</div>
         <template v-else>
-            <div v-if="$slots.stats" class="grid grid-cols-2 gap-2.5 px-5 pt-4 lg:grid-cols-4"><slot name="stats" /></div>
+            <div v-if="$slots.stats" class="grid grid-cols-2 gap-2.5 px-5 pt-4" :class="statsColumns === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'"><slot name="stats" /></div>
             <div v-if="$slots.tabs" class="px-5 pt-4"><slot name="tabs" /></div>
             <div class="space-y-4 p-5"><slot /></div>
         </template>

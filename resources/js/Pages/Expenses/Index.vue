@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useUrlView } from '@/Composables/useUrlState'
 import { router, useForm, usePage } from '@inertiajs/vue3'
-import { Plus, Pencil, Trash2, BellRing, CalendarClock } from 'lucide-vue-next'
+import { Plus, SquarePen, Trash2, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -152,7 +152,7 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
                     <td class="px-3.5 py-2.5 text-slate-600"><HighlightText v-if="row.recipient" :text="row.recipient" :keyword="search" /><template v-else>—</template></td>
                     <td class="px-3.5 py-2.5 text-slate-600">{{ paymentLabels[row.payment_method] || row.payment_method }}</td>
                     <td class="px-3.5 py-2.5 text-right font-bold text-emerald-700">{{ formatMoney(row.amount) }}</td>
-                    <td class="px-3.5 py-2.5 text-center" @click.stop><div v-if="canManage" class="app-row-actions"><button type="button" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa" @click="openEdit(row)"><Pencil class="h-4 w-4" /></button><button type="button" class="app-row-action app-row-action--danger" title="Xóa" aria-label="Xóa" @click="remove(row)"><Trash2 class="h-4 w-4" /></button></div></td>
+                    <td class="px-3.5 py-2.5 text-center" @click.stop><div v-if="canManage" class="app-row-actions"><button type="button" class="app-row-action app-row-action--edit" title="Sửa" aria-label="Sửa" @click="openEdit(row)"><SquarePen class="h-4 w-4" /></button><button type="button" class="app-row-action app-row-action--danger" title="Xóa" aria-label="Xóa" @click="remove(row)"><Trash2 class="h-4 w-4" /></button></div></td>
                 </template>
                 <template #mobile-title="{ row }">
                     <div class="flex items-start justify-between gap-2">
@@ -170,7 +170,7 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
                 </template>
                 <template #mobile-actions="{ row }">
                     <div v-if="canManage" class="flex flex-wrap gap-2" @click.stop>
-                        <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100" @click="openEdit(row)"><Pencil class="h-5 w-5" /></button>
+                        <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 active:bg-amber-100" @click="openEdit(row)"><SquarePen class="h-5 w-5" /></button>
                         <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" @click="remove(row)"><Trash2 class="h-5 w-5" /></button>
                     </div>
                 </template>
@@ -184,7 +184,7 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
             <div v-if="recurringExpenses.length" class="divide-y divide-slate-100">
                 <div v-for="row in recurringExpenses" :key="row.id" class="flex flex-wrap items-center justify-between gap-3 p-4" :class="!row.is_active ? 'opacity-60' : ''">
                     <div class="min-w-48 flex-1"><div class="flex flex-wrap items-center gap-2"><strong class="text-sm text-slate-900">{{ row.description }}</strong><span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ categoryLabels[row.category] || row.category }}</span><span v-if="!row.is_active" class="text-xs text-slate-500">Đã tạm dừng</span></div><div class="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500"><span class="inline-flex items-center gap-1"><CalendarClock :size="13" />Ngày {{ row.due_day }} {{ scheduleCycleText(row) }} · nhắc trước {{ row.remind_days }} ngày</span><span>{{ formatMoney(row.amount) }}</span><span v-if="row.recipient">{{ row.recipient }}</span></div></div>
-                    <div v-if="canManage" class="flex items-center gap-2"><span v-if="row.is_due_in_period === false" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">Không đến hạn tháng {{ month }}</span><span v-else-if="row.payments?.length" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Đã thanh toán tháng {{ month }}</span><ActionButton v-else-if="row.is_active" variant="info" @click="markPaid(row)">Đã thanh toán</ActionButton><button class="rounded-lg p-2 text-blue-700 hover:bg-blue-50" aria-label="Sửa lịch" @click="openSchedule(row)"><Pencil :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa lịch" @click="deleteSchedule(row)"><Trash2 :size="15" /></button></div>
+                    <div v-if="canManage" class="flex items-center gap-2"><span v-if="row.is_due_in_period === false" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">Không đến hạn tháng {{ month }}</span><span v-else-if="row.payments?.length" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Đã thanh toán tháng {{ month }}</span><ActionButton v-else-if="row.is_active" variant="info" @click="markPaid(row)">Đã thanh toán</ActionButton><button class="rounded-lg p-2 text-blue-700 hover:bg-blue-50" aria-label="Sửa lịch" @click="openSchedule(row)"><SquarePen :size="15" /></button><button class="rounded-lg p-2 text-rose-700 hover:bg-rose-50" aria-label="Xóa lịch" @click="deleteSchedule(row)"><Trash2 :size="15" /></button></div>
                 </div>
             </div>
             <div v-else class="p-8 text-center text-sm text-slate-500">Chưa có lịch chi phí định kỳ.</div>
