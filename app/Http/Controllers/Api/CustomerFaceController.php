@@ -7,22 +7,26 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
+use App\Models\CustomerFaceSample;
 use App\Support\DoorCameraAccess;
 use App\Support\FaceMatcher;
 use App\Support\FaceTuning;
+use App\Services\FaceImageStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Nhận diện khách hàng bằng khuôn mặt (chỉ khi khách đã đồng ý).
  *
  * - Dịch vụ OpenVINO tạo vector SFace cho cả đăng ký lẫn camera nền.
- * - Máy chủ chỉ lưu vector, so khớp phía server nên vector của khách khác không bao giờ gửi xuống POS.
+ * - Máy chủ so khớp vector ở phía server nên vector của khách khác không bao giờ gửi xuống POS.
+ * - Ảnh mẫu đã có đồng ý được lưu trên private disk và chỉ xem qua route phân quyền.
  */
 class CustomerFaceController extends Controller
 {
@@ -46,6 +50,9 @@ class CustomerFaceController extends Controller
             'samples' => $profiles->count(),
             'consented_at' => $profiles->max('consented_at')?->toIso8601String(),
             'engines' => [FaceMatcher::SFACE => $profiles->where('engine', FaceMatcher::SFACE)->count()],
+            // These photos are intentionally private. The URL is a protected
+            // controller route, never a public storage URL or a data URI.
+            'sample_images' => $this->sampleImages($customer),
             // HTTP snapshots are proxied from the camera itself; RTSP streams
             // are proxied from Camera Intelligence's in-memory current frame.
             'cctv_configured' => DoorCameraAccess::snapshotCameras() !== [],
@@ -56,7 +63,7 @@ class CustomerFaceController extends Controller
         ]);
     }
 
-    public function store(Request $request, Customer $customer): JsonResponse
+    public function store(Request $request, Customer $customer, FaceImageStorage $faceImages): JsonResponse
     {
         if ($disabled = $this->ensureEnabled()) {
             return $disabled;
@@ -66,6 +73,8 @@ class CustomerFaceController extends Controller
             'consent' => ['required', 'accepted'],
             'images' => ['required', 'array', 'min:1', 'max:5'],
             'images.*' => ['required', 'string', 'max:8388608'],
+            'sources' => ['sometimes', 'array', 'size:'.count((array) $request->input('images', []))],
+            'sources.*' => ['required', 'in:camera,photo,cctv'],
         ], [
             'consent.accepted' => 'Cần có sự đồng ý của khách hàng trước khi lưu dữ liệu khuôn mặt.',
         ]);
@@ -90,25 +99,74 @@ class CustomerFaceController extends Controller
             return response()->json(['message' => 'Các mẫu không đủ giống nhau để chắc chắn là cùng một người. Giữ một người trong ảnh, nhìn thẳng camera và chụp lại ít nhất 2 mẫu rõ mặt.'], 422);
         }
         $discarded = count($descriptors) - count($coherent);
-        $descriptors = $coherent;
-
-        DB::transaction(function () use ($descriptors, $customer, $request, $engine): void {
-            // Đăng ký lại chỉ thay bộ vector SFace/OpenVINO đang dùng trong dịch vụ mới.
-            CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->delete();
-
-            foreach ($descriptors as $descriptor) {
-                CustomerFaceProfile::query()->create([
-                    'customer_id' => $customer->id,
-                    'descriptor' => array_map('floatval', $descriptor),
-                    'engine' => $engine,
-                    'source' => 'enroll',
-                    'consented_at' => now(),
-                    'consented_by' => $request->user()?->id,
-                ]);
+        // The service returns one descriptor per submitted image. Persist only
+        // the images that survived the same-person coherence check; keeping a
+        // rejected stranger/blurred sample would be misleading and unsafe.
+        $accepted = [];
+        foreach ($descriptors as $index => $descriptor) {
+            if (in_array($descriptor, $coherent, true)) {
+                $accepted[] = [
+                    'image' => $data['images'][$index],
+                    'source' => $data['sources'][$index] ?? 'photo',
+                ];
             }
-        });
+        }
+        $descriptors = $coherent;
+        $newPaths = [];
+        $oldPaths = CustomerFaceSample::query()->where('customer_id', $customer->id)->pluck('image_path')->all();
 
-        return response()->json(['registered' => true, 'samples' => count($descriptors), 'discarded_samples' => $discarded]);
+        try {
+            foreach ($accepted as $sample) {
+                $newPaths[] = [
+                    'path' => $faceImages->storeDataUrl($sample['image'], 'face-samples/'.$customer->id),
+                    'source' => $sample['source'],
+                ];
+            }
+
+            DB::transaction(function () use ($descriptors, $newPaths, $customer, $request, $engine): void {
+                // Đăng ký lại chỉ thay bộ vector SFace/OpenVINO đang dùng trong dịch vụ mới.
+                CustomerFaceProfile::query()->where('customer_id', $customer->id)->where('engine', $engine)->delete();
+                CustomerFaceSample::query()->where('customer_id', $customer->id)->delete();
+
+                foreach ($descriptors as $descriptor) {
+                    CustomerFaceProfile::query()->create([
+                        'customer_id' => $customer->id,
+                        'descriptor' => array_map('floatval', $descriptor),
+                        'engine' => $engine,
+                        'source' => 'enroll',
+                        'consented_at' => now(),
+                        'consented_by' => $request->user()?->id,
+                    ]);
+                }
+                foreach ($newPaths as $sample) {
+                    CustomerFaceSample::query()->create([
+                        'customer_id' => $customer->id,
+                        'image_path' => $sample['path'],
+                        'source' => $sample['source'],
+                        'consented_at' => now(),
+                        'consented_by' => $request->user()?->id,
+                    ]);
+                }
+            });
+        } catch (\InvalidArgumentException $error) {
+            $faceImages->deleteMany(array_column($newPaths, 'path'));
+
+            return response()->json(['message' => $error->getMessage()], 422);
+        } catch (\Throwable $error) {
+            $faceImages->deleteMany(array_column($newPaths, 'path'));
+            Log::warning('face.sample_store_failed', ['customer_id' => $customer->id, 'message' => $error->getMessage()]);
+
+            return response()->json(['message' => 'Không thể lưu ảnh mẫu khuôn mặt. Vui lòng thử lại.'], 503);
+        }
+
+        $faceImages->deleteMany($oldPaths);
+
+        return response()->json([
+            'registered' => true,
+            'samples' => count($descriptors),
+            'discarded_samples' => $discarded,
+            'sample_images' => $this->sampleImages($customer),
+        ]);
     }
 
     /**
@@ -256,11 +314,45 @@ class CustomerFaceController extends Controller
         return response()->json(['added' => true]);
     }
 
-    public function destroy(Customer $customer): JsonResponse
+    public function destroy(Customer $customer, FaceImageStorage $faceImages): JsonResponse
     {
-        CustomerFaceProfile::query()->where('customer_id', $customer->id)->delete();
+        $paths = CustomerFaceSample::query()->where('customer_id', $customer->id)->pluck('image_path')->all();
+        DB::transaction(function () use ($customer): void {
+            CustomerFaceProfile::query()->where('customer_id', $customer->id)->delete();
+            CustomerFaceSample::query()->where('customer_id', $customer->id)->delete();
+        });
+        $faceImages->deleteMany($paths);
 
         return response()->json(['registered' => false, 'samples' => 0]);
+    }
+
+    /** Serve one consented enrollment photo only to an authenticated customer user. */
+    public function sampleImage(Customer $customer, CustomerFaceSample $sample)
+    {
+        abort_unless($sample->customer_id === $customer->id, 404);
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($sample->image_path), 404);
+
+        return $disk->response($sample->image_path, null, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    /** @return array<int, array{id: int, source: string, url: string, captured_at: string|null}> */
+    private function sampleImages(Customer $customer): array
+    {
+        return CustomerFaceSample::query()
+            ->where('customer_id', $customer->id)
+            ->latest('id')
+            ->get(['id', 'source', 'consented_at'])
+            ->map(fn (CustomerFaceSample $sample): array => [
+                'id' => $sample->id,
+                'source' => $sample->source,
+                'url' => route('api.customers.face-samples.show', [$customer, $sample]),
+                'captured_at' => $sample->consented_at?->toIso8601String(),
+            ])
+            ->all();
     }
 
     /**

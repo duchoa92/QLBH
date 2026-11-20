@@ -72,6 +72,12 @@ class Customer extends Model
         return $this->hasMany(CustomerImage::class);
     }
 
+    /** Consent-backed enrollment photos, kept separately from ordinary customer portraits. */
+    public function faceSamples(): HasMany
+    {
+        return $this->hasMany(CustomerFaceSample::class);
+    }
+
     public function primaryImage(): HasOne
     {
         return $this->hasOne(CustomerImage::class)

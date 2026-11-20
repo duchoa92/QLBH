@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Link, router } from '@inertiajs/vue3'
+import { Link } from '@inertiajs/vue3'
 import { Camera, CameraOff, Clock, Footprints, History, RefreshCw, ScanFace, Trash2, User, UserCheck, UserPlus, UserRoundPlus, UsersRound, TriangleAlert, Video } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -27,52 +27,97 @@ const props = defineProps({
 
 const confirmBox = useConfirm()
 
+// The first render comes from Inertia. Subsequent filters, pagination and
+// live updates replace only this state through JSON, so video peers and modal
+// state stay intact instead of the page navigating again.
+const filters = ref({ ...props.filters })
+const summary = ref({ ...props.summary })
+const hours = ref([...props.hours])
+const days = ref([...props.days])
+const visits = ref(props.visits)
+const trackingEnabled = ref(props.trackingEnabled)
+const doorCamera = ref({ ...props.doorCamera })
+const retentionDays = ref(props.retentionDays)
+const canManage = ref(props.canManage)
+const canCreateCustomer = ref(props.canCreateCustomer)
+
+const applyDashboard = data => {
+    filters.value = { ...data.filters }
+    summary.value = { ...data.summary }
+    hours.value = Array.isArray(data.hours) ? data.hours : []
+    days.value = Array.isArray(data.days) ? data.days : []
+    visits.value = data.visits || { data: [] }
+    trackingEnabled.value = !!data.trackingEnabled
+    doorCamera.value = data.doorCamera || { enabled: false, online: false, camera_ok: false }
+    retentionDays.value = Number(data.retentionDays) || 30
+    canManage.value = !!data.canManage
+    canCreateCustomer.value = !!data.canCreateCustomer
+}
+
 /* ---------------- tự cập nhật khi có thay đổi ---------------- */
 const lastUpdated = ref(new Date())
-let reloadTimer = null
+let refreshTimer = null
 let pollTimer = null
-let reloadInFlight = false
-let reloadQueued = false
-const reloadNow = () => {
-    if (document.hidden) return
-    if (reloadInFlight) { reloadQueued = true; return }
-    reloadInFlight = true
-    router.reload({
-        only: ['summary', 'hours', 'days', 'visits', 'doorCamera'],
-        preserveScroll: true,
-        preserveState: true,
-        onSuccess: () => { lastUpdated.value = new Date() },
-        onFinish: () => {
-            reloadInFlight = false
-            if (reloadQueued && !document.hidden) {
-                reloadQueued = false
-                reloadTimer = setTimeout(reloadNow, 200)
-            }
-        },
-    })
+let requestSequence = 0
+const requestParams = value => {
+    const params = {
+        range: value.range || 'today',
+        status: value.status || undefined,
+        per_page: value.per_page || 20,
+        page: value.page || undefined,
+    }
+    if (params.range === 'custom') {
+        params.date_from = value.date_from || undefined
+        params.date_to = value.date_to || undefined
+    }
+    return Object.fromEntries(Object.entries(params).filter(([, current]) => current !== undefined && current !== ''))
 }
-const scheduleReload = () => {
-    clearTimeout(reloadTimer)
-    reloadTimer = setTimeout(reloadNow, 1000)
+const updateAddress = params => {
+    const search = new URLSearchParams(params).toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${search ? `?${search}` : ''}`)
 }
+const fetchDashboard = async (next = filters.value, { updateUrl = false } = {}) => {
+    if (document.hidden && !updateUrl) return
+    const params = requestParams(next)
+    const sequence = ++requestSequence
+    if (updateUrl) updateAddress(params)
+    try {
+        const { data } = await api.get('/api/customer-visits/dashboard', { params })
+        if (sequence !== requestSequence) return
+        applyDashboard(data)
+        dateFrom.value = data.filters?.date_from || dateFrom.value
+        dateTo.value = data.filters?.date_to || dateTo.value
+        lastUpdated.value = new Date()
+    } catch (error) {
+        // Keep the last successful state visible if the network hiccups.
+        console.warn('Không thể cập nhật thống kê lượt khách.', error)
+    }
+}
+const scheduleRefresh = () => {
+    clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => fetchDashboard(), 500)
+}
+const onVisibilityChange = () => { if (!document.hidden) fetchDashboard() }
 onMounted(() => {
-    pollTimer = setInterval(reloadNow, 5000)
-    document.addEventListener('visibilitychange', reloadNow)
+    // Keep new camera events feeling live without navigating/recreating the
+    // video stream. Hidden tabs do not request because fetchDashboard exits.
+    pollTimer = setInterval(() => fetchDashboard(), 2000)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onBeforeUnmount(() => {
     clearInterval(pollTimer)
-    clearTimeout(reloadTimer)
-    document.removeEventListener('visibilitychange', reloadNow)
+    clearTimeout(refreshTimer)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 
 /* ---------------- camera xem trực tiếp + bắt khuôn mặt ---------------- */
 // Hai nguồn xem, đổi qua lại bằng hai nút trên đầu khung:
 //  - Camera cửa: video WebRTC từ MediaMTX; khung mặt và nhãn từ Camera Intelligence được vẽ đè ở đây.
 //  - Camera máy: camera của thiết bị đang mở trang này, bắt mặt ngay trên trình duyệt (đổi được camera trước/sau).
-const hasDoor = computed(() => !!props.doorCamera.enabled)
+const hasDoor = computed(() => !!doorCamera.value.enabled)
 const readFlag = (key, fallback) => { try { const value = localStorage.getItem(key); return value === null ? fallback : value } catch { return fallback } }
 const writeFlag = (key, value) => { try { localStorage.setItem(key, value) } catch { /* bỏ qua */ } }
-const doorCameras = computed(() => props.doorCamera.configured_cameras || [])
+const doorCameras = computed(() => doorCamera.value.configured_cameras || [])
 const receivingDoorCameras = computed(() => doorCameras.value.filter(camera => camera.receiving))
 const rememberedDoorCamera = readFlag('visits.doorCamera', '')
 // Do not reopen a camera that has lost its RTSP source just because it was the
@@ -110,17 +155,17 @@ const {
     switchCamera,
 } = useFaceCheckIn({
     storageKey: 'visits.camera',
-    onVisit: scheduleReload,
+    onVisit: scheduleRefresh,
     // Camera máy chỉ chạy khi đang chọn nguồn "Camera máy" và đã bấm bật; chọn Camera cửa thì tự tắt.
     activeWhen: () => !showDoor.value && localOn.value,
 })
 
 const doorStatus = computed(() => {
-    if (!props.doorCamera.online) {
+    if (!doorCamera.value.online) {
         return 'Camera Intelligence chưa kết nối'
     }
     if (!receivingDoorCameras.value.length) return selectedDoorCameraInfo.value ? `${selectedDoorCameraInfo.value.name}: ${selectedDoorCameraInfo.value.message || 'chưa nhận được khung hình'}` : 'Chưa nhận được khung hình'
-    if (!props.doorCamera.camera_ok) return 'Camera Intelligence không lấy được ảnh camera'
+    if (!doorCamera.value.camera_ok) return 'Camera Intelligence không lấy được ảnh camera'
     return `Đang phát và dò khuôn mặt tại ${receivingDoorCameras.value.length}/${doorCameras.value.length} camera`
 })
 
@@ -159,43 +204,41 @@ const statuses = [
     { value: 'unknown', label: 'Chưa có tên' },
     { value: 'assigned', label: 'Đã gán tên' },
 ]
-const dateFrom = ref(props.filters.date_from)
-const dateTo = ref(props.filters.date_to)
-watch(() => props.filters, (value) => { dateFrom.value = value.date_from; dateTo.value = value.date_to })
+const dateFrom = ref(filters.value.date_from)
+const dateTo = ref(filters.value.date_to)
 
 const go = (changes = {}) => {
     const params = {
-        range: props.filters.range,
-        status: props.filters.status,
-        per_page: props.filters.per_page,
+        range: filters.value.range,
+        status: filters.value.status,
+        per_page: filters.value.per_page,
         ...changes,
     }
     if (params.range === 'custom') {
         params.date_from = changes.date_from ?? dateFrom.value
         params.date_to = changes.date_to ?? dateTo.value
     }
-    Object.keys(params).forEach((key) => { if (params[key] === '' || params[key] == null) delete params[key] })
-    router.get('/customer-visits', params, { preserveState: true, preserveScroll: true, replace: true })
+    return fetchDashboard(params, { updateUrl: true })
 }
 const setRange = value => go({ range: value, page: undefined })
 const setStatus = value => go({ status: value, page: undefined })
 const applyCustom = () => { if (dateFrom.value && dateTo.value) go({ range: 'custom', date_from: dateFrom.value, date_to: dateTo.value, page: undefined }) }
 
 /* ---------------- biểu đồ ---------------- */
-const hourMax = computed(() => Math.max(1, ...props.hours))
+const hourMax = computed(() => Math.max(1, ...hours.value))
 const peakHour = computed(() => {
-    const max = Math.max(...props.hours, 0)
-    return max > 0 ? props.hours.indexOf(max) : null
+    const max = Math.max(...hours.value, 0)
+    return max > 0 ? hours.value.indexOf(max) : null
 })
-const dayMax = computed(() => Math.max(1, ...props.days.map(day => day.count)))
-const showDays = computed(() => props.days.length > 1)
+const dayMax = computed(() => Math.max(1, ...days.value.map(day => day.count)))
+const showDays = computed(() => days.value.length > 1)
 const barHeight = (value, max) => `${value > 0 ? Math.max(6, Math.round((value / max) * 100)) : 0}%`
 
 const cards = computed(() => [
-    { key: 'total', label: 'Tổng lượt khách', value: props.summary.total, icon: Footprints, tone: 'text-blue-600 bg-blue-50' },
-    { key: 'known', label: 'Khách quen nhận ra', value: props.summary.known, icon: UserCheck, tone: 'text-emerald-600 bg-emerald-50' },
-    { key: 'unknown', label: 'Chưa có tên', value: props.summary.unknown, icon: UserPlus, tone: 'text-amber-600 bg-amber-50' },
-    { key: 'distinct', label: 'Số khách khác nhau', value: props.summary.distinct_customers, icon: UsersRound, tone: 'text-violet-600 bg-violet-50' },
+    { key: 'total', label: 'Tổng lượt khách', value: summary.value.total, icon: Footprints, tone: 'text-blue-600 bg-blue-50' },
+    { key: 'known', label: 'Khách quen nhận ra', value: summary.value.known, icon: UserCheck, tone: 'text-emerald-600 bg-emerald-50' },
+    { key: 'unknown', label: 'Chưa có tên', value: summary.value.unknown, icon: UserPlus, tone: 'text-amber-600 bg-amber-50' },
+    { key: 'distinct', label: 'Số khách khác nhau', value: summary.value.distinct_customers, icon: UsersRound, tone: 'text-violet-600 bg-violet-50' },
 ])
 
 /* ---------------- hiển thị ---------------- */
@@ -251,7 +294,17 @@ watch(keyword, (value) => {
     }, 300)
 })
 
-const refresh = () => router.reload({ preserveScroll: true })
+const refresh = () => fetchDashboard()
+
+const navigatePage = url => {
+    if (!url) return
+    const search = new URL(url, window.location.origin).searchParams
+    return fetchDashboard({
+        ...filters.value,
+        ...Object.fromEntries(search.entries()),
+    }, { updateUrl: true })
+}
+const changeVisitPageSize = value => go({ per_page: value, page: undefined })
 
 const linkTo = async (customerId) => {
     saving.value = true
@@ -353,7 +406,7 @@ const remove = (visit) => {
             <p>
                 Chưa bật ghi nhận lượt khách nên POS chưa lưu thêm lượt mới. Bật trong
                 <Link href="/settings" class="font-semibold underline">Cài đặt → Khách hàng</Link>
-                (cần bật cả nhận diện khuôn mặt). Ảnh và dữ liệu khuôn mặt chưa gán tên tự xóa sau {{ retentionDays }} ngày.
+                (cần bật cả nhận diện khuôn mặt). Lịch sử lượt đến và ảnh camera tự xóa sau {{ retentionDays }} ngày.
             </p>
         </div>
 
@@ -604,7 +657,7 @@ const remove = (visit) => {
                     </div>
                 </div>
             </div>
-            <PaginationBar :data="visits" :filters="filters" />
+            <PaginationBar :data="visits" :filters="filters" ajax @navigate="navigatePage" @per-page="changeVisitPageSize" />
         </div>
         <div v-else class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             Chưa có lượt khách nào trong khoảng này.

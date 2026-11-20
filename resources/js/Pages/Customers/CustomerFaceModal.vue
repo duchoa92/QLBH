@@ -13,7 +13,8 @@ import {
 /**
  * Đăng ký khuôn mặt từ nhiều nguồn cùng lúc: camera tại quầy, ảnh tải lên/chụp bằng điện thoại,
  * ảnh chụp từ camera an ninh. Các mẫu từ mọi nguồn gom chung (tối đa 5) rồi lưu một lần.
- * Chỉ vector đặc trưng được gửi lên máy chủ; ảnh chỉ dùng tạm trên trình duyệt.
+ * Vector và ảnh mẫu có sự đồng ý được lưu riêng tư trên máy chủ; ảnh chỉ
+ * được mở qua quyền Khách hàng và bị xóa cùng dữ liệu nhận diện.
  *
  * Camera tại quầy và camera an ninh TỰ QUÉT: thấy đúng một khuôn mặt rõ nét, giữ yên đủ lâu thì tự chụp mẫu, rồi nhắc đổi
  * góc mặt cho mẫu kế tiếp, đến khi đủ số mẫu thì tự dừng. Không cần bấm tay (vẫn có nút "Chụp ngay" dự phòng).
@@ -46,6 +47,7 @@ const cctvConfigured = ref(false)
 const cctvCameras = ref([])
 const selectedCctvCamera = ref('door-1')
 const profileEngines = ref({ 'sface-v1': 0 })
+const savedSamples = ref([])
 const samples = ref([]) // { id, source, descriptors[], thumb, lowQuality }
 const autoCapture = ref(true) // camera tại quầy: tự quét và tự chụp
 const scanState = ref('idle') // idle | none | multiple | small | blurry | hold: màu viền khung camera
@@ -75,6 +77,7 @@ const loadStatus = async () => {
             selectedCctvCamera.value = cctvCameras.value[0]?.id || 'door-1'
         }
         profileEngines.value = data.engines || { 'sface-v1': 0 }
+        savedSamples.value = Array.isArray(data.sample_images) ? data.sample_images : []
     } catch { /* vẫn cho đăng ký */ }
 }
 
@@ -368,6 +371,7 @@ const save = async () => {
         const { data } = await api.post(`/api/customers/${props.customer.id}/face`, {
             consent: true,
             images: samples.value.map(sample => sample.image),
+            sources: samples.value.map(sample => sample.source),
         })
         registered.value = true
         sfaceRegistered.value = true
@@ -375,6 +379,7 @@ const save = async () => {
         // Đã lưu xong: tắt camera để không tự chụp thêm mẫu mới khi danh sách mẫu vừa được làm trống.
         if (cameraOn.value) { stopCamera(stream, video.value); stream = null; cameraOn.value = false }
         samples.value = []
+        savedSamples.value = Array.isArray(data?.sample_images) ? data.sample_images : []
         const discarded = Number(data?.discarded_samples || 0)
         say(discarded
             ? `Đã lưu ${data.samples} mẫu đồng nhất; đã bỏ ${discarded} mẫu lệch để tránh nhận nhầm.`
@@ -397,6 +402,7 @@ const remove = async () => {
         registered.value = false
         sfaceRegistered.value = false
         consentedAt.value = ''
+        savedSamples.value = []
         say('Đã xóa dữ liệu nhận diện của khách.', 'ok')
         toast.success('Đã xóa dữ liệu khuôn mặt.')
         emit('updated')
@@ -487,11 +493,20 @@ const remove = async () => {
                 <input v-model="consent" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-amber-300 text-blue-600" />
                 <span>
                     Khách <strong>đã đồng ý</strong> cho cửa hàng lưu dữ liệu nhận diện khuôn mặt để nhận ra khách khi đến mua hàng
-                    (áp dụng cho cả ảnh tải lên và ảnh từ camera an ninh). Hệ thống chỉ lưu dữ liệu đặc trưng, <strong>không lưu ảnh</strong>.
-                    Khách có thể yêu cầu xóa bất cứ lúc nào.
+                    (áp dụng cho cả ảnh tải lên và ảnh từ camera an ninh). Hệ thống lưu vector và <strong>ảnh mẫu riêng tư</strong>
+                    để đối chiếu khi cần; chỉ người có quyền Khách hàng xem được. Khách có thể yêu cầu xóa bất cứ lúc nào.
                 </span>
             </label>
             <p v-if="registered && consentedAt" class="text-xs text-slate-400">Đồng ý lúc {{ new Date(consentedAt).toLocaleString('vi-VN') }}. Mẫu YuNet + SFace/OpenVINO: {{ profileEngines['sface-v1'] || 0 }}.</p>
+            <div v-if="savedSamples.length" class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5">
+                <div class="mb-2 text-xs font-bold text-indigo-900">Ảnh mẫu đã lưu riêng tư ({{ savedSamples.length }})</div>
+                <div class="flex flex-wrap gap-2">
+                    <a v-for="sample in savedSamples" :key="sample.id" :href="sample.url" target="_blank" rel="noopener" class="group relative block" :title="`Ảnh mẫu từ ${sourceLabel[sample.source] || 'mẫu'}`">
+                        <img :src="sample.url" alt="Ảnh mẫu khuôn mặt đã lưu" class="h-16 w-16 rounded-lg object-cover ring-1 ring-indigo-200 transition group-hover:ring-2 group-hover:ring-indigo-500" />
+                        <span class="absolute bottom-1 left-1 rounded px-1 py-0.5 text-[9px] font-bold text-white" :class="sourceBadge[sample.source] || 'bg-indigo-600'">{{ sourceLabel[sample.source] || 'Mẫu' }}</span>
+                    </a>
+                </div>
+            </div>
         </div>
 
         <template #footer>

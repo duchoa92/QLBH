@@ -32,6 +32,39 @@ if (-not $ffmpegDirectory) { throw "Khong tim thay FFmpeg. Chay lai deploy/camer
 if (-not (Test-Path $mediaMtx)) { throw "Khong tim thay MediaMTX. Chay lai deploy/camera-platform/install-windows.ps1." }
 if (-not (Test-Path $mediaGenerator)) { throw "Khong tim thay MediaMTX config generator: $mediaGenerator" }
 
+# The worker must not inherit a config.yaml generated on another computer.
+# Rebuild it from the local QLBH Settings every time the logon task starts:
+# this renews the loopback API path/key and the LAN WebRTC hosts after an IP
+# change, a restore, or a copied project.  If PHP is temporarily unavailable,
+# retain a valid existing config so an already working camera is not stopped.
+$phpCommand = Get-Command php -ErrorAction SilentlyContinue
+$phpExecutable = if ($phpCommand) { $phpCommand.Source } else { $null }
+if (-not $phpExecutable) {
+    # Scheduled Task often has a smaller PATH than an interactive Laragon
+    # terminal. Resolve Laragon's bundled PHP relative to a normal
+    # C:\laragon\www\<project> installation before falling back.
+    $laragonRoot = Split-Path -Parent (Split-Path -Parent $project)
+    $laragonPhp = Join-Path $laragonRoot 'bin\php'
+    if (Test-Path $laragonPhp) {
+        $phpExecutable = (Get-ChildItem -Path $laragonPhp -Filter 'php.exe' -File -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName)
+    }
+}
+if ($phpExecutable) {
+    Push-Location $project
+    try {
+        & $phpExecutable (Join-Path $project 'artisan') camera-intelligence:configure
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Khong the tao lai cau hinh Camera Intelligence tu Cai dat; dang dung config.yaml hien co.'
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Warning 'Khong tim thay PHP trong PATH cua tac vu nen; dang dung config.yaml hien co.'
+}
+
 # The scheduled task starts this launcher after every Windows logon. Generate
 # the ignored, machine-local MediaMTX config and ensure its video server exists
 # before starting the AI worker; otherwise the worker would recover without a

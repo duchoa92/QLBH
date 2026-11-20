@@ -50,7 +50,7 @@ class ProductRepository extends BaseRepository
                     ->select('id', 'product_id', 'sku', 'barcode', 'attributes', 'cost_price', 'sell_price', 'stock', 'is_active'),
                 'stockBatches' => fn ($query) => $query
                     ->where('remaining_quantity', '>', 0)
-                    ->select('id', 'product_id', 'variant_id', 'remaining_quantity', 'sell_price'),
+                    ->select('id', 'product_id', 'variant_id', 'remaining_quantity', 'sell_price', 'imported_at'),
             ])
 
             /*

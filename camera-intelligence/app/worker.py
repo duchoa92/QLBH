@@ -17,6 +17,11 @@ from .tracker import Box, MultiFaceTracker, Track
 
 LOG = logging.getLogger(__name__)
 DISPLAY_TRACK_FRAMES = 2
+# A high YuNet confidence is much stronger evidence than a one-frame texture
+# hit.  It can be shown immediately, while lower-confidence boxes still need
+# two adjacent hits. Identity, visits and stored images always retain the
+# separate multi-sample SFace quality gate below.
+IMMEDIATE_OVERLAY_SCORE = 0.80
 RECOGNITION_SAMPLE_COUNT = 3
 THUMB_MAX_CHARACTERS = 29_000
 
@@ -67,14 +72,15 @@ def make_face_thumb(frame: np.ndarray, box: "Box") -> str | None:
 def overlay_face(track: Track, frame: np.ndarray) -> dict[str, float | str] | None:
     """Describe one confirmed face for the WebRTC overlay.
 
-    A box becomes visible after two adjacent YuNet hits.  It remains cyan while
-    samples are collected or the server compares SFace vectors, emerald only
-    after a confident known-customer match, and amber only after an explicit
-    no-match.  This prevents the UI from implying that a single detector hit
-    is a recognised customer.
+    A normal box becomes visible after two adjacent YuNet hits. A single
+    high-confidence YuNet result is visually safe to show immediately, so an
+    operator receives feedback without waiting for a second frame. It remains
+    cyan while samples are collected or the server compares SFace vectors,
+    emerald only after a confident known-customer match, and amber only after
+    an explicit no-match.
     """
     box = track.box
-    if box is None or track.frames < DISPLAY_TRACK_FRAMES:
+    if box is None or (track.frames < DISPLAY_TRACK_FRAMES and box.score < IMMEDIATE_OVERLAY_SCORE):
         return None
 
     if track.identity:

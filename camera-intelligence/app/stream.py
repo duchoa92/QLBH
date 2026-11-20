@@ -8,7 +8,10 @@ from time import monotonic
 import numpy as np
 
 
-STREAM_REFRESH_SECONDS = 4.0
+# A new camera connection starts at the current keyframe, but some CCTV
+# firmware then exposes a replay queue.  Keep each session shorter than the
+# time an operator can notice a face box is late.
+STREAM_REFRESH_SECONDS = 1.5
 
 
 class RtspFrames:

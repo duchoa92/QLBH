@@ -365,20 +365,25 @@ const productStockDisplay = (row) => {
 }
  
 const productSellPriceLabel = (row) => {
-    const batchPrices = (row.stock_batches || [])
+    // POS allocates stock FIFO, so the catalog must show the same price as the next item to sell.
+    const nextBatch = (row.stock_batches || [])
         .filter(batch => Number(batch.remaining_quantity || 0) > 0 && Number(batch.sell_price || 0) > 0)
-        .map(batch => Number(batch.sell_price))
-    const variantPrices = (row.variants || [])
-        .filter(variant => Number(variant.stock || 0) > 0 && Number(variant.sell_price || 0) > 0)
-        .map(variant => Number(variant.sell_price))
-    const imeiPrices = (row.imeis || [])
+        .sort((left, right) => {
+            const byDate = String(left.imported_at || '').localeCompare(String(right.imported_at || ''))
+            return byDate || Number(left.id) - Number(right.id)
+        })
+        .at(0)
+
+    if (nextBatch) return formatMoney(nextBatch.sell_price)
+
+    const nextImeiPrice = (row.imeis || [])
         .filter(imei => imei.status === 'in_stock' && Number(imei.sell_price || 0) > 0)
-        .map(imei => Number(imei.sell_price))
-    const prices = batchPrices.length ? batchPrices : (imeiPrices.length ? imeiPrices : variantPrices)
-    if (!prices.length) return formatMoney(row.sell_price)
-    const min = Math.min(...prices)
-    const max = Math.max(...prices)
-    return min === max ? formatMoney(min) : `${formatMoney(min)} – ${formatMoney(max)}`
+        .at(0)
+    if (nextImeiPrice) return formatMoney(nextImeiPrice.sell_price)
+
+    const nextVariant = (row.variants || [])
+        .find(variant => Number(variant.stock || 0) > 0 && Number(variant.sell_price || 0) > 0)
+    return formatMoney(nextVariant?.sell_price || row.sell_price)
 }
  
 const openImeiList = (row) => {

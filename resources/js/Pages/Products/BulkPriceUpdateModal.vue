@@ -52,6 +52,21 @@ const inheritedPrice = (value, fallback = 0) => {
     return price > 0 ? price : fallback
 }
 
+// Keep the update form aligned with POS: the oldest open batch is sold first.
+const fifoBatchPrice = (product, variantId, fallback = 0) => {
+    const batch = (product.stock_batches ?? [])
+        .filter((item) => Number(item.remaining_quantity || 0) > 0
+            && (variantId ? Number(item.variant_id) === Number(variantId) : !item.variant_id)
+            && numericPrice(item.sell_price) > 0)
+        .sort((left, right) => {
+            const byDate = String(left.imported_at ?? '').localeCompare(String(right.imported_at ?? ''))
+            return byDate || Number(left.id) - Number(right.id)
+        })
+        .at(0)
+
+    return inheritedPrice(batch?.sell_price, fallback)
+}
+
 const attributeText = (attributes) => (attributes ?? [])
     .map((attribute) => {
         const name = String(attribute?.name ?? '').trim()
@@ -71,7 +86,7 @@ const attributeSummary = (attributes) => (attributes ?? [])
     .join(' · ')
 
 const buildUpdates = () => props.products.flatMap((product) => {
-    const defaultPrice = numericPrice(product.sell_price)
+    const defaultPrice = fifoBatchPrice(product, null, numericPrice(product.sell_price))
     const defaultCost = numericPrice(product.cost_price)
     const variants = (product.variants ?? []).filter((variant) => variant.is_active !== false)
     const variantMap = new Map(variants.map((variant) => [variant.id, variant]))
@@ -83,7 +98,7 @@ const buildUpdates = () => props.products.flatMap((product) => {
     }]
 
     variants.forEach((variant) => {
-        const price = inheritedPrice(variant.sell_price, defaultPrice)
+        const price = fifoBatchPrice(product, variant.id, inheritedPrice(variant.sell_price, defaultPrice))
         rows.push({
             key: `variant:${variant.id}`, type: 'variant', id: variant.id, product_id: product.id,
             product_name: productName, label: attributeSummary(variant.attributes) || variant.sku || `Biến thể #${variant.id}`, detail: variant.sku,

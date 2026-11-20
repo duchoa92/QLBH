@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\CameraIntelligenceController;
 use App\Models\Customer;
 use App\Models\CustomerFaceProfile;
 use App\Models\CustomerVisit;
+use App\Services\CustomerVisitRetention;
+use App\Services\FaceImageStorage;
 use App\Support\DoorCameraAccess;
 use App\Support\FaceMatcher;
 use Carbon\Carbon;
@@ -15,6 +17,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -36,11 +40,41 @@ class CustomerVisitController extends Controller
 
     private const MAX_PROFILE_SAMPLES = 10;
 
+    public function __construct(
+        private readonly CustomerVisitRetention $retention,
+        private readonly FaceImageStorage $faceImages,
+    ) {
+    }
+
     /* ------------------------------------------------------------------ */
     /* TRANG THỐNG KÊ                                                       */
     /* ------------------------------------------------------------------ */
 
     public function index(Request $request): Response
+    {
+        return Inertia::render('CustomerVisits/Index', $this->pageData($request));
+    }
+
+    /** JSON payload used for silent filtering and background refreshes. */
+    public function dashboard(Request $request): JsonResponse
+    {
+        return response()->json($this->pageData($request));
+    }
+
+    private function pageData(Request $request): array
+    {
+        return $this->dashboardData($request) + [
+            'trackingEnabled' => $this->trackingEnabled(),
+            'doorCamera' => [
+                'enabled' => filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN),
+            ] + CameraIntelligenceController::status(),
+            'retentionDays' => $this->retentionDays(),
+            'canManage' => (bool) $request->user()?->can('customers.edit'),
+            'canCreateCustomer' => (bool) $request->user()?->can('customers.create'),
+        ];
+    }
+
+    private function dashboardData(Request $request): array
     {
         $range = in_array($request->query('range'), ['today', 'yesterday', '7d', '30d', 'custom'], true) ? $request->query('range') : 'today';
         [$from, $to] = $this->resolveRange($range, $request->query('date_from'), $request->query('date_to'));
@@ -82,7 +116,7 @@ class CustomerVisitController extends Controller
         // thống kê chỉ hiển thị một block. Khách chưa gán tên vẫn giữ từng block riêng
         // vì chưa thể khẳng định hai khuôn mặt là cùng người sau khi dữ liệu đã hết hạn.
         $visits = (clone $base)
-            ->selectRaw('MIN(id) as id, customer_id, MAX(recognized) as recognized, MAX(thumb) as thumb, MIN(first_seen_at) as first_seen_at, MAX(last_seen_at) as last_seen_at, COUNT(*) as visit_count, MAX(CASE WHEN descriptor IS NOT NULL THEN 1 ELSE 0 END) as has_face, GROUP_CONCAT(DISTINCT camera_id) as camera_ids')
+            ->selectRaw('MIN(id) as id, customer_id, MAX(recognized) as recognized, MAX(thumb) as thumb, MAX(image_path) as image_path, MAX(CASE WHEN image_path IS NOT NULL THEN id ELSE NULL END) as image_visit_id, MIN(first_seen_at) as first_seen_at, MAX(last_seen_at) as last_seen_at, COUNT(*) as visit_count, MAX(CASE WHEN descriptor IS NOT NULL THEN 1 ELSE 0 END) as has_face, GROUP_CONCAT(DISTINCT camera_id) as camera_ids')
             ->with('customer:id,code,full_name,phone')
             ->when($status === 'known', fn ($q) => $q->where('recognized', true))
             ->when($status === 'unknown', fn ($q) => $q->where('recognized', false)->whereNull('customer_id'))
@@ -97,7 +131,7 @@ class CustomerVisitController extends Controller
                 return [
                 'id' => $visit->id,
                 'recognized' => $visit->recognized,
-                'thumb' => $visit->thumb,
+                'thumb' => $this->imageForVisit($visit),
                 'has_face' => (bool) $visit->has_face,
                 'first_seen_at' => $visit->first_seen_at?->toIso8601String(),
                 'last_seen_at' => $visit->last_seen_at?->toIso8601String(),
@@ -114,7 +148,7 @@ class CustomerVisitController extends Controller
             ];
             });
 
-        return Inertia::render('CustomerVisits/Index', [
+        return [
             'filters' => [
                 'range' => $range,
                 'status' => $status,
@@ -132,14 +166,7 @@ class CustomerVisitController extends Controller
             'hours' => $hours,
             'days' => $dayList,
             'visits' => $visits,
-            'trackingEnabled' => $this->trackingEnabled(),
-            'doorCamera' => [
-                'enabled' => filter_var(setting('face_door_camera_enabled', false), FILTER_VALIDATE_BOOLEAN),
-            ] + CameraIntelligenceController::status(),
-            'retentionDays' => $this->retentionDays(),
-            'canManage' => (bool) $request->user()?->can('customers.edit'),
-            'canCreateCustomer' => (bool) $request->user()?->can('customers.create'),
-        ]);
+        ];
     }
 
     /**
@@ -187,7 +214,7 @@ class CustomerVisitController extends Controller
                 'code' => $visit->customer?->code,
                 'phone' => $visit->customer?->phone,
                 'recognized' => $visit->recognized,
-                'thumb' => $visit->thumb ?? $rows->firstWhere('thumb', '!=', null)?->thumb,
+                'thumb' => $this->imageForVisit($visit) ?? $rows->map(fn (CustomerVisit $row) => $this->imageForVisit($row))->first(),
             ],
             'matched_by' => $matchedBy,
             'stats' => [
@@ -201,7 +228,7 @@ class CustomerVisitController extends Controller
                 'id' => $row->id,
                 'current' => $row->id === $visit->id,
                 'recognized' => $row->recognized,
-                'thumb' => $row->thumb,
+                'thumb' => $this->imageForVisit($row),
                 'first_seen_at' => $row->first_seen_at?->toIso8601String(),
                 'last_seen_at' => $row->last_seen_at?->toIso8601String(),
                 'minutes' => $minutesOf($row),
@@ -213,6 +240,7 @@ class CustomerVisitController extends Controller
 
     public function destroy(CustomerVisit $visit): JsonResponse
     {
+        $this->faceImages->deleteMany([$visit->image_path]);
         $visit->delete();
 
         return response()->json(['deleted' => true]);
@@ -240,7 +268,7 @@ class CustomerVisitController extends Controller
             ->map(fn (CustomerVisit $visit) => [
                 'id' => $visit->id,
                 'kind' => $visit->customer ? 'known' : 'unknown',
-                'thumb' => $visit->thumb,
+                'thumb' => $this->imageForVisit($visit),
                 'first_seen_at' => $visit->first_seen_at?->toIso8601String(),
                 'customer' => $visit->customer,
             ])
@@ -301,8 +329,9 @@ class CustomerVisitController extends Controller
                 // Older AI events had no thumbnail. Fill it on the first
                 // subsequent clear sighting instead of leaving the card as a
                 // generic silhouette forever.
-                if ($visit->thumb === null && ! empty($data['thumb'])) {
-                    $changes['thumb'] = $data['thumb'];
+                if ($visit->image_path === null && ! empty($data['thumb']) && ($imagePath = $this->storeVisitImage($data['thumb']))) {
+                    $changes['image_path'] = $imagePath;
+                    $changes['thumb'] = null;
                 }
                 $visit->update($changes);
 
@@ -312,7 +341,7 @@ class CustomerVisitController extends Controller
             $visit = CustomerVisit::query()->create([
                 'customer_id' => $data['customer_id'],
                 'recognized' => true,
-                'thumb' => $data['thumb'] ?? null,
+                'image_path' => $this->storeVisitImage($data['thumb'] ?? null),
                 'user_id' => $request->user()?->id,
                 'camera_id' => $data['camera_id'] ?? null,
                 'first_seen_at' => $now,
@@ -346,8 +375,9 @@ class CustomerVisitController extends Controller
             if (! empty($data['camera_id'])) {
                 $changes['camera_id'] = $data['camera_id'];
             }
-            if ($existing->thumb === null && ! empty($data['thumb'])) {
-                $changes['thumb'] = $data['thumb'];
+            if ($existing->image_path === null && ! empty($data['thumb']) && ($imagePath = $this->storeVisitImage($data['thumb']))) {
+                $changes['image_path'] = $imagePath;
+                $changes['thumb'] = null;
             }
             $existing->update($changes);
 
@@ -359,7 +389,7 @@ class CustomerVisitController extends Controller
             'recognized' => false,
             'descriptor' => $probe,
             'descriptor_engine' => $engine,
-            'thumb' => $data['thumb'] ?? null,
+            'image_path' => $this->storeVisitImage($data['thumb'] ?? null),
             'user_id' => $request->user()?->id,
             'camera_id' => $data['camera_id'] ?? null,
             'first_seen_at' => $now,
@@ -442,20 +472,50 @@ class CustomerVisitController extends Controller
 
     private function retentionDays(): int
     {
-        return min(365, max(1, (int) setting('face_visit_retention_days', 30)));
+        return $this->retention->days();
     }
 
-    /** Xóa ảnh nhỏ và vector của các lượt quá hạn (giữ lại số liệu thống kê), tối đa 1 lần mỗi giờ. */
+    /** Xóa lịch sử cùng ảnh/vector quá hạn, tối đa một lần mỗi giờ khi có lượt mới. */
     private function pruneExpired(): void
     {
-        Cache::remember('customer-visits-pruned', 3600, function (): bool {
-            CustomerVisit::query()
-                ->where('last_seen_at', '<', now()->subDays($this->retentionDays()))
-                ->where(fn ($q) => $q->whereNotNull('thumb')->orWhereNotNull('descriptor'))
-                ->update(['thumb' => null, 'descriptor' => null, 'descriptor_engine' => null]);
+        Cache::remember('customer-visits-pruned', 3600, fn (): int => $this->retention->prune());
+    }
 
-            return true;
-        });
+    /** Protected image URL when a new file exists; tolerate legacy data-URI thumbnails. */
+    private function imageForVisit(CustomerVisit $visit): ?string
+    {
+        return $visit->image_path
+            ? route('customer-visits.image', ['visit' => $visit->image_visit_id ?: $visit->id])
+            : $visit->thumb;
+    }
+
+    private function storeVisitImage(?string $thumb): ?string
+    {
+        if (! is_string($thumb) || $thumb === '') {
+            return null;
+        }
+        try {
+            return $this->faceImages->storeDataUrl($thumb, 'customer-visits');
+        } catch (\Throwable $error) {
+            // A visit must still be recorded if the optional snapshot storage
+            // is temporarily unavailable. The next clear sighting retries it.
+            Log::warning('customer_visit_image_store_failed', ['message' => $error->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /** Serve a visit photo only to the authenticated customer-history viewer. */
+    public function image(CustomerVisit $visit)
+    {
+        abort_unless($visit->image_path, 404);
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($visit->image_path), 404);
+
+        return $disk->response($visit->image_path, null, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /** @return array{0: Carbon, 1: Carbon} */

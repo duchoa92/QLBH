@@ -44,10 +44,21 @@ installMobileTables()
 installViewportFix()
 
 if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname === 'localhost')) {
+    // A newly activated worker owns an already-open tab only after
+    // `controllerchange`. Reload once so that an ordinary F5 immediately
+    // reflects the new cache policy instead of requiring Shift+F5.
+    let reloadedForServiceWorker = false
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadedForServiceWorker) return
+        reloadedForServiceWorker = true
+        window.location.reload()
+    })
+
     navigator.serviceWorker.register(new URL('service-worker.js', appBaseUrl), {
         scope: new URL('./', appBaseUrl).pathname,
         updateViaCache: 'none',
-    }).catch(error => console.warn('Không thể đăng ký hỗ trợ offline.', error))
+    }).then(registration => registration.update())
+        .catch(error => console.warn('Không thể đăng ký hỗ trợ offline.', error))
 }
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';

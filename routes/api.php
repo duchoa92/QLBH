@@ -81,6 +81,8 @@ Route::middleware(['web', 'auth'])->group(function ()
     Route::post('/customers/{customer}/face-feedback', [CustomerFaceController::class, 'feedback'])
         ->middleware(['permission:pos.access', 'throttle:30,1']);
     // Ghi nhận lượt khách trước camera POS (khách quen + khách lạ), liên kết khách lạ khi đã có thông tin.
+    Route::get('/customer-visits/dashboard', [CustomerVisitController::class, 'dashboard'])
+        ->middleware('permission:customers.view');
     Route::post('/customers/visits', [CustomerVisitController::class, 'record'])
         ->middleware(['permission:pos.access', 'throttle:60,1']);
     Route::get('/customers/visits/present', [CustomerVisitController::class, 'present'])
@@ -103,6 +105,9 @@ Route::middleware(['web', 'auth'])->group(function ()
         ->middleware(['permission:customers.edit', 'throttle:20,1,customer_face_cctv_snapshot']);
     Route::get('/customers/{customer}/face', [CustomerFaceController::class, 'status'])
         ->middleware('permission:customers.view|customers.edit');
+    Route::get('/customers/{customer}/face/samples/{sample}', [CustomerFaceController::class, 'sampleImage'])
+        ->middleware('permission:customers.view|customers.edit')
+        ->name('api.customers.face-samples.show');
     Route::post('/customers/{customer}/face', [CustomerFaceController::class, 'store'])
         ->middleware('permission:customers.edit');
     Route::delete('/customers/{customer}/face', [CustomerFaceController::class, 'destroy'])

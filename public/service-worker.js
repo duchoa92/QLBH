@@ -1,6 +1,17 @@
-const CACHE_NAME = 'qlbh-offline-shell-v4'
+// v5 drops the old snapshots of authenticated pages. Those snapshots could
+// make an ordinary F5 render yesterday's Camera Intelligence/POS state until
+// the operator forced a hard reload.
+const CACHE_NAME = 'qlbh-offline-shell-v5'
 const OFFLINE_PAGE = new URL('offline.html', self.registration.scope).href
 const APP_SHELL = new URL('__offline_app_shell__.html', self.registration.scope).href
+
+// A cached authenticated dashboard is unsafe: it can say a camera is offline
+// or a setting is disabled even though the server has already changed. Keep
+// the offline shell solely for POS, where its IndexedDB queue is useful.
+const isOfflinePosPage = value => {
+    const url = value instanceof URL ? value : new URL(value, self.registration.scope)
+    return /\/pos(?:\/|$)/.test(url.pathname)
+}
 
 const escapeAttribute = value => String(value)
     .replace(/&/g, '&amp;')
@@ -18,6 +29,7 @@ const htmlForInertiaPage = (html, page) => {
 }
 
 const cacheInertiaPage = async (request, response) => {
+    if (!isOfflinePosPage(request.url)) return
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return
     let page
     try { page = await response.clone().json() } catch { return }
@@ -41,7 +53,7 @@ const cacheInertiaPage = async (request, response) => {
 const cachePageSnapshot = async ({ html: sourceHtml, page }) => {
     if (typeof sourceHtml !== 'string' || !page?.component || !page?.url || !page?.props) return
     const pageUrl = new URL(page.url, self.registration.scope)
-    if (pageUrl.origin !== self.location.origin || /\/(login|register|forgot-password|reset-password)(\/|$)/.test(pageUrl.pathname)) return
+    if (pageUrl.origin !== self.location.origin || !isOfflinePosPage(pageUrl)) return
     const html = htmlForInertiaPage(sourceHtml, page)
     if (!html) return
 
@@ -88,19 +100,25 @@ self.addEventListener('fetch', event => {
 
     if (request.mode === 'navigate') {
         event.respondWith((async () => {
+            const mayUseOfflineSnapshot = isOfflinePosPage(url)
             try {
-                const response = await fetch(request)
+                // Never let a normal F5 reuse a browser HTTP-cache entry for
+                // dynamic, authenticated data. The app therefore behaves the
+                // same for F5 and Shift+F5 while the server is reachable.
+                const response = await fetch(request, { cache: 'no-store' })
                 const finalUrl = new URL(response.url || request.url)
                 const isSignInPage = /\/(login|register|forgot-password|reset-password)(\/|$)/.test(finalUrl.pathname)
-                if (response.ok && !isSignInPage && response.headers.get('content-type')?.includes('text/html')) {
+                if (mayUseOfflineSnapshot && response.ok && !isSignInPage && response.headers.get('content-type')?.includes('text/html')) {
                     const cache = await caches.open(CACHE_NAME)
                     await cache.put(APP_SHELL, response.clone())
                     await cache.put(request, response.clone())
                 }
                 return response
             } catch {
-                const cachedPage = await caches.match(request)
-                if (cachedPage) return cachedPage
+                if (mayUseOfflineSnapshot) {
+                    const cachedPage = await caches.match(request)
+                    if (cachedPage) return cachedPage
+                }
                 const cachedShell = await caches.match(OFFLINE_PAGE)
                 return cachedShell || new Response('Mất kết nối mạng.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
             }
@@ -109,7 +127,7 @@ self.addEventListener('fetch', event => {
     }
 
     if (request.headers.get('X-Inertia') === 'true') {
-        event.respondWith(fetch(request).then(async response => {
+        event.respondWith(fetch(request, { cache: 'no-store' }).then(async response => {
             await cacheInertiaPage(request, response.clone())
             return response
         }))

@@ -868,8 +868,8 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             </div>
                             <div class="grid gap-3 sm:grid-cols-2">
                                 <div class="max-w-xs">
-                                    <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Giữ ảnh khách lạ (ngày)" />
-                                    <p class="mt-1 text-xs text-slate-500">Hết hạn, ảnh và dữ liệu nhận diện của khách lạ bị xóa tự động; số liệu thống kê vẫn được giữ.</p>
+                                    <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Tự xóa lịch sử khách đến sau (ngày)" />
+                                    <p class="mt-1 text-xs text-slate-500">Hết hạn, hệ thống tự xóa toàn bộ lượt đến, ảnh camera và dữ liệu gộp khuôn mặt. Ảnh mẫu đã đăng ký chỉ xóa khi xóa dữ liệu khuôn mặt của khách.</p>
                                     <p v-if="form.errors.face_visit_retention_days" class="text-xs text-rose-600">{{ form.errors.face_visit_retention_days }}</p>
                                 </div>
                                 <SettingSwitch

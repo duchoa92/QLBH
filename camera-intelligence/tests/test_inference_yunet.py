@@ -8,14 +8,14 @@ from app.inference_yunet import SFACE_TEMPLATE, align_sface, nchw, similarity_ma
 from app.config import CameraConfig
 from app.stream import STREAM_REFRESH_SECONDS, RtspFrames
 from app.tracker import Box, Track
-from app.worker import DISPLAY_TRACK_FRAMES, THUMB_MAX_CHARACTERS, analysis_stream_url, make_face_thumb, overlay_face
+from app.worker import DISPLAY_TRACK_FRAMES, IMMEDIATE_OVERLAY_SCORE, THUMB_MAX_CHARACTERS, analysis_stream_url, make_face_thumb, overlay_face
 
 
 class InferenceTests(unittest.TestCase):
     def test_rtsp_reader_prefers_udp_for_low_latency(self) -> None:
         reader = RtspFrames('rtsp://camera/sub', 1280, 720)
         self.assertEqual(reader._transport, 'udp')
-        self.assertLessEqual(STREAM_REFRESH_SECONDS, 5)
+        self.assertLessEqual(STREAM_REFRESH_SECONDS, 2)
 
     def test_analysis_uses_direct_view_stream_not_buffered_mediamtx_restream(self) -> None:
         camera = CameraConfig(
@@ -52,6 +52,13 @@ class InferenceTests(unittest.TestCase):
 
     def test_overlay_explains_confirmed_face_before_identity_is_known(self) -> None:
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        # A high-confidence YuNet face appears promptly, while a weak isolated
+        # texture hit still has to survive a second adjacent frame.
+        immediate = Track(box=Box(400, 180, 180, 180, IMMEDIATE_OVERLAY_SCORE, ()), frames=1)
+        self.assertIsNotNone(overlay_face(immediate, frame))
+        weak = Track(box=Box(400, 180, 180, 180, IMMEDIATE_OVERLAY_SCORE - 0.01, ()), frames=1)
+        self.assertIsNone(overlay_face(weak, frame))
+
         track = Track(box=Box(400, 180, 180, 180, 0.95), frames=DISPLAY_TRACK_FRAMES)
         scanning = overlay_face(track, frame)
         self.assertEqual(scanning['kind'], 'scanning')

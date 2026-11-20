@@ -5,13 +5,20 @@ import { router } from '@inertiajs/vue3'
 const props = defineProps({
     data: { type: Object, default: () => ({}) },
     filters: { type: Object, default: () => ({}) },
+    // An embedding page can use its own JSON data source without forcing an
+    // Inertia navigation for page links or page-size changes.
+    ajax: { type: Boolean, default: false },
 })
+const emit = defineEmits(['navigate', 'per-page'])
 
 const visit = (url) => {
-    if (url) router.visit(url, { preserveState: true, preserveScroll: true })
+    if (!url) return
+    if (props.ajax) { emit('navigate', url); return }
+    router.visit(url, { preserveState: true, preserveScroll: true })
 }
 
 const changePerPage = (value) => {
+    if (props.ajax) { emit('per-page', value); return }
     const params = new URLSearchParams(window.location.search)
     params.set('per_page', String(value))
     params.delete('page')
