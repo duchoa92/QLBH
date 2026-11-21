@@ -6,7 +6,15 @@ export function installViewportFix() {
     const viewport = typeof window !== 'undefined' ? window.visualViewport : null
     if (!viewport) return
 
+    // Chỉ thiết bị cảm ứng (điện thoại/máy tính bảng) mới có bàn phím ảo. Trên máy tính, việc đổi cỡ cửa sổ,
+    // zoom trình duyệt, mở DevTools hay thanh công cụ làm visualViewport nhỏ đi sẽ bị nhầm là "bàn phím mở"
+    // và làm modal dính sát khung + chừa khoảng trống bên dưới.
+    const coarse = window.matchMedia ? window.matchMedia('(hover: none) and (pointer: coarse)') : null
+    if (!coarse || !coarse.matches) return
+
     const root = document.documentElement
+    const isEditable = el => el instanceof HTMLElement
+        && el.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [contenteditable="true"]')
     let frame = 0
     let widestViewport = viewport.width
     let fullViewportHeight = Math.max(viewport.height, window.innerHeight, document.documentElement.clientHeight)
@@ -38,7 +46,8 @@ export function installViewportFix() {
         }
 
         const coveredHeight = Math.max(0, fullViewportHeight - viewport.height - viewport.offsetTop)
-        const keyboardOpen = !zoomed && coveredHeight > 100
+        // Bàn phím chỉ thật sự mở khi có một ô nhập đang được focus.
+        const keyboardOpen = !zoomed && coveredHeight > 100 && isEditable(document.activeElement)
 
         if (keyboardOpen) {
             root.style.setProperty('--vv-h', `${Math.round(viewport.height)}px`)
@@ -65,6 +74,13 @@ export function installViewportFix() {
         if (!(field instanceof HTMLElement) || !field.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')) return
 
         window.setTimeout(revealFocusedField, 350)
+    })
+
+    // Rời khỏi ô nhập: gỡ trạng thái kb-open ngay (tránh bị kẹt khi sự kiện resize không bắn).
+    document.addEventListener('focusout', () => window.setTimeout(schedule, 120))
+    window.addEventListener('orientationchange', () => {
+        widestViewport = 0
+        window.setTimeout(schedule, 300)
     })
 
     schedule()

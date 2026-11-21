@@ -200,7 +200,7 @@ if (!window._inertiaToastRegistered) {
     if (!flash) return
 
     if (flash.success) {
-        toast.success(flash.success)
+        toast.success(flash.success, { id: flash.success })
     }
 
     if (flash.error) {

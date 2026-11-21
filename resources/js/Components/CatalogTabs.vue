@@ -1,6 +1,7 @@
 <script setup>
 import { Link, usePage } from '@inertiajs/vue3'
 import { computed } from 'vue'
+import PageActions from '@/Components/UI/PageActions.vue'
 
 const page = usePage()
 const currentPath = computed(() => page.url.split('?')[0])
@@ -30,8 +31,6 @@ const isActive = (tab) => tab.paths.some(path => currentPath.value.startsWith(pa
                 {{ tab.label }}
             </Link>
         </nav>
-        <div class="app-mobile-icon-actions flex shrink-0 items-center gap-2 pb-1">
-            <slot />
-        </div>
+        <PageActions><slot /></PageActions>
     </div>
 </template>

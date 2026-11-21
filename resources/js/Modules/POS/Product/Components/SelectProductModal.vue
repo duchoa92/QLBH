@@ -384,9 +384,10 @@ const confirm = () => {
                         v-model="imeiKeyword"
                         type="text"
                         placeholder="Tìm kiếm mã IMEI / Seri / Biến thể..."
-                        class="w-full pl-9 pr-4 py-2 text-xs font-normal rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                        class="w-full pl-9 pr-9 py-2 text-xs font-normal rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                     />
                     <Search class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <button v-if="imeiKeyword" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa nội dung" aria-label="Xóa nội dung" @click="imeiKeyword = ''"><X class="h-3 w-3" /></button>
                 </div>
 
                 <!-- BƯỚC 1: CHỌN BIẾN THỂ -->

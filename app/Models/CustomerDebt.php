@@ -18,6 +18,8 @@ class CustomerDebt extends Model
         'source_id',
         'note',
         'payment_method',
+        'user_id',
+        'payment_group', 'received_amount', 'change_amount', 'shortage_amount', 'debt_before', 'debt_after',
     ];
 
     protected $casts = [
@@ -29,7 +31,11 @@ class CustomerDebt extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    // 
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function source(): MorphTo
     {
         return $this->morphTo();

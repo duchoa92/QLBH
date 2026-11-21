@@ -121,7 +121,10 @@ export function useProductSearch(emit) {
 
         } finally {
 
-            if (!silent && requestId === latestRequest) loading.value = false
+            // Luôn tắt trạng thái đang tải khi đây là phản hồi mới nhất, kể cả khi nó là lần nạp ngầm.
+            // Nếu không: nạp ngầm (tự động sau thanh toán / nhập hàng) vượt mặt lần nạp có hiển thị
+            // "đang tải" thì không ai tắt loading => vòng quay vô tận.
+            if (requestId === latestRequest) loading.value = false
         }
     }
 

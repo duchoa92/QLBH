@@ -1,6 +1,6 @@
 <script setup>
 import { computed, Fragment, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
-import { ChevronLeft, Globe, LoaderCircle, Search, SlidersHorizontal, X } from 'lucide-vue-next'
+import { ChevronLeft, FilterX, Globe, LoaderCircle, Search, SlidersHorizontal, X } from 'lucide-vue-next'
 import GlobalSearchResults from '@/Components/GlobalSearchResults.vue'
 import { useGlobalSearch } from '@/Composables/useGlobalSearch'
 import { floatingActionsCount, floatingActionsTarget } from '@/Stores/floatingActions'
@@ -15,7 +15,7 @@ const props = defineProps({
     globalSearch: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['update:modelValue', 'clear', 'focus', 'blur', 'submit'])
+const emit = defineEmits(['update:modelValue', 'clear', 'clear-filters', 'focus', 'blur', 'submit'])
 const slots = useSlots()
 const hasValue = computed(() => String(props.modelValue ?? '').length > 0)
 
@@ -73,6 +73,18 @@ const activeCount = computed(() => flatten(slots.filters?.()).filter((node) => {
     return isFilled(nodeProps.modelValue) || isFilled(nodeProps['model-value']) || isFilled(nodeProps.from) || isFilled(nodeProps.to)
 }).length)
 
+// Xóa mọi ô lọc đang có giá trị bằng cách gọi handler v-model (update:modelValue / update:from / update:to) của từng ô trong slot.
+const callHandler = (handler, value) => (Array.isArray(handler) ? handler : [handler]).forEach(fn => typeof fn === 'function' && fn(value))
+const clearFilters = () => {
+    flatten(slots.filters?.()).forEach((node) => {
+        const nodeProps = node?.props || {}
+        if (isFilled(nodeProps.modelValue) || isFilled(nodeProps['model-value'])) callHandler(nodeProps['onUpdate:modelValue'] ?? nodeProps['onUpdate:model-value'], '')
+        if (isFilled(nodeProps.from)) callHandler(nodeProps['onUpdate:from'], '')
+        if (isFilled(nodeProps.to)) callHandler(nodeProps['onUpdate:to'], '')
+    })
+    emit('clear-filters')
+}
+
 // null = chưa bấm: tự mở nếu đang có lọc (vd. tải lại trang theo URL) để người dùng thấy điều kiện đang áp dụng.
 const manualOpen = ref(null)
 const filtersOpen = computed(() => manualOpen.value ?? activeCount.value > 0)
@@ -102,8 +114,8 @@ const toggleFilters = () => { manualOpen.value = !filtersOpen.value }
                         @blur="emit('blur', $event)"
                         @keydown="onKeydown"
                     />
-                    <LoaderCircle v-if="loading" class="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" />
-                    <button v-else-if="hasValue" type="button" class="app-list-toolbar__clear" title="Xóa từ khóa" aria-label="Xóa từ khóa" @click="clear">
+                    <LoaderCircle v-if="loading" class="pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-600" :class="hasValue ? 'right-10' : 'right-3.5'" />
+                    <button v-if="hasValue" type="button" class="app-list-toolbar__clear" title="Xóa từ khóa" aria-label="Xóa từ khóa" @click="clear">
                         <X class="h-3 w-3" />
                     </button>
                     <slot name="search-end" />
@@ -140,6 +152,17 @@ const toggleFilters = () => { manualOpen.value = !filtersOpen.value }
                     <span class="hidden sm:inline">Lọc</span>
                     <span v-if="activeCount" class="app-list-toolbar__badge">{{ activeCount }}</span>
                 </button>
+                <button
+                    v-if="$slots.filters && activeCount"
+                    type="button"
+                    class="app-list-toolbar__clear-filters"
+                    title="Xóa tất cả bộ lọc"
+                    aria-label="Xóa tất cả bộ lọc"
+                    @click="clearFilters"
+                >
+                    <FilterX class="h-4 w-4" />
+                    <span class="hidden sm:inline">Xóa lọc</span>
+                </button>
             </div>
 
             <!-- v-show (không v-if) để các ô lọc giữ nguyên trạng thái khi đóng/mở -->
@@ -160,9 +183,12 @@ const toggleFilters = () => { manualOpen.value = !filtersOpen.value }
     /* Nền mờ + đệm nhỏ để nội dung cuộn phía dưới không lộ qua các góc bo của ô tìm kiếm. */
     padding-block: 0.375rem;
     margin-block: -0.375rem;
-    background: rgb(248 250 252 / 0.92);
-    backdrop-filter: blur(6px);
+    /* Không dùng backdrop-filter: nó biến khối này thành "khối chứa" của phần tử fixed (lịch, bảng trượt) làm lịch bị lệch/che. */
+    background: rgb(248 250 252 / 0.97);
 }
+.app-list-toolbar-wrap:focus-within { z-index: 29; }
+.app-list-toolbar__input::-webkit-search-cancel-button,
+.app-list-toolbar__input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
 .app-list-toolbar { @apply flex w-full flex-col items-stretch gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4; }
 .app-list-toolbar__row { @apply flex w-full items-center gap-2; }
 .app-list-toolbar__search { @apply relative min-w-0 flex-1; }
@@ -170,6 +196,7 @@ const toggleFilters = () => { manualOpen.value = !filtersOpen.value }
 .app-list-toolbar__clear { @apply absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300; }
 .app-list-toolbar__filter-btn { @apply relative inline-flex h-[42px] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-95; }
 .app-list-toolbar__filter-btn.is-active { @apply border-blue-300 bg-blue-50 text-blue-700; }
+.app-list-toolbar__clear-filters { @apply inline-flex h-[42px] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-600 transition hover:bg-rose-100 active:scale-95; }
 .app-list-toolbar__badge { @apply inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold leading-none text-white; }
 /* Các ô lọc xếp đuổi nhau trên một hàng khi đủ chỗ, tự xuống hàng khi hết chỗ; điện thoại: 2 ô mỗi hàng. */
 .app-list-toolbar__filters { @apply grid w-full grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 sm:flex sm:flex-wrap sm:items-center; }

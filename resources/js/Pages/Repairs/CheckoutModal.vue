@@ -1,4 +1,4 @@
-<script setup>
+ <script setup>
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import PaymentMethodSelect from './PaymentMethodSelect.vue'

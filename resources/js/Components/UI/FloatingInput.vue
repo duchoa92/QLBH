@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { X } from 'lucide-vue-next'
 import { formatThousandsInput, formatThousandsText } from '@/utils/format'
 
 const props = defineProps({
@@ -41,6 +42,11 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    // Hiện nút X xóa nhanh nội dung khi ô có dữ liệu (dùng cho ô tìm kiếm).
+    clearable: {
+        type: Boolean,
+        default: false,
+    },
     inputClass: {
         type: String,
         default: '',
@@ -51,6 +57,11 @@ const props = defineProps({
     },
     
 })
+
+const clearInput = () => {
+    emit('update:modelValue', '')
+    emit('input', { target: { value: '' } })
+}
 
 const emit = defineEmits([
     'update:modelValue',
@@ -103,6 +114,14 @@ const inputType = computed(() => props.formatThousands ? 'text' : props.type)
             placeholder=" "
             :class="['peer w-full border border-gray-300 rounded-lg px-2 pt-2.5 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all', inputClass]"
         />
+        <button
+            v-if="clearable && String(modelValue ?? '') !== ''"
+            type="button"
+            class="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300"
+            title="Xóa nội dung"
+            aria-label="Xóa nội dung"
+            @click="clearInput"
+        ><X class="h-3 w-3" /></button>
         <span
             v-if="placeholderText"
             class="pointer-events-none absolute left-3 top-2.5 hidden text-sm text-gray-400 peer-placeholder-shown:block peer-focus:hidden"

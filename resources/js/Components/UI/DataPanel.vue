@@ -11,7 +11,7 @@ defineProps({
         <!-- Dạng detached: phần header (ô tìm kiếm/lọc) dính đỉnh vùng cuộn suốt chiều dài bảng bên dưới. -->
         <div
             v-if="$slots.header"
-            :class="detached ? 'sticky z-20 transition-[top] duration-200 ease-out' : 'border-b border-slate-200 px-4 py-3'"
+            :class="detached ? 'sticky z-20 focus-within:z-[29] transition-[top] duration-200 ease-out' : 'border-b border-slate-200 px-4 py-3'"
             :style="detached ? { top: 'var(--app-sticky-top, 0px)' } : undefined"
         >
             <slot name="header" />

@@ -169,7 +169,7 @@ class GlobalSearchController extends Controller
 
     /**
      * Bước 1: mọi từ khóa đều phải xuất hiện (không phân biệt dấu/hoa thường, không cần đúng thứ tự).
-     * Bước 2 (khi chưa đủ kết quả): lấy ứng viên theo mẩu 3 ký tự rồi chấm điểm gần đúng, cho phép gõ sai nhẹ.
+     * Bước 2 (chỉ khi bước 1 không có kết quả): lấy ứng viên theo mẩu 3 ký tự rồi chấm điểm gần đúng, cho phép gõ sai nhẹ.
      *
      * @param  array<int, string>  $columns
      * @param  array<string, array<int, string>>  $relations  quan hệ => cột
@@ -209,7 +209,8 @@ class GlobalSearchController extends Controller
             ->limit($limit)->get();
 
         $models = $exact;
-        if ($exact->count() < $limit) {
+        // Đã có kết quả khớp chính xác thì không thêm kết quả "gần đúng" (tránh thừa kết quả khi gõ nguyên mã); chỉ gợi ý khi không khớp gì.
+        if ($exact->isEmpty()) {
             $candidates = $order(clone $query)
                 ->where(function ($q) use ($tokens, $matchPiece) {
                     foreach (FuzzyMatcher::fragments($tokens) as $fragment) {

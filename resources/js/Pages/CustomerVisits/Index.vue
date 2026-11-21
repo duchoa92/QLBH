@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link } from '@inertiajs/vue3'
-import { Camera, CameraOff, Clock, Footprints, History, RefreshCw, ScanFace, Trash2, User, UserCheck, UserPlus, UserRoundPlus, UsersRound, TriangleAlert, Video } from 'lucide-vue-next'
+import { X as ClearIcon, Camera, CameraOff, Clock, Footprints, History, RefreshCw, ScanFace, Trash2, User, UserCheck, UserPlus, UserRoundPlus, UsersRound, TriangleAlert, Video } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
@@ -749,7 +749,10 @@ const remove = (visit) => {
                 </div>
 
                 <div v-if="mode === 'search'" class="space-y-2">
-                    <input v-model="keyword" placeholder="Tìm theo tên hoặc số điện thoại" class="w-full rounded-lg border border-slate-300 p-3 text-sm">
+                    <div class="relative">
+                        <input v-model="keyword" placeholder="Tìm theo tên hoặc số điện thoại" class="w-full rounded-lg border border-slate-300 p-3 pr-10 text-sm">
+                        <button v-if="keyword" type="button" class="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa nội dung" aria-label="Xóa nội dung" @click="keyword = ''"><ClearIcon class="h-3 w-3" /></button>
+                    </div>
                     <div v-if="searching" class="text-xs text-slate-400">Đang tìm…</div>
                     <div v-else-if="keyword.trim() && !results.length" class="text-xs text-slate-400">Không thấy khách phù hợp.</div>
                     <div class="max-h-60 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200" v-if="results.length">

@@ -1,4 +1,5 @@
 <script setup>
+import { X as ClearIcon } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import {
     Barcode, Check, ChevronRight, CircleCheck, Clock, Copy, Eye, EyeOff,
@@ -447,8 +448,9 @@ const imageUrl = computed(() => (imageFailed.value ? null : product.value?.image
                                 v-model="imeiSearch"
                                 type="text"
                                 placeholder="Tìm IMEI / Serial..."
-                                class="w-48 rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+                                class="w-48 rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-8 text-xs placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
                             />
+                            <button v-if="imeiSearch" type="button" class="absolute right-2 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa nội dung" aria-label="Xóa nội dung" @click="imeiSearch = ''"><ClearIcon class="h-3 w-3" /></button>
                         </div>
                         <select v-model="imeiFilterStatus" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none">
                             <option value="all">Tất cả trạng thái</option>

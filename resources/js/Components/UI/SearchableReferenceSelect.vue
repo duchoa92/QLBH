@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Plus, Search } from 'lucide-vue-next'
+import { Plus, Search, X } from 'lucide-vue-next'
 
 const props = defineProps({
     modelValue: { type: [String, Number, null], default: null },
@@ -59,11 +59,12 @@ onBeforeUnmount(() => {
                 v-model="query"
                 :disabled="disabled"
                 type="text"
-                class="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+                class="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-8 text-sm outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100"
                 :placeholder="`Tìm ${label.toLocaleLowerCase()}...`"
                 @focus="open = true"
                 @input="open = true"
             />
+            <button v-if="query && !disabled" type="button" class="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300" title="Xóa nội dung" aria-label="Xóa nội dung" @click="query = ''; open = true"><X class="h-3 w-3" /></button>
         </div>
         <p v-if="error" class="mt-1 text-sm text-red-500">{{ error }}</p>
         <div v-if="open && !disabled" class="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-xl">

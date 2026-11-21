@@ -11,6 +11,7 @@ class SupplierDebt extends Model
     protected $fillable = [
         'supplier_id', 'type', 'amount', 'source_type', 'source_id',
         'payment_method', 'note', 'user_id',
+        'payment_group', 'received_amount', 'change_amount', 'shortage_amount', 'debt_before', 'debt_after',
     ];
 
     protected $casts = ['amount' => 'decimal:2'];

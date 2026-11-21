@@ -138,19 +138,19 @@ const panelClass = computed(() => [
 
 <template>
     <Transition name="fa-fade">
-        <div v-if="open" class="fixed inset-0 z-[39] bg-slate-900/10 backdrop-blur-[1.5px] print:hidden" aria-hidden="true" />
+        <div v-if="open" class="fixed inset-0 z-[54] bg-slate-900/10 backdrop-blur-[1.5px] print:hidden" aria-hidden="true" />
     </Transition>
 
     <div
         ref="root"
-        class="floating-actions fixed left-0 top-0 z-40 print:hidden"
+        class="floating-actions fixed left-0 top-0 z-[55] print:hidden"
         :class="{ 'is-dragging': dragging }"
         :style="{ transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`, width: `${SIZE}px`, height: `${SIZE}px` }"
     >
         <Transition name="fa-pop">
             <div
                 v-show="open"
-                class="floating-actions__panel absolute w-52 rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-2xl shadow-slate-900/15 backdrop-blur"
+                class="floating-actions__panel absolute w-max min-w-[10.5rem] max-w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-2xl shadow-slate-900/15 backdrop-blur"
                 :class="panelClass"
                 :style="{ '--fa-shift': openUp ? '10px' : '-10px' }"
                 @click="onPanelClick"
@@ -158,9 +158,11 @@ const panelClass = computed(() => [
                 <p v-if="floatingActionsCount" class="px-2 pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Chức năng</p>
                 <div ref="body" class="floating-actions__body flex flex-col gap-1" />
                 <button type="button" class="floating-actions__search" @click.stop="openSearch">
-                    <Search class="h-3.5 w-3.5 text-slate-400" />
-                    <span class="flex-1 text-left">Tìm toàn hệ thống</span>
-                    <kbd class="rounded border border-slate-200 bg-slate-50 px-1 text-[9px] font-bold text-slate-400">Ctrl K</kbd>
+                    <Search class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span class="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+                        <span class="whitespace-nowrap leading-tight">Tìm toàn hệ thống</span>
+                        <kbd class="rounded border border-slate-200 bg-slate-50 px-1 text-[9px] font-bold leading-4 text-slate-400">Ctrl K</kbd>
+                    </span>
                 </button>
             </div>
         </Transition>

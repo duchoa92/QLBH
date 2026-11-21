@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 // Bộ lọc khoảng ngày — tách từ trang Hóa đơn bán hàng để các trang khác dùng chung.
@@ -173,11 +173,42 @@ const selectDate = (key) => {
     awaitingEnd.value = false
     commit(from, to)
 }
-const closeOnOutside = event => {
-    if (open.value && rootRef.value && !rootRef.value.contains(event.target)) open.value = false
+// Lịch được đưa ra <body> và định vị bằng position: fixed theo vị trí nút, nên không bị menu/thanh trên/khối dính che hay cắt.
+const popupRef = ref(null)
+const popupStyle = ref({})
+const updatePosition = () => {
+    if (!open.value || !rootRef.value) return
+    if (window.innerWidth < 640) { popupStyle.value = {}; return } // điện thoại: bảng trượt dưới đáy màn hình (class max-sm)
+    const rect = rootRef.value.getBoundingClientRect()
+    const width = Math.min(470, window.innerWidth - 16)
+    const left = Math.min(Math.max(8, props.align === 'left' ? rect.left : rect.right - width), window.innerWidth - width - 8)
+    const height = popupRef.value?.offsetHeight || 420
+    let top = rect.bottom + 8
+    if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 8) // hết chỗ phía dưới thì mở lên trên
+    popupStyle.value = { top: `${top}px`, left: `${left}px`, width: `${width}px` }
 }
-onMounted(() => window.addEventListener('pointerdown', closeOnOutside))
-onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
+watch(open, async (isOpen) => {
+    if (!isOpen) return
+    await nextTick()
+    updatePosition()
+    requestAnimationFrame(updatePosition)
+})
+const closeOnOutside = event => {
+    if (!open.value) return
+    const target = event.target
+    if (rootRef.value?.contains(target) || popupRef.value?.contains(target)) return
+    open.value = false
+}
+onMounted(() => {
+    window.addEventListener('pointerdown', closeOnOutside)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+})
+onBeforeUnmount(() => {
+    window.removeEventListener('pointerdown', closeOnOutside)
+    window.removeEventListener('resize', updatePosition)
+    window.removeEventListener('scroll', updatePosition, true)
+})
 </script>
 
 <template>
@@ -187,7 +218,8 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
             <span class="min-w-0 flex-1 truncate">{{ selectedLabel }}</span>
             <ChevronRight class="h-4 w-4 shrink-0 rotate-90 text-slate-400" />
         </button>
-        <div v-if="open" class="absolute top-full z-50 mt-2 w-[min(470px,calc(100vw-2rem))] overflow-hidden rounded-2xl border max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:mt-0 max-sm:max-h-[85dvh] max-sm:w-auto max-sm:overflow-y-auto max-sm:shadow-2xl border-slate-200 bg-white shadow-xl" :class="align === 'left' ? 'left-0' : 'right-0'">
+        <Teleport to="body">
+        <div v-if="open" ref="popupRef" :style="popupStyle" class="fixed z-[10000] w-[min(470px,calc(100vw-2rem))] overflow-hidden rounded-2xl border max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:mt-0 max-sm:max-h-[85dvh] max-sm:w-auto max-sm:overflow-y-auto max-sm:shadow-2xl border-slate-200 bg-white shadow-xl">
             <div class="flex flex-col sm:flex-row">
                 <aside class="border-b border-slate-200 bg-slate-50/70 p-2 sm:w-40 sm:shrink-0 sm:border-b-0 sm:border-r">
                     <p class="mb-1 px-2 pt-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Khoảng có sẵn</p>
@@ -225,5 +257,6 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOnOutside))
                 </div>
             </footer>
         </div>
+        </Teleport>
     </div>
 </template>

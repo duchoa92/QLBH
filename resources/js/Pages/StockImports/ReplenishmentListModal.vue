@@ -518,7 +518,8 @@ onMounted(() => {
                             label="Tìm kiếm"
                             placeholder-text="Tên hàng hoặc mã SKU..."
                             type="search"
-                            input-class="h-10"
+                            clearable
+                            input-class="h-10 !pr-9"
                         />
                         <FloatingSelect
                             v-model="categoryId"
