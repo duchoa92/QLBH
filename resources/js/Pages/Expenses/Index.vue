@@ -5,6 +5,7 @@ import { router, useForm, usePage } from '@inertiajs/vue3'
 import { Plus, SquarePen, Trash2, BellRing, CalendarClock } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
+import PageActions from '@/Components/UI/PageActions.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import ExpenseDetailModal from './ExpenseDetailModal.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
@@ -179,7 +180,7 @@ const applySort = ({ field, order }) => list.request({ sort_by: field, sort_orde
         <section class="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 bg-blue-50/70 p-4">
                 <div><h2 class="flex items-center gap-2 font-bold text-slate-900"><BellRing :size="18" class="text-blue-700" />Lịch chi phí cố định</h2><p class="mt-1 text-xs text-slate-600">Nhắc trước hạn và hiện nhắc việc trên trang tổng quan. Tháng đang xem: {{ month }}.</p></div>
-                <ActionButton v-if="canManage" @click="openSchedule()"><Plus :size="15" />Thêm lịch định kỳ</ActionButton>
+                <PageActions><ActionButton v-if="canManage" variant="secondary" @click="openSchedule()"><Plus :size="15" />Thêm lịch định kỳ</ActionButton></PageActions>
             </div>
             <div v-if="recurringExpenses.length" class="divide-y divide-slate-100">
                 <div v-for="row in recurringExpenses" :key="row.id" class="flex flex-wrap items-center justify-between gap-3 p-4" :class="!row.is_active ? 'opacity-60' : ''">

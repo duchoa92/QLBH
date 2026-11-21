@@ -476,6 +476,8 @@ const submit = () => {
             <!-- BODY -->
             <div class="flex-1 space-y-4 overflow-y-auto p-6 custom-scrollbar">
 
+                <slot name="notice" />
+
                 <!-- PHƯƠNG THỨC THANH TOÁN -->
                 <div>
                     <PaymentMethodSelect v-model="paymentMethod" :disabled="Boolean(bankIntent)" />

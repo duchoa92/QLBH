@@ -11,6 +11,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue';
 import { openModal } from '@/Stores/modal';
 import RepairFormModal from './RepairFormModal.vue';
 import RepairDetailModal from './RepairDetailModal.vue';
+import RepairAccessoriesNotice from './RepairAccessoriesNotice.vue';
 import { useRepairAccess, fetchRepairCredentials } from '@/Composables/useRepairAccess';
 import axios from 'axios';
 import { toast } from 'vue-sonner';
@@ -47,6 +48,12 @@ const detailCredentials = ref(null);
 const printPreviewUrl = ref('');
 const paymentRepair = ref(null);
 const paymentLoading = ref(false);
+const returnConfirmRepair = ref(null);
+const returnSubmitting = ref(false);
+// Phiếu truyền vào từ quy trình sửa có thể không kèm phụ kiện, nên lấy thêm từ danh sách đang hiển thị.
+const accessoriesOf = (repair) => repair?.accessories
+    ?? repairsData.value?.data?.find((item) => Number(item.id) === Number(repair?.id))?.accessories
+    ?? [];
 const cancelRepairModalOpen = ref(false);
 const repairToCancel = ref(null);
 const cancelReason = ref('');
@@ -229,11 +236,28 @@ const openWorkflowFromDetail = (startAt) => {
     if (repair) openRepairWorkflow(repair, startAt);
 };
 
+// Ảnh chụp props hiện tại của trang, lấy từ dữ liệu cục bộ mới nhất (danh sách/thống kê đã đồng bộ từ server qua axios).
+const inertiaPropsSnapshot = () => ({
+    ...page.props,
+    repairs: repairsData.value,
+    stats: statsData.value,
+    cancelReasonSuggestions: cancelReasonSuggestions.value,
+});
+
+// Ghi dữ liệu mới nhất vào props/history hiện tại của Inertia (không gọi server) để các lần điều hướng
+// phía client sau đó không khôi phục lại props cũ.
+const syncInertiaProps = () => {
+    const url = new URL(window.location.href);
+    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, props: inertiaPropsSnapshot(), preserveState: true, preserveScroll: true });
+};
+
 const openRepairDetail = (repair) => {
     if (!repair?.id) return;
     const url = new URL(window.location.href);
     url.searchParams.set('open_repair', String(repair.id));
-    router.push({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true });
+    // Phải truyền props hiện tại của trang: nếu không, Inertia dùng lại props cũ lúc tải trang (phiếu chưa hủy)
+    // và watch(props.repairs) sẽ ghi đè dữ liệu đã cập nhật, làm phiếu hủy quay về trạng thái cũ.
+    router.push({ url: `${url.pathname}${url.search}${url.hash}`, props: inertiaPropsSnapshot(), preserveState: true, preserveScroll: true });
     detailRepair.value = repair;
     loadDetailCredentials(repair);
     refreshRepairDetail(repair.id);
@@ -281,21 +305,32 @@ const onRepairCompleted = (repair) => {
 
 const onProgressPayment = async (repair) => {
     if (Number(repair.final_cost || 0) <= 0) {
-        try {
-            await axios.post(route('repairs.return', repair.id), {
-                payment_method: 'cash',
-                paid_amount: 0,
-                note: repair.warranty_covered_amount > 0 ? 'Toàn bộ chi phí được bảo hành' : 'Không phát sinh thanh toán',
-            });
-            toast.success('Đã xác nhận trả máy, không phát sinh thanh toán');
-            requestRepairs(currentPage.value);
-        } catch (error) {
-            toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể xác nhận trả máy');
-        }
+        // Không phát sinh thanh toán vẫn phải cho nhân viên đối chiếu phụ kiện trước khi giao máy.
+        returnConfirmRepair.value = repair;
         return;
     }
     paymentRepair.value = repair;
     requestRepairs(currentPage.value);
+};
+
+const confirmZeroReturn = async () => {
+    const repair = returnConfirmRepair.value;
+    if (!repair || returnSubmitting.value) return;
+    returnSubmitting.value = true;
+    try {
+        await axios.post(route('repairs.return', repair.id), {
+            payment_method: 'cash',
+            paid_amount: 0,
+            note: repair.warranty_covered_amount > 0 ? 'Toàn bộ chi phí được bảo hành' : 'Không phát sinh thanh toán',
+        });
+        toast.success('Đã xác nhận trả máy, không phát sinh thanh toán');
+        returnConfirmRepair.value = null;
+        requestRepairs(currentPage.value);
+    } catch (error) {
+        toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể xác nhận trả máy');
+    } finally {
+        returnSubmitting.value = false;
+    }
 };
 
 const removeRepair = (repair) => removeRepairWithConfirm(repair, () => {
@@ -395,6 +430,7 @@ const cancelRepair = async () => {
         markRepairCancelled(repair, reason);
         await refreshRepairDetail(repair.id);
         await requestRepairs(currentPage.value, { fresh: true });
+        syncInertiaProps();
     } catch (error) {
         toast.error(Object.values(error.response?.data?.errors || {}).flat()[0] || 'Không thể hủy phiếu sửa');
     } finally {
@@ -600,7 +636,21 @@ const confirmPayment = async (payment) => {
             :cart="[]"
             @close="paymentRepair = null"
             @confirm="confirmPayment"
-        />
+        >
+            <template #notice>
+                <RepairAccessoriesNotice :accessories="accessoriesOf(paymentRepair)" />
+            </template>
+        </CheckoutModal>
+        <BaseModal v-if="returnConfirmRepair" title="Xác nhận trả máy" size="md" @close="!returnSubmitting && (returnConfirmRepair = null)">
+            <div class="space-y-4">
+                <p class="text-sm text-slate-600">Phiếu <strong>{{ returnConfirmRepair.code }}</strong> không phát sinh thanh toán. Kiểm tra phụ kiện trước khi giao máy cho khách.</p>
+                <RepairAccessoriesNotice :accessories="accessoriesOf(returnConfirmRepair)" />
+                <div class="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                    <button type="button" :disabled="returnSubmitting" class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50" @click="returnConfirmRepair = null">Quay lại</button>
+                    <button type="button" :disabled="returnSubmitting" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50" @click="confirmZeroReturn">{{ returnSubmitting ? 'Đang xác nhận...' : 'Xác nhận trả máy' }}</button>
+                </div>
+            </div>
+        </BaseModal>
         <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước phiếu sửa chữa" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
     </div>
 </template>

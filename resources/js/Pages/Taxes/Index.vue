@@ -98,18 +98,15 @@ const bankAccountSelectOptions = computed(() => [
 <template>
     <Head title="Khai thuế" />
     <div class="space-y-3">
-        <PageHeader title="Khai thuế">
-            <template #actions>
-                <div class="flex flex-wrap items-center gap-2">
-                    <select v-model.number="period" aria-label="Kỳ kê khai" class="rounded-xl border-slate-200 text-sm font-medium">
-                        <option :value="1">Quý 1</option><option :value="2">Quý 2</option><option :value="3">Quý 3</option><option :value="4">Quý 4</option>
-                    </select>
-                    <select v-model.number="year" aria-label="Năm kê khai" class="rounded-xl border-slate-200 text-sm font-medium">
-                        <option v-for="item in years" :key="item" :value="item">Năm {{ item }}</option>
-                    </select>
-                </div>
-            </template>
-        </PageHeader>
+        <PageHeader title="Khai thuế" />
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            <select v-model.number="period" aria-label="Kỳ kê khai" class="rounded-xl border-slate-200 text-sm font-medium">
+                <option :value="1">Quý 1</option><option :value="2">Quý 2</option><option :value="3">Quý 3</option><option :value="4">Quý 4</option>
+            </select>
+            <select v-model.number="year" aria-label="Năm kê khai" class="rounded-xl border-slate-200 text-sm font-medium">
+                <option v-for="item in years" :key="item" :value="item">Năm {{ item }}</option>
+            </select>
+        </div>
 
         <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <div class="flex gap-2"><AlertCircle :size="18" class="mt-0.5 shrink-0" /><div><strong>Bảng tổng hợp tham khảo · {{ quarterLabel }} ({{ formatDate(range.from) }} – {{ formatDate(range.to) }})</strong><p class="mt-1 text-amber-900">Thuế đầu ra lấy từ trường thuế đã lưu trên hóa đơn bán. Phiếu nhập mới chỉ ghi nhận cờ “Có VAT” và giá nhập, chưa lưu số thuế VAT trên hóa đơn đầu vào; vì vậy số tiền mua hàng có VAT dưới đây không phải thuế GTGT đầu vào được khấu trừ và hệ thống chưa tính số thuế phải nộp. Vui lòng đối chiếu hóa đơn chứng từ trước khi nộp tờ khai.</p></div></div>

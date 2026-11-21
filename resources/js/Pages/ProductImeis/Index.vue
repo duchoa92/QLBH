@@ -5,6 +5,7 @@ import { useForm, Link, router } from '@inertiajs/vue3';
 import { SquarePen } from 'lucide-vue-next';
 import { openModal } from '@/Stores/modal';
 import PriceFormModal from './PriceFormModal.vue';
+import PageActions from '@/Components/UI/PageActions.vue';
 
 const props = defineProps({
 
@@ -72,12 +73,9 @@ const openPriceEditor = (imei) => {
                 </p>
             </div>
 
-            <Link
-                :href="route('products.index')"
-                class="px-4 py-2 bg-gray-200 rounded"
-            >
-                Quay lại
-            </Link>
+            <PageActions>
+            <Link :href="route('products.index')" class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Quay lại</Link>
+        </PageActions>
         </div>
 
         <!-- thêm imei -->

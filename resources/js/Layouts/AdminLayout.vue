@@ -9,13 +9,14 @@ import {
     LogOut,
     ChevronDown,
     Shield,
-    Wrench,
-    Search
+    Wrench
 } from 'lucide-vue-next'
 
 import Sidebar from '@/Components/Sidebar.vue'
 import ConfirmBox from '@/Components/ConfirmBox.vue'
-import GlobalSearch from '@/Components/GlobalSearch.vue'
+import FloatingActions from '@/Components/FloatingActions.vue'
+import GlobalSearchDialog from '@/Components/GlobalSearchDialog.vue'
+import { globalSearchDialogOpen } from '@/Stores/globalSearch'
 // Thông báo
 import NotificationBell from '@/Components/NotificationBell.vue'
 import WorkShiftAutoOpen from '@/Components/WorkShiftAutoOpen.vue'
@@ -27,7 +28,6 @@ import { appBasePath } from '@/utils/appPaths'
 const sidebarOpen = ref(false)
 const isDesktop = ref(false)
 const userDropdownOpen = ref(false)
-const showMobileSearch = ref(false)
 
 // Trạng thái Collapse của Sidebar
 const sidebarCollapsed = ref(
@@ -49,7 +49,7 @@ const headerHidden = ref(false)
 let lastScrollTop = 0
 let headerTimer = null
 
-const headerPinned = computed(() => sidebarOpen.value || userDropdownOpen.value || showMobileSearch.value)
+const headerPinned = computed(() => sidebarOpen.value || userDropdownOpen.value)
 const hideHeader = computed(() => !isDesktop.value && headerHidden.value && !headerPinned.value)
 
 const scheduleHeaderHide = () => {
@@ -176,7 +176,6 @@ const updateViewport = () => {
     isDesktop.value = window.matchMedia('(min-width: 1024px)').matches
     if (isDesktop.value) {
         sidebarOpen.value = false
-        showMobileSearch.value = false
     }
 }
 
@@ -189,12 +188,21 @@ const openRepairReceipt = async () => {
     openModal(RepairFormModal)
 }
 
+const onGlobalSearchShortcut = (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        globalSearchDialogOpen.value = !globalSearchDialogOpen.value
+    }
+}
+
 onMounted(() => {
+    window.addEventListener('keydown', onGlobalSearchShortcut)
     updateViewport()
     window.addEventListener('resize', updateViewport)
 })
 
 onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onGlobalSearchShortcut)
     window.removeEventListener('resize', updateViewport)
     clearTimeout(headerTimer)
 })
@@ -233,7 +241,12 @@ onBeforeUnmount(() => {
 
 
             <!-- MAIN CONTENT AREA (vùng cuộn, gồm cả thanh trên) -->
-            <main ref="mainRef" class="flex-1 overflow-y-auto overscroll-contain" @scroll.passive="onMainScroll">
+            <main
+                ref="mainRef"
+                class="flex-1 overflow-y-auto overscroll-contain [--app-header-h:3.5rem] sm:[--app-header-h:4rem]"
+                :style="{ '--app-sticky-top': hideHeader ? '0px' : 'var(--app-header-h)' }"
+                @scroll.passive="onMainScroll"
+            >
             <!-- HEADER: dính đỉnh vùng cuộn; điện thoại / máy tính bảng ẩn khi vuốt xuống, hiện lại khi vuốt lên -->
                 <header
                     class="sticky top-0 z-30 border-b border-slate-200/80 bg-white shadow-2xs transition-transform duration-200 ease-out"
@@ -263,23 +276,8 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <!-- GÓC PHẢI: TÌM KIẾM, NÚT TÁC VỤ & USER -->
+                        <!-- GÓC PHẢI: NÚT TÁC VỤ & USER -->
                         <div class="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0 flex-1">
-
-                            <!-- TÌM KIẾM GLOBAL (DESKTOP: co giãn theo độ rộng màn hình) -->
-                            <div class="hidden md:block min-w-0 flex-1 md:max-w-[15rem] lg:max-w-[24rem] xl:max-w-[32rem] 2xl:max-w-[40rem]">
-                                <GlobalSearch />
-                            </div>
-
-                            <!-- BUTTON TÌM KIẾM (MOBILE: Bấm để bật/tắt ô search) -->
-                            <button
-                                type="button"
-                                @click="showMobileSearch = !showMobileSearch"
-                                class="md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition active:scale-95 shrink-0"
-                                title="Tìm kiếm"
-                            >
-                                <Search :size="18" />
-                            </button>
 
                             <!-- NÚT 1: TIẾP NHẬN MÁY SỬA -->
                             <button
@@ -376,11 +374,6 @@ onBeforeUnmount(() => {
 
                         </div>
                     </div>
-
-                    <!-- KHU VỰC TÌM KIẾM DÀNH CHO MOBILE (Trượt xuống khi bấm nút kính lúp) -->
-                    <div v-if="showMobileSearch" class="md:hidden border-t border-slate-200/80 p-2.5 bg-slate-50 animate-in slide-in-from-top-2 duration-150">
-                        <GlobalSearch @selected="showMobileSearch = false" />
-                    </div>
                 </header>
 
                 <div class="px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3 sm:pb-3 sm:pt-1.5">
@@ -395,5 +388,7 @@ onBeforeUnmount(() => {
 </div>
 
 <ConfirmBox />
+<FloatingActions />
+<GlobalSearchDialog />
 <WorkShiftAutoOpen />
 </template>

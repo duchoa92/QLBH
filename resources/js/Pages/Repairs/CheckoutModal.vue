@@ -1,0 +1,691 @@
+<script setup>
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { usePage } from '@inertiajs/vue3'
+import PaymentMethodSelect from './PaymentMethodSelect.vue'
+import FloatingInput from '@/Components/UI/FloatingInput.vue'
+import QrPayment from './QrPayment.vue'
+import { X, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
+import { formatCurrency, formatNumber } from '@/utils/format'
+import { announceBankPayment, armBankPaymentAudio } from '@/Modules/POS/Payment/Utils/paymentAlerts'
+import axios from 'axios'
+import { buildCheckoutItems } from '@/Modules/POS/Payment/Utils/checkoutPayload'
+
+const props = defineProps({
+    loading: Boolean,
+    show: Boolean,
+    grandTotal: Number,
+    invoiceDiscount: { type: Number, default: 0 },
+    invoiceDiscountType: { type: String, default: 'amount' },
+    extraFee: { type: Number, default: 0 },
+    invoiceCode: { type: String, default: '' },
+    selectedCustomer: Object,
+    editMode: { type: Boolean, default: false },
+    initialPayment: { type: Object, default: () => ({}) },
+    cart: {
+        type: Array,
+        default: () => [],
+    },
+})
+
+const emit = defineEmits(['close', 'confirm', 'bank-completed', 'bank-completed-background', 'bank-transfer-partial'])
+
+const paymentMethod = ref('cash')
+const mixedPayment = ref(false)
+const paidAmount = ref('')
+const cashReceivedAmount = ref(0)
+const bankReceivedAmount = ref('')
+const autoFillFullPayment = ref(false)
+const note = ref('')
+const payOldDebt = ref(false)
+const bankIntent = ref(null)
+const bankStatus = ref(null)
+const bankError = ref('')
+const bankStarting = ref(false)
+const bankManualFallback = ref(false)
+const bankCartSnapshot = ref('')
+const qrPaymentSection = ref(null)
+let bankPollTimer = null
+let initializingPaymentFields = false
+
+const page = usePage()
+const refreshedPaymentSettings = ref(null)
+const refreshPaymentSettings = async () => {
+    try {
+        const { data } = await axios.get(route('pos.payment-settings'))
+        refreshedPaymentSettings.value = data.settings
+    } catch (error) {
+        console.error('Không thể cập nhật cài đặt thanh toán POS.', error)
+    }
+}
+const onPaymentSettingsStorage = event => {
+    if (event.key === 'pos-payment-settings-updated') refreshPaymentSettings()
+}
+window.addEventListener('storage', onPaymentSettingsStorage)
+onBeforeUnmount(() => window.removeEventListener('storage', onPaymentSettingsStorage))
+
+const bankSettings = computed(() =>
+    ({ ...(page.props.settings || {}), ...(refreshedPaymentSettings.value || {}) })
+)
+
+const bankAccounts = computed(() => {
+    const configuredAccounts = bankSettings.value.bank_accounts
+    if (Array.isArray(configuredAccounts) && configuredAccounts.length) return configuredAccounts
+    if (bankSettings.value.bank_bin && bankSettings.value.bank_account) {
+        return [{
+            id: 'legacy-default',
+            bank_bin: bankSettings.value.bank_bin,
+            bank_name: '',
+            bank_account: bankSettings.value.bank_account,
+            bank_account_name: bankSettings.value.bank_account_name,
+            is_default: true,
+            vat_preferred: false,
+        }]
+    }
+    return []
+})
+
+const selectedBankAccountId = ref('')
+const recommendedBankAccount = computed(() => {
+    const accounts = bankAccounts.value
+    const hasVatProduct = props.cart.some(item => Boolean(item.has_vat))
+    return (hasVatProduct ? accounts.find(account => account.vat_preferred) : null)
+        || accounts.find(account => account.is_default)
+        || accounts[0]
+        || null
+})
+watch(bankAccounts, accounts => {
+    if (!accounts.some(account => String(account.id) === String(selectedBankAccountId.value))) {
+        selectedBankAccountId.value = String(recommendedBankAccount.value?.id ?? '')
+    }
+}, { immediate: true })
+
+const selectedBankAccount = computed(() =>
+    bankAccounts.value.find(account => String(account.id) === String(selectedBankAccountId.value))
+        || bankAccounts.value.find(account => account.is_default)
+        || bankAccounts.value[0]
+        || null
+)
+
+watch(paymentMethod, () => {
+    if (initializingPaymentFields) return
+    paidAmount.value = ''
+    cashReceivedAmount.value = 0
+    bankReceivedAmount.value = ''
+    autoFillFullPayment.value = false
+    mixedPayment.value = false
+})
+watch(paymentMethod, async method => {
+    if (method !== 'bank') return
+    await nextTick()
+    requestAnimationFrame(() => qrPaymentSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+})
+watch(mixedPayment, async enabled => {
+    if (initializingPaymentFields) return
+    if (!enabled) return
+    paidAmount.value = ''
+    await nextTick()
+    requestAnimationFrame(() => qrPaymentSection.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+})
+
+const totalNeedToPay = computed(() => {
+    const debt = payOldDebt.value
+        ? Number(props.selectedCustomer?.debt_balance || 0)
+        : 0
+    return Number(props.grandTotal || 0) + debt
+})
+const previouslyPaidAmount = computed(() => props.editMode ? Math.max(0, Number(props.initialPayment.paid_amount || 0)) : 0)
+const remainingToCollect = computed(() => Math.max(0, totalNeedToPay.value - previouslyPaidAmount.value))
+
+const transferAmount = computed(() => {
+    const total = Math.max(0, Number(totalNeedToPay.value || 0))
+    const payableNow = props.editMode ? Math.max(0, total - previouslyPaidAmount.value) : total
+    const defaultAmount = mixedPayment.value ? Math.max(0, payableNow - Number(cashReceivedAmount.value || 0)) : payableNow
+    const enteredAmount = paidAmount.value === '' || paidAmount.value === null ? defaultAmount : Number(paidAmount.value || 0)
+    return Math.min(payableNow, Math.max(0, enteredAmount))
+})
+
+// QR amount is the requested amount. This field captures what the customer
+// actually transferred so manual payments can record an overpayment.
+const actualBankReceivedAmount = computed(() => {
+    if (!usesBankPayment.value) return 0
+    if (autoBankTracking.value && bankIntent.value) return Number(bankStatus.value?.received_amount || 0)
+    return bankReceivedAmount.value === '' || bankReceivedAmount.value === null
+        ? (props.editMode ? 0 : transferAmount.value)
+        : Number(bankReceivedAmount.value || 0)
+})
+
+const usesBankPayment = computed(() => paymentMethod.value === 'bank' || mixedPayment.value)
+const autoBankEnabled = computed(() => !props.editMode && usesBankPayment.value && Boolean(selectedBankAccount.value?.payment_auto_enabled))
+const autoBankTracking = computed(() => autoBankEnabled.value && !bankManualFallback.value)
+
+const additionalPaidAmount = computed(() =>
+    usesBankPayment.value
+        ? (autoBankTracking.value && bankIntent.value
+            ? Number(bankStatus.value?.received_amount || 0) + (mixedPayment.value ? Number(cashReceivedAmount.value || 0) : 0)
+            : actualBankReceivedAmount.value + (mixedPayment.value ? Number(cashReceivedAmount.value || 0) : 0))
+        : Number(paidAmount.value || 0)
+)
+const effectivePaidAmount = computed(() => Number(props.editMode ? props.initialPayment.paid_amount || 0 : 0) + additionalPaidAmount.value)
+
+const balanceAmount = computed(() => {
+    return effectivePaidAmount.value - totalNeedToPay.value
+})
+
+const formatMoney = formatCurrency
+
+const formatMoneyInput = (value) => {
+    const number = Number(value || 0)
+    return number > 0 ? formatNumber(number) : ''
+}
+
+const parseMoneyInput = (value) =>
+    Number(String(value || '').replace(/\D/g, ''))
+
+const handlePaidAmountInput = (event) => {
+    paidAmount.value = parseMoneyInput(event.target.value)
+    autoFillFullPayment.value = false
+}
+
+const handleBankTransferAmountValue = (value) => {
+    const payableNow = props.editMode ? remainingToCollect.value : Math.max(0, Math.round(totalNeedToPay.value))
+    paidAmount.value = Math.min(Number(value || 0), payableNow)
+    autoFillFullPayment.value = false
+}
+
+const handleCashReceivedAmountInput = (event) => {
+    cashReceivedAmount.value = parseMoneyInput(event.target.value)
+    autoFillFullPayment.value = false
+    bankError.value = ''
+}
+
+const handleBankReceivedAmountInput = (event) => {
+    bankReceivedAmount.value = parseMoneyInput(event.target.value)
+    autoFillFullPayment.value = false
+    bankError.value = ''
+}
+
+const handleCashAmountInput = (event) => {
+    if (mixedPayment.value) handleCashReceivedAmountInput(event)
+    else {
+        handlePaidAmountInput(event)
+        bankError.value = ''
+    }
+}
+
+const fullPaymentAmount = computed(() => props.editMode ? remainingToCollect.value : totalNeedToPay.value)
+const toggleFullPayment = (checked) => {
+    autoFillFullPayment.value = checked
+    if (!checked) return
+
+    const amount = Math.max(0, Math.round(fullPaymentAmount.value))
+    if (paymentMethod.value === 'bank') {
+        paidAmount.value = amount
+        bankReceivedAmount.value = amount
+        return
+    }
+    paidAmount.value = amount
+}
+
+watch(fullPaymentAmount, value => {
+    if (!autoFillFullPayment.value) return
+    const amount = Math.max(0, Math.round(value))
+    paidAmount.value = amount
+    if (paymentMethod.value === 'bank') bankReceivedAmount.value = amount
+})
+
+const enableRemainingQr = () => {
+    const cashAmount = mixedPayment.value ? Number(cashReceivedAmount.value || 0) : Number(paidAmount.value || 0)
+    if (cashAmount <= 0) {
+        bankError.value = 'Nhập số tiền mặt trước để tạo mã QR cho phần còn lại.'
+        return
+    }
+    const remainingAmount = props.editMode ? remainingToCollect.value : Number(totalNeedToPay.value || 0)
+    if (cashAmount >= remainingAmount) {
+        bankError.value = 'Tiền mặt đã đủ tổng cần thu; không còn khoản chuyển khoản để tạo QR.'
+        return
+    }
+    cashReceivedAmount.value = cashAmount
+    bankError.value = ''
+    mixedPayment.value = true
+}
+
+const disableRemainingQr = () => {
+    paidAmount.value = Number(cashReceivedAmount.value || 0)
+    cashReceivedAmount.value = 0
+    mixedPayment.value = false
+}
+
+const resetPaymentFields = () => {
+    initializingPaymentFields = true
+    const initialAccount = bankAccounts.value.find(account => String(account.bank_account) === String(props.initialPayment.bank_account))
+    if (props.editMode && initialAccount) selectedBankAccountId.value = String(initialAccount.id ?? initialAccount.bank_account)
+    else selectedBankAccountId.value = String(recommendedBankAccount.value?.id ?? '')
+    paymentMethod.value = 'cash'
+    mixedPayment.value = false
+    if (props.editMode) {
+        const method = props.initialPayment.payment_method || 'cash'
+        paymentMethod.value = method === 'mixed' ? 'cash' : method
+        paidAmount.value = ''
+        cashReceivedAmount.value = 0
+        bankReceivedAmount.value = ''
+    autoFillFullPayment.value = false
+    } else {
+        mixedPayment.value = false
+        paidAmount.value = ''
+        cashReceivedAmount.value = 0
+        bankReceivedAmount.value = ''
+    }
+    note.value = ''
+    payOldDebt.value = false
+    bankStatus.value = null
+    bankError.value = ''
+    bankManualFallback.value = false
+    bankStarting.value = false
+    bankCartSnapshot.value = ''
+    nextTick(() => { initializingPaymentFields = false })
+}
+
+watch(() => props.show, shown => {
+    // Keep an active bank intent intact when its modal is only hidden.
+    if (shown && !bankIntent.value) resetPaymentFields()
+})
+
+const balanceStatus = computed(() => {
+    if (balanceAmount.value < 0) {
+        return {
+            label: 'Còn thiếu',
+            amount: Math.abs(balanceAmount.value),
+            className: 'text-rose-600',
+        }
+    }
+
+    if (balanceAmount.value > 0) {
+        return {
+            label: 'Tiền thừa',
+            amount: balanceAmount.value,
+            className: 'text-emerald-600',
+        }
+    }
+
+    return {
+        label: 'Đã thanh toán đủ',
+        amount: null,
+        className: 'text-emerald-600',
+    }
+})
+
+const hasBankSettings = computed(() =>
+    Boolean(selectedBankAccount.value?.bank_bin && selectedBankAccount.value?.bank_account)
+)
+
+const transferDescription = computed(() =>
+    autoBankEnabled.value || selectedBankAccount.value?.transfer_content_mode === 'invoice'
+        ? props.invoiceCode
+        : ''
+)
+
+const paymentStatusLabel = computed(() => {
+    if (bankStatus.value?.status === 'paid') return 'Đã nhận đủ tiền, hóa đơn đã tự hoàn tất.'
+    if (bankStatus.value?.status === 'expired') return 'Đã hết thời gian chờ. Nếu khách đã chuyển, vui lòng kiểm tra lịch sử giao dịch.'
+    if (bankStatus.value?.status === 'cancelled') return 'Đã dừng chờ giao dịch.'
+    if (Number(bankStatus.value?.received_amount || 0) === 0) return 'Đang chờ ngân hàng báo giao dịch vào tài khoản…'
+    const difference = Number(bankStatus.value?.difference || 0)
+    if (difference < 0) return `Đã nhận thiếu ${formatMoney(Math.abs(difference))}. Đang tiếp tục chờ chuyển thêm.`
+    if (difference > 0) return `Khách đã chuyển thừa ${formatMoney(difference)}.`
+    return 'Đang chờ ngân hàng báo giao dịch vào tài khoản…'
+})
+
+const pollBankPayment = async () => {
+    // Keep polling while the modal is hidden. The bank webhook can complete
+    // after the cashier closes the QR dialog; the POS page still needs to
+    // receive the completion event and show the sale/notification.
+    if (!bankIntent.value) return
+    try {
+        const { data } = await axios.get(route('pos.bank-payments.status', bankIntent.value.id))
+        const previousReceived = Number(bankStatus.value?.received_amount || 0)
+        bankStatus.value = data.data
+        const received = Number(data.data.received_amount || 0)
+        const expected = Number(data.data.expected_amount || 0)
+        if (received > previousReceived) {
+            if (received < expected) {
+                const remaining = expected - received
+                announceBankPayment({ kind: 'partial', amount: remaining, language: bankSettings.value.payment_voice_language || 'vi-VN', speak: bankSettings.value.payment_voice_enabled !== false })
+                emit('bank-transfer-partial', { received, expected, remaining })
+            } else if (received > expected) {
+                announceBankPayment({ kind: 'excess', amount: received - expected, language: bankSettings.value.payment_voice_language || 'vi-VN', speak: bankSettings.value.payment_voice_enabled !== false })
+            } else {
+                announceBankPayment({ kind: 'exact', language: bankSettings.value.payment_voice_language || 'vi-VN', speak: bankSettings.value.payment_voice_enabled !== false })
+            }
+        }
+        if (data.data.status === 'paid' && data.data.sale) {
+            bankIntent.value = null
+            if (props.show) emit('bank-completed', data.data.sale)
+            else emit('bank-completed-background', data.data.sale, bankCartSnapshot.value)
+            return
+        }
+        if (data.data.status === 'waiting') bankPollTimer = setTimeout(pollBankPayment, 1500)
+    } catch (error) {
+        bankError.value = error.response?.data?.message || 'Không kiểm tra được trạng thái giao dịch.'
+        bankPollTimer = setTimeout(pollBankPayment, 3000)
+    }
+}
+
+const startBankPayment = async () => {
+    if (bankStarting.value) return
+    armBankPaymentAudio()
+    bankStarting.value = true
+    bankError.value = ''
+    bankManualFallback.value = false
+    try {
+        const items = buildCheckoutItems(props.cart)
+        const { data } = await axios.post(route('pos.bank-payments.start'), {
+            items,
+            customer_id: props.selectedCustomer?.id ?? null,
+            pay_old_debt: payOldDebt.value,
+            invoice_code: props.invoiceCode,
+            expected_amount: Math.round(transferAmount.value),
+            total_amount: Math.round(totalNeedToPay.value),
+            invoice_discount: Number(props.invoiceDiscount || 0),
+            invoice_discount_type: props.invoiceDiscountType === 'percent' ? 'percent' : 'amount',
+            extra_fee: Number(props.extraFee || 0),
+            note: note.value || null,
+            cash_received_amount: mixedPayment.value ? Math.round(cashReceivedAmount.value) : 0,
+            bank_account: selectedBankAccount.value?.bank_account,
+        })
+        bankIntent.value = data.data
+        bankCartSnapshot.value = JSON.stringify(props.cart)
+        bankStatus.value = { status: 'waiting', expected_amount: data.data.expected_amount, received_amount: 0, difference: -data.data.expected_amount }
+        bankPollTimer = setTimeout(pollBankPayment, 1200)
+    } catch (error) {
+        bankError.value = error.response?.data?.message || 'Không thể bắt đầu theo dõi thanh toán.'
+        bankManualFallback.value = true
+    } finally {
+        bankStarting.value = false
+    }
+}
+
+const closeModal = () => emit('close')
+
+const submit = () => {
+    if (mixedPayment.value && (Number(cashReceivedAmount.value) <= 0 || transferAmount.value <= 0)) {
+        bankError.value = 'Vui lòng nhập số tiền lớn hơn 0 cho cả tiền mặt và chuyển khoản.'
+        return
+    }
+    if (autoBankTracking.value) {
+        if (!bankIntent.value) startBankPayment()
+        return
+    }
+    const previousCash = props.editMode ? Number(props.initialPayment.cash_received_amount || 0) : 0
+    const previousBank = props.editMode ? Number(props.initialPayment.bank_received_amount || 0) : 0
+    const receivedCash = mixedPayment.value
+        ? Number(cashReceivedAmount.value || 0)
+        : (paymentMethod.value === 'cash' ? Number(paidAmount.value || 0) : 0)
+    const receivedBank = usesBankPayment.value ? actualBankReceivedAmount.value : 0
+    const totalCashReceived = previousCash + receivedCash
+    const totalBankReceived = previousBank + receivedBank
+    const finalPaymentMethod = !props.editMode
+        ? (mixedPayment.value ? 'mixed' : paymentMethod.value)
+        : (totalCashReceived > 0 && totalBankReceived > 0
+            ? 'mixed'
+            : additionalPaidAmount.value <= 0
+                ? props.initialPayment.payment_method || paymentMethod.value
+                : paymentMethod.value)
+
+    emit('confirm', {
+        payment_method: finalPaymentMethod,
+        bank_account: totalBankReceived > 0 ? selectedBankAccount.value?.bank_account ?? null : null,
+        invoice_code: props.invoiceCode,
+        paid_amount: effectivePaidAmount.value,
+        cash_received_amount: props.editMode ? totalCashReceived : receivedCash,
+        bank_received_amount: props.editMode ? totalBankReceived : receivedBank,
+        note: note.value,
+        pay_old_debt: payOldDebt.value,
+    })
+}
+
+</script>
+
+<template>
+    <div
+        v-if="show"
+        class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in"
+    >
+        <div class="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
+
+            <!-- HEADER -->
+            <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                        <Receipt class="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">{{ editMode ? 'Thanh toán hóa đơn' : 'Xác nhận thanh toán' }}</h2>
+                        <p class="text-xs text-slate-500 font-medium">{{ editMode ? `Cập nhật hóa đơn ${invoiceCode}` : 'Hoàn tất đơn hàng POS' }}</p>
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                    @click="closeModal"
+                >
+                    <X class="w-5 h-5" />
+                </button>
+            </div>
+
+            <!-- BODY -->
+            <div class="flex-1 space-y-4 overflow-y-auto p-6 custom-scrollbar">
+
+                <slot name="notice" />
+
+                <!-- PHƯƠNG THỨC THANH TOÁN -->
+                <div>
+                    <PaymentMethodSelect v-model="paymentMethod" :disabled="Boolean(bankIntent)" />
+                </div>
+                <label v-if="!mixedPayment" class="-mt-2 inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+                    <input
+                        :checked="autoFillFullPayment"
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        :disabled="Boolean(bankIntent)"
+                        @change="toggleFullPayment($event.target.checked)"
+                    />
+                    Đưa đủ <span class="text-blue-600">{{ formatMoney(fullPaymentAmount) }}</span>
+                </label>
+                <p v-if="editMode" class="-mt-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] leading-relaxed text-blue-800">
+                    <template v-if="previouslyPaidAmount > totalNeedToPay">Đơn cũ đã thanh toán {{ formatMoney(previouslyPaidAmount) }}. Cần trả lại khách {{ formatMoney(previouslyPaidAmount - totalNeedToPay) }} tiền thừa.</template>
+                    <template v-else-if="remainingToCollect > 0">Đơn cũ đã thanh toán {{ formatMoney(previouslyPaidAmount) }}. Chỉ nhập khoản thu thêm; phần còn thiếu chưa thu sẽ được ghi vào công nợ của khách.</template>
+                    <template v-else>Đơn cũ đã thanh toán đủ {{ formatMoney(previouslyPaidAmount) }}.</template>
+                </p>
+
+                <!-- SỐ TIỀN MẶT KHÁCH ĐƯA VÀ NÚT TẠO QR PHẦN CÒN LẠI -->
+                <div v-if="paymentMethod === 'cash' || paymentMethod === 'card'">
+                    <div class="relative">
+                        <FloatingInput
+                            :model-value="formatMoneyInput(mixedPayment ? cashReceivedAmount : paidAmount)"
+                            @input="handleCashAmountInput"
+                            type="text"
+                            inputmode="numeric"
+                            :disabled="Boolean(bankIntent)"
+                            :label="editMode ? (paymentMethod === 'card' ? 'Tiền thẻ thu thêm' : 'Khách đưa') : 'Số tiền khách đưa'"
+                            :input-class="paymentMethod === 'cash' ? 'pr-36' : ''"
+                        />
+                        <button
+                            v-if="paymentMethod === 'cash' && !mixedPayment"
+                            type="button"
+                            :disabled="Boolean(bankIntent)"
+                            class="absolute right-1 top-1.5 rounded-md bg-blue-50 px-2 py-1.5 text-[10px] font-bold leading-tight text-blue-700 hover:bg-blue-100"
+                            @click="enableRemainingQr"
+                        >Tạo QR phần còn lại</button>
+                        <button
+                            v-else-if="paymentMethod === 'cash'"
+                            type="button"
+                            :disabled="Boolean(bankIntent)"
+                            class="absolute right-1 top-1.5 rounded-md bg-slate-100 px-2 py-1.5 text-[10px] font-bold leading-tight text-slate-700 hover:bg-slate-200"
+                            @click="disableRemainingQr"
+                        >Chỉ nhận tiền mặt</button>
+                    </div>
+                    <p v-if="editMode" class="mt-1 text-[11px] text-slate-500">{{ paymentMethod === 'card' ? 'Nhập khoản thanh toán mới qua thẻ; số đã nhận trước đó được giữ nguyên.' : 'Nhập khoản tiền mặt thu thêm; số đã nhận trước đó được giữ nguyên.' }}</p>
+                    <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-600">{{ bankError }}</p>
+                </div>
+
+                <!-- MA QR THANH TOAN -->
+                <div v-if="usesBankPayment && (!editMode || remainingToCollect > 0)">
+                    <p v-if="mixedPayment" class="mb-2 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Thanh toán kết hợp · tiền mặt + chuyển khoản</p>
+                    <div v-if="bankAccounts.length" class="mb-3">
+                        <label for="checkout-bank-account" class="block min-w-0 text-xs font-semibold text-slate-600">
+                            Tài khoản nhận tiền
+                            <select id="checkout-bank-account" v-model="selectedBankAccountId" :disabled="Boolean(bankIntent)" class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100">
+                                <option v-for="account in bankAccounts" :key="account.id" :value="String(account.id)">
+                                    {{ account.bank_name || `BIN ${account.bank_bin}` }} · {{ account.bank_account }}{{ account.bank_account_name ? ` · ${account.bank_account_name}` : '' }}{{ account.is_default ? ' (Mặc định)' : '' }}{{ account.vat_preferred ? ' (VAT)' : '' }}
+                                </option>
+                            </select>
+                        </label>
+                    </div>
+                    <div ref="qrPaymentSection">
+                    <QrPayment
+                        v-if="hasBankSettings"
+                        :bank-bin="String(selectedBankAccount.bank_bin)"
+                        :bank-account="String(selectedBankAccount.bank_account)"
+                        :amount="transferAmount"
+                        :description="transferDescription"
+                        :provider-qr-url="bankIntent?.provider_qr_url || ''"
+                        :provider-payment-url="bankIntent?.provider_payment_url || ''"
+                        :editable="!bankIntent"
+                        @amount-change="handleBankTransferAmountValue"
+                        :theme="bankSettings.bank_qr_theme || 'classic'"
+                    />
+                    </div>
+
+                    <div v-if="autoBankTracking" class="mt-3 rounded-xl border px-3 py-3 text-sm" :class="bankStatus?.status === 'paid' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : bankStatus?.difference > 0 ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-blue-200 bg-blue-50 text-blue-800'">
+                        <p class="font-bold">{{ paymentStatusLabel }}</p>
+                        <p v-if="bankStatus" class="mt-1 text-xs">Đã nhận {{ formatMoney(bankStatus.received_amount) }} / {{ formatMoney(bankStatus.expected_amount) }}</p>
+                        <p v-else class="mt-1 text-xs">Nội dung chuyển khoản tự gắn mã {{ invoiceCode }} để tự đối soát.</p>
+                        <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-700">{{ bankError }}</p>
+                    </div>
+
+                    <div
+                        v-else-if="!autoBankTracking"
+                        class="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center text-xs font-semibold text-amber-800"
+                    >
+                        <template v-if="editMode">Thanh toán sẽ được ghi nhận vào hóa đơn sau khi xác nhận.</template>
+                        <template v-else-if="bankManualFallback">Không kết nối được dịch vụ đối soát. Bạn vẫn có thể nhập số tiền nhận và xác nhận thanh toán thủ công.</template>
+                        <template v-else-if="!hasBankSettings">Chưa cấu hình tài khoản ngân hàng trong Cài đặt. Bạn vẫn có thể nhập số tiền nhận và xác nhận thủ công.</template>
+                        <template v-else-if="selectedBankAccount?.payment_provider === 'apipay'">
+                            ApiPay chưa đủ cấu hình. Hãy kiểm tra Bank Account Public ID, API keys và Webhook signing secret trong Cài đặt.
+                        </template>
+                        <template v-else-if="selectedBankAccount?.payment_provider === 'sepay'">
+                            Tự đối soát SePay chưa bật. Hãy nhập API Key hoặc webhook secret cho tài khoản này trong Cài đặt.
+                        </template>
+                        <template v-else>Chưa chọn dịch vụ tự đối soát cho tài khoản này trong Cài đặt.</template>
+                    </div>
+                </div>
+
+                <!-- THANH TOÁN NỢ CŨ (NẾU CÓ) -->
+                <div
+                    v-if="!editMode && selectedCustomer && Number(selectedCustomer.debt_balance) > 0"
+                    class="rounded-xl border border-blue-100 bg-blue-50/40 p-3"
+                >
+                    <label class="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-blue-900">
+                        <input
+                            v-model="payOldDebt"
+                            type="checkbox"
+                            class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                        />
+                        <span>Cộng gộp nợ cũ ({{ formatMoney(selectedCustomer.debt_balance) }})</span>
+                    </label>
+                </div>
+
+                <!-- Số tiền thực nhận từ chuyển khoản, cho phép ghi nhận tiền chuyển thừa -->
+                <div v-if="usesBankPayment">
+                    <p v-if="mixedPayment" class="mt-1 text-xs text-slate-600">Tổng nhận: {{ formatMoney(effectivePaidAmount) }} / {{ formatMoney(totalNeedToPay) }}</p>
+                    <p v-if="bankError" class="mt-1 text-xs font-semibold text-rose-600">{{ bankError }}</p>
+                </div>
+
+                <div v-if="usesBankPayment && !autoBankTracking && (!editMode || remainingToCollect > 0)" class="relative">
+                    <FloatingInput
+                        :model-value="formatMoneyInput(actualBankReceivedAmount)"
+                        @input="handleBankReceivedAmountInput"
+                        type="text"
+                        inputmode="numeric"
+                        :disabled="Boolean(bankIntent)"
+                            :label="editMode ? 'Khách chuyển' : 'Số tiền khách chuyển khoản'"
+                    />
+                    <p class="mt-1 text-[11px] text-slate-500">{{ editMode ? 'QR chỉ tạo phần còn thiếu sau khi trừ khoản đã nhận trước đó. Nhập đúng số tiền chuyển khoản vừa nhận.' : 'Nhập số tiền thực nhận để tính chính xác tiền thừa hoặc còn thiếu.' }}</p>
+                </div>
+
+                <!-- GHI CHÚ -->
+                <div v-if="!editMode">
+                    <FloatingInput
+                        v-model="note"
+                        label="Ghi chú đơn hàng..."
+                    />
+                </div>
+
+                <!-- TỔNG KẾT TÍNH TOÁN -->
+                <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-2">
+                    <template v-if="editMode">
+                        <div class="flex justify-between text-xs font-medium text-slate-600">
+                            <span>Đơn cũ đã thanh toán</span>
+                            <span class="font-bold text-slate-800">{{ formatMoney(initialPayment.paid_amount || 0) }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs font-medium text-slate-600">
+                            <span>Tổng đơn mới</span>
+                            <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
+                        </div>
+                        <div class="flex items-center justify-between border-t border-slate-200/60 pt-2 text-sm font-extrabold text-blue-900">
+                            <span>Cần thu</span>
+                            <span class="text-base text-blue-600">{{ formatMoney(remainingToCollect) }}</span>
+                        </div>
+                        <div class="flex justify-between pt-1 text-xs font-bold">
+                            <span class="text-slate-500">{{ balanceStatus.label }}</span>
+                            <span :class="balanceStatus.className">{{ balanceStatus.amount === null ? '✓' : formatMoney(balanceStatus.amount) }}</span>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div class="flex justify-between text-xs font-medium text-slate-600">
+                            <span>Tiền hàng</span>
+                            <span class="font-bold text-slate-800">{{ formatMoney(grandTotal) }}</span>
+                        </div>
+                        <div class="flex justify-between border-t border-slate-200/60 pt-2 text-sm font-extrabold text-blue-900">
+                            <span>Tổng thu</span>
+                            <span class="text-base text-blue-600">{{ formatMoney(totalNeedToPay) }}</span>
+                        </div>
+                        <div class="flex justify-between pt-1 text-xs font-bold">
+                            <span class="text-slate-500">{{ balanceStatus.label }}</span>
+                            <span :class="balanceStatus.className">{{ balanceStatus.amount === null ? '✓' : formatMoney(balanceStatus.amount) }}</span>
+                        </div>
+                    </template>
+                </div>
+
+            </div>
+
+            <!-- FOOTER -->
+            <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex gap-2">
+                <button
+                    type="button"
+                    class="flex-1 rounded-xl border border-slate-200/80 bg-white py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                    @click="closeModal"
+                >
+                    {{ bankIntent ? 'Ẩn, tiếp tục theo dõi' : 'Hủy bỏ' }}
+                </button>
+
+                <button
+                    :disabled="loading || bankStarting || Boolean(bankIntent)"
+                    @click="submit"
+                    class="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-md shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50"
+                >
+                    <Loader2 v-if="loading" class="w-4 h-4 animate-spin" />
+                    <CheckCircle2 v-else class="w-4 h-4" />
+                    <span>{{ loading ? 'Đang xử lý...' : bankStarting ? 'Đang kết nối...' : bankIntent ? 'Đang chờ tiền vào...' : autoBankTracking ? 'Bắt đầu theo dõi chuyển khoản' : 'Xác nhận thanh toán' }}</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+</template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>

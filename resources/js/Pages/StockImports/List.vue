@@ -7,6 +7,7 @@ import StockImportFormModal from './StockImportFormModal.vue'
 import ReplenishmentListModal from './ReplenishmentListModal.vue'
 import api from '@/Services/api'
 import PageHeader from '@/Components/UI/PageHeader.vue'
+import PageActions from '@/Components/UI/PageActions.vue'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import DataPanel from '@/Components/UI/DataPanel.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
@@ -648,10 +649,10 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
         <PageHeader title="Phiếu nhập hàng" />
 
         
-        <div class="app-mobile-icon-actions flex justify-end gap-2">
+        <PageActions>
             <ActionButton variant="warning" @click="showReplenishmentModal = true"><ClipboardList :size="16" />Lập DS lấy hàng</ActionButton>
             <ActionButton @click="openCreateModal('supplier')"><Plus :size="16" />Tạo đơn nhập</ActionButton>
-        </div>
+        </PageActions>
 
         <DataPanel detached>
 
