@@ -24,7 +24,13 @@ class BackupCloudOAuthController extends Controller
             return back()->with('error', 'OAuth Google Drive/OneDrive cần callback HTTPS công khai. Hãy cấu hình APP_URL hoặc BACKUP_CLOUD_REDIRECT_BASE_URL trước.');
         }
 
-        $data = $request->validate(['name' => ['required', 'string', 'max:100']]);
+        $data = $request->validate(['name' => ['nullable', 'string', 'max:100']]);
+        // Không bắt người dùng đặt tên: mặc định theo dịch vụ, trùng thì thêm số thứ tự.
+        if (blank($data['name'] ?? null)) {
+            $label = $provider === 'google_drive' ? 'Google Drive' : 'OneDrive';
+            $existing = \App\Models\BackupCloudConnection::query()->where('provider', $provider)->count();
+            $data['name'] = $existing ? $label.' '.($existing + 1) : $label;
+        }
         $state = bin2hex(random_bytes(32));
         session()->put('backup_cloud_oauth', ['provider' => $provider, 'name' => $data['name'], 'state' => $state]);
         $redirectUri = $this->redirectUri($provider);
@@ -51,12 +57,12 @@ class BackupCloudOAuthController extends Controller
         abort_unless(in_array($provider, ['google_drive', 'onedrive'], true), 404);
         $pending = session()->pull('backup_cloud_oauth');
         if (! is_array($pending) || ($pending['provider'] ?? null) !== $provider || ! hash_equals((string) ($pending['state'] ?? ''), (string) $request->query('state'))) {
-            return redirect()->route('backups.index')->with('error', 'Phiên kết nối đám mây hết hạn hoặc không hợp lệ. Hãy thử kết nối lại.');
+            return redirect()->route('settings.index', ['section' => 'cloud'])->with('error', 'Phiên kết nối đám mây hết hạn hoặc không hợp lệ. Hãy thử kết nối lại.');
         }
         if ($request->filled('error')) {
-            return redirect()->route('backups.index')->with('error', 'Dịch vụ đám mây từ chối cấp quyền: '.$request->query('error_description', $request->query('error')));
+            return redirect()->route('settings.index', ['section' => 'cloud'])->with('error', 'Dịch vụ đám mây từ chối cấp quyền: '.$request->query('error_description', $request->query('error')));
         }
-        if (! $request->filled('code')) return redirect()->route('backups.index')->with('error', 'Dịch vụ đám mây không trả mã ủy quyền.');
+        if (! $request->filled('code')) return redirect()->route('settings.index', ['section' => 'cloud'])->with('error', 'Dịch vụ đám mây không trả mã ủy quyền.');
 
         $service = $provider === 'google_drive' ? 'google_drive' : 'microsoft_onedrive';
         $redirectUri = $this->redirectUri($provider);
@@ -89,10 +95,10 @@ class BackupCloudOAuthController extends Controller
             $connection->last_tested_at = now();
             $connection->save();
 
-            return redirect()->route('backups.index')->with('success', 'Đã kết nối '.$pending['name'].' thành công.');
+            return redirect()->route('settings.index', ['section' => 'cloud'])->with('success', 'Đã kết nối '.$pending['name'].' thành công.');
         } catch (Throwable $exception) {
             report($exception);
-            return redirect()->route('backups.index')->with('error', 'Không thể kết nối '.$pending['name'].': '.$exception->getMessage());
+            return redirect()->route('settings.index', ['section' => 'cloud'])->with('error', 'Không thể kết nối '.$pending['name'].': '.$exception->getMessage());
         }
     }
 

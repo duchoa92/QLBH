@@ -25,6 +25,7 @@ import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { useConfirm } from '@/Composables/useConfirm'
+import { formatCloudError } from '@/utils/cloudErrors'
 
 defineOptions({ layout: AdminLayout })
 
@@ -46,6 +47,9 @@ const props = defineProps({
     restore_preview: { type: Object, default: null },
 })
 
+// Báo cho trang Cài đặt mở mục "Kho lưu trữ đám mây" để thêm/bớt kết nối.
+const emit = defineEmits(['manage-cloud'])
+
 const scheduleForm = useForm({
     enabled: Boolean(props.schedule.enabled),
     frequency: props.schedule.frequency || 'daily',
@@ -56,16 +60,6 @@ const scheduleForm = useForm({
 
 const restoreForm = useForm({ mode: 'merge', conflict_policy: 'keep_current', confirmed: false, operation_id: null })
 const uploadForm = useForm({ backup_file: null, operation_id: null })
-const cloudForm = useForm({ provider: 'google_drive', name: '' })
-const cloudOAuthCallbackUri = computed(() => props.cloud_oauth.redirect_uri?.[cloudForm.provider] || '')
-const cloudOAuthOriginMatches = computed(() => {
-    if (!cloudOAuthCallbackUri.value || typeof window === 'undefined') return false
-    try {
-        return new URL(cloudOAuthCallbackUri.value).origin === window.location.origin
-    } catch {
-        return false
-    }
-})
 const confirmBox = useConfirm()
 const selectedFileName = ref('')
 const restorePreview = ref(props.restore_preview)
@@ -76,7 +70,6 @@ const comparisonError = ref('')
 const lastPreviewKey = ref(restorePreview.value?.backup || null)
 const dismissedPreviewKey = ref(null)
 const showCloudStorage = ref(true)
-const showCloudGuide = ref(false)
 const operationProgress = ref({ active: false, percent: 0, message: '', state: 'running', steps: [], report: null })
 const showOperationReportDetails = ref(false)
 let progressTimer = null
@@ -365,26 +358,6 @@ const inspectCloudBackup = (connection, backup) => router.post(route('backups.cl
     preserveScroll: true,
     onSuccess: finishRestoreComparison,
 })
-const saveCloudConnection = (event) => {
-    const inputName = event?.currentTarget?.querySelector('[name="name"]')?.value
-    const connectionName = String(inputName ?? cloudForm.name ?? '').trim()
-    if (!['google_drive', 'onedrive'].includes(cloudForm.provider)) return
-    if (!connectionName) {
-        cloudForm.setError('name', 'Vui lòng nhập tên kết nối.')
-        event?.currentTarget?.querySelector('[name="name"]')?.focus()
-        return
-    }
-    cloudForm.clearErrors()
-    router.get(route('backups.cloud.oauth.start', { provider: cloudForm.provider }), { name: connectionName }, { preserveScroll: true })
-}
-const toggleCloudConnection = (connection) => router.patch(route('backups.cloud-connections.toggle', { connection: connection.id }), {}, { preserveScroll: true })
-const removeCloudConnection = (connection) => confirmBox.show({
-    title: 'Xóa kết nối đám mây',
-    message: `Xóa kết nối “${connection.name}”? Các bản sao lưu đã có trên dịch vụ đám mây sẽ được giữ nguyên.`,
-    confirmText: 'Xóa kết nối',
-    onConfirm: () => router.delete(route('backups.cloud-connections.destroy', { connection: connection.id }), { preserveScroll: true }),
-})
-
 const selectBackupFile = (event) => {
     uploadForm.backup_file = event.target.files?.[0] || null
     selectedFileName.value = uploadForm.backup_file?.name || ''
@@ -432,46 +405,6 @@ const restoreBackup = () => {
 const formatSize = (size) => size < 1024 * 1024
     ? `${(size / 1024).toFixed(1)} KB`
     : `${(size / (1024 * 1024)).toFixed(2)} MB`
-
-const formatCloudError = (error, provider = 'google_drive') => {
-    const raw = String(error || '').trim()
-    const message = raw.toLowerCase()
-    const service = provider === 'onedrive' ? 'OneDrive' : 'Google Drive'
-    const status = Number(raw.match(/(?:HTTP|status code)\s*[:=]?\s*(\d{3})/i)?.[1] || 0)
-
-    if (/project.{0,80}(has been deleted|deleted)|has been deleted.{0,80}project/.test(message)) {
-        return `Dự án Google Cloud đang cấp quyền cho kết nối này đã bị xóa. Hãy chọn hoặc tạo dự án còn hoạt động, bật Google Drive API, cập nhật OAuth Client ID/Secret trên máy chủ, rồi xóa kết nối cũ và kết nối lại.`
-    }
-    if (/storagequotaexceeded|quota.{0,30}(exceed|full)|storage quota/.test(message)) {
-        return 'Google Drive đã hết dung lượng. Hãy giải phóng dung lượng hoặc kết nối tài khoản Drive khác.'
-    }
-    if (/redirect_uri_mismatch/.test(message)) {
-        return 'Địa chỉ chuyển hướng OAuth chưa khớp. Hãy khai báo đúng Redirect URI trong ứng dụng OAuth.'
-    }
-    if (/invalid_client|unauthorized_client/.test(message)) {
-        return 'Thông tin OAuth của ứng dụng không hợp lệ. Hãy kiểm tra Client ID và Client Secret trên máy chủ.'
-    }
-    if (/invalid_grant|token has been expired|refresh token|interaction_required/.test(message)) {
-        return `Quyền truy cập ${service} đã hết hạn hoặc bị thu hồi. Hãy xóa kết nối cũ rồi kết nối lại.`
-    }
-    if (/access_denied|user denied|consent_required/.test(message)) {
-        return `Bạn chưa cấp quyền cho ứng dụng truy cập ${service}. Hãy kết nối lại và chấp thuận các quyền được yêu cầu.`
-    }
-    if (/insufficientpermissions|insufficient permission|accessdenied|forbidden/.test(message) || status === 403) {
-        return `Ứng dụng chưa được cấp đủ quyền với ${service}. Hãy kiểm tra quyền OAuth và quyền truy cập kho, sau đó kết nối lại.`
-    }
-    if (/invalid credentials|invalidauthenticationtoken|unauthenticated/.test(message) || status === 401) {
-        return `Phiên kết nối ${service} không còn hợp lệ. Hãy xóa kết nối cũ rồi đăng nhập và kết nối lại.`
-    }
-    if (/rate limit|ratelimit|userratelimitexceeded/.test(message) || status === 429) {
-        return `${service} đang giới hạn số yêu cầu. Hãy chờ ít phút rồi thử lại.`
-    }
-    if (/timed out|timeout|could not resolve|connection refused|network error/.test(message)) {
-        return `Không thể liên lạc với ${service}. Kiểm tra kết nối mạng rồi thử lại.`
-    }
-    if (status >= 500) return `${service} đang gặp sự cố tạm thời. Hãy thử lại sau.`
-    return `Không thể truy cập ${service}. Hãy kiểm tra quyền của ứng dụng và thử kết nối lại.`
-}
 
 // Dữ liệu options cho FloatingSelect
 const frequencyOptions = [
@@ -688,6 +621,7 @@ const conflictPolicyOptions = [
             </div>
         </DataPanel>
 
+        <!-- Bản sao lưu trên đám mây (kết nối kho được thiết lập ở Cài đặt → Kho lưu trữ đám mây) -->
         <DataPanel class="p-3.5 sm:p-4">
             <button
                 type="button"
@@ -698,78 +632,33 @@ const conflictPolicyOptions = [
             >
                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-600/15"><Cloud :size="20" /></span>
                 <span class="min-w-0 flex-1">
-                    <span class="flex items-center gap-2 text-base font-bold text-slate-800">Kho sao lưu đám mây <span v-if="props.cloud_connections.length" class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{{ props.cloud_connections.length }} kết nối</span></span>
-                    <span class="mt-0.5 block text-xs text-slate-500">Nhấn để {{ showCloudStorage ? 'thu gọn' : 'quản lý kết nối và bản sao lưu' }}.</span>
+                    <span class="flex items-center gap-2 text-base font-bold text-slate-800">Bản sao lưu trên đám mây <span v-if="props.cloud_connections.length" class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{{ props.cloud_connections.length }} kho</span></span>
+                    <span class="mt-0.5 block text-xs text-slate-500">Xem và khôi phục từ các kho đã kết nối.</span>
                 </span>
                 <ChevronDown :size="18" class="shrink-0 text-slate-500 transition-transform duration-200" :class="showCloudStorage && 'rotate-180'" />
             </button>
 
-            <div v-if="showCloudStorage" id="cloud-backup-storage" class="mt-4 space-y-4 border-t border-slate-100 pt-4">
-            <div class="text-xs text-slate-500">Kết nối Google Drive hoặc OneDrive. Bản sao lưu mới sẽ được tải lên mọi kết nối đang bật.</div>
-            <form class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3" @submit.prevent="saveCloudConnection">
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <label class="text-xs font-semibold text-slate-600">Loại kho
-                        <select v-model="cloudForm.provider" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500">
-                            <option value="google_drive">Google Drive</option>
-                            <option value="onedrive">OneDrive</option>
-                        </select>
-                    </label>
-                    <label class="text-xs font-semibold text-slate-600">Tên kết nối
-                        <input v-model="cloudForm.name" name="name" required maxlength="100" class="mt-1 h-10 w-full rounded-lg border-slate-300 text-sm focus:border-sky-500 focus:ring-sky-500" placeholder="Ví dụ: Kho dự phòng R2">
-                    </label>
+            <div v-if="showCloudStorage" id="cloud-backup-storage" class="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                <div v-if="!props.cloud_connections.length" class="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-5 text-center">
+                    <p class="text-sm text-slate-600">Chưa kết nối kho đám mây nào.</p>
+                    <button type="button" class="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-900" @click="emit('manage-cloud')"><Link2 :size="14" /> Kết nối Google Drive / OneDrive</button>
                 </div>
-                <p v-if="cloudForm.errors.name" class="text-xs font-medium text-red-600">
-                    {{ cloudForm.errors.name }}
-                </p>
-                <div v-if="!props.cloud_oauth[cloudForm.provider] || !props.cloud_oauth.redirect_is_secure || (props.cloud_oauth.redirect_is_secure && !cloudOAuthOriginMatches)" class="space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
-                    <p v-if="!props.cloud_oauth[cloudForm.provider]" class="font-semibold">Chưa cấu hình OAuth cho {{ cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }} trên máy chủ.</p>
-                    <p v-if="!props.cloud_oauth.redirect_is_secure" class="font-semibold">Địa chỉ chuyển hướng chưa an toàn. Hãy cấu hình HTTPS công khai hoặc dùng localhost.</p>
-                    <p v-else-if="!cloudOAuthOriginMatches" class="font-semibold">Địa chỉ đang mở không khớp với địa chỉ OAuth. Hãy mở hệ thống bằng đúng địa chỉ gốc của callback.</p>
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <button type="button" class="text-xs font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900" :aria-expanded="showCloudGuide" @click="showCloudGuide = !showCloudGuide">{{ showCloudGuide ? 'Ẩn hướng dẫn' : 'Hướng dẫn kết nối' }}</button>
-                    <ActionButton type="submit" :disabled="cloudForm.processing || !props.cloud_oauth[cloudForm.provider] || !props.cloud_oauth.redirect_is_secure || !cloudOAuthOriginMatches" class="h-10 !bg-sky-700 px-4 text-xs font-semibold !text-white hover:!bg-sky-800 disabled:!opacity-70">
-                        <Link2 :size="15" /> {{ cloudForm.processing ? 'Đang kiểm tra kết nối…' : ['google_drive', 'onedrive'].includes(cloudForm.provider) ? `Kết nối ${cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive'}` : 'Kiểm tra & kết nối' }}
-                    </ActionButton>
-                </div>
-                <div v-if="showCloudGuide" class="space-y-2 rounded-lg border border-sky-100 bg-sky-50/70 p-3 text-xs text-slate-700">
-                    <p class="font-bold text-slate-900">Hướng dẫn kết nối {{ cloudForm.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }}</p>
-                    <ol class="list-inside list-decimal space-y-1.5">
-                        <li>Tạo ứng dụng OAuth trong Google Cloud Console hoặc Microsoft Entra.</li>
-                        <li>Thêm chính xác địa chỉ chuyển hướng này vào ứng dụng:
-                            <code class="mt-1 block break-all rounded bg-white px-2 py-1 text-[11px]">{{ props.cloud_oauth.redirect_uri?.[cloudForm.provider] || 'Chưa tạo được địa chỉ chuyển hướng' }}</code>
-                        </li>
-                        <li>Đặt Client ID và Client Secret vào cấu hình máy chủ:
-                            <strong class="block">{{ cloudForm.provider === 'google_drive' ? 'GOOGLE_DRIVE_CLIENT_ID và GOOGLE_DRIVE_CLIENT_SECRET' : 'MICROSOFT_ONEDRIVE_CLIENT_ID và MICROSOFT_ONEDRIVE_CLIENT_SECRET' }}</strong>
-                            Sau đó chạy <code>php artisan config:clear</code>.
-                        </li>
-                        <li>Mở hệ thống bằng đúng địa chỉ gốc ở trên, nhập tên kết nối, nhấn <strong>Kết nối</strong> và cấp quyền.</li>
-                    </ol>
-                    <p v-if="cloudForm.provider === 'onedrive'" class="text-slate-600">OneDrive cần quyền Files.ReadWrite, User.Read và offline_access.</p>
-                </div>
-            </form>
-
-            <div v-if="props.cloud_connections.length" class="mt-4 space-y-3">
-                <div v-for="connection in props.cloud_connections" :key="connection.id" class="overflow-hidden rounded-xl border border-slate-200">
-                    <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3">
-                        <div>
-                            <div class="flex items-center gap-2 text-sm font-bold text-slate-800"><Cloud :size="15" class="text-sky-700" />{{ connection.name }} <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{{ connection.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }}</span></div>
-                            <p class="mt-1 text-[11px]" :class="connection.error ? 'text-red-600' : 'text-slate-500'">{{ connection.error ? formatCloudError(connection.error, connection.provider) : connection.enabled ? 'Đang đồng bộ bản sao lưu mới' : 'Đã tạm dừng đồng bộ' }}</p>
+                <template v-else>
+                    <div v-for="connection in props.cloud_connections" :key="connection.id" class="overflow-hidden rounded-xl border border-slate-200">
+                        <div class="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2.5">
+                            <div class="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-800"><Cloud :size="15" class="shrink-0 text-sky-700" /><span class="truncate">{{ connection.name }}</span> <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{{ connection.provider === 'google_drive' ? 'Google Drive' : 'OneDrive' }}</span></div>
+                            <span v-if="connection.error" class="text-[11px] text-red-600">{{ formatCloudError(connection.error, connection.provider) }}</span>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button type="button" class="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" @click="toggleCloudConnection(connection)">{{ connection.enabled ? 'Tạm dừng' : 'Bật đồng bộ' }}</button>
-                            <button type="button" class="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50" @click="removeCloudConnection(connection)">Xóa kết nối</button>
+                        <div v-if="connection.backups?.length" class="max-h-56 space-y-1 overflow-y-auto border-t border-slate-100 bg-slate-50/60 p-2">
+                            <div v-for="backup in connection.backups" :key="backup.name" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2">
+                                <div class="min-w-0"><p class="break-all text-xs font-semibold text-slate-700">{{ backup.name }}</p><p class="text-[10px] text-slate-500">{{ formatSize(backup.size) }}<span v-if="backup.created_at"> · {{ backup.created_at }}</span></p></div>
+                                <button type="button" class="shrink-0 rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100" :disabled="operationProgress.active" @click="inspectCloudBackup(connection, backup)"><ScanSearch :size="13" class="mr-1 inline" />Kiểm tra & khôi phục</button>
+                            </div>
                         </div>
+                        <p v-else-if="!connection.error" class="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">Chưa có bản sao lưu trên kho này.</p>
                     </div>
-                    <div v-if="connection.backups?.length" class="max-h-56 space-y-1 overflow-y-auto border-t border-slate-100 bg-slate-50/60 p-2">
-                        <div v-for="backup in connection.backups" :key="backup.name" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2">
-                            <div class="min-w-0"><p class="break-all text-xs font-semibold text-slate-700">{{ backup.name }}</p><p class="text-[10px] text-slate-500">{{ formatSize(backup.size) }}<span v-if="backup.created_at"> · {{ backup.created_at }}</span></p></div>
-                            <button type="button" class="shrink-0 rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100" :disabled="operationProgress.active" @click="inspectCloudBackup(connection, backup)"><ScanSearch :size="13" class="mr-1 inline" />Kiểm tra & khôi phục</button>
-                        </div>
-                    </div>
-                    <p v-else-if="!connection.error" class="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">Chưa có bản sao lưu trên kho này.</p>
-                </div>
-            </div>
+                    <button type="button" class="text-xs font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900" @click="emit('manage-cloud')">Quản lý kết nối kho</button>
+                </template>
             </div>
         </DataPanel>
 

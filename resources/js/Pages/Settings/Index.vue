@@ -1,24 +1,23 @@
 <script setup>
 import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { onLiveChange } from '@/Services/liveSync'
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { router, useForm, usePage } from '@inertiajs/vue3'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useForm } from '@inertiajs/vue3'
 import { useConfirm } from '@/Composables/useConfirm'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
-import DataPanel from '@/Components/UI/DataPanel.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
-import RecordDetailModal from '@/Components/RecordDetailModal.vue'
-import { openModal as openGlobalModal, registerUrlModal } from '@/Stores/modal'
 import ActionButton from '@/Components/UI/ActionButton.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import LabelTemplateEditor from './LabelTemplateEditor.vue'
 import SettingSwitch from './SettingSwitch.vue'
 import SettingCollapse from './SettingCollapse.vue'
+import SettingBlock from './SettingBlock.vue'
 import DoorCameraSetup from './DoorCameraSetup.vue'
+import CloudStorageSettings from './CloudStorageSettings.vue'
 import { mergeLabelTemplate } from '@/utils/printLabels'
-import { SquarePen, Plus, Power, Save, Trash2, X, Store, DatabaseBackup, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
+import { Plus, Save, Trash2, Store, DatabaseBackup, Cloud, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
@@ -34,10 +33,6 @@ const props = defineProps({
     door_camera: { type: Object, default: null },
     can_manage_payment_accounts: { type: Boolean, default: false },
     can_manage_inventory_settings: { type: Boolean, default: false },
-    units: {
-        type: Array,
-        default: () => [],
-    },
     can_manage_backups: Boolean,
     active_section: String,
     backups: { type: Array, default: () => [] },
@@ -47,7 +42,6 @@ const props = defineProps({
     restore_preview: { type: Object, default: null },
     purchase_contract_defaults: { type: Object, default: () => ({ title: '', content: '' }) },
 })
-const page = usePage()
 
 const activeModal = ref(null)
 const confirmBox = useConfirm()
@@ -165,6 +159,7 @@ const testSelectedPaymentVoice = () => {
 // Mở/đóng mục thiết lập hoàn toàn ở phía trình duyệt: không gọi lại server nên không bị tải lại.
 const applySection = (section) => {
     if (section === 'backups' && props.can_manage_backups) activeModal.value = 'backups'
+    else if (section === 'cloud' && props.can_manage_backups) activeModal.value = 'cloud'
     else if (section === 'cleanup' && props.can_edit_settings) { activeModal.value = section; scanUnusedFiles() }
     else if (section === 'system' && props.can_edit_settings) activeModal.value = section
     else if (section === 'payments' && props.can_manage_payment_accounts) activeModal.value = section
@@ -259,8 +254,8 @@ const applyCameraPreset = camera => {
 }
 
 const SECTION_KEYS = {
-    system: ['shop_name', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
-    printing: ['shop_name', 'print_template', 'print_paper_size', 'print_orientation', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
+    system: ['shop_name', 'print_shop_subtitle', 'print_shop_address', 'print_shop_phone', 'currency_symbol', 'currency_format', 'app_locale', 'app_timezone', 'date_format'],
+    printing: ['print_template', 'print_paper_size', 'print_orientation', 'label_template', 'purchase_contract_title', 'purchase_contract_content'],
     inventory: ['allow_negative_stock', 'inventory_alert_enabled', 'inventory_alert_threshold', 'stock_import_vat_default', 'stock_import_vat_rate', 'pos_vat_default_enabled', 'pos_vat_default_scope', 'pos_vat_rate', 'pos_vat_used_enabled', 'pos_vat_used_default', 'pos_cost_price_suggestion_enabled', 'work_shift_opening_count_enabled', 'work_shift_auto_open_enabled'],
     loyalty: ['customer_points_enabled', 'customer_points_amount_per_point', 'customer_points_basis', 'customer_points_debt_enabled', 'customer_points_debt_mode', 'customer_points_debt_percent', 'face_recognition_enabled', 'face_notify_modal_enabled', 'face_visit_tracking_enabled', 'face_door_camera_enabled', 'face_visit_retention_days', 'face_cameras', 'face_auto_learn_enabled', 'face_auto_learn_min_percent', 'face_auto_learn_margin_percent', 'face_auto_learn_cooldown_minutes'],
     payments: ['bank_accounts', 'bank_qr_theme', 'payment_voice_enabled', 'payment_voice_language'],
@@ -439,28 +434,38 @@ watch(
     },
 )
 
-// Thẻ mục ở trang chính, gom theo nhóm công việc thay vì xếp rời 7 thẻ ngang hàng.
+// Tiêu đề từng hộp thoại cài đặt.
+const modalTitles = {
+    system: 'Thông tin & hệ thống',
+    printing: 'In ấn',
+    inventory: 'Kho & bán hàng',
+    payments: 'Tài khoản thanh toán',
+    loyalty: 'Khách hàng',
+}
+
+// Thẻ mục ở trang chính, gom theo nhóm công việc: cửa hàng, bán hàng, dữ liệu.
 const settingGroups = computed(() => [
     {
         title: 'Cửa hàng',
         cards: [
-            { key: 'system', title: 'Thiết lập hệ thống', description: 'Tên cửa hàng, ngôn ngữ, tiền tệ, ngày giờ.', icon: Store, tone: 'bg-blue-50 text-blue-700', hover: 'hover:border-blue-300', visible: props.can_edit_settings },
-            { key: 'printing', title: 'Bản in và khổ giấy', description: 'Thông tin trên hóa đơn, khổ giấy, tem sản phẩm và mẫu hợp đồng.', icon: Printer, tone: 'bg-sky-50 text-sky-700', hover: 'hover:border-sky-300', visible: props.can_edit_settings },
+            { key: 'system', title: 'Thông tin & hệ thống', description: 'Tên, địa chỉ, số điện thoại, tiền tệ, ngày giờ.', icon: Store, tone: 'bg-blue-50 text-blue-700', hover: 'hover:border-blue-300', visible: props.can_edit_settings },
+            { key: 'printing', title: 'In ấn', description: 'Hóa đơn, khổ giấy, tem sản phẩm, hợp đồng.', icon: Printer, tone: 'bg-sky-50 text-sky-700', hover: 'hover:border-sky-300', visible: props.can_edit_settings },
         ],
     },
     {
         title: 'Bán hàng',
         cards: [
-            { key: 'inventory', title: 'Bán hàng và kho hàng', description: 'Tồn kho âm, cảnh báo hàng sắp hết, VAT, kiểm kê đầu ca và đơn vị tính.', icon: Boxes, tone: 'bg-amber-50 text-amber-700', hover: 'hover:border-amber-300', visible: props.can_manage_inventory_settings },
-            { key: 'payments', title: 'Tài khoản thanh toán', description: 'Tài khoản nhận chuyển khoản, VietQR và tự đối soát giao dịch.', icon: CreditCard, tone: 'bg-violet-50 text-violet-700', hover: 'hover:border-violet-300', visible: props.can_manage_payment_accounts },
-            { key: 'loyalty', title: 'Khách hàng', description: 'Tích điểm theo doanh thu/lợi nhuận và bật nhận diện khách bằng khuôn mặt.', icon: Award, tone: 'bg-emerald-50 text-emerald-700', hover: 'hover:border-emerald-300', visible: props.can_edit_settings },
+            { key: 'inventory', title: 'Kho & bán hàng', description: 'Tồn kho, POS, VAT.', icon: Boxes, tone: 'bg-amber-50 text-amber-700', hover: 'hover:border-amber-300', visible: props.can_manage_inventory_settings },
+            { key: 'payments', title: 'Tài khoản thanh toán', description: 'Ngân hàng, VietQR, tự đối soát.', icon: CreditCard, tone: 'bg-violet-50 text-violet-700', hover: 'hover:border-violet-300', visible: props.can_manage_payment_accounts },
+            { key: 'loyalty', title: 'Khách hàng', description: 'Tích điểm, nhận diện khuôn mặt.', icon: Award, tone: 'bg-emerald-50 text-emerald-700', hover: 'hover:border-emerald-300', visible: props.can_edit_settings },
         ],
     },
     {
         title: 'Dữ liệu',
         cards: [
-            { key: 'backups', title: 'Sao lưu và khôi phục', description: 'Tạo bản sao, đặt lịch tự động, kết nối đám mây và khôi phục dữ liệu.', icon: DatabaseBackup, tone: 'bg-emerald-50 text-emerald-700', hover: 'hover:border-emerald-300', visible: props.can_manage_backups },
-            { key: 'cleanup', title: 'Dọn dẹp hệ thống', description: 'Tìm và xóa ảnh tải lên không còn được dữ liệu sử dụng.', icon: HardDrive, tone: 'bg-rose-50 text-rose-700', hover: 'hover:border-rose-300', visible: props.can_edit_settings },
+            { key: 'backups', title: 'Sao lưu & khôi phục', description: 'Sao lưu tự động, đám mây, khôi phục.', icon: DatabaseBackup, tone: 'bg-emerald-50 text-emerald-700', hover: 'hover:border-emerald-300', visible: props.can_manage_backups },
+            { key: 'cloud', title: 'Kho lưu trữ đám mây', description: 'Kết nối Google Drive, OneDrive để lưu bản sao lưu.', icon: Cloud, tone: 'bg-sky-50 text-sky-700', hover: 'hover:border-sky-300', visible: props.can_manage_backups },
+            { key: 'cleanup', title: 'Dọn dẹp hệ thống', description: 'Xóa file thừa, xóa dữ liệu nghiệp vụ.', icon: HardDrive, tone: 'bg-rose-50 text-rose-700', hover: 'hover:border-rose-300', visible: props.can_edit_settings },
         ],
     },
 ].map(group => ({ ...group, cards: group.cards.filter(card => card.visible) })).filter(group => group.cards.length))
@@ -625,136 +630,6 @@ const bankLockedText = computed(() =>
         ? 'Admin có thể cập nhật thông tin nhận chuyển khoản.'
         : 'Chỉ Admin được thay đổi thông tin nhận chuyển khoản.'
 )
-
-const editingUnitId = ref(null)
-
-const unitForm = useForm({
-    name: '',
-    short_name: '',
-    is_active: true,
-})
-
-const save = () => {
-    ignoreServerSectionForAWhile()
-    if (activeModal.value !== 'payments') {
-        const currentSection = activeModal.value
-        const keys = SECTION_KEYS[currentSection] || []
-        // Bỏ ?section=... trước khi gửi để địa chỉ server redirect về không mở lại modal vừa đóng (lỗi thì khôi phục).
-        syncSectionUrl(null)
-        form.transform(data => Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)))).post(route('settings.update'), {
-            preserveScroll: true,
-            preserveState: true,
-            onError: () => syncSectionUrl(currentSection),
-            onSuccess: () => {
-                form.defaults()
-                closeModal()
-            },
-        })
-        return
-    }
-
-    const accountsToSave = form.bank_accounts.filter(account =>
-        [account.bank_bin, account.bank_account, account.bank_account_name].some(value => String(value || '').trim() !== '')
-    )
-    const selectedAccountIsSaved = accountsToSave.some(account => String(account.id) === String(selectedBankAccountId.value))
-    const defaultAccountId = selectedAccountIsSaved
-        ? String(selectedBankAccountId.value)
-        : String(accountsToSave.find(account => account.is_default)?.id || accountsToSave[0]?.id || '')
-    accountsToSave.forEach(account => { account.is_default = String(account.id) === defaultAccountId })
-    let vatPreferredAssigned = false
-    accountsToSave.forEach(account => {
-        account.vat_preferred = Boolean(account.vat_preferred) && !vatPreferredAssigned
-        if (account.vat_preferred) vatPreferredAssigned = true
-    })
-    form.bank_accounts = accountsToSave
-
-    const section = activeModal.value
-    const keys = SECTION_KEYS[section] || []
-    // Server redirect về đúng địa chỉ đang mở: nếu còn ?section=... thì trang trả về sẽ mở lại modal ngay sau khi đóng.
-    // Bỏ tham số này trước khi gửi (lưu lỗi thì khôi phục lại để F5 vẫn mở đúng mục).
-    syncSectionUrl(null)
-    form.transform(data => Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)))).post(route('settings.update'), {
-        preserveScroll: true,
-        preserveState: true,
-        onError: () => syncSectionUrl(section),
-        onSuccess: () => {
-            if (section === 'payments') {
-                // Nạp lại từ máy chủ: khóa bí mật vừa nhập đã được mã hóa, trạng thái "đang bật/chưa đủ cấu hình" cũng được cập nhật.
-                form.bank_accounts = mapBankAccounts()
-                selectedBankAccountId.value = String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || defaultAccountId)
-                localStorage.setItem('pos-payment-settings-updated', String(Date.now()))
-            }
-            form.defaults()
-            closeModal()
-        },
-    })
-}
-
-const resetUnitForm = () => {
-    editingUnitId.value = null
-    unitForm.reset()
-    unitForm.clearErrors()
-    unitForm.name = ''
-    unitForm.short_name = ''
-    unitForm.is_active = true
-}
-
-const editUnit = (unit) => {
-    editingUnitId.value = unit.id
-    unitForm.clearErrors()
-    unitForm.name = unit.name || ''
-    unitForm.short_name = unit.short_name || ''
-    unitForm.is_active = Boolean(unit.is_active)
-}
-
-const submitUnit = () => {
-    const options = {
-        preserveScroll: true,
-        onSuccess: resetUnitForm,
-    }
-
-    if (editingUnitId.value) {
-        unitForm.put(route('units.update', editingUnitId.value), options)
-        return
-    }
-
-    unitForm.post(route('units.store'), options)
-}
-
-const toggleUnitStatus = (unit) => {
-    router.patch(route('units.toggleStatus', unit.id), {}, {
-        preserveScroll: true,
-    })
-}
-
-const unitDeleteError = computed(() => page.props.errors?.unit || '')
-
-const deleteUnit = (unit) => {
-    confirmBox.show({
-        title: 'Xóa đơn vị tính',
-        message: `Xóa đơn vị "${unit.name}"? Đơn vị đã dùng trong sản phẩm, phiếu nhập hoặc hóa đơn sẽ không xóa được, khi đó hãy chuyển sang "Tạm tắt".`,
-        confirmText: 'Xóa đơn vị',
-        cancelText: 'Giữ lại',
-        onConfirm: () => router.delete(route('units.destroy', unit.id), { preserveScroll: true }),
-    })
-}
-
-const unitDisplayName = (unit) =>
-    unit?.short_name
-        ? `${unit.name} (${unit.short_name})`
-        : unit?.name
-
-const openUnitDetailFromGlobalSearch = () => {
-    const url = new URL(window.location.href)
-    const unitId = Number(url.searchParams.get('open_unit'))
-    if (!unitId) return
-    url.searchParams.delete('open_unit')
-    router.replace({ url: `${url.pathname}${url.search}${url.hash}`, preserveState: true, preserveScroll: true, onSuccess: () => openGlobalModal(RecordDetailModal, { props: { type: 'unit', recordId: unitId }, deepLink: { type: 'unit', id: unitId } }) })
-}
-
-registerUrlModal('unit', RecordDetailModal, id => ({ type: 'unit', recordId: id }))
-
-watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediate: true })
 </script>
 
 <template>
@@ -785,195 +660,56 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
             </div>
         </section>
 
+
         <BaseModal
             v-if="(activeModal === 'system' && can_edit_settings) || (activeModal === 'payments' && can_manage_payment_accounts) || (activeModal === 'inventory' && can_manage_inventory_settings) || (activeModal === 'printing' && can_edit_settings) || (activeModal === 'loyalty' && can_edit_settings)"
-            :title="activeModal === 'system' ? 'Thiết lập hệ thống' : activeModal === 'payments' ? 'Tài khoản thanh toán' : activeModal === 'printing' ? 'Cài đặt bản in' : activeModal === 'loyalty' ? 'Khách hàng' : 'Bán hàng và kho hàng'"
+            :title="modalTitles[activeModal]"
             :size="'lg'"
-            :body-class="activeModal === 'payments' ? 'max-h-[70dvh] overflow-y-auto px-5 py-2 sm:px-6 sm:py-3' : 'max-h-[70dvh] overflow-y-auto p-3 sm:p-4'"
+            body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4"
             @close="cancelModal"
         >
-       
-        <div class="grid gap-5">
+        <div class="space-y-3">
             <div v-if="Object.keys(form.errors).length" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700" role="alert">
                 <div v-for="(message, key) in form.errors" :key="key">{{ message }}</div>
             </div>
-            <div class="space-y-5">
-                <DataPanel v-if="activeModal === 'loyalty'">
-                    <template #header><h2 class="text-sm font-bold text-slate-900">Nhận diện khách bằng khuôn mặt</h2></template>
-                    <div class="space-y-3 p-3">
-                        <SettingSwitch
-                            v-model="form.face_recognition_enabled"
-                            title="Bật nhận diện khuôn mặt"
-                            description="Cho phép đăng ký khuôn mặt ở trang Khách hàng và tự gợi ý khách khi đến quầy POS."
-                        />
-                        <SettingSwitch
-                            v-if="form.face_recognition_enabled"
-                            v-model="form.face_notify_modal_enabled"
-                            title="Hiện hộp thông báo chi tiết khi nhận ra khách"
-                            description="Khi POS nhận ra khách, mở thêm một hộp thoại cho biết tên, số điện thoại, CCCD và tình trạng công nợ để nhân viên xác nhận. Tắt thì chỉ hỏi ngay trong ô khách hàng."
-                        />
-                        <SettingSwitch
-                            v-if="form.face_recognition_enabled"
-                            v-model="form.face_visit_tracking_enabled"
-                            title="Ghi nhận lượt khách ra vào"
-                            description="POS ghi lại mỗi người xuất hiện trước camera (cả khách lạ chưa có thông tin) để thống kê ở trang Lượt khách. Khách lạ được chụp ảnh nhỏ để nhân viên gán tên sau. Chỉ bật khi cửa hàng đã có biển thông báo dùng camera."
-                        />
-                        <SettingSwitch
-                            v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled"
-                            v-model="form.face_door_camera_enabled"
-                            title="Dùng camera cửa (Camera AI chạy nền)"
-                            description="Camera Intelligence nhận diện khuôn mặt liên tục kể cả khi không mở POS. POS hiển thị video MediaMTX cùng nhãn nhận diện và danh sách khách đang đứng ở cửa. Bật lên rồi làm theo 3 bước hiện ngay bên dưới."
-                        />
-                        <div v-if="form.face_recognition_enabled" class="space-y-3 rounded-lg bg-slate-50 p-3">
-                            <div class="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                    <h3 class="text-xs font-bold text-slate-800">Danh sách camera</h3>
-                                    <p class="mt-0.5 text-xs text-slate-500">Mỗi camera có luồng chính và sub-stream H.264 riêng. Sau khi lưu, AI, MediaMTX và danh sách xem trực tiếp tự đồng bộ toàn bộ camera đang bật.</p>
-                                </div>
-                                <button type="button" :disabled="form.face_cameras.length >= 8" class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50" @click="addCamera"><Plus :size="14" />Thêm camera</button>
-                            </div>
-                            <div v-for="(camera, index) in form.face_cameras" :key="camera.id" class="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="min-w-0 flex-1 text-xs font-bold text-slate-800">{{ index === 0 ? 'Camera cửa mặc định' : `Camera bổ sung ${index}` }}</span>
-                                    <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600"><input v-model="camera.enabled" type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Hoạt động</label>
-                                    <button v-if="camera.id !== 'door-1'" type="button" class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700" @click="removeCamera(index)"><Trash2 :size="13" />Xóa</button>
-                                </div>
-                                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                                    <FloatingInput v-model="camera.name" :name="`face_cameras.${index}.name`" label="Tên hiển thị" placeholder-text="Camera lối vào" />
-                                    <FloatingInput v-model="camera.id" :name="`face_cameras.${index}.id`" label="Mã camera" :disabled="index === 0" placeholder-text="camera-2" />
-                                </div>
-                                <div class="grid gap-2 sm:grid-cols-3">
-                                    <FloatingSelect v-model="camera.brand" :name="`face_cameras.${index}.brand`" label="Hãng camera" :options="cameraBrandOptions" :show-placeholder="false" />
-                                    <FloatingInput v-model="camera.host" :name="`face_cameras.${index}.host`" label="IP / tên miền" placeholder-text="192.168.1.50" />
-                                    <FloatingInput v-model.number="camera.channel" :name="`face_cameras.${index}.channel`" type="number" min="1" max="64" label="Kênh" />
-                                </div>
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <button type="button" :disabled="camera.brand === 'custom' || !camera.host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset(camera)">Điền URL theo hãng</button>
-                                    <span class="text-[11px] text-slate-500">URL tự sửa sẽ được giữ nguyên; sub-stream phải là H.264.</span>
-                                </div>
-                                <FloatingInput v-model="camera.snapshot_url" :name="`face_cameras.${index}.snapshot_url`" label="Luồng chính (RTSP main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
-                                <p v-if="form.errors[`face_cameras.${index}.snapshot_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.snapshot_url`] }}</p>
-                                <FloatingInput v-if="isRtspCamera(camera)" v-model="camera.view_rtsp_url" :name="`face_cameras.${index}.view_rtsp_url`" label="Luồng AI và xem trực tiếp (RTSP sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub-stream..." />
-                                <p v-if="form.errors[`face_cameras.${index}.view_rtsp_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.view_rtsp_url`] }}</p>
-                                <div v-if="camera.snapshot_url" class="grid gap-2 sm:grid-cols-3">
-                                    <FloatingSelect v-if="!isRtspCamera(camera)" v-model="camera.auth" :name="`face_cameras.${index}.auth`" label="Đăng nhập" :options="faceCctvAuthOptions" :show-placeholder="false" />
-                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.username" :name="`face_cameras.${index}.username`" label="Tài khoản" autocomplete="off" />
-                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.password" :name="`face_cameras.${index}.password`" type="password" autocomplete="new-password" :label="camera.has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
-                                </div>
-                            </div>
-                        </div>
-                        <DoorCameraSetup v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled && form.face_door_camera_enabled && door_camera" :info="door_camera" />
-                        <div v-if="form.face_recognition_enabled && form.face_visit_tracking_enabled" class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                            <div class="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                    <h3 class="text-xs font-bold text-slate-800">Nhận diện và lưu dữ liệu</h3>
-                                    <p class="mt-0.5 text-xs text-slate-500">Camera cửa dùng YuNet + SFace/OpenVINO cố định để mẫu đăng ký và luồng nền luôn cùng loại vector.</p>
-                                </div>
-                                <span class="rounded-full bg-indigo-100 px-2 py-1 text-[11px] font-semibold text-indigo-700">YuNet + SFace</span>
-                            </div>
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div class="max-w-xs">
-                                    <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Tự xóa lịch sử khách đến sau (ngày)" />
-                                    <p class="mt-1 text-xs text-slate-500">Hết hạn, hệ thống tự xóa toàn bộ lượt đến, ảnh camera và dữ liệu gộp khuôn mặt. Ảnh mẫu đã đăng ký chỉ xóa khi xóa dữ liệu khuôn mặt của khách.</p>
-                                    <p v-if="form.errors.face_visit_retention_days" class="text-xs text-rose-600">{{ form.errors.face_visit_retention_days }}</p>
-                                </div>
-                                <SettingSwitch
-                                    v-model="form.face_auto_learn_enabled"
-                                    title="Tự bổ sung mẫu khuôn mặt đã nhận đúng"
-                                    description="Chỉ lưu thêm mẫu khi khách đã được nhận diện rõ và cách biệt đủ với người giống thứ hai."
-                                />
-                            </div>
-                            <div v-if="form.face_auto_learn_enabled" class="grid gap-3 sm:grid-cols-3">
-                                <FloatingInput v-model.number="form.face_auto_learn_min_percent" name="face_auto_learn_min_percent" type="number" min="60" max="95" label="Độ giống tối thiểu (%)" />
-                                <FloatingInput v-model.number="form.face_auto_learn_margin_percent" name="face_auto_learn_margin_percent" type="number" min="5" max="50" label="Cách biệt tối thiểu (%)" />
-                                <FloatingInput v-model.number="form.face_auto_learn_cooldown_minutes" name="face_auto_learn_cooldown_minutes" type="number" min="10" max="1440" label="Chờ trước khi học lại (phút)" />
-                            </div>
-                        </div>
-                        <p class="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-                            Khuôn mặt là dữ liệu sinh trắc học. Chỉ đăng ký khi khách <strong>đồng ý</strong> và đã được thông báo mục đích.
-                            Hệ thống chỉ lưu dữ liệu đặc trưng, không lưu ảnh. Khi tắt tính năng, POS ngừng nhận diện;
-                            dữ liệu đã đăng ký vẫn được giữ và có thể xóa ở trang Khách hàng.
-                        </p>
-                    </div>
-                </DataPanel>
-                                <DataPanel v-if="activeModal === 'loyalty'">
-                    <template #header>
-                        <label class="relative flex cursor-pointer items-center justify-between gap-3">
-                            <h2 class="text-sm font-bold text-slate-900">Tích điểm khách hàng</h2>
-                            <input v-model="form.customer_points_enabled" type="checkbox" role="switch" aria-label="Tích điểm khách hàng" class="peer sr-only">
-                            <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full bg-slate-300 transition peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"></span>
-                        </label>
-                    </template>
-                    <div v-if="form.customer_points_enabled" class="space-y-3 p-4">
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <FloatingSelect
-                                v-model="form.customer_points_basis"
-                                name="customer_points_basis"
-                                label="Tính theo"
-                                :options="[
-                                    { value: 'revenue', label: 'Doanh thu' },
-                                    { value: 'profit', label: 'Lợi nhuận' },
-                                ]"
-                                :show-placeholder="false"
-                                :error="form.errors.customer_points_basis"
-                            />
-                            <FloatingInput v-model.number="form.customer_points_amount_per_point" name="customer_points_amount_per_point" label="Số tiền cho 1 điểm (₫)" type="number" min="1" format-thousands :error="form.errors.customer_points_amount_per_point" />
-                            <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
-                                <label class="relative flex cursor-pointer items-center justify-between gap-3">
-                                    <span class="text-sm font-semibold text-slate-800">Tích điểm đơn còn nợ</span>
-                                    <input v-model="form.customer_points_debt_enabled" type="checkbox" role="switch" aria-label="Tích điểm đơn còn nợ" class="peer sr-only">
-                                    <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full bg-slate-300 transition peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"></span>
-                                </label>
-                                <div v-if="form.customer_points_debt_enabled" class="grid gap-3 sm:grid-cols-2">
-                                    <FloatingSelect
-                                        v-model="form.customer_points_debt_mode"
-                                        name="customer_points_debt_mode"
-                                        label="Điểm đơn nợ"
-                                        :options="[
-                                            { value: 'same', label: 'Như đơn đã thanh toán' },
-                                            { value: 'half', label: '50% điểm' },
-                                            { value: 'custom', label: 'Tự đặt' },
-                                        ]"
-                                        :show-placeholder="false"
-                                        :error="form.errors.customer_points_debt_mode"
-                                    />
-                                    <FloatingInput
-                                        v-if="form.customer_points_debt_mode === 'custom'"
-                                        v-model.number="form.customer_points_debt_percent"
-                                        name="customer_points_debt_percent"
-                                        label="Tỷ lệ điểm (%)"
-                                        type="number"
-                                        min="1"
-                                        max="100"
-                                        :error="form.errors.customer_points_debt_percent"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </DataPanel>
-                <div v-if="activeModal === 'printing'" class="space-y-4">
-<SettingCollapse title="Thông tin cửa hàng trên hóa đơn" description="Chỉ thông tin có nhập mới xuất hiện trên hóa đơn.">
+
+            <!-- ===== THÔNG TIN & HỆ THỐNG ===== -->
+            <template v-if="activeModal === 'system'">
+                <SettingCollapse title="Thông tin cửa hàng" description="Hiện trên hóa đơn, phiếu sửa chữa và màn hình POS. Chỗ nào để trống sẽ không in.">
                     <div class="grid gap-3 p-4 sm:grid-cols-2">
                         <FloatingInput v-model="form.shop_name" name="shop_name" label="Tên cửa hàng" :error="form.errors.shop_name" />
                         <FloatingInput v-model="form.print_shop_subtitle" name="print_shop_subtitle" label="Ngành hàng / dòng giới thiệu" :error="form.errors.print_shop_subtitle" />
-                        <FloatingInput v-model="form.print_shop_phone" name="print_shop_phone" label="Số điện thoại cửa hàng" :error="form.errors.print_shop_phone" />
-                        <FloatingInput v-model="form.print_shop_address" name="print_shop_address" label="Địa chỉ cửa hàng" :error="form.errors.print_shop_address" />
+                        <FloatingInput v-model="form.print_shop_phone" name="print_shop_phone" label="Số điện thoại" :error="form.errors.print_shop_phone" />
+                        <FloatingInput v-model="form.print_shop_address" name="print_shop_address" label="Địa chỉ" :error="form.errors.print_shop_address" />
                     </div>
                 </SettingCollapse>
-<SettingCollapse title="Mẫu hóa đơn và khổ giấy" description="Áp dụng cho hóa đơn bán hàng và phiếu sửa chữa.">
+                <SettingCollapse title="Hiển thị chung" description="Tiền tệ, ngôn ngữ, múi giờ và định dạng ngày.">
                     <div class="grid gap-3 p-4 sm:grid-cols-2">
+                        <FloatingInput v-model="form.currency_symbol" name="currency_symbol" label="Ký hiệu tiền" :error="form.errors.currency_symbol" />
+                        <FloatingSelect v-model="form.currency_format" name="currency_format" label="Định dạng số tiền" :options="currencyFormatOptions" />
+                        <FloatingSelect v-model="form.app_locale" name="app_locale" label="Ngôn ngữ" :options="localeOptions" />
+                        <FloatingSelect v-model="form.date_format" name="date_format" label="Định dạng ngày" :options="dateFormatOptions" />
+                        <FloatingSelect v-model="form.app_timezone" name="app_timezone" label="Múi giờ" :options="timezoneOptions" class="sm:col-span-2" />
+                        <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600 sm:col-span-2">
+                            Ngôn ngữ chỉ áp dụng cho phiếu in và thông báo (giao diện quản trị chỉ có tiếng Việt). Đổi múi giờ chỉ thay cách hiển thị giờ, không đổi dữ liệu đã lưu.
+                        </p>
+                    </div>
+                </SettingCollapse>
+            </template>
+
+            <!-- ===== IN ẤN ===== -->
+            <template v-if="activeModal === 'printing'">
+                <SettingCollapse title="Hóa đơn và khổ giấy" description="Áp dụng cho hóa đơn bán hàng và phiếu sửa chữa. Thông tin cửa hàng chỉnh ở mục “Thông tin & hệ thống”.">
+                    <div class="grid gap-3 p-4 sm:grid-cols-3">
                         <FloatingSelect v-model="form.print_template" name="print_template" label="Mẫu hóa đơn" :options="printTemplateOptions" :show-placeholder="false" />
                         <FloatingSelect v-model="form.print_paper_size" name="print_paper_size" label="Khổ giấy" :options="printPaperOptions" />
                         <FloatingSelect v-model="form.print_orientation" name="print_orientation" label="Hướng giấy" :options="printOrientationOptions" />
                     </div>
                 </SettingCollapse>
-                </div>
-                <SettingCollapse v-if="activeModal === 'printing'" title="Mẫu in tem sản phẩm" description="Chỉnh khổ tem, nội dung và cỡ chữ; bản xem trước hiển thị đúng kích thước thật." :default-open="false">
+                <SettingCollapse title="Tem sản phẩm" description="Khổ tem, nội dung và cỡ chữ; bản xem trước đúng kích thước thật." :default-open="false">
                     <LabelTemplateEditor v-model="form.label_template" :shop-name="form.shop_name" :errors="form.errors" />
                 </SettingCollapse>
-                <SettingCollapse v-if="activeModal === 'printing'" title="Nội dung hợp đồng mua bán" :default-open="false">
-                    <template #description>Biến: <code>&#123;&#123;date&#125;&#125;</code>, <code>&#123;&#123;delivery_date&#125;&#125;</code>, <code>&#123;&#123;import_code&#125;&#125;</code>, <code>&#123;&#123;buyer_name&#125;&#125;</code>, <code>&#123;&#123;seller_name&#125;&#125;</code>, <code>&#123;&#123;total&#125;&#125;</code>, <code>&#123;&#123;note&#125;&#125;</code>.</template>
+                <SettingCollapse title="Hợp đồng mua bán" description="Nội dung in trên hợp đồng khi nhập hàng từ khách." :default-open="false">
                     <div class="space-y-3 p-4">
                         <FloatingInput v-model="form.purchase_contract_title" name="purchase_contract_title" label="Tiêu đề hợp đồng" :error="form.errors.purchase_contract_title" />
                         <div>
@@ -984,366 +720,176 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                                 <button type="button" class="font-semibold text-indigo-600 hover:text-indigo-800" @click="resetContractDefaults">Dùng mẫu mặc định</button>
                             </div>
                             <p v-if="form.errors.purchase_contract_content" class="mt-1 text-xs text-rose-600">{{ form.errors.purchase_contract_content }}</p>
-                        </div>
-                    </div>
-                </SettingCollapse>
-                <template v-if="activeModal === 'system'">
-                    <div class="space-y-4">
-                        <div class="space-y-4">
-<SettingCollapse title="Thông tin cửa hàng" description="Tên hiển thị trên hóa đơn, màn hình POS và báo cáo.">
-                        <div class="grid gap-4 p-4 sm:grid-cols-2">
-                            <FloatingInput v-model="form.shop_name" name="shop_name" label="Tên cửa hàng" :error="form.errors.shop_name" />
-                        </div>
-                    </SettingCollapse>
-<SettingCollapse title="Tiền tệ" description="Cách hiển thị số tiền trên toàn hệ thống.">
-                        <div class="grid gap-4 p-4 sm:grid-cols-2">
-                            <FloatingInput v-model="form.currency_symbol" name="currency_symbol" label="Ký hiệu tiền" :error="form.errors.currency_symbol" />
-                            <FloatingSelect v-model="form.currency_format" name="currency_format" label="Định dạng tiền" :options="currencyFormatOptions" />
-                        </div>
-                    </SettingCollapse>
-<SettingCollapse title="Ngôn ngữ và thời gian" description="Ảnh hưởng đến cách hiển thị ngày giờ và thông báo.">
-                        <div class="grid gap-4 p-4 sm:grid-cols-2">
-                            <FloatingSelect v-model="form.app_locale" name="app_locale" label="Ngôn ngữ hệ thống" :options="localeOptions" />
-                            <FloatingSelect v-model="form.app_timezone" name="app_timezone" label="Múi giờ hệ thống" :options="timezoneOptions" />
-                            <FloatingSelect v-model="form.date_format" name="date_format" label="Định dạng ngày" :options="dateFormatOptions" />
-                            <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600 sm:col-span-2">
-                                <strong>Ngôn ngữ</strong> chỉ đổi thuộc tính ngôn ngữ của phiếu in và thông báo hệ thống; giao diện quản trị hiện chỉ có tiếng Việt.
-                                <strong>Múi giờ</strong> chỉ thay cách hiển thị giờ, không chuyển đổi dữ liệu đã lưu, nên chỉ đổi khi thật sự cần.
+                            <p class="mt-2 text-xs leading-5 text-slate-500">
+                                Biến dùng được: <code>&#123;&#123;date&#125;&#125;</code>, <code>&#123;&#123;delivery_date&#125;&#125;</code>, <code>&#123;&#123;import_code&#125;&#125;</code>, <code>&#123;&#123;buyer_name&#125;&#125;</code>, <code>&#123;&#123;seller_name&#125;&#125;</code>, <code>&#123;&#123;total&#125;&#125;</code>, <code>&#123;&#123;note&#125;&#125;</code>.
                             </p>
                         </div>
-                    </SettingCollapse>
-                        </div>
-                    </div>
-                </template>
-
-                <template v-if="activeModal === 'inventory'">
-                    <div class="space-y-4">
-                        <div class="space-y-4">
-<SettingCollapse title="Tồn kho" description="Quy tắc bán hàng theo số lượng tồn và cảnh báo hàng sắp hết.">
-                        <div class="grid sm:grid-cols-2">
-                            <div class="border-b border-slate-100 p-4 sm:border-b-0 sm:border-r">
-                                <SettingSwitch
-                                    v-model="form.allow_negative_stock"
-                                    title="Cho phép tồn kho âm"
-                                    description="Cho bán trước rồi nhập bù sau. Phần bán vượt tồn chưa có lô nhập nên chưa tính được giá vốn theo lô."
-                                />
-                            </div>
-                            <div class="space-y-3 p-4">
-                                <SettingSwitch
-                                    v-model="form.inventory_alert_enabled"
-                                    title="Cảnh báo hàng sắp hết"
-                                    description="Áp dụng cho sản phẩm chưa có ngưỡng riêng."
-                                />
-                                <FloatingInput
-                                    v-if="form.inventory_alert_enabled"
-                                    v-model.number="form.inventory_alert_threshold"
-                                    name="inventory_alert_threshold"
-                                    label="Ngưỡng mặc định (số lượng)"
-                                    type="number"
-                                    min="0"
-                                    class="sm:max-w-xs"
-                                    :error="form.errors.inventory_alert_threshold"
-                                />
-                            </div>
-                        </div>
-                    </SettingCollapse>
-<SettingCollapse title="Bán hàng tại quầy (POS)" description="Gợi ý giá nhập và kiểm kê khi bắt đầu ca làm việc.">
-                        <div class="grid sm:grid-cols-2">
-                            <div class="border-b border-slate-100 p-4 sm:border-b-0 sm:border-r">
-                                <SettingSwitch
-                                    v-model="form.pos_cost_price_suggestion_enabled"
-                                    title="Gợi ý giá nhập trên POS"
-                                    description="Nhấn giữ ảnh sản phẩm hoặc dòng IMEI/biến thể để xem giá nhập."
-                                />
-                            </div>
-                            <div class="space-y-3 p-4">
-                                <SettingSwitch
-                                    v-model="form.work_shift_opening_count_enabled"
-                                    title="Kiểm kê đầu ca"
-                                    description="Cho phép nhập bảng kê tiền và hàng khi mở ca."
-                                />
-                                <div v-if="form.work_shift_opening_count_enabled" class="rounded-lg bg-slate-50 p-3">
-                                    <SettingSwitch
-                                        v-model="form.work_shift_auto_open_enabled"
-                                        title="Tự động hiện bảng kiểm kê khi vào POS"
-                                        description="Khi tắt, bảng kiểm kê không tự bật lên; có thể mở ca thủ công từ POS."
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </SettingCollapse>
-<SettingCollapse title="Thuế VAT" description="Mặc định khi nhập hàng và khi bán hàng; có thể đổi lại từng phiếu.">
-                        <div class="grid sm:grid-cols-2">
-                            <div class="space-y-3 border-b border-slate-100 p-4 sm:border-r">
-                                <SettingSwitch
-                                    v-model="form.stock_import_vat_default"
-                                    title="Nhập hàng: mặc định có VAT"
-                                    description="Áp dụng cho mặt hàng mới trong phiếu nhập."
-                                />
-                                <FloatingInput
-                                    v-model.number="form.stock_import_vat_rate"
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    step="0.1"
-                                    name="stock_import_vat_rate"
-                                    label="Thuế suất VAT nhập hàng (%)"
-                                    class="sm:max-w-xs"
-                                    :error="form.errors.stock_import_vat_rate"
-                                />
-                            </div>
-                            <div class="space-y-3 border-b border-slate-100 p-4">
-                                <SettingSwitch
-                                    v-model="form.pos_vat_default_enabled"
-                                    title="Bán hàng: mặc định tính và cộng VAT"
-                                    description="Nhãn VAT theo hàng nhập chỉ để nhận biết, không tự cộng thuế."
-                                />
-                                <FloatingInput
-                                    v-model.number="form.pos_vat_rate"
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    step="0.1"
-                                    name="pos_vat_rate"
-                                    label="Thuế suất VAT bán hàng (%)"
-                                    class="sm:max-w-xs"
-                                    :error="form.errors.pos_vat_rate"
-                                />
-                                <div v-if="form.pos_vat_default_enabled" class="space-y-2 rounded-lg bg-slate-50 p-3">
-                                    <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
-                                        <input v-model="form.pos_vat_default_scope" type="radio" value="all" class="h-4 w-4 border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                                        Tính VAT cho tất cả sản phẩm
-                                    </label>
-                                    <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
-                                        <input v-model="form.pos_vat_default_scope" type="radio" value="vat_products" class="h-4 w-4 border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                                        Chỉ tính VAT cho sản phẩm có nhãn VAT khi nhập hàng
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="grid items-start gap-3 p-4 sm:col-span-2 sm:grid-cols-2">
-                                <SettingSwitch
-                                    v-model="form.pos_vat_used_enabled"
-                                    title="Hàng cũ: cho phép tính VAT"
-                                    description="Mặc định hàng cũ (nhập từ khách) không chịu VAT. Bật để thu ngân được chọn VAT cho hàng cũ trên POS và khi sửa hóa đơn."
-                                />
-                                <div v-if="form.pos_vat_used_enabled" class="rounded-lg bg-slate-50 p-3">
-                                    <SettingSwitch
-                                        v-model="form.pos_vat_used_default"
-                                        title="Hàng cũ: mặc định chọn tính VAT"
-                                        description="Khi tắt, thu ngân phải tự bấm VAT cho từng dòng hàng cũ."
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </SettingCollapse>
-                        </div>
-                    </div>
-                </template>
-
-                <SettingCollapse v-if="activeModal === 'inventory'" title="Đơn vị tính" description="Thêm, sửa, xóa đơn vị dùng cho sản phẩm. Thay đổi ở bảng này được lưu ngay, không cần bấm “Lưu cài đặt”." :default-open="false">
-
-                    <div class="grid items-start gap-4 p-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-                      <div class="space-y-4">
-                        <div
-                            v-if="unitDeleteError"
-                            class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
-                            role="alert"
-                        >
-                            {{ unitDeleteError }}
-                        </div>
-
-                        <div
-                            v-if="unitForm.hasErrors"
-                            class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
-                        >
-                            <div
-                                v-for="message in Object.values(unitForm.errors)"
-                                :key="message"
-                            >
-                                {{ message }}
-                            </div>
-                        </div>
-
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <FloatingInput
-                                v-model="unitForm.name"
-                                name="unit_name"
-                                label="Tên đơn vị"
-                                placeholder="Ví dụ: Thùng"
-                                :error="unitForm.errors.name"
-                            />
-
-                            <FloatingInput
-                                v-model="unitForm.short_name"
-                                name="unit_short_name"
-                                label="Viết tắt"
-                                placeholder="hộp"
-                                :error="unitForm.errors.short_name"
-                            />
-
-                            <ActionButton
-                                class="h-[42px] sm:col-span-2"
-                                :variant="editingUnitId ? 'info' : 'primary'"
-                                :disabled="unitForm.processing"
-                                @click="submitUnit"
-                            >
-                                <Save v-if="editingUnitId" :size="16" />
-                                <Plus v-else :size="16" />
-                                {{ editingUnitId ? 'Cập nhật' : 'Thêm' }}
-                            </ActionButton>
-                        </div>
-
-                        <div
-                            v-if="editingUnitId"
-                            class="flex justify-end"
-                        >
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800"
-                                @click="resetUnitForm"
-                            >
-                                <X :size="14" />
-                                Hủy sửa
-                            </button>
-                        </div>
-
-                        <div class="rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
-                            Ví dụ: Cái, Chiếc, Bộ, Hộp. Đơn vị dùng để hiển thị và quy đổi (ví dụ Thùng → Cái) khi cấu hình sản phẩm và nhập hàng; tồn kho luôn tính theo đơn vị gốc.
-                        </div>
-                      </div>
-                      <div>
-                        <div class="max-h-96 overflow-auto rounded-lg border border-slate-200">
-                            <table class="m-cards app-data-table w-full text-sm">
-                                <thead>
-                                    <tr class="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                                        <th class="px-3 py-2 text-left">
-                                            Đơn vị
-                                        </th>
-                                        <th class="w-28 px-3 py-2 text-left">
-                                            Viết tắt
-                                        </th>
-                                        <th class="w-28 px-3 py-2 text-center">
-                                            Trạng thái
-                                        </th>
-                                        <th class="w-28 px-3 py-2 text-center">
-                                            Thao tác
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-100">
-                                    <tr
-                                        v-for="unit in units"
-                                        :key="unit.id"
-                                        class="hover:bg-slate-50"
-                                    >
-                                        <td class="px-3 py-2 font-semibold text-slate-800">
-                                            {{ unitDisplayName(unit) }}
-                                        </td>
-                                        <td class="px-3 py-2 text-slate-600">
-                                            {{ unit.short_name || '-' }}
-                                        </td>
-                                        <td class="px-3 py-2 text-center">
-                                            <span
-                                                class="rounded-full px-2 py-1 text-xs font-bold"
-                                                :class="unit.is_active
-                                                    ? 'bg-emerald-50 text-emerald-700'
-                                                    : 'bg-slate-100 text-slate-500'"
-                                            >
-                                                {{ unit.is_active ? 'Đang dùng' : 'Tạm tắt' }}
-                                            </span>
-                                        </td>
-                                        <td class="px-3 py-2">
-                                            <div class="flex items-center justify-center gap-1">
-                                                <button
-                                                    type="button"
-                                                    class="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50"
-                                                    title="Sửa"
-                                                    @click="editUnit(unit)"
-                                                >
-                                                    <SquarePen :size="16" />
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    class="rounded-lg p-1.5 text-amber-600 hover:bg-amber-50"
-                                                    title="Bật/tắt"
-                                                    @click="toggleUnitStatus(unit)"
-                                                >
-                                                    <Power :size="16" />
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    class="rounded-lg p-1.5 text-red-600 hover:bg-red-50"
-                                                    title="Xóa"
-                                                    @click="deleteUnit(unit)"
-                                                >
-                                                    <Trash2 :size="16" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-
-                                    <tr v-if="!units.length">
-                                        <td
-                                            colspan="4"
-                                            class="px-3 py-8 text-center text-sm font-medium text-slate-400"
-                                        >
-                                            Chưa có đơn vị tính nào
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                      </div>
-
                     </div>
                 </SettingCollapse>
-            </div>
+            </template>
 
-            <section v-if="activeModal === 'payments'" class="w-full">
-                <div class="space-y-3">
-                    <div class="space-y-2">
-                    <div class="flex items-center justify-between gap-2">
-                        <p class="text-sm font-bold text-slate-800">
-                            Tài khoản nhận tiền
-                            <span class="font-medium text-slate-400">({{ form.bank_accounts.length }}/10)</span>
-                        </p>
-                        <button
-                            v-if="can_update_bank_settings && form.bank_accounts.length < 10"
-                            type="button"
-                            class="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100"
-                            @click="addBankAccount"
-                        >
-                            <Plus :size="14" /> Thêm tài khoản
-                        </button>
+            <!-- ===== KHO & BÁN HÀNG ===== -->
+            <template v-if="activeModal === 'inventory'">
+                <SettingCollapse title="Kho hàng" description="Tồn kho âm và cảnh báo hàng sắp hết.">
+                    <div class="divide-y divide-slate-100">
+                        <SettingBlock>
+                            <SettingSwitch
+                                v-model="form.allow_negative_stock"
+                                title="Cho phép tồn kho âm"
+                                description="Bán trước, nhập bù sau. Phần bán vượt tồn chưa có lô nhập nên chưa tính được giá vốn theo lô."
+                            />
+                        </SettingBlock>
+                        <SettingBlock>
+                            <SettingSwitch
+                                v-model="form.inventory_alert_enabled"
+                                title="Cảnh báo hàng sắp hết"
+                                description="Áp dụng cho sản phẩm chưa đặt ngưỡng riêng."
+                            />
+                            <FloatingInput
+                                v-if="form.inventory_alert_enabled"
+                                v-model.number="form.inventory_alert_threshold"
+                                name="inventory_alert_threshold"
+                                label="Ngưỡng mặc định (số lượng)"
+                                type="number"
+                                min="0"
+                                class="sm:max-w-xs"
+                                :error="form.errors.inventory_alert_threshold"
+                            />
+                        </SettingBlock>
                     </div>
-                    <div v-if="form.bank_accounts.length" class="flex flex-wrap gap-2" role="tablist" aria-label="Tài khoản ngân hàng">
-                        <button
-                            v-for="item in form.bank_accounts"
-                            :key="item.id"
-                            type="button"
-                            role="tab"
-                            :aria-selected="String(item.id) === String(selectedBankAccountId)"
-                            class="max-w-full truncate rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
-                            :class="String(item.id) === String(selectedBankAccountId)
-                                ? 'border-violet-500 bg-violet-50 text-violet-800 ring-2 ring-violet-100'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
-                            @click="selectedBankAccountId = String(item.id)"
-                        >
-                            {{ bankAccountLabel(item) }} · {{ item.bank_account || 'Chưa có số' }}
-                            <span v-if="item.is_default" class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">Mặc định</span>
-                            <span v-if="item.vat_preferred" class="ml-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">VAT</span>
-                        </button>
+                </SettingCollapse>
+
+                <SettingCollapse title="Bán hàng tại quầy (POS)" description="Gợi ý giá nhập và kiểm kê đầu ca.">
+                    <div class="divide-y divide-slate-100">
+                        <SettingBlock>
+                            <SettingSwitch
+                                v-model="form.pos_cost_price_suggestion_enabled"
+                                title="Gợi ý giá nhập trên POS"
+                                description="Nhấn giữ ảnh sản phẩm hoặc dòng IMEI/biến thể để xem giá nhập."
+                            />
+                        </SettingBlock>
+                        <SettingBlock>
+                            <SettingSwitch
+                                v-model="form.work_shift_opening_count_enabled"
+                                title="Kiểm kê đầu ca"
+                                description="Nhập bảng kê tiền và hàng khi mở ca."
+                            />
+                            <div v-if="form.work_shift_opening_count_enabled" class="rounded-lg bg-slate-50 p-3">
+                                <SettingSwitch
+                                    v-model="form.work_shift_auto_open_enabled"
+                                    title="Tự hiện bảng kiểm kê khi vào POS"
+                                    description="Tắt thì mở ca thủ công từ POS."
+                                />
+                            </div>
+                        </SettingBlock>
                     </div>
-                    <div v-else class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                        Chưa có tài khoản nào. Bấm “Thêm tài khoản” để nhập thông tin nhận chuyển khoản và VietQR.
+                </SettingCollapse>
+
+                <SettingCollapse title="Thuế VAT" description="Giá trị mặc định, vẫn đổi lại được cho từng phiếu.">
+                    <div class="divide-y divide-slate-100">
+                        <SettingBlock title="Nhập hàng">
+                            <SettingSwitch
+                                v-model="form.stock_import_vat_default"
+                                title="Mặc định có VAT"
+                                description="Áp dụng cho mặt hàng mới trong phiếu nhập."
+                            />
+                            <FloatingInput
+                                v-model.number="form.stock_import_vat_rate"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                                name="stock_import_vat_rate"
+                                label="Thuế suất (%)"
+                                class="sm:max-w-xs"
+                                :error="form.errors.stock_import_vat_rate"
+                            />
+                        </SettingBlock>
+                        <SettingBlock title="Bán hàng">
+                            <SettingSwitch
+                                v-model="form.pos_vat_default_enabled"
+                                title="Mặc định tính và cộng VAT"
+                                description="Nhãn VAT theo hàng nhập chỉ để nhận biết, không tự cộng thuế."
+                            />
+                            <FloatingInput
+                                v-model.number="form.pos_vat_rate"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                                name="pos_vat_rate"
+                                label="Thuế suất (%)"
+                                class="sm:max-w-xs"
+                                :error="form.errors.pos_vat_rate"
+                            />
+                            <div v-if="form.pos_vat_default_enabled" class="space-y-2 rounded-lg bg-slate-50 p-3">
+                                <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                                    <input v-model="form.pos_vat_default_scope" type="radio" value="all" class="h-4 w-4 border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    Tính VAT cho tất cả sản phẩm
+                                </label>
+                                <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+                                    <input v-model="form.pos_vat_default_scope" type="radio" value="vat_products" class="h-4 w-4 border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    Chỉ tính cho sản phẩm có nhãn VAT khi nhập hàng
+                                </label>
+                            </div>
+                        </SettingBlock>
+                        <SettingBlock title="Hàng cũ (nhập từ khách)">
+                            <SettingSwitch
+                                v-model="form.pos_vat_used_enabled"
+                                title="Cho phép tính VAT"
+                                description="Mặc định hàng cũ không chịu VAT. Bật để thu ngân được chọn VAT trên POS và khi sửa hóa đơn."
+                            />
+                            <div v-if="form.pos_vat_used_enabled" class="rounded-lg bg-slate-50 p-3">
+                                <SettingSwitch
+                                    v-model="form.pos_vat_used_default"
+                                    title="Mặc định chọn tính VAT"
+                                    description="Tắt thì thu ngân tự bấm VAT cho từng dòng hàng cũ."
+                                />
+                            </div>
+                        </SettingBlock>
                     </div>
-                    <div v-if="!banks.length" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                        Chưa tải được danh sách VietQR. Bạn có thể nhập BIN thủ công.
-                    </div>
-                    <div v-for="account in visibleBankAccounts" :key="account.id" class="space-y-3 pt-1">
-                        <div class="space-y-3">
+                </SettingCollapse>
+
+            </template>
+
+            <!-- ===== THANH TOÁN ===== -->
+            <template v-if="activeModal === 'payments'">
+                <SettingCollapse title="Tài khoản nhận tiền" :description="`${form.bank_accounts.length}/10 tài khoản · dùng cho VietQR và tự đối soát`">
+                    <div class="space-y-3 p-4">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div v-if="form.bank_accounts.length" class="flex min-w-0 flex-1 flex-wrap gap-2" role="tablist" aria-label="Tài khoản ngân hàng">
+                                <button
+                                    v-for="item in form.bank_accounts"
+                                    :key="item.id"
+                                    type="button"
+                                    role="tab"
+                                    :aria-selected="String(item.id) === String(selectedBankAccountId)"
+                                    class="max-w-full truncate rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
+                                    :class="String(item.id) === String(selectedBankAccountId)
+                                        ? 'border-violet-500 bg-violet-50 text-violet-800 ring-2 ring-violet-100'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
+                                    @click="selectedBankAccountId = String(item.id)"
+                                >
+                                    {{ bankAccountLabel(item) }} · {{ item.bank_account || 'Chưa có số' }}
+                                    <span v-if="item.is_default" class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">Mặc định</span>
+                                    <span v-if="item.vat_preferred" class="ml-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">VAT</span>
+                                </button>
+                            </div>
+                            <p v-else class="min-w-0 flex-1 text-sm text-slate-500">Chưa có tài khoản nào. Bấm “Thêm tài khoản” để nhập thông tin nhận chuyển khoản.</p>
+                            <button
+                                v-if="can_update_bank_settings && form.bank_accounts.length < 10"
+                                type="button"
+                                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100"
+                                @click="addBankAccount"
+                            >
+                                <Plus :size="14" /> Thêm tài khoản
+                            </button>
+                        </div>
+                        <div v-if="!banks.length" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            Chưa tải được danh sách VietQR. Bạn có thể nhập mã BIN thủ công.
+                        </div>
+                        <p v-if="!can_update_bank_settings" class="text-xs text-slate-500">{{ bankLockedText }}</p>
+                        <div v-for="account in visibleBankAccounts" :key="account.id" class="space-y-3 border-t border-slate-100 pt-3">
                         <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
                             <label class="flex items-center gap-2 text-xs font-semibold text-slate-800" :class="account.is_default || !can_update_bank_settings ? 'cursor-default' : 'cursor-pointer'">
                                 <input
@@ -1463,27 +1009,22 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                                     <span v-if="account.payment_webhook_secret_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu secret.</span>
                                 </div>
                             </div>
-                            <div v-if="account.payment_provider" class="mt-2 rounded-lg bg-white/80 px-2.5 py-2 text-[11px] leading-relaxed text-slate-600">
-                                Webhook URL: <code class="select-all break-all font-semibold text-violet-700">{{ bankWebhookEndpoint }}</code>
-                                <p v-if="account.payment_provider === 'apipay'" class="mt-1">Trong ApiPay, đăng ký URL này tại Cài đặt → Webhooks (URL phải HTTPS và truy cập được từ Internet), rồi nhập secret trả về. QLBH gửi mã hóa đơn hiện tại làm nội dung khi tạo payment request; QR ApiPay trả về sẽ được hiển thị và webhook dùng chính nội dung đó để ghép giao dịch với hóa đơn.</p>
-                                <p v-else class="mt-1">Dán URL này vào cấu hình webhook của dịch vụ. URL cần truy cập được từ Internet; POS gửi mã hóa đơn trong nội dung thanh toán để tự đối soát.</p>
-                            </div>
+                            <details class="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                <summary class="cursor-pointer font-semibold text-slate-700">Hướng dẫn cấu hình webhook</summary>
+                                <p class="mt-2">Webhook URL: <code class="select-all break-all font-semibold text-violet-700">{{ bankWebhookEndpoint }}</code></p>
+                                <p v-if="account.payment_provider === 'apipay'" class="mt-1 leading-relaxed">Đăng ký URL này trong ApiPay → Cài đặt → Webhooks (cần HTTPS, truy cập được từ Internet) rồi nhập secret được trả về. QR của ApiPay sẽ hiển thị trên POS và webhook ghép giao dịch theo mã hóa đơn.</p>
+                                <p v-else class="mt-1 leading-relaxed">Dán URL này vào cấu hình webhook của dịch vụ (cần truy cập được từ Internet). POS gửi mã hóa đơn trong nội dung thanh toán để tự đối soát.</p>
+                            </details>
                             </div>
                         </div>
                         </div>
                     </div>
+                </SettingCollapse>
 
-                    </div>
-
-                    <div class="border-t border-slate-200 pt-4">
-                        <h3 class="text-sm font-bold text-slate-800">Cài đặt chung</h3>
-                        <p class="text-xs text-slate-500">Áp dụng cho mọi tài khoản ngân hàng.</p>
-                    </div>
-
-                    <div class="grid items-start gap-4 lg:grid-cols-2">
-                    <section class="rounded-lg bg-slate-50 p-3">
-                        <p class="mb-1.5 text-sm font-semibold text-slate-700">Kiểu màu mã QR</p>
-                        <p class="mb-3 text-xs text-slate-500">Chọn màu phù hợp với cửa hàng. Nền luôn sáng để mã dễ quét.</p>
+                <SettingCollapse title="Mã QR và âm báo" description="Áp dụng cho mọi tài khoản ngân hàng." :default-open="false">
+                    <div class="divide-y divide-slate-100">
+                        <SettingBlock title="Màu mã QR">
+                            <p class="text-xs text-slate-500">Nền luôn sáng để mã dễ quét.</p>
                         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             <button
                                 v-for="theme in VIET_QR_THEMES"
@@ -1507,8 +1048,8 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             </button>
                         </div>
                         <p v-if="form.errors.bank_qr_theme" class="mt-1 text-xs text-rose-600">{{ form.errors.bank_qr_theme }}</p>
-                    </section>
-                    <section class="rounded-lg bg-slate-50 p-3">
+                        </SettingBlock>
+                        <SettingBlock title="Âm báo khi nhận tiền">
                         <SettingSwitch
                             v-model="form.payment_voice_enabled"
                             :disabled="!can_update_bank_settings"
@@ -1528,11 +1069,155 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                             <p v-if="paymentVoiceTestMessage" class="col-span-2 text-xs text-slate-500">{{ paymentVoiceTestMessage }}</p>
                             <p v-if="paymentVoiceChecked && !paymentVoiceAvailable" class="col-span-2 text-xs text-amber-700">Máy chưa có giọng đọc {{ form.payment_voice_language === 'vi-VN' ? 'Tiếng Việt' : 'English' }}; POS vẫn phát âm báo dạng tiếng bíp.</p>
                         </div>
-                    </section>
+                        </SettingBlock>
                     </div>
+                </SettingCollapse>
+            </template>
 
-                </div>
-            </section>
+            <!-- ===== KHÁCH HÀNG ===== -->
+            <template v-if="activeModal === 'loyalty'">
+                <SettingCollapse title="Tích điểm" description="Cộng điểm cho khách theo giá trị đơn hàng.">
+                    <div class="space-y-4 p-4">
+                        <SettingSwitch v-model="form.customer_points_enabled" title="Bật tích điểm khách hàng" />
+                        <template v-if="form.customer_points_enabled">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <FloatingSelect
+                                    v-model="form.customer_points_basis"
+                                    name="customer_points_basis"
+                                    label="Tính điểm theo"
+                                    :options="[
+                                        { value: 'revenue', label: 'Doanh thu' },
+                                        { value: 'profit', label: 'Lợi nhuận' },
+                                    ]"
+                                    :show-placeholder="false"
+                                    :error="form.errors.customer_points_basis"
+                                />
+                                <FloatingInput v-model.number="form.customer_points_amount_per_point" name="customer_points_amount_per_point" label="Số tiền cho 1 điểm (₫)" type="number" min="1" format-thousands :error="form.errors.customer_points_amount_per_point" />
+                            </div>
+                            <div class="space-y-3 rounded-lg bg-slate-50 p-3">
+                                <SettingSwitch v-model="form.customer_points_debt_enabled" title="Tích điểm cho đơn còn nợ" />
+                                <div v-if="form.customer_points_debt_enabled" class="grid gap-3 sm:grid-cols-2">
+                                    <FloatingSelect
+                                        v-model="form.customer_points_debt_mode"
+                                        name="customer_points_debt_mode"
+                                        label="Điểm của đơn nợ"
+                                        :options="[
+                                            { value: 'same', label: 'Như đơn đã thanh toán' },
+                                            { value: 'half', label: '50% điểm' },
+                                            { value: 'custom', label: 'Tự đặt' },
+                                        ]"
+                                        :show-placeholder="false"
+                                        :error="form.errors.customer_points_debt_mode"
+                                    />
+                                    <FloatingInput
+                                        v-if="form.customer_points_debt_mode === 'custom'"
+                                        v-model.number="form.customer_points_debt_percent"
+                                        name="customer_points_debt_percent"
+                                        label="Tỷ lệ điểm (%)"
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        :error="form.errors.customer_points_debt_percent"
+                                    />
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </SettingCollapse>
+
+                <SettingCollapse title="Nhận diện khuôn mặt" description="Tự nhận ra khách quen khi đến quầy POS." :default-open="false">
+                    <div class="space-y-4 p-4">
+                        <SettingSwitch
+                            v-model="form.face_recognition_enabled"
+                            title="Bật nhận diện khuôn mặt"
+                            description="Cho phép đăng ký khuôn mặt ở trang Khách hàng và gợi ý khách tại POS."
+                        />
+                        <template v-if="form.face_recognition_enabled">
+                            <div class="space-y-3 rounded-lg bg-slate-50 p-3">
+                                <SettingSwitch
+                                    v-model="form.face_notify_modal_enabled"
+                                    title="Hộp thông báo chi tiết khi nhận ra khách"
+                                    description="Hiện tên, SĐT, CCCD, công nợ để nhân viên xác nhận. Tắt thì chỉ hỏi ngay trong ô khách hàng."
+                                />
+                                <SettingSwitch
+                                    v-model="form.face_visit_tracking_enabled"
+                                    title="Ghi nhận lượt khách ra vào"
+                                    description="Lưu mọi người xuất hiện trước camera (cả khách lạ) để thống kê ở trang Lượt khách. Chỉ bật khi cửa hàng đã có biển báo dùng camera."
+                                />
+                                <SettingSwitch
+                                    v-if="form.face_visit_tracking_enabled"
+                                    v-model="form.face_door_camera_enabled"
+                                    title="Camera cửa chạy nền (Camera AI)"
+                                    description="AI nhận diện liên tục kể cả khi không mở POS; POS hiện video trực tiếp và danh sách khách đang ở cửa."
+                                />
+                            </div>
+
+                            <SettingCollapse title="Danh sách camera" :description="`${form.face_cameras.length}/8 camera · mỗi camera cần luồng chính và sub-stream H.264`">
+                                <div class="space-y-3 p-3">
+                                    <div class="flex justify-end">
+                                        <button type="button" :disabled="form.face_cameras.length >= 8" class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50" @click="addCamera"><Plus :size="14" />Thêm camera</button>
+                                    </div>
+                            <div v-for="(camera, index) in form.face_cameras" :key="camera.id" class="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="min-w-0 flex-1 text-xs font-bold text-slate-800">{{ index === 0 ? 'Camera cửa mặc định' : `Camera bổ sung ${index}` }}</span>
+                                    <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600"><input v-model="camera.enabled" type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Hoạt động</label>
+                                    <button v-if="camera.id !== 'door-1'" type="button" class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700" @click="removeCamera(index)"><Trash2 :size="13" />Xóa</button>
+                                </div>
+                                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                                    <FloatingInput v-model="camera.name" :name="`face_cameras.${index}.name`" label="Tên hiển thị" placeholder-text="Camera lối vào" />
+                                    <FloatingInput v-model="camera.id" :name="`face_cameras.${index}.id`" label="Mã camera" :disabled="index === 0" placeholder-text="camera-2" />
+                                </div>
+                                <div class="grid gap-2 sm:grid-cols-3">
+                                    <FloatingSelect v-model="camera.brand" :name="`face_cameras.${index}.brand`" label="Hãng camera" :options="cameraBrandOptions" :show-placeholder="false" />
+                                    <FloatingInput v-model="camera.host" :name="`face_cameras.${index}.host`" label="IP / tên miền" placeholder-text="192.168.1.50" />
+                                    <FloatingInput v-model.number="camera.channel" :name="`face_cameras.${index}.channel`" type="number" min="1" max="64" label="Kênh" />
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button type="button" :disabled="camera.brand === 'custom' || !camera.host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset(camera)">Điền URL theo hãng</button>
+                                    <span class="text-[11px] text-slate-500">URL tự sửa sẽ được giữ nguyên; sub-stream phải là H.264.</span>
+                                </div>
+                                <FloatingInput v-model="camera.snapshot_url" :name="`face_cameras.${index}.snapshot_url`" label="Luồng chính (RTSP main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
+                                <p v-if="form.errors[`face_cameras.${index}.snapshot_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.snapshot_url`] }}</p>
+                                <FloatingInput v-if="isRtspCamera(camera)" v-model="camera.view_rtsp_url" :name="`face_cameras.${index}.view_rtsp_url`" label="Luồng AI và xem trực tiếp (RTSP sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub-stream..." />
+                                <p v-if="form.errors[`face_cameras.${index}.view_rtsp_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.view_rtsp_url`] }}</p>
+                                <div v-if="camera.snapshot_url" class="grid gap-2 sm:grid-cols-3">
+                                    <FloatingSelect v-if="!isRtspCamera(camera)" v-model="camera.auth" :name="`face_cameras.${index}.auth`" label="Đăng nhập" :options="faceCctvAuthOptions" :show-placeholder="false" />
+                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.username" :name="`face_cameras.${index}.username`" label="Tài khoản" autocomplete="off" />
+                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.password" :name="`face_cameras.${index}.password`" type="password" autocomplete="new-password" :label="camera.has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
+                                </div>
+                            </div>
+                                </div>
+                            </SettingCollapse>
+
+                            <DoorCameraSetup v-if="form.face_visit_tracking_enabled && form.face_door_camera_enabled && door_camera" :info="door_camera" />
+
+                            <SettingCollapse v-if="form.face_visit_tracking_enabled" title="Lưu trữ và tự học" description="Thời gian giữ lịch sử khách và cách bổ sung mẫu khuôn mặt." :default-open="false">
+                                <div class="space-y-4 p-4">
+                                    <div class="max-w-xs">
+                                        <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Tự xóa lịch sử khách sau (ngày)" />
+                                        <p class="mt-1 text-xs text-slate-500">Hết hạn sẽ xóa lượt đến, ảnh camera và dữ liệu gộp. Ảnh mẫu đã đăng ký chỉ xóa khi xóa dữ liệu khuôn mặt của khách.</p>
+                                        <p v-if="form.errors.face_visit_retention_days" class="text-xs text-rose-600">{{ form.errors.face_visit_retention_days }}</p>
+                                    </div>
+                                    <SettingSwitch
+                                        v-model="form.face_auto_learn_enabled"
+                                        title="Tự bổ sung mẫu khuôn mặt"
+                                        description="Chỉ lưu thêm khi khách được nhận rõ và cách biệt đủ với người giống thứ hai."
+                                    />
+                                    <div v-if="form.face_auto_learn_enabled" class="grid gap-3 sm:grid-cols-3">
+                                        <FloatingInput v-model.number="form.face_auto_learn_min_percent" name="face_auto_learn_min_percent" type="number" min="60" max="95" label="Độ giống tối thiểu (%)" />
+                                        <FloatingInput v-model.number="form.face_auto_learn_margin_percent" name="face_auto_learn_margin_percent" type="number" min="5" max="50" label="Cách biệt tối thiểu (%)" />
+                                        <FloatingInput v-model.number="form.face_auto_learn_cooldown_minutes" name="face_auto_learn_cooldown_minutes" type="number" min="10" max="1440" label="Chờ trước khi học lại (phút)" />
+                                    </div>
+                                    <p class="text-[11px] text-slate-500">Engine cố định: YuNet + SFace/OpenVINO, để mẫu đăng ký và luồng nền luôn cùng loại vector.</p>
+                                </div>
+                            </SettingCollapse>
+                        </template>
+                        <p class="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                            Khuôn mặt là dữ liệu sinh trắc học: chỉ đăng ký khi khách <strong>đồng ý</strong> và biết mục đích. Hệ thống chỉ lưu dữ liệu đặc trưng, không lưu ảnh. Tắt tính năng thì POS ngừng nhận diện; dữ liệu đã đăng ký vẫn giữ và xóa được ở trang Khách hàng.
+                        </p>
+                    </div>
+                </SettingCollapse>
+            </template>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
@@ -1546,11 +1231,18 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
         </BaseModal>
 
         <BaseModal v-if="activeModal === 'backups' && can_manage_backups" title="Sao lưu và khôi phục" size="xl" body-class="bg-slate-50 p-4 sm:p-5" @close="closeModal">
-            <BackupsIndex hide-header :backups="backups" :cloud_connections="cloud_connections" :cloud_oauth="cloud_oauth" :schedule="schedule" :restore_preview="restore_preview" />
+            <BackupsIndex hide-header :backups="backups" :cloud_connections="cloud_connections" :cloud_oauth="cloud_oauth" :schedule="schedule" :restore_preview="restore_preview" @manage-cloud="openModal('cloud')" />
+        </BaseModal>
+        <BaseModal v-if="activeModal === 'cloud' && can_manage_backups" title="Kho lưu trữ đám mây" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">
+            <CloudStorageSettings :connections="cloud_connections" :oauth="cloud_oauth" />
         </BaseModal>
         <BaseModal v-if="activeModal === 'cleanup' && can_edit_settings" title="Dọn dẹp hệ thống" size="xl" body-class="bg-slate-50 p-4 sm:p-5" @close="closeModal">
             <div class="space-y-4">
-                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Khu vực backup được bảo vệ:</strong> chức năng này không quét hoặc xóa file sao lưu. Chỉ ảnh sản phẩm, khách hàng, sửa chữa, avatar và ảnh IMEI không còn được dữ liệu sử dụng mới xuất hiện trong danh sách.</div>
+                <section class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-900">File thừa</h2>
+                        <p class="mt-0.5 text-xs text-slate-500">Ảnh sản phẩm, khách hàng, sửa chữa, avatar, IMEI không còn được dữ liệu dùng. File sao lưu không bị quét hay xóa.</p>
+                    </div>
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div v-if="cleanupResult" class="text-sm text-slate-700">Tìm thấy <strong>{{ cleanupResult.count }}</strong> file · {{ formatBytes(cleanupResult.bytes) }} có thể giải phóng</div>
                     <div v-else class="text-sm text-slate-500">{{ cleanupLoading ? 'Đang quét...' : 'Chưa quét file.' }}</div>
@@ -1568,13 +1260,14 @@ watch(() => page.url, () => nextTick(openUnitDetailFromGlobalSearch), { immediat
                     </div>
                 </div>
                 <div v-else-if="cleanupResult && !cleanupLoading" class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Không tìm thấy file mồ côi trong các thư mục được quét.</div>
+                </section>
                 <section v-if="can_manage_backups" class="rounded-xl border border-red-200 bg-red-50/50 p-4">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex items-start gap-3">
                             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700"><Trash2 :size="19" /></span>
                             <div>
                                 <h2 class="text-sm font-bold text-red-900">Xóa dữ liệu nghiệp vụ</h2>
-                                <p class="mt-1 max-w-3xl text-xs leading-5 text-red-800">Hệ thống tạo bản sao lưu cứu hộ trước, sau đó xóa dữ liệu bán hàng, kho, khách hàng, sửa chữa, chi phí và tệp tải lên. Tài khoản, phân quyền, cấu hình và bản sao lưu được giữ lại.</p>
+                                <p class="mt-1 max-w-3xl text-xs leading-5 text-red-800">Tự sao lưu cứu hộ trước, rồi xóa dữ liệu bán hàng, kho, khách hàng, sửa chữa, chi phí và tệp tải lên. Tài khoản, phân quyền, cấu hình và bản sao lưu được giữ lại.</p>
                             </div>
                         </div>
                         <ActionButton variant="danger" :disabled="clearDataForm.processing" @click="clearDataPhrase = ''; showClearDataDialog = true"><Trash2 :size="15" /> Xóa dữ liệu nghiệp vụ</ActionButton>

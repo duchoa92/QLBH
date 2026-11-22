@@ -36,7 +36,7 @@ class RecordDetailController extends Controller
             'repair' => 'repairs.view',
             'category' => 'categories.view',
             'brand' => 'brands.view',
-            'unit' => 'settings.view',
+            'unit' => 'units.manage',
             'user' => 'users.view',
             default => abort(404),
         };

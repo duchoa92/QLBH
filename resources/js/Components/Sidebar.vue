@@ -141,9 +141,9 @@ const menuGroups = [
             {
                 label: 'Danh mục & Thương hiệu',
                 icon: FolderTree,
-                href: can('categories.view') ? '/categories' : '/brands',
-                paths: ['/categories', '/brands'],
-                permissions: ['categories.view', 'brands.view'],
+                href: can('categories.view') ? '/categories' : can('brands.view') ? '/brands' : '/units',
+                paths: ['/categories', '/brands', '/units'],
+                permissions: ['categories.view', 'brands.view', 'units.manage'],
             },
             {
                 label: 'Nhà cung cấp',

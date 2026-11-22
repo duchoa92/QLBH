@@ -5,9 +5,35 @@ namespace App\Http\Controllers;
 use App\Models\Unit;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class UnitController extends Controller
 {
+    public function index(Request $request)
+    {
+        $perPage = in_array((int) $request->query('per_page', 10), [10, 20, 50, 100], true)
+            ? (int) $request->query('per_page', 10) : 10;
+
+        $units = Unit::query()
+            ->select('id', 'name', 'short_name', 'is_active')
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $keyword = '%'.$request->query('search').'%';
+                $q->where(fn ($w) => $w->where('name', 'like', $keyword)->orWhere('short_name', 'like', $keyword));
+            })
+            ->when(in_array($request->query('sort_by'), ['id', 'name', 'short_name', 'is_active'], true), function ($q) use ($request) {
+                $q->orderBy($request->query('sort_by'), $request->query('sort_order') === 'desc' ? 'desc' : 'asc');
+            }, function ($q) {
+                $q->orderByDesc('is_active')->orderBy('name');
+            })
+            ->paginate($perPage)
+            ->withQueryString();
+
+        return Inertia::render('Units/Index', [
+            'units' => $units,
+            'filters' => [...$request->only('search', 'sort_by', 'sort_order', 'per_page'), 'per_page' => $perPage],
+        ]);
+    }
+
     public function store(Request $request)
     {
         $unit = Unit::create($this->normalizedData($request));

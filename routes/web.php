@@ -104,6 +104,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/backups/bulk', [BackupController::class, 'destroyMany'])->middleware('permission:backups.manage')->name('backups.bulk-destroy');
     Route::delete('/backups/{backup}', [BackupController::class, 'destroy'])->middleware('permission:backups.manage')->name('backups.destroy');
     Route::put('/backups/schedule', [BackupController::class, 'updateSchedule'])->middleware('permission:backups.manage')->name('backups.schedule');
+    Route::get('/units', [UnitController::class, 'index'])->middleware('permission:units.manage')->name('units.index');
     Route::post('/units', [UnitController::class, 'store'])->middleware('permission:units.manage')->name('units.store');
     Route::put('/units/{unit}', [UnitController::class, 'update'])->middleware('permission:units.manage')->name('units.update');
     Route::patch('/units/{unit}/toggle-status', [UnitController::class, 'toggleStatus'])->middleware('permission:units.manage')->name('units.toggleStatus');

@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\Setting;
-use App\Models\Unit;
 use App\Services\CloudBackupStorage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
@@ -126,11 +125,6 @@ class SettingController extends Controller
             'can_manage_inventory_settings' => $user?->can('units.manage') ?? false,
             'can_manage_backups' => $canManageBackups,
             'active_section' => $request->query('section'),
-            'units' => Unit::query()
-                ->select('id', 'name', 'short_name', 'is_active')
-                ->orderByDesc('is_active')
-                ->orderBy('name')
-                ->get(),
         ], $canManageBackups ? $backupController->pageData($cloudStorage) : [
             'backups' => [], 'cloud_connections' => [], 'cloud_oauth' => [],
             'restore_preview' => null,

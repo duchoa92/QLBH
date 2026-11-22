@@ -151,7 +151,7 @@ class GlobalSearchController extends Controller
                 Unit::query(), $tokens, ['name', 'short_name'], [], 4,
                 fn (Unit $u) => [$u->name, $u->short_name],
                 fn (Unit $u) => $this->result('Đơn vị tính', 'unit', $u->id, $u->name, $u->short_name,
-                    route('settings.index', ['open_unit' => $u->id], false)),
+                    route('units.index', ['open_unit' => $u->id], false)),
             ));
         }
 
