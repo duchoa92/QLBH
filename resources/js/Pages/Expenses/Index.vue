@@ -59,6 +59,7 @@ watch(() => props.recurringExpenses, openScheduleReminder)
 const list = useLiveList({
     props,
     dataKey: 'expenses',
+    channels: ['expenses'],
     extraKeys: ['summary'],
     params: () => ({ month: month.value, search: search.value.trim(), category: category.value }),
 })

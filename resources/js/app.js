@@ -11,6 +11,7 @@ import clickOutside from '@/Directives/clickOutside'
 import ModalRoot from '@/Components/ModalRoot.vue'
 import { formatMoney, formatCurrency, formatDate, formatDateTime, getCurrencySymbol, setFormatSettings } from '@/utils/format'
 import { notifyReferenceDataChanged } from '@/Stores/referenceData'
+import { startLiveSync } from '@/Services/liveSync'
 import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
 import { installInsecureNotice, syncInsecureNotice } from '@/utils/insecureNotice'
 import { installMobileTables } from '@/utils/mobileTables'
@@ -317,11 +318,14 @@ createInertiaApp({
             printStyle.textContent = `@media print { :root { --configured-receipt-width: ${receiptWidth}; } @page { size: ${pageSize}; margin: ${pageMargin}; } .receipt-container { width: var(--configured-receipt-width) !important; } }`
         }
         applyPageSettings(props.initialPage)
+        // Tự cập nhật dữ liệu các trang khi có thay đổi (xem Services/liveSync.js).
+        startLiveSync(props.initialPage)
         resolvedDocumentTitle = pageTitleFor(props.initialPage)
         document.title = resolvedDocumentTitle
         router.on('navigate', (event) => {
             const currentPage = event.detail.page
             applyPageSettings(currentPage)
+            startLiveSync(currentPage)
             syncInsecureNotice()
             resolvedDocumentTitle = pageTitleFor(currentPage)
             document.title = resolvedDocumentTitle

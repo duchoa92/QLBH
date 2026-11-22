@@ -26,6 +26,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
@@ -336,6 +337,17 @@ watch(() => salesData.value?.data, (rows) => {
 
     const fresh = rows?.find(sale => sale.id === currentId) || (props.selectedSale?.id === currentId ? props.selectedSale : null)
     if (fresh) detailSale.value = fresh
+})
+
+// Tự cập nhật danh sách + thống kê khi hóa đơn/khách hàng/thanh toán đổi (do bất kỳ ai), giữ bộ lọc và trang đang xem.
+useAutoRefresh({
+    channels: ['sales', 'customers', 'payments'],
+    keys: ['sales', 'stats'],
+    apply: (next) => {
+        if ('sales' in next) salesData.value = next.sales
+        if ('stats' in next) statsData.value = next.stats
+    },
+    enabled: () => !loadingSales.value && !searchTimeout,
 })
 
 // Lý do hủy mẫu

@@ -7,7 +7,6 @@ Claude
 
 Index · VUE
 <script setup>
-import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import { canPrintLabels } from '@/utils/printLabels'
@@ -69,6 +68,7 @@ const isEditingSearch = ref(false)
 const list = useLiveList({
     props,
     dataKey: 'products',
+    channels: ['products', 'categories', 'brands', 'units', 'suppliers'],
     params: () => ({
         search: search.value.trim(),
         category_id: category_id.value,
@@ -395,8 +395,6 @@ const openImeiList = (row) => {
 }
  
 
-// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
-useSilentRefresh(['products'])
 </script>
  
 <template>

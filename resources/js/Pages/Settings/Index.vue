@@ -1,5 +1,6 @@
 <script setup>
 import { useSilentRefresh } from '@/Composables/useSilentRefresh'
+import { onLiveChange } from '@/Services/liveSync'
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { router, useForm, usePage } from '@inertiajs/vue3'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -205,6 +206,10 @@ const { refresh: refreshSettingsSilently } = useSilentRefresh({
         selectedBankAccountId.value = String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || '')
     },
 })
+
+// Cài đặt đổi ở máy khác: nạp lại ngầm (useSilentRefresh tự bỏ qua nếu form đang chỉnh dở).
+const offSettingsLive = onLiveChange(['settings'], () => refreshSettingsSilently(true))
+onBeforeUnmount(() => offSettingsLive())
 
 const openModal = (section) => {
     applySection(section)

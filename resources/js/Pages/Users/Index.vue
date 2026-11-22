@@ -1,5 +1,4 @@
 <script setup>
-import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Head, router, usePage } from '@inertiajs/vue3'
 import { Plus, ShieldCheck, SquarePen, Trash2 } from 'lucide-vue-next'
@@ -51,7 +50,7 @@ const columns = [
 ]
 
 // Tìm kiếm/sắp xếp bằng AJAX, không tải lại trang; kết quả được bôi vàng.
-const list = useLiveList({ props, dataKey: 'users', params: () => ({ search: searchValue.value.trim(), role: roleFilter.value }) })
+const list = useLiveList({ props, dataKey: 'users', channels: ['users'], params: () => ({ search: searchValue.value.trim(), role: roleFilter.value }) })
 const { data: usersData, filters: filtersData, loading } = list
 watch(searchValue, () => list.schedule())
 watch(roleFilter, () => list.request())
@@ -129,8 +128,6 @@ const destroy = (user) => {
 }
 
 
-// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
-useSilentRefresh(['users', 'roles', 'permissions', 'can_assign_super_admin', 'can_manage_roles', 'can_create_users', 'can_edit_users', 'can_delete_users'])
 </script>
 
 <template>

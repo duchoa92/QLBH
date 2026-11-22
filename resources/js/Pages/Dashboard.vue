@@ -1,4 +1,6 @@
 <script setup>
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
+import { onLiveChange } from '@/Services/liveSync'
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -205,10 +207,12 @@ const activeChart = computed(() => {
 })
 
 let chartRequest = 0
-const loadChartRange = async ({ from, to }) => {
+const loadChartRange = async ({ from, to }, { silent = false } = {}) => {
     const id = ++chartRequest
-    chartLoading.value = true
-    chartError.value = ''
+    if (!silent) {
+        chartLoading.value = true
+        chartError.value = ''
+    }
     try {
         const { data } = await axios.get(route('dashboard.chart'), { params: { from, to } })
         if (id !== chartRequest) return
@@ -217,12 +221,31 @@ const loadChartRange = async ({ from, to }) => {
         chartRange.from = data.from
         chartRange.to = data.to
     } catch (error) {
-        if (id !== chartRequest) return
+        if (id !== chartRequest || silent) return
         chartError.value = error?.response?.data?.errors?.to?.[0] || error?.response?.data?.message || 'Không tải được biểu đồ cho khoảng ngày này.'
     } finally {
-        if (id === chartRequest) chartLoading.value = false
+        if (id === chartRequest && !silent) chartLoading.value = false
     }
 }
+
+// Khoảng ngày tùy chỉnh được nạp riêng nên không đi theo props: tự nạp lại ngầm khi doanh thu thay đổi.
+// 7 ngày / tháng này đã được useAutoRefresh bên dưới cập nhật qua props.
+let chartLiveTimer = null
+let offChartLive = null
+const refreshCustomChart = () => {
+    chartLiveTimer = null
+    if (document.hidden || chartLoading.value) return
+    const key = rangeKey(chartRange)
+    if (!chartRange.from || !chartRange.to || key === weekKey.value || key === monthKey.value) return
+    loadChartRange({ from: chartRange.from, to: chartRange.to }, { silent: true })
+}
+onMounted(() => {
+    offChartLive = onLiveChange(['sales', 'repairs'], () => {
+        clearTimeout(chartLiveTimer)
+        chartLiveTimer = setTimeout(refreshCustomChart, 800)
+    })
+})
+onBeforeUnmount(() => { offChartLive?.(); clearTimeout(chartLiveTimer) })
 
 const onChartRangeChange = ({ from, to }) => {
     if (!from || !to) return
@@ -342,6 +365,9 @@ const doughnutChartOptions = {
     },
     cutout: '70%'
 }
+
+// Tự cập nhật khi dữ liệu đổi (do bất kỳ ai), giữ cuộn và trạng thái.
+useAutoRefresh({ channels: ['sales', 'repairs', 'expenses', 'debts', 'payments', 'customers'], keys: ['stats', 'topDebtors', 'recentOrders', 'revenueChart', 'revenueBreakdown', 'expenseReminders', 'todos'] })
 </script>
 
 <template>

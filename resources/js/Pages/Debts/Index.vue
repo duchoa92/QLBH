@@ -51,6 +51,7 @@ const expandedId = ref(null)
 const list = useLiveList({
     props,
     dataKey: 'rows',
+    channels: ['debts', 'customers', 'suppliers', 'sales', 'stock_imports'],
     extraKeys: ['orders'],
     params: () => ({ search: search.value.trim(), level: level.value }),
 })

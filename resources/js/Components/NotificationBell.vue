@@ -5,6 +5,7 @@ import axios from 'axios'
 import { toast } from 'vue-sonner'
 import { Bell, Trash2, CheckCheck, ExternalLink, AlertTriangle, Package, FileText, Wrench, SlidersHorizontal } from 'lucide-vue-next'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import { onLiveChange } from '@/Services/liveSync'
 
 const isOpen = ref(false)
 const filterMenuOpen = ref(false)
@@ -132,12 +133,15 @@ const handleClickOutside = (e) => {
     }
 }
 
+let offLive = null
 onMounted(() => {
     loadNotifications()
+    offLive = onLiveChange(['notifications'], refresh)
     refreshTimer = window.setInterval(refresh, 60000)
     document.addEventListener('mousedown', handleClickOutside)
 })
 onBeforeUnmount(() => {
+    offLive?.()
     window.clearInterval(refreshTimer)
     document.removeEventListener('mousedown', handleClickOutside)
 })

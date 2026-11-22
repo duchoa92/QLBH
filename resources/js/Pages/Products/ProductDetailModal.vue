@@ -1,6 +1,7 @@
 <script setup>
 import { X as ClearIcon } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
+import { useLiveReload } from '@/Composables/useLiveReload'
 import {
     Barcode, Check, ChevronRight, CircleCheck, Clock, Copy, Eye, EyeOff,
     Info, Layers, LayoutGrid, Package, SquarePen, Printer, Search, Smartphone,
@@ -33,18 +34,23 @@ const imeiFilterStatus = ref('all')
 const variantFilterId = ref(null) // lọc IMEI theo biến thể (null = tất cả)
 const imageFailed = ref(false)
 
-onMounted(async () => {
+const loadProduct = async ({ silent = false } = {}) => {
     try {
         const { data } = await window.axios.get(route('products.show', props.productId), {
-            headers: { Accept: 'application/json' },
+            headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
         })
         product.value = data.product
+        error.value = ''
     } catch {
-        error.value = 'Không tải được thông tin sản phẩm.'
+        if (!silent) error.value = 'Không tải được thông tin sản phẩm.'
     } finally {
-        loading.value = false
+        if (!silent) loading.value = false
     }
-})
+}
+
+onMounted(() => loadProduct())
+// Kho/giá/IMEI đổi (ai sửa cũng được): tải lại ngầm để modal luôn mới.
+useLiveReload(['products', 'sales', 'stock_imports'], () => loadProduct({ silent: true }))
 
 /* ================= PRODUCT TYPE ================= */
 const hasImei = computed(() => Boolean(product.value?.manage_stock_by_serial) || product.value?.product_type === 'imei')

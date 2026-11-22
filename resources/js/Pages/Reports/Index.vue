@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head, router } from '@inertiajs/vue3'
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { onLiveChange } from '@/Services/liveSync'
 import axios from 'axios'
 import { formatMoney, formatDate } from '@/utils/format'
 import SimpleBarChart from '@/Components/Charts/SimpleBarChart.vue'
@@ -35,6 +36,7 @@ const paymentOptions = withAll('Mọi thanh toán', [
     { value: 'bank', label: 'Chuyển khoản' },
     { value: 'card', label: 'Thẻ' },
     { value: 'mixed', label: 'Kết hợp' },
+    { value: 'debt', label: 'Nợ' },
 ])
 const sourceOptions = withAll('Tất cả nguồn thu', [
     { value: 'sales', label: 'Bán hàng' },
@@ -73,6 +75,8 @@ const readActiveTab = () => {
 }
 const activeTab = ref(readActiveTab())
 const loading = ref(false)
+// true khi làm mới ngầm: không bật vòng quay tải, không đổi bộ lọc/trang đang xem.
+let silentLoad = false
 
 const selectTab = (tab) => {
     if (!validTabKeys.includes(tab) || activeTab.value === tab) return
@@ -119,7 +123,7 @@ const revenue = reactive({
 const revenueFilters = reactive({ source: '', payment_method: '', user_id: '' })
 
 const loadRevenue = async () => {
-    loading.value = true
+    if (!silentLoad) loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.revenue'), {
@@ -148,6 +152,7 @@ const revenueChartSeries = computed(() =>
 )
 
 const paymentMethodLabel = (method) => ({
+    debt: 'Nợ',
     cash: 'Tiền mặt',
     card: 'Thẻ',
     transfer: 'Chuyển khoản',
@@ -173,7 +178,7 @@ const profit = reactive({
 const profitFilters = reactive({ search: '', category_id: '', user_id: '', source: '' })
 
 const loadProfit = async () => {
-    loading.value = true
+    if (!silentLoad) loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.profit'), {
@@ -226,7 +231,7 @@ const bestSellerLimit = ref(10)
 const bestSellerFilters = reactive({ search: '', category_id: '', brand_id: '' })
 
 const loadBestSellers = async () => {
-    loading.value = true
+    if (!silentLoad) loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.bestSellers'), {
@@ -267,7 +272,7 @@ const inventoryFilters = reactive({
 })
 
 const loadInventory = async (page = 1) => {
-    loading.value = true
+    if (!silentLoad) loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.inventory'), {
@@ -305,7 +310,7 @@ const debtFilters = reactive({
 })
 
 const loadDebts = async (page = 1) => {
-    loading.value = true
+    if (!silentLoad) loading.value = true
 
     try {
         const { data } = await axios.get(route('reports.debts'), {
@@ -422,8 +427,52 @@ watch(() => debtFilters.search, () => {
     }, 350)
 })
 
+// Tự làm mới số liệu của tab đang xem khi dữ liệu liên quan đổi (do bất kỳ ai), giữ nguyên bộ lọc và trang đang xem.
+const LIVE_CHANNELS = ['sales', 'repairs', 'products', 'stock_imports', 'debts', 'customers', 'suppliers']
+let liveTimer = null
+let liveDirty = false
+let offLive = null
+
+const refreshActiveTabSilently = () => {
+    liveTimer = null
+    if (document.hidden || loading.value) {
+        // Đang bận: thử lại khi rảnh (tab ẩn thì đợi visibilitychange).
+        liveDirty = true
+        if (!document.hidden) liveTimer = setTimeout(refreshActiveTabSilently, 1500)
+        return
+    }
+    liveDirty = false
+    silentLoad = true
+    try {
+        let task
+        if (activeTab.value === 'revenue') task = loadRevenue()
+        else if (activeTab.value === 'profit') task = loadProfit()
+        else if (activeTab.value === 'best-sellers') task = loadBestSellers()
+        else if (activeTab.value === 'inventory') task = loadInventory(inventory.products?.current_page || 1)
+        else if (activeTab.value === 'debts') task = loadDebts(debts.items?.current_page || 1)
+        task?.catch?.(() => {})
+    } finally {
+        silentLoad = false
+    }
+}
+const onLiveDataChanged = () => {
+    liveDirty = true
+    clearTimeout(liveTimer)
+    liveTimer = setTimeout(refreshActiveTabSilently, 500)
+}
+const onReportVisible = () => {
+    if (!document.hidden && liveDirty) { clearTimeout(liveTimer); liveTimer = setTimeout(refreshActiveTabSilently, 200) }
+}
+
 onMounted(() => {
     loadCurrentTab()
+    offLive = onLiveChange(LIVE_CHANNELS, onLiveDataChanged)
+    document.addEventListener('visibilitychange', onReportVisible)
+})
+onBeforeUnmount(() => {
+    offLive?.()
+    clearTimeout(liveTimer)
+    document.removeEventListener('visibilitychange', onReportVisible)
 })
 </script>
 

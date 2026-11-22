@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\ReferenceDataController;
+use App\Http\Controllers\Api\DataVersionController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\AdministrativeUnitController;
@@ -36,6 +37,8 @@ Route::middleware(['web', 'auth'])->group(function ()
     Route::get('/vietqr/apps/{platform}', fn (SettingController $controller, string $platform) => response()->json($controller->vietQrApps($platform)))
         ->middleware('permission:stock_imports.create');
     Route::get('/global-search', GlobalSearchController::class);
+    // Số phiên bản dữ liệu theo nhóm: các trang hỏi định kỳ để tự làm mới khi có thay đổi (rất nhẹ).
+    Route::get('/data-versions', [DataVersionController::class, 'index']);
     Route::get('/administrative-units/provinces', [AdministrativeUnitController::class, 'provinces'])
         ->middleware('permission:customers.create|customers.edit|pos.access|stock_imports.create');
     Route::get('/administrative-units/provinces/{provinceCode}/wards', [AdministrativeUnitController::class, 'wards'])

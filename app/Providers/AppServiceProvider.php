@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\App;
+use App\Support\DataVersion;
 use App\Support\DefaultPurchaseContract;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,12 +26,17 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
+        // Theo dõi mọi thay đổi dữ liệu để các trang tự cập nhật (xem App\Support\DataVersion).
+        DataVersion::listen();
+
         App::setLocale(setting('app_locale', 'vi'));
         $timezone = setting('app_timezone', config('app.timezone', 'Asia/Ho_Chi_Minh'));
         config(['app.timezone' => $timezone]);
         date_default_timezone_set($timezone);
 
         Inertia::share([
+            // Mốc phiên bản dữ liệu lúc dựng trang: trình duyệt dùng làm mốc so sánh đầu tiên.
+            'data_versions' => fn () => DataVersion::all(),
             'vietqr_banks' => fn () => app(\App\Http\Controllers\SettingController::class)->vietQrBanks(),
             'settings' => fn () => [
                 'shop_name' => setting('shop_name', config('app.name', 'QLBH POS')),

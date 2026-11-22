@@ -38,12 +38,13 @@ const receiptOptions = [
     { value: 'card', label: 'Quẹt thẻ' },
     { value: 'debt', label: 'Còn nợ chưa thu đủ' },
 ]
-const methodLabels = { cash: 'Tiền mặt', bank: 'Chuyển khoản', mixed: 'Kết hợp', card: 'Thẻ' }
+const methodLabels = { cash: 'Tiền mặt', bank: 'Chuyển khoản', mixed: 'Kết hợp', card: 'Thẻ', debt: 'Nợ' }
 
 // Lọc bằng AJAX, không tải lại trang (cùng cách với các trang danh sách khác).
 const list = useLiveList({
     props,
     dataKey: 'sales',
+    channels: ['sales', 'stock_imports', 'expenses', 'payments', 'settings'],
     extraKeys: ['summary', 'items', 'imports', 'taxExpenses', 'range', 'bankOptions', 'bankBreakdown'],
     params: () => ({
         year: year.value, period: period.value, search: search.value.trim(),

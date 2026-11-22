@@ -1,4 +1,5 @@
 <script setup>
+import { isDebtSale } from '@/utils/salePayment'
 import { onMounted } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { applyReceiptPrintStyle } from '@/utils/receiptPrint'
@@ -81,6 +82,8 @@ const customerPaymentLabel = (method) => ({
 }[String(method || '').toLowerCase()] || 'Khách đưa')
 
 const customerPaymentRows = () => {
+    // Đơn nợ hoàn toàn: chưa có khoản tiền nào của khách cho đơn này, không in dòng "Khách đưa".
+    if (isDebtSale(props.sale)) return []
     const cash = Math.max(0, Number(props.sale?.cash_received_amount || 0))
     const bank = Math.max(0, Number(props.sale?.bank_received_amount || 0))
     if (cash > 0 || bank > 0) return [

@@ -2,6 +2,7 @@
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import PaginationBar from '@/Components/UI/PaginationBar.vue';
+import { useAutoRefresh } from '@/Composables/useAutoRefresh';
 import DataPanel from '@/Components/UI/DataPanel.vue';
 import ListToolbar from '@/Components/UI/ListToolbar.vue';
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue';
@@ -164,6 +165,20 @@ watch(() => props.filters, (value) => {
     perPage.value = Number(value.per_page ?? 20);
 }, { deep: true });
 watch([search, status, dateFrom, dateTo, sortBy, sortOrder], applyFilters);
+
+// Tự cập nhật danh sách + thống kê khi phiếu sửa/khách hàng/linh kiện đổi (do bất kỳ ai), giữ bộ lọc và trang đang xem.
+useAutoRefresh({
+    channels: ['repairs', 'customers', 'products'],
+    keys: ['repairs', 'stats'],
+    apply: (next) => {
+        if ('repairs' in next) {
+            repairsData.value = next.repairs;
+            currentPage.value = Number(next.repairs?.current_page ?? currentPage.value);
+        }
+        if ('stats' in next) statsData.value = next.stats || {};
+    },
+    enabled: () => !loadingRepairs.value && !filterTimeout,
+});
 
 const openCreate = () => {
     openRepairWorkflow();

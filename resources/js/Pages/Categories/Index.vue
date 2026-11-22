@@ -1,5 +1,4 @@
 <script setup>
-import { useSilentRefresh } from '@/Composables/useSilentRefresh'
 import { router, usePage } from '@inertiajs/vue3'
 import { ref, watch, onMounted, nextTick } from 'vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
@@ -54,6 +53,7 @@ const status = ref(props.filters?.status || '')
 const list = useLiveList({
     props,
     dataKey: 'categories',
+    channels: ['categories', 'brands', 'products'],
     params: () => ({ search: search.value.trim(), status: status.value }),
 })
 const { data: categoriesData, filters: filtersData, loading } = list
@@ -163,8 +163,6 @@ const toggleStatus = (id) => {
 
 const sort = ({ field, order }) => list.request({ sort_by: field, sort_order: order })
 
-// Quay lại tab thì nạp ngầm danh sách mới nhất (không tải lại trang, không làm gián đoạn khi đang mở form).
-useSilentRefresh(['categories'])
 </script>
 
 <template>

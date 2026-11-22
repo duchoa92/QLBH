@@ -87,7 +87,7 @@ class ReportController extends Controller
     {
         [$from, $to] = $this->dateRange();
 
-        $paymentMethod = in_array(request('payment_method'), ['cash', 'bank', 'mixed', 'card'], true)
+        $paymentMethod = in_array(request('payment_method'), ['cash', 'bank', 'mixed', 'card', 'debt'], true)
             ? request('payment_method') : '';
         $staffId = (int) request('user_id');
 
@@ -99,7 +99,8 @@ class ReportController extends Controller
         $base = Sale::query()
             ->where('status', '!=', 'cancelled')
             ->whereBetween('created_at', [$from, $to])
-            ->when($paymentMethod !== '', fn ($query) => $query->where('payment_method', $paymentMethod))
+            ->when($paymentMethod === 'debt', fn ($query) => $query->where('grand_total', '>', 0)->where('paid_amount', '<=', 0))
+            ->when($paymentMethod !== '' && $paymentMethod !== 'debt', fn ($query) => $query->where('payment_method', $paymentMethod)->where('paid_amount', '>', 0))
             ->when($staffId > 0, fn ($query) => $query->where('user_id', $staffId));
 
         // Doanh thu sửa chữa tính theo ngày trả/hoàn tất, giống Dashboard.
@@ -107,7 +108,8 @@ class ReportController extends Controller
         $repairBase = Repair::query()
             ->whereIn('status', ['done', 'returned'])
             ->whereRaw("{$repairDate} BETWEEN ? AND ?", [$from, $to])
-            ->when($paymentMethod !== '', fn ($query) => $query->where('payment_method', $paymentMethod))
+            ->when($paymentMethod === 'debt', fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($paymentMethod !== '' && $paymentMethod !== 'debt', fn ($query) => $query->where('payment_method', $paymentMethod))
             ->when($staffId > 0, fn ($query) => $query->where('technician_id', $staffId));
 
         $salesRevenue = $includeSales ? (float) (clone $base)->sum('grand_total') : 0.0;
@@ -163,8 +165,9 @@ class ReportController extends Controller
         $paymentMap = [];
         if ($includeSales) {
             foreach ((clone $base)
-                ->selectRaw('payment_method, SUM(grand_total) as revenue, COUNT(*) as orders')
-                ->groupBy('payment_method')->get() as $row) {
+                // Đơn nợ hoàn toàn (chưa trả đồng nào) gom riêng thành "debt" vì chưa xác định tiền mặt hay chuyển khoản.
+                ->selectRaw("CASE WHEN grand_total > 0 AND paid_amount <= 0 THEN 'debt' ELSE payment_method END as payment_method, SUM(grand_total) as revenue, COUNT(*) as orders")
+                ->groupByRaw("CASE WHEN grand_total > 0 AND paid_amount <= 0 THEN 'debt' ELSE payment_method END")->get() as $row) {
                 $paymentMap[$row->payment_method] = ['payment_method' => $row->payment_method, 'revenue' => (float) $row->revenue, 'orders' => (int) $row->orders];
             }
         }

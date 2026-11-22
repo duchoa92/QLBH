@@ -1,9 +1,13 @@
 <script setup>
 import { Link } from '@inertiajs/vue3';
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
 
 defineProps({
     product: Object,
 });
+
+// Tự cập nhật khi dữ liệu đổi (do bất kỳ ai), giữ cuộn và trạng thái.
+useAutoRefresh({ channels: ['products', 'brands', 'categories'], keys: ['product'] })
 </script>
 
 <template>

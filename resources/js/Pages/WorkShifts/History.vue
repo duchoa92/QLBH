@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePage } from '@inertiajs/vue3'
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -134,6 +135,9 @@ const cashDifferenceClass = difference => difference < 0
     : difference > 0
         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
         : 'border-slate-200 bg-slate-50 text-slate-700'
+
+// Tự cập nhật khi dữ liệu đổi (do bất kỳ ai), giữ cuộn và trạng thái.
+useAutoRefresh({ channels: ['work_shifts', 'users'], keys: ['shifts'] })
 </script>
 
 <template>

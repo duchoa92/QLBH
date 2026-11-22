@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onBeforeUnmount } from 'vue'
 import { router } from '@inertiajs/vue3'
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
 
 import CustomerTabs from './Partials/CustomerTabs.vue'
 import { imageUrl } from '@/utils/imageUrl'
@@ -39,6 +40,9 @@ const selectTab = (label) => {
 const restoreTabFromUrl = () => { activeTab.value = readActiveTab() }
 window.addEventListener('popstate', restoreTabFromUrl)
 onBeforeUnmount(() => window.removeEventListener('popstate', restoreTabFromUrl))
+
+// Tự cập nhật khi dữ liệu đổi (do bất kỳ ai), giữ cuộn và trạng thái.
+useAutoRefresh({ channels: ['customers', 'debts', 'sales', 'repairs'], keys: ['customer'] })
 </script>
 
 <template>

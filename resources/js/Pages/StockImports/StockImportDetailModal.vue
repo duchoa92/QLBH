@@ -2,6 +2,7 @@
 import { formatWarranty } from '@/utils/warranty'
 // Modal phiếu nhập mở từ ô tìm nhanh: cùng giao diện/logic hiển thị như modal "Chi tiết đơn nhập" ở trang Phiếu nhập hàng.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useLiveReload } from '@/Composables/useLiveReload'
 import { router, usePage } from '@inertiajs/vue3'
 import { toast } from 'vue-sonner'
 import api from '@/Services/api'
@@ -340,6 +341,15 @@ onMounted(async () => {
     } catch {
         toast.error('Không tải được phiếu nhập.')
         emit('close')
+    }
+})
+// Phiếu/công nợ đổi (ai sửa cũng được): tải lại ngầm, lỗi tạm thời thì giữ nguyên nội dung đang xem.
+useLiveReload(['stock_imports', 'suppliers', 'debts'], async () => {
+    try {
+        const response = await api.get(`/stock-import/${props.importId}`, { headers: { 'Cache-Control': 'no-cache' } })
+        if (response.data) detailImport.value = response.data
+    } catch {
+        // giữ nguyên dữ liệu hiện có
     }
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', handleEsc))

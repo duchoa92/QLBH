@@ -1,4 +1,5 @@
 <script setup>
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
 import { formatCurrency, formatDateTime } from '@/utils/format'
 import { imageUrl } from '@/utils/imageUrl'
 
@@ -36,6 +37,8 @@ const saleCustomerName = (saleItem) =>
     saleItem.sale?.customer?.name ||
     '-'
 
+// Tự cập nhật khi dữ liệu đổi (do bất kỳ ai), giữ cuộn và trạng thái.
+useAutoRefresh({ channels: ['products', 'repairs'], keys: ['imei', 'repairs'] })
 </script>
 
 <template>

@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useLiveReload } from '@/Composables/useLiveReload'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import SearchHighlight from '@/Components/UI/SearchHighlight.vue'
 
@@ -15,21 +16,26 @@ const detail = ref(null)
 const loading = ref(true)
 const error = ref('')
 
-onMounted(async () => {
+const load = async ({ silent = false } = {}) => {
     try {
         const { data } = await window.axios.get(route('records.show', {
             type: props.type,
             id: props.recordId,
         }), {
-            headers: { Accept: 'application/json' },
+            headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
         })
         detail.value = data
+        error.value = ''
     } catch {
-        error.value = 'Không tải được thông tin chi tiết.'
+        if (!silent) error.value = 'Không tải được thông tin chi tiết.'
     } finally {
-        loading.value = false
+        if (!silent) loading.value = false
     }
-})
+}
+
+onMounted(() => load())
+// Dữ liệu đổi (ai sửa cũng được): tải lại ngầm để modal luôn mới.
+useLiveReload(null, () => load({ silent: true }))
 </script>
 
 <template>

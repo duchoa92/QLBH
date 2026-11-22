@@ -313,7 +313,10 @@ class ProductImeiController extends Controller
                 'unit_price' => $item->unit_price,
                 'discount_value' => $item->discount_value,
                 'subtotal' => $item->subtotal,
-                'payment_method' => $item->sale?->payment_method,
+                // Đơn nợ hoàn toàn (chưa trả đồng nào): hình thức là "debt" vì chưa xác định tiền mặt hay chuyển khoản.
+                'payment_method' => ($item->sale && $item->sale->status !== 'cancelled' && (float) $item->sale->grand_total > 0 && (float) $item->sale->paid_amount <= 0)
+                    ? 'debt'
+                    : $item->sale?->payment_method,
                 'status' => $item->sale?->status,
                 'sold_at' => $item->sale?->created_at,
             ])->values(),

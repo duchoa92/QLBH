@@ -3,6 +3,7 @@ import { formatWarranty } from '@/utils/warranty'
 import { formatCurrency, formatDate as formatConfiguredDate } from '@/utils/format'
 
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import { useAutoRefresh } from '@/Composables/useAutoRefresh'
 import StockImportFormModal from './StockImportFormModal.vue'
 import ReplenishmentListModal from './ReplenishmentListModal.vue'
 import api from '@/Services/api'
@@ -240,6 +241,17 @@ watch([search, partyTypeFilter, statusFilter, dateFrom, dateTo], () => {
 onBeforeUnmount(() => {
     clearTimeout(searchTimer)
     importsController?.abort()
+})
+
+// Tự cập nhật danh sách phiếu nhập khi phiếu/nhà cung cấp/kho đổi (do bất kỳ ai), giữ bộ lọc và trang đang xem.
+useAutoRefresh({
+    channels: ['stock_imports', 'suppliers', 'products', 'debts'],
+    keys: ['imports', 'filters'],
+    apply: (next) => {
+        if ('imports' in next) importsData.value = next.imports
+        if ('filters' in next && next.filters) filtersData.value = next.filters
+    },
+    enabled: () => !loadingImports.value && !searchTimer,
 })
 
 /*

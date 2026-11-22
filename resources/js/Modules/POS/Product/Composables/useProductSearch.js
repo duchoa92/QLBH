@@ -9,6 +9,7 @@ import { useEventBus } from '@/Composables/useEventBus'
 import { useReferenceData } from '@/Stores/referenceData'
 import { usePage } from '@inertiajs/vue3'
 import { cacheOfflineProducts, readOfflineProducts } from '@/utils/offlinePos'
+import { onLiveChange } from '@/Services/liveSync'
 
 export function useProductSearch(emit) {
 
@@ -194,6 +195,7 @@ export function useProductSearch(emit) {
     let silentTimer = null
     let silentPoll = null
     let catalogChannel = null
+    let offLive = null
 
     const refreshSilently = (force = false) => {
         if (document.hidden) return
@@ -229,6 +231,8 @@ export function useProductSearch(emit) {
             catalogChannel.addEventListener('message', scheduleSilentRefresh)
         }
         silentPoll = setInterval(() => refreshSilently(), SILENT_POLL_INTERVAL)
+        // Kho/danh mục/thương hiệu đổi ở máy khác: nạp lại ngầm.
+        offLive = onLiveChange(['products', 'categories', 'brands', 'units'], scheduleSilentRefresh)
 
         onEvent(
             'products:refresh',
@@ -259,6 +263,8 @@ export function useProductSearch(emit) {
         window.removeEventListener('focus', onVisible)
         catalogChannel?.close()
         catalogChannel = null
+        offLive?.()
+        offLive = null
 
        offEvent(
             'products:refresh',

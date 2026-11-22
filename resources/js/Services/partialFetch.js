@@ -14,6 +14,8 @@ export async function fetchPartialProps({ keys, params = {}, path, signal } = {}
         params,
         signal,
         headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
             Accept: 'text/html, application/xhtml+xml',
             'X-Inertia': 'true',
             'X-Inertia-Version': page.version,

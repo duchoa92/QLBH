@@ -19,7 +19,7 @@ class TaxDeclarationController extends Controller
 {
     private const NO_BANK_ACCOUNT = '__none__';
 
-    private const METHOD_LABELS = ['cash' => 'Tiền mặt', 'bank' => 'Chuyển khoản', 'mixed' => 'Kết hợp', 'card' => 'Thẻ'];
+    private const METHOD_LABELS = ['cash' => 'Tiền mặt', 'bank' => 'Chuyển khoản', 'mixed' => 'Kết hợp', 'card' => 'Thẻ', 'debt' => 'Nợ'];
 
     public function index(Request $request): Response|BinaryFileResponse
     {
@@ -89,15 +89,15 @@ class TaxDeclarationController extends Controller
                 fn (Builder $inner) => $inner->whereNull('tax')->orWhere('tax', '<=', 0)
             ))
             ->when($receipt === 'cash', fn (Builder $query) => $query->where(
-                fn (Builder $inner) => $inner->where('payment_method', 'cash')
+                fn (Builder $inner) => $inner->where(fn (Builder $m) => $m->where('payment_method', 'cash')->where('paid_amount', '>', 0))
                     ->orWhereRaw('COALESCE(cash_received_amount, 0) - COALESCE(change_amount, 0) > 0')
             ))
             ->when($receipt === 'bank', fn (Builder $query) => $query->where(
-                fn (Builder $inner) => $inner->where('payment_method', 'bank')
+                fn (Builder $inner) => $inner->where(fn (Builder $m) => $m->where('payment_method', 'bank')->where('paid_amount', '>', 0))
                     ->orWhere('bank_received_amount', '>', 0)
             ))
-            ->when($receipt === 'mixed', fn (Builder $query) => $query->where('payment_method', 'mixed'))
-            ->when($receipt === 'card', fn (Builder $query) => $query->where('payment_method', 'card'))
+            ->when($receipt === 'mixed', fn (Builder $query) => $query->where('payment_method', 'mixed')->where('paid_amount', '>', 0))
+            ->when($receipt === 'card', fn (Builder $query) => $query->where('payment_method', 'card')->where('paid_amount', '>', 0))
             ->when($receipt === 'debt', fn (Builder $query) => $query->whereColumn('paid_amount', '<', 'grand_total'))
             ->when($bankAccount === self::NO_BANK_ACCOUNT, fn (Builder $query) => $query->where(
                 fn (Builder $inner) => $inner->whereNull('bank_account')->orWhere('bank_account', '')
@@ -116,7 +116,8 @@ class TaxDeclarationController extends Controller
         foreach ($saleModels as $sale) {
             $grand = (float) $sale->grand_total;
             $paid = (float) $sale->paid_amount;
-            $method = (string) $sale->payment_method;
+            // Đơn nợ hoàn toàn: chưa xác định tiền mặt hay chuyển khoản nên hình thức là "Nợ".
+            $method = ($grand > 0 && $paid <= 0) ? 'debt' : (string) $sale->payment_method;
             $tax = (float) $sale->tax;
 
             // Tiền mặt thực nhận = tiền khách đưa trừ tiền thối (giống cách tính ở Dashboard).

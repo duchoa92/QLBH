@@ -1,5 +1,6 @@
 <!-- resources/js/Components/InvoiceDetailModal.vue -->
 <script setup>
+import { isDebtSale, effectivePaymentMethod } from '@/utils/salePayment'
 import { formatCurrency, formatDateTime, formatDate as formatConfiguredDate, formatDatePlusDays, formatNumber } from '@/utils/format'
 import { computed, ref } from 'vue'
 import { allocateSaleVat } from '@/utils/lineVat'
@@ -65,6 +66,7 @@ const warrantyEndDate = (item) => {
 }
 
 const paymentMethodLabel = (method) => ({
+    debt: 'Nợ',
     cash: 'Tiền mặt',
     bank: 'Chuyển khoản',
     mixed: 'Tiền mặt + Chuyển khoản',
@@ -80,6 +82,8 @@ const customerPaymentLabel = (method) => ({
 
 const customerPaymentRows = computed(() => {
     const invoice = props.invoice || {}
+    // Đơn nợ hoàn toàn: chưa có khoản tiền nào của khách cho đơn này.
+    if (isDebtSale(invoice)) return []
     const cash = Math.max(0, Number(invoice.cash_received_amount || 0))
     const bank = Math.max(0, Number(invoice.bank_received_amount || 0))
     if (cash > 0 || bank > 0) {
@@ -549,7 +553,7 @@ const cancelReason = computed(() =>
 
                         <div class="flex justify-between text-[11px] uppercase text-slate-400 pt-1 border-t border-slate-100">
                             <span>Phương thức:</span>
-                            <span class="font-bold text-slate-700">{{ paymentMethodLabel(invoice.payment_method) }}</span>
+                            <span class="font-bold text-slate-700">{{ paymentMethodLabel(effectivePaymentMethod(invoice)) }}</span>
                         </div>
                     </div>
                 </div>
