@@ -24,6 +24,8 @@ const props = defineProps({
     showUnit: { type: Boolean, default: true },
     clickableVariant: { type: Boolean, default: false },
     clickableImei: { type: Boolean, default: false },
+    // true: không hiện nhãn "Có VAT" cạnh tên (form sửa hóa đơn dùng cột VAT riêng thay cho nhãn).
+    hideVat: { type: Boolean, default: false },
 })
 
 const noteCount = computed(() => props.item.note?.trim() ? 1 : 0)
@@ -47,7 +49,7 @@ const emit = defineEmits([
         <div class="min-w-0 flex-1">
             <div class="flex min-w-0 items-center gap-1.5">
                 <div class="flex min-w-0 items-center gap-1"><span class="line-clamp-2 break-words text-xs font-semibold leading-tight text-slate-900 sm:truncate" :title="item.name">{{ item.name }}</span><span v-if="item.is_used" class="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-100 px-1 py-0.5 text-[9px] font-bold leading-none text-amber-800">CŨ</span></div>
-                <span v-if="item.has_vat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Mặt hàng được đánh dấu có VAT khi nhập hàng"><Receipt class="h-3 w-3" />Có VAT</span>
+                <span v-if="item.has_vat && !hideVat" class="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold leading-none text-emerald-700" title="Mặt hàng được đánh dấu có VAT khi nhập hàng"><Receipt class="h-3 w-3" />Có VAT</span>
             </div>
             <div v-if="showUnit" class="mt-0.5 text-[11px] leading-tight text-slate-500">{{ item.unit_name ?? 'Cái' }}</div>
 

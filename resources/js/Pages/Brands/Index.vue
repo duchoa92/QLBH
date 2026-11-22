@@ -276,7 +276,7 @@ useSilentRefresh(['brands'])
             </template>
 
             <template #mobile-body="{ row }">
-                <div class="border-t border-slate-100 pt-2.5">
+                <div>
                     <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Danh mục liên kết</div>
                     <div v-if="row.categories?.length" class="mt-1.5 flex flex-wrap gap-1.5">
                         <span v-for="category in row.categories" :key="category.id" class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{{ category.name }}</span>

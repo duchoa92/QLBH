@@ -1357,17 +1357,12 @@ const confirm = (payment = {}) => {
 
 <template>
     <BaseModal
-        :title="isEditingImport ? 'Sửa phiếu nhập' : 'Nhập hàng'"
+        :title="isEditingImport ? `Sửa phiếu nhập ${initialImport.code || ''}`.trim() : 'Nhập hàng'"
         size="xl"
         body-class="p-3 sm:p-4"
         @close="emit('close')"
     >
         <div class="flex min-h-0 flex-col gap-2.5">
-
-            <div v-if="isEditingImport" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                <div><span class="font-bold">Đang sửa phiếu {{ initialImport.code }}</span><span class="ml-2 text-amber-700">· Thông tin thanh toán hiện có được giữ nguyên.</span></div>
-                <span class="rounded-full border border-amber-300 bg-white px-2 py-0.5 font-bold text-amber-700">Chế độ chỉnh sửa</span>
-            </div>
 
             <!-- NHÀ CUNG CẤP -->
             <SupplierSection
@@ -1517,7 +1512,7 @@ const confirm = (payment = {}) => {
                                     <span v-if="item.type === 'imei' || item.type === 'imei_variant'" class="rounded-md bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">{{ (item.imeis || []).length }} IMEI</span>
                                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{{ itemUnit(item) }}</span>
                                     <span v-if="item.is_used" class="inline-flex min-h-6 items-center rounded-md border border-amber-300 bg-amber-100 px-2 text-[11px] font-bold text-amber-800">Sản phẩm cũ</span>
-                                    <span v-if="item.has_vat" class="inline-flex min-h-6 items-center rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">VAT</span>
+                                    <span v-if="item.has_vat" class="inline-flex min-h-6 items-center rounded-md bg-emerald-500 px-2 text-[11px] font-extrabold tracking-wide text-white shadow-sm shadow-emerald-300/60 ring-1 ring-emerald-300" title="Sản phẩm được đánh dấu có VAT">VAT</span>
                                 </div>
                             </div>
                             <div class="flex shrink-0 items-center gap-1">
@@ -1635,7 +1630,7 @@ const confirm = (payment = {}) => {
                                                 class="mt-1 flex flex-wrap items-center gap-1.5"
                                             >
                                                 <span v-if="item.is_used" class="inline-flex min-h-6 items-center rounded-md border border-amber-300 bg-amber-100 px-2 text-[11px] font-bold text-amber-800">Sản phẩm cũ</span>
-                                    <span v-if="item.has_vat" class="inline-flex min-h-6 items-center rounded-md bg-emerald-50 px-2 text-[11px] font-medium text-emerald-800">VAT</span>
+                                    <span v-if="item.has_vat" class="inline-flex min-h-6 items-center rounded-md bg-emerald-500 px-2 text-[11px] font-extrabold tracking-wide text-white shadow-sm shadow-emerald-300/60 ring-1 ring-emerald-300" title="Sản phẩm được đánh dấu có VAT">VAT</span>
                                                 <span
                                                     v-if="
                                                         item.type ===

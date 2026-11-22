@@ -2,6 +2,7 @@
 <script setup>
 import { formatCurrency, formatDateTime, formatDate as formatConfiguredDate, formatDatePlusDays, formatNumber } from '@/utils/format'
 import { computed, ref } from 'vue'
+import { allocateSaleVat } from '@/utils/lineVat'
 import {
     CheckCircle2,
     Gift,
@@ -95,6 +96,10 @@ const customerPaymentAmount = computed(() => customerPaymentRows.value.reduce((t
 
 // Format tiền tệ
 const money = formatCurrency
+
+// Cột VAT: chỉ hiện khi hóa đơn có dòng được tính VAT; số tiền chia theo thành tiền từng dòng.
+const lineVats = computed(() => allocateSaleVat(props.invoice?.items, props.invoice?.tax))
+const showVatColumn = computed(() => (props.invoice?.items || []).some(item => item.vat_applied))
 
 // Format ngày tháng
 const formatDate = (date) => {
@@ -329,6 +334,7 @@ const cancelReason = computed(() =>
                                     <th class="w-24 px-3 py-2 text-center whitespace-nowrap">SL</th>
                                     <th class="w-28 px-3 py-2 text-right whitespace-nowrap">Đơn giá</th>
                                     <th class="w-32 px-3 py-2 text-right whitespace-nowrap">Thành tiền</th>
+                                    <th v-if="showVatColumn" class="w-28 px-3 py-2 text-right whitespace-nowrap">VAT</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 font-medium text-xs">
@@ -344,7 +350,6 @@ const cancelReason = computed(() =>
                                             <div class="min-w-0 w-full">
                                             <div class="font-bold text-slate-900 text-sm">
                                                 <span class="mr-1 text-slate-400 md:hidden">{{ index + 1 }}.</span>{{ item.product?.name || item.product_name || '-' }}
-                                                <span v-if="item.has_vat" class="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-emerald-700">Có VAT</span><span v-if="item.vat_applied" class="ml-1 rounded bg-blue-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-blue-700">VAT tính</span>
                                             </div>
 
                                             <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -426,6 +431,10 @@ const cancelReason = computed(() =>
                                         <td class="px-3 py-2.5 text-right font-extrabold text-slate-900 text-sm whitespace-nowrap">
                                             {{ money(item.subtotal) }}
                                         </td>
+
+                                        <td v-if="showVatColumn" class="px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap" :class="lineVats[index] > 0 ? 'text-emerald-700' : 'text-slate-300'" :data-m-hide="lineVats[index] > 0 ? null : ''">
+                                            {{ lineVats[index] > 0 ? money(lineVats[index]) : '—' }}
+                                        </td>
                                     </tr>
 
                                     <!-- QUÀ TẶNG -->
@@ -454,6 +463,7 @@ const cancelReason = computed(() =>
                                             {{ money(gift.product?.retail_price || gift.product?.sell_price || gift.product?.price) }}
                                         </td>
                                         <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">{{ money(0) }}</td>
+                                        <td v-if="showVatColumn" data-m-hide></td>
                                     </tr>
 
                                     <tr v-if="item.gift_product" class="bg-emerald-50/40 text-xs">
@@ -475,6 +485,7 @@ const cancelReason = computed(() =>
                                             {{ money(item.gift_product.retail_price || item.gift_product.sell_price || item.gift_product.price) }}
                                         </td>
                                         <td class="px-3 py-2 text-right font-bold text-emerald-600 whitespace-nowrap">{{ money(0) }}</td>
+                                        <td v-if="showVatColumn" data-m-hide></td>
                                     </tr>
                                 </template>
                             </tbody>

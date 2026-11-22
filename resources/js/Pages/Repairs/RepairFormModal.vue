@@ -1239,13 +1239,14 @@ const selectWorkflowStep = (status) => {
 
 <template>
     <BaseModal
-        :title="step === 'intake' ? (createdRepair ? `Sửa thông tin phiếu · ${createdRepair.code}` : 'Tiếp nhận và sửa chữa') : `Quy trình sửa chữa · ${createdRepair?.code || ''}`"
+        :title="step === 'intake' ? (createdRepair ? `Sửa phiếu ${createdRepair.code}` : 'Tiếp nhận và sửa chữa') : `Phiếu ${createdRepair?.code || ''}`"
         size="xl"
         modal-class="h-[min(88dvh,820px)]"
         body-class="px-4 pb-4"
         @close="handleModalClose"
     >
-        <div class="sticky top-0 z-40 -mx-4 mb-2 bg-slate-100 px-4 py-2">
+        <!-- Điện thoại: thanh trạng thái cuộn cùng nội dung (không cố định) để nhường chỗ; từ sm trở lên mới dính đỉnh. -->
+        <div class="-mx-4 mb-2 bg-slate-100 px-4 py-2 sm:sticky sm:top-0 sm:z-40">
             <div class="px-1 py-1">
                 <div class="flex min-w-0 items-center gap-2">
                     <RepairStatusProgress
@@ -1755,14 +1756,14 @@ const selectWorkflowStep = (status) => {
                 </ActionButton>
             </div>
             <div v-else class="flex w-full items-center justify-between gap-2">
-                <div class="flex items-center gap-1">
-                    <button v-if="progressModalRef?.footerShowCancel" type="button" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.cancelRepair()">Hủy phiếu</button>
-                    <button v-if="createdRepair" type="button" class="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700" @click="progressModalRef?.openHistory()"><History class="h-3.5 w-3.5" /> Lịch sử</button>
+                <div class="flex shrink-0 items-center gap-0.5 sm:gap-1">
+                    <button v-if="progressModalRef?.footerShowCancel" type="button" class="whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 sm:px-3" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.cancelRepair()">Hủy phiếu</button>
+                    <button v-if="createdRepair" type="button" class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3" title="Lịch sử" aria-label="Lịch sử" @click="progressModalRef?.openHistory()"><History class="h-4 w-4 sm:h-3.5 sm:w-3.5" /> <span class="hidden sm:inline">Lịch sử</span></button>
                 </div>
-                <div class="flex items-center gap-2">
-                    <ActionButton v-if="progressModalRef?.footerShowBack" variant="secondary" @click="progressModalRef.returnToProgress()">Quay lại tiến trình</ActionButton>
-                    <ActionButton v-if="!progressModalRef?.footerShowBack && ['pending', 'repairing', 'done'].includes(createdRepair?.status)" variant="secondary" @click="step = 'intake'">Quay lại để sửa</ActionButton>
-                    <ActionButton v-if="progressModalRef?.footerShowSave" type="button" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.saveProgress()">{{ progressModalRef?.footerActionLabel }}</ActionButton>
+                <div class="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
+                    <ActionButton v-if="progressModalRef?.footerShowBack" variant="secondary" class="whitespace-nowrap !px-3 !py-2 !text-xs sm:!px-3.5 sm:!text-sm" @click="progressModalRef.returnToProgress()"><span class="sm:hidden">Tiến trình</span><span class="hidden sm:inline">Quay lại tiến trình</span></ActionButton>
+                    <ActionButton v-if="!progressModalRef?.footerShowBack && ['pending', 'repairing', 'done'].includes(createdRepair?.status)" variant="secondary" class="whitespace-nowrap !px-3 !py-2 !text-xs sm:!px-3.5 sm:!text-sm" @click="step = 'intake'"><span class="sm:hidden">Sửa lại</span><span class="hidden sm:inline">Quay lại để sửa</span></ActionButton>
+                    <ActionButton v-if="progressModalRef?.footerShowSave" type="button" class="whitespace-nowrap !px-3.5 !py-2 !text-xs sm:!px-3.5 sm:!text-sm" :disabled="progressModalRef?.footerBusy" @click="progressModalRef.saveProgress()"><span class="sm:hidden">{{ progressModalRef?.footerActionShort }}</span><span class="hidden sm:inline">{{ progressModalRef?.footerActionLabel }}</span></ActionButton>
                 </div>
             </div>
         </template>

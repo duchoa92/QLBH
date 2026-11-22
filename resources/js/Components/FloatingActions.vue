@@ -159,10 +159,7 @@ const panelClass = computed(() => [
                 <div ref="body" class="floating-actions__body flex flex-col gap-1" />
                 <button type="button" class="floating-actions__search" @click.stop="openSearch">
                     <Search class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span class="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
-                        <span class="whitespace-nowrap leading-tight">Tìm toàn hệ thống</span>
-                        <kbd class="rounded border border-slate-200 bg-slate-50 px-1 text-[9px] font-bold leading-4 text-slate-400">Ctrl K</kbd>
-                    </span>
+                    <span class="whitespace-nowrap text-left leading-tight">Tìm toàn hệ thống</span>
                 </button>
             </div>
         </Transition>

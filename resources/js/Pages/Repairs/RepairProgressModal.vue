@@ -294,6 +294,18 @@ const footerActionLabel = computed(() => footerBusy.value
             : (isWaiting.value
             ? (waitingMode.value === 'parts' ? 'Lưu chờ linh kiện' : 'Lưu tạm chờ sửa')
             : repairNowLabel.value))))
+// Nhãn rút gọn cho điện thoại (nút chính chỉ còn 1-2 từ, không còn chồng chữ nhiều dòng).
+const footerActionShort = computed(() => footerBusy.value
+    ? 'Đang xử lý...'
+    : (completionStep.value
+        ? (payImmediately.value ? 'Hoàn tất & thu' : 'Hoàn tất')
+        : (declineWarranty.value && !continueAsService.value
+            ? 'Từ chối BH'
+            : (isWaiting.value
+                ? (waitingMode.value === 'parts' ? 'Chờ linh kiện' : 'Tạm chờ sửa')
+                : (declineWarranty.value && continueAsService.value
+                    ? 'Sửa dịch vụ'
+                    : (props.repair.status === 'pending' ? 'Nhận sửa' : (props.repair.waiting_for_parts ? 'Tiếp tục sửa' : 'Lưu & tiếp')))))))
 const footerShowCancel = computed(() => !completionStep.value && ['pending', 'repairing'].includes(props.repair.status))
 const footerShowSave = computed(() => activeTab.value !== 'history' && ['pending', 'repairing'].includes(props.repair.status))
 const saveProgress = async () => {
@@ -368,7 +380,7 @@ const openProgressStep = () => {
 const openHistory = () => { historyModalOpen.value = true }
 const closeProgress = () => emit('close')
 
-defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, footerShowBack: computed(() => completionStep.value), credentialsModalOpen: computed(() => credentialsModalOpen.value), historyModalOpen: computed(() => historyModalOpen.value), imageViewerOpen: computed(() => Boolean(imageViewer.value)), cameraOpen: computed(() => progressCameraOpen.value), canDeclineWarranty, declineWarranty: computed(() => declineWarranty.value), toggleDeclineWarranty, hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || Boolean(declineReason.value.trim()) || declineWarranty.value || continueAsService.value || form.images.length > 0), cancelRepair, saveProgress, returnToProgress, openCompletionStep, openProgressStep, openHistory, openCredentials, closeProgress })
+defineExpose({ footerActionLabel, footerActionShort, footerBusy, footerShowCancel, footerShowSave, footerShowBack: computed(() => completionStep.value), credentialsModalOpen: computed(() => credentialsModalOpen.value), historyModalOpen: computed(() => historyModalOpen.value), imageViewerOpen: computed(() => Boolean(imageViewer.value)), cameraOpen: computed(() => progressCameraOpen.value), canDeclineWarranty, declineWarranty: computed(() => declineWarranty.value), toggleDeclineWarranty, hasUnsavedChanges: computed(() => form.isDirty || Boolean(issueText.value.trim()) || Boolean(declineReason.value.trim()) || declineWarranty.value || continueAsService.value || form.images.length > 0), cancelRepair, saveProgress, returnToProgress, openCompletionStep, openProgressStep, openHistory, openCredentials, closeProgress })
 </script>
 
 <template>
@@ -393,8 +405,8 @@ defineExpose({ footerActionLabel, footerBusy, footerShowCancel, footerShowSave, 
             </section>
 
             <template v-if="!declineWarranty || continueAsService">
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <button v-for="option in [{ value: 'repair_now', label: 'Sửa ngay', hint: 'Tiếp tục xử lý', icon: Zap, tone: 'amber' }, { value: 'parts', label: 'Chờ linh kiện', hint: 'Đặt linh kiện', icon: PackageSearch, tone: 'blue' }, { value: 'wait_repair', label: 'Tạm chờ sửa', hint: 'Chưa thể xử lý', icon: PauseCircle, tone: 'slate' }]" :key="option.value" type="button" class="group flex min-h-[58px] items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200 shadow-sm' : option.tone === 'blue' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 shadow-sm' : 'border-slate-500 bg-slate-100 ring-2 ring-slate-200 shadow-sm') : 'border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50'" @click="selectProgressMode(option.value)"><component :is="option.icon" class="h-5 w-5 shrink-0" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'text-amber-700' : option.tone === 'blue' ? 'text-blue-700' : 'text-slate-700') : 'text-slate-500 group-hover:text-slate-700'"/><span class="min-w-0"><span class="block text-xs font-bold text-slate-900">{{ option.label }}</span><span class="mt-0.5 block text-[10px] text-slate-600">{{ option.hint }}</span></span><span v-if="waitingMode === option.value" class="ml-auto shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-700">Đang chọn</span></button>
+            <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+                <button v-for="option in [{ value: 'repair_now', label: 'Sửa ngay', hint: 'Tiếp tục xử lý', icon: Zap, tone: 'amber' }, { value: 'parts', label: 'Chờ linh kiện', hint: 'Đặt linh kiện', icon: PackageSearch, tone: 'blue' }, { value: 'wait_repair', label: 'Tạm chờ sửa', hint: 'Chưa thể xử lý', icon: PauseCircle, tone: 'slate' }]" :key="option.value" type="button" class="group flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 sm:min-h-[58px] sm:flex-row sm:justify-start sm:gap-2.5 sm:px-3 sm:text-left" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200 shadow-sm' : option.tone === 'blue' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 shadow-sm' : 'border-slate-500 bg-slate-100 ring-2 ring-slate-200 shadow-sm') : 'border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50'" @click="selectProgressMode(option.value)"><component :is="option.icon" class="h-5 w-5 shrink-0" :class="waitingMode === option.value ? (option.tone === 'amber' ? 'text-amber-700' : option.tone === 'blue' ? 'text-blue-700' : 'text-slate-700') : 'text-slate-500 group-hover:text-slate-700'"/><span class="min-w-0"><span class="block text-xs font-bold text-slate-900">{{ option.label }}</span><span class="mt-0.5 hidden text-[10px] text-slate-600 sm:block">{{ option.hint }}</span></span><span v-if="waitingMode === option.value" class="ml-auto hidden shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-700 sm:inline-block">Đang chọn</span></button>
             </div>
 
             <div class="grid grid-cols-1 gap-3 md:grid-cols-12">

@@ -144,8 +144,6 @@ onMounted(() => {
                 <div v-for="item in sale.items" :key="item.id" class="item">
                     <div class="item-name">
                         {{ item.product?.name || 'Sản phẩm' }}
-                        <span v-if="item.has_vat" class="vat-badge">Có VAT</span>
-                        <span v-if="item.vat_applied" class="vat-badge">VAT tính</span>
                         <span v-if="variantLabel(item.variant)" class="item-variant">
                             ({{ variantLabel(item.variant) }})
                         </span>

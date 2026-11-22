@@ -172,6 +172,22 @@ const vat = computed(() => {
     const afterInvoiceDiscount = Math.max(0, taxable - invoiceDiscountAmount.value * taxable / base)
     return Math.round(afterInvoiceDiscount * vatRate.value / 100)
 })
+// VAT từng dòng: chia VAT của hóa đơn theo thành tiền các dòng chịu VAT (dòng cuối nhận phần dư làm tròn).
+const lineVats = computed(() => {
+    const result = form.items.map(() => 0)
+    const total = vat.value
+    const taxable = form.items.map((row, index) => index).filter(index => form.items[index].apply_vat)
+    const base = taxable.reduce((sum, index) => sum + lineTotal(form.items[index]), 0)
+    if (!total || !taxable.length || base <= 0) return result
+    let used = 0
+    taxable.forEach((index, position) => {
+        const amount = position === taxable.length - 1 ? total - used : Math.round(total * lineTotal(form.items[index]) / base)
+        result[index] = Math.max(0, amount)
+        used += amount
+    })
+    return result
+})
+const showVatColumn = computed(() => form.items.some(row => row.has_vat || row.apply_vat))
 const newGrandTotal = computed(() => Math.max(0, subtotal.value - discount.value - invoiceDiscountAmount.value + vat.value + extraFeeAmount.value))
 const previouslyPaid = computed(() => previouslyPaidAmount)
 const oldOutstandingBalance = computed(() => Math.max(0, oldInvoiceTotal - previouslyPaid.value))
@@ -618,25 +634,70 @@ const confirmItemOptions = ({ variant, imei }) => {
                 </section>
                 </div>
 
-                <section class="overflow-x-auto rounded-lg border border-slate-200">
+                <!-- ĐIỆN THOẠI: mỗi mặt hàng là một thẻ gọn (tên + nhãn, rồi SL / Đơn giá cùng hàng, rồi Thành tiền). Bảng bên dưới chỉ dùng từ md trở lên. -->
+                <div class="space-y-2.5 md:hidden">
+                    <article v-for="(item, index) in form.items" :key="`m-${item.product_id}-${item.variant_id}-${index}`" class="rounded-xl border border-slate-200 border-l-4 border-l-blue-400 bg-white p-3 shadow-sm">
+                        <div class="flex items-start gap-1.5">
+                            <div class="min-w-0 flex-1">
+                                <CartItem :item="item" editor-only hide-vat :show-remove="false" :clickable-variant="!item.is_imei && Boolean(item.variant_id || item.variant_name)" :clickable-imei="item.is_imei" @editor-saved="syncSharedCartEditor" @select-variant="openItemOptions(index)" @select-imei="openItemOptions(index)" />
+                            </div>
+                            <button type="button" class="shrink-0 rounded-lg p-2 text-rose-500 transition hover:bg-rose-50 active:scale-95" title="Xóa mặt hàng" aria-label="Xóa mặt hàng" @click="removeItem(index)"><Trash2 :size="17" /></button>
+                        </div>
+
+                        <div class="mt-3 flex items-end justify-between gap-3 border-t border-dashed border-slate-200 pt-3">
+                            <div class="w-20 shrink-0">
+                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Số lượng</span>
+                                <FloatingInput v-if="!item.is_imei" v-model.number="item.quantity" label="Số lượng" :floating-label="false" type="number" min="1" input-class="!h-10 !rounded-lg !px-1 !py-1 !text-center !text-sm" />
+                                <div v-else class="flex h-10 items-center justify-center rounded-lg bg-slate-50 text-sm font-semibold text-slate-600">1</div>
+                            </div>
+                            <div class="min-w-0">
+                                <span class="mb-1 block text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">Đơn giá</span>
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <FloatingInput v-model.number="item.unit_price" class="w-32" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-10 !rounded-lg !px-2.5 !py-1 !text-right !text-sm" />
+                                    <button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" :disabled="Boolean(item.is_used) && !usedVatEnabled" class="inline-flex h-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border px-2 text-[9px] font-bold leading-none transition disabled:cursor-not-allowed disabled:opacity-40" :class="item.apply_vat ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-400'" :title="item.is_used && !usedVatEnabled ? 'Sản phẩm cũ không áp dụng VAT' : (item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này')" @click="(!item.is_used || usedVatEnabled) && (item.apply_vat = !item.apply_vat)"><Receipt class="h-3.5 w-3.5" />VAT</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                            <span class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Thành tiền</span>
+                            <span class="min-w-0 text-right">
+                                <b class="text-base text-slate-900">{{ formatMoney(lineTotal(item)) }}</b>
+                                <span v-if="Number(item.discount_value || 0)" class="block text-[10px] font-semibold text-amber-700">Giảm {{ item.discount_type === 'percent' ? `${item.discount_value}%` : formatMoney(item.discount_value) }}</span>
+                                <span v-if="lineVats[index] > 0" class="block text-[10px] font-semibold text-emerald-700">VAT {{ formatMoney(lineVats[index]) }}</span>
+                            </span>
+                        </div>
+
+                        <div v-for="(gift, giftIndex) in item.gifts || []" :key="`m-gift-${item.product_id}-${gift.id || giftIndex}`" class="mt-2 flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-2 text-xs text-emerald-800">
+                            <Gift :size="15" class="shrink-0 text-emerald-600" />
+                            <div class="min-w-0 flex-1">
+                                <div class="truncate font-bold">{{ gift.name || 'Quà tặng' }}</div>
+                                <div v-if="gift.variant_name" class="truncate text-[11px] text-blue-700">Biến thể: {{ gift.variant_name }}</div>
+                                <div v-if="gift.imei" class="truncate font-mono text-[11px] text-blue-700">IMEI: {{ gift.imei }}</div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <span class="inline-block rounded-full border border-emerald-200 bg-emerald-100/70 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Quà tặng × {{ gift.quantity || 1 }}</span>
+                                <div class="mt-0.5 text-[10px] text-slate-400 line-through">{{ formatMoney(gift.unit_price || 0) }}</div>
+                            </div>
+                        </div>
+                    </article>
+                    <div v-if="!form.items.length" class="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18" />Chưa có mặt hàng trong hóa đơn.</div>
+                </div>
+
+                <section class="hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
                     <table class="m-cards w-full min-w-[760px] table-fixed text-sm">
-                        <colgroup><col/><col class="w-16"/><col class="w-36"/><col class="w-36"/><col class="w-10"/></colgroup>
-                        <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="p-2.5 text-left">Mặt hàng</th><th class="p-2 text-center">SL</th><th class="p-2 text-right">Đơn giá</th><th class="p-2 text-right">Thành tiền</th><th></th></tr></thead>
+                        <colgroup><col/><col class="w-16"/><col class="w-32"/><col class="w-32"/><col v-if="showVatColumn" class="w-28"/><col class="w-10"/></colgroup>
+                        <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="p-2.5 text-left">Mặt hàng</th><th class="p-2 text-center">SL</th><th class="p-2 text-right">Đơn giá</th><th class="p-2 text-right">Thành tiền</th><th v-if="showVatColumn" class="p-2 text-right">VAT</th><th></th></tr></thead>
                         <tbody>
                             <template v-for="(item, index) in form.items" :key="`${item.product_id}-${item.variant_id}-${index}`">
                             <tr class="border-t">
                                 <td class="p-2.5" data-m-wide>
-                                    <CartItem :item="item" editor-only :show-remove="false" :clickable-variant="!item.is_imei && Boolean(item.variant_id || item.variant_name)" :clickable-imei="item.is_imei" @editor-saved="syncSharedCartEditor" @select-variant="openItemOptions(index)" @select-imei="openItemOptions(index)" />
-                                    <div v-if="Number(item.customer_warranty_days ?? item.warranty_days ?? 0) > 0 || item.customer_warranty_note || item.warranty_note" class="mt-1 flex flex-wrap items-center gap-1.5 pl-[60px]">
-                                        <span v-if="Number(item.customer_warranty_days ?? item.warranty_days ?? 0) > 0" class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">{{ itemWarrantyEndDate(item) ? `Bảo hành đến ${itemWarrantyEndDate(item)}` : 'Có bảo hành' }}</span>
-                                        <button v-if="item.customer_warranty_note || item.warranty_note" type="button" class="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-amber-50 hover:text-amber-700" title="Xem ghi chú bảo hành" :aria-expanded="openWarrantyNoteIndex === index" aria-label="Xem ghi chú bảo hành" @click.stop="openWarrantyNoteIndex = openWarrantyNoteIndex === index ? null : index"><MessageSquare :size="14" /></button>
-                                    </div>
-                                    <div v-if="(item.customer_warranty_note || item.warranty_note) && openWarrantyNoteIndex === index" class="ml-[60px] mt-1 max-w-sm whitespace-pre-line rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900">{{ item.customer_warranty_note || item.warranty_note }}</div>
-                                    <div v-if="item.note" class="mt-1 pl-[60px] text-xs italic text-slate-400">Ghi chú: {{ item.note }}</div>
+                                    <CartItem :item="item" editor-only hide-vat :show-remove="false" :clickable-variant="!item.is_imei && Boolean(item.variant_id || item.variant_name)" :clickable-imei="item.is_imei" @editor-saved="syncSharedCartEditor" @select-variant="openItemOptions(index)" @select-imei="openItemOptions(index)" />
                                 </td>
                                 <td class="p-1.5 m-input-cell"><FloatingInput v-if="!item.is_imei" v-model.number="item.quantity" label="Số lượng" :floating-label="false" type="number" min="1" input-class="!h-9 !rounded-md !px-1 !py-1 !text-center !text-xs" /><span v-else class="block text-center text-xs text-slate-600">1</span></td>
                                 <td class="p-1.5 m-input-cell"><FloatingInput v-model.number="item.unit_price" label="Đơn giá" :floating-label="false" format-thousands min="0" step="100" input-class="!h-9 !rounded-md !px-2 !py-1 !text-right !text-xs" /><button type="button" role="checkbox" :aria-checked="Boolean(item.apply_vat)" :disabled="Boolean(item.is_used) && !usedVatEnabled" class="mt-1 inline-flex h-5 items-center gap-0.5 rounded px-1 text-[9px] font-bold leading-none transition disabled:cursor-not-allowed disabled:opacity-40" :class="item.apply_vat ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'" :title="item.is_used && !usedVatEnabled ? 'Sản phẩm cũ không áp dụng VAT' : (item.apply_vat ? 'Bỏ tính VAT cho sản phẩm này' : 'Tính VAT cho sản phẩm này')" @click="(!item.is_used || usedVatEnabled) && (item.apply_vat = !item.apply_vat)"><Receipt class="h-3 w-3" />VAT</button></td>
                                 <td class="p-2 text-right"><div class="font-bold">{{ formatMoney(lineTotal(item)) }}</div><div v-if="Number(item.discount_value || 0)" class="mt-0.5 text-[10px] font-semibold text-amber-700">Giảm {{ item.discount_type === 'percent' ? `${item.discount_value}%` : formatMoney(item.discount_value) }}</div></td>
+                                <td v-if="showVatColumn" class="p-2 text-right text-xs font-bold" :class="lineVats[index] > 0 ? 'text-emerald-700' : 'text-slate-300'" :data-m-hide="lineVats[index] > 0 ? null : ''">{{ lineVats[index] > 0 ? formatMoney(lineVats[index]) : '—' }}</td>
                                 <td class="p-1"><button type="button" @click="removeItem(index)" class="rounded p-1.5 text-rose-600 hover:bg-rose-50" title="Xóa mặt hàng" aria-label="Xóa mặt hàng"><Trash2 :size="15" /></button></td>
                             </tr>
                             <tr v-for="(gift, giftIndex) in item.gifts || []" :key="`gift-${item.product_id}-${gift.id || giftIndex}`" class="border-t border-emerald-100 bg-emerald-50/50 text-xs">
@@ -646,10 +707,11 @@ const confirmItemOptions = ({ variant, imei }) => {
                                 <td class="px-2 py-2 text-center font-semibold text-slate-700">{{ gift.quantity || 1 }}</td>
                                 <td class="px-2 py-2 text-right text-slate-400 line-through">{{ formatMoney(gift.unit_price || 0) }}</td>
                                 <td class="px-2 py-2 text-right font-bold text-emerald-700">0 đ</td>
+                                <td v-if="showVatColumn" data-m-hide></td>
                                 <td data-m-hide></td>
                             </tr>
                             </template>
-                            <tr v-if="!form.items.length"><td colspan="5" class="p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18"/>Chưa có mặt hàng trong hóa đơn.</td></tr>
+                            <tr v-if="!form.items.length"><td :colspan="showVatColumn ? 6 : 5" class="p-6 text-center text-sm text-slate-500"><Plus class="mx-auto mb-1" :size="18"/>Chưa có mặt hàng trong hóa đơn.</td></tr>
                         </tbody>
                     </table>
                 </section>

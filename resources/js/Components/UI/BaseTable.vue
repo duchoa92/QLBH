@@ -9,6 +9,8 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     selectable: { type: Boolean, default: false },
     rowClickable: { type: Boolean, default: false },
+    // false: thẻ mobile chỉ có phần tiêu đề (trang tự vẽ hết thông tin ở slot mobile-title), không vẽ khối thân rỗng.
+    mobileBody: { type: Boolean, default: true },
     hidePaginationWhenSinglePage: { type: Boolean, default: false },
     selectedIds: { type: Array, default: () => [] },
     hideActions: { type: Boolean, default: false }
@@ -123,7 +125,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
 
     <div class="space-y-2.5 md:hidden">
         <article v-for="row in rows" :key="`mobile-${row.id}`" class="space-y-2.5 rounded-xl border border-slate-200 border-l-4 border-l-slate-300 bg-white p-3.5 shadow-sm transition active:bg-slate-50" :class="rowClickable ? 'cursor-pointer' : ''" @click="rowClickable && $emit('rowClick', row)">
-            <div class="flex items-start gap-2 border-b border-slate-100 pb-3">
+            <div class="flex items-start gap-2" :class="mobileBody || $slots['mobile-actions'] ? 'border-b border-slate-100 pb-3' : ''">
                 <input v-if="selectable" type="checkbox" class="mt-1 shrink-0" :checked="selectedIds.includes(row.id)" @click.stop @change="$emit('toggleOne', row.id)" />
                 <div class="min-w-0 flex-1">
                     <slot name="mobile-title" :row="row">
@@ -131,7 +133,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
                     </slot>
                 </div>
             </div>
-            <div class="border-b border-slate-100 pb-3">
+            <div v-if="mobileBody" :class="$slots['mobile-actions'] ? 'border-b border-slate-100 pb-3' : ''">
             <slot name="mobile-body" :row="row">
             <div class="grid grid-cols-2 gap-x-3 gap-y-2 pl-6 text-xs">
                 <template v-for="col in columns.slice(1)" :key="col.key">
@@ -143,7 +145,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
             </div>
             </slot>
             </div>
-            <div class="pt-0.5">
+            <div v-if="$slots['mobile-actions']" class="pt-0.5">
                 <slot name="mobile-actions" :row="row" />
             </div>
         </article>

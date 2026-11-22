@@ -200,6 +200,7 @@ useSilentRefresh(['categories'])
             :filters="filtersData"
             row-clickable
             @sort="sort"
+            :mobile-body="false"
             @row-click="openEdit($event)"
         >
             <template #row="{ row }">
@@ -244,11 +245,6 @@ useSilentRefresh(['categories'])
                     </div>
                 </td>
 
-            </template>
-
-            <!-- Ghi đè phần thân mặc định để không lặp tên và trạng thái. -->
-            <template #mobile-body>
-                <span class="hidden" aria-hidden="true"></span>
             </template>
 
             <template #mobile-title="{ row }">
