@@ -24,6 +24,7 @@ import { openModal } from '@/Stores/modal'
 import { prepareOpenPos } from '@/utils/pos'
 import { imageUrl } from '@/utils/imageUrl'
 import { appBasePath } from '@/utils/appPaths'
+import { pageTitles } from '@/utils/pageTitles'
 
 const sidebarOpen = ref(false)
 const isDesktop = ref(false)
@@ -96,46 +97,14 @@ const currentTitle = computed(() => {
         ? rawPath.slice(appBasePath.length)
         : rawPath
 
-    const componentTitles = {
-        'Dashboard': 'Dashboard',
-        'Products/Index': 'Sản phẩm',
-        'Products/Form': 'Thông tin sản phẩm',
-        'Products/Show': 'Chi tiết sản phẩm',
-        'ProductImeis/Index': 'IMEI',
-        'ProductImeis/Lookup': 'Tra cứu',
-        'ProductImeis/Show': 'Chi tiết IMEI',
-        'Categories/Index': 'Danh mục',
-        'Brands/Index': 'Thương hiệu',
-        'Customers/Index': 'Khách hàng',
-        'Customers/Create': 'Thêm khách hàng',
-        'Customers/Edit': 'Sửa khách hàng',
-        'Customers/Show': 'Chi tiết khách hàng',
-        'Sales/Index': 'Hóa đơn bán hàng',
-        'Sales/Edit': 'Sửa hóa đơn',
-        'StockImports/List': 'Phiếu nhập hàng',
-        'Suppliers/Index': 'Nhà cung cấp',
-        'Suppliers/Create': 'Thêm nhà cung cấp',
-        'Suppliers/Edit': 'Sửa nhà cung cấp',
-        'Repairs/Index': 'Sửa chữa thiết bị',
-        'Users/Index': 'Nhân viên',
-        'Users/Create': 'Thêm nhân viên',
-        'Users/Edit': 'Sửa nhân viên',
-        'Debts/Index': 'Quản lý công nợ',
-        'Expenses/Index': 'Chi phí cửa hàng',
-        'Taxes/Index': 'Khai thuế',
-        'Reports/Index': 'Báo cáo & Thống kê',
-        'WorkShifts/History': 'Lịch sử kiểm kê',
-        'Settings/Index': 'Thiết lập',
-        'Profile/Edit': 'Tài khoản cá nhân',
-    }
-
-    const componentTitle = componentTitles[page.component]
+    const componentTitle = pageTitles[page.component]
 
     if (path.startsWith('/settings')) return page.props.active_section === 'backups' ? 'Sao lưu dữ liệu' : 'Thiết lập'
     if (page.component === 'Records/Show' && page.props.title) return page.props.title
+    if (path.startsWith('/pos') && path.includes('payment-settings')) return 'Thiết lập thanh toán POS'
     if (componentTitle) return componentTitle
 
-    if (path.startsWith('/pos')) return path.includes('payment-settings') ? 'Thiết lập thanh toán POS' : 'POS bán hàng'
+    if (path.startsWith('/pos')) return 'POS bán hàng'
     if (path.startsWith('/products')) return 'Sản phẩm'
     if (path.startsWith('/product-imeis') || path.startsWith('/imeis')) return 'IMEI'
     if (path.startsWith('/categories') || path.startsWith('/brands')) return 'Danh mục & Thương hiệu'

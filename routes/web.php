@@ -228,9 +228,7 @@ Route::middleware(['auth'])->group(function () {
     */
     // Users
     Route::get('/users', [UserController::class, 'index'])->middleware('permission:users.view')->name('users.index');
-    Route::get('/users/create', [UserController::class, 'create'])->middleware('permission:users.create')->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->middleware('permission:users.create')->name('users.store');
-    Route::get('/users/{user}/edit', [UserController::class, 'edit'])->middleware('permission:users.edit')->name('users.edit');
     Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:users.edit')->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('permission:users.delete')->name('users.destroy');
     Route::get('/roles/options', [RoleManagementController::class, 'options'])->middleware('permission:roles.manage')->name('roles.options');
@@ -243,10 +241,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/categories/{id}/restore', [CategoryController::class, 'restore'])->middleware('permission:categories.edit')->name('categories.restore');
     Route::delete('/categories/{id}/force', [CategoryController::class, 'forceDelete'])->middleware('permission:categories.delete')->name('categories.forceDelete');
     Route::patch('/categories/{id}/toggle-status', [CategoryController::class, 'toggleStatus'])->middleware('permission:categories.edit')->name('categories.toggleStatus');
-    Route::resource('categories', CategoryController::class)
-        ->middlewareFor(['index', 'show'], 'permission:categories.view')
-        ->middlewareFor(['create', 'store'], 'permission:categories.create')
-        ->middlewareFor(['edit', 'update'], 'permission:categories.edit')
+    Route::resource('categories', CategoryController::class)->only(['index', 'store', 'update', 'destroy'])
+        ->middlewareFor('index', 'permission:categories.view')
+        ->middlewareFor('store', 'permission:categories.create')
+        ->middlewareFor('update', 'permission:categories.edit')
         ->middlewareFor('destroy', 'permission:categories.delete');
 
     // Brands
@@ -254,10 +252,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/brands/{id}/restore', [BrandController::class, 'restore'])->middleware('permission:brands.edit')->name('brands.restore');
     Route::delete('/brands/{id}/force', [BrandController::class, 'forceDelete'])->middleware('permission:brands.delete')->name('brands.forceDelete');
     Route::patch('/brands/{id}/toggle-status', [BrandController::class, 'toggleStatus'])->middleware('permission:brands.edit')->name('brands.toggleStatus');
-    Route::resource('brands', BrandController::class)
-        ->middlewareFor(['index', 'show'], 'permission:brands.view')
-        ->middlewareFor(['create', 'store'], 'permission:brands.create')
-        ->middlewareFor(['edit', 'update'], 'permission:brands.edit')
+    Route::resource('brands', BrandController::class)->only(['index', 'store', 'update', 'destroy'])
+        ->middlewareFor('index', 'permission:brands.view')
+        ->middlewareFor('store', 'permission:brands.create')
+        ->middlewareFor('update', 'permission:brands.edit')
         ->middlewareFor('destroy', 'permission:brands.delete');
 
     /*
@@ -327,10 +325,10 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('/imeis/lookup', '/lookup');
     Route::get('/imeis/{imei}', [ProductImeiController::class, 'show'])->middleware('permission:products.view')->name('product-imeis.show');
 
-    Route::resource('customers', CustomerController::class)
-        ->middlewareFor(['index', 'show'], 'permission:customers.view')
-        ->middlewareFor(['create', 'store'], 'permission:customers.create')
-        ->middlewareFor(['edit', 'update'], 'permission:customers.edit')
+    Route::resource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy'])
+        ->middlewareFor('index', 'permission:customers.view')
+        ->middlewareFor('store', 'permission:customers.create')
+        ->middlewareFor('update', 'permission:customers.edit')
         ->middlewareFor('destroy', 'permission:customers.delete');
     Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
 
@@ -357,10 +355,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/expenses/recurring/{recurringExpense}/paid', [ExpenseController::class, 'markRecurringPaid'])->middleware('permission:expenses.manage')->name('expenses.recurring.paid');
     Route::get('/tax-declaration', [TaxDeclarationController::class, 'index'])->middleware('permission:reports.view')->name('tax-declaration.index');
     Route::get('/api/suppliers/search', [SupplierController::class, 'search'])->middleware('permission:suppliers.view|stock_imports.view|stock_imports.create')->name('api.suppliers.search');
-    Route::resource('suppliers', SupplierController::class)
-        ->middlewareFor(['index', 'show'], 'permission:suppliers.view')
-        ->middlewareFor(['create', 'store'], 'permission:suppliers.create')
-        ->middlewareFor(['edit', 'update'], 'permission:suppliers.edit')
+    Route::resource('suppliers', SupplierController::class)->only(['index', 'store', 'update', 'destroy'])
+        ->middlewareFor('index', 'permission:suppliers.view')
+        ->middlewareFor('store', 'permission:suppliers.create')
+        ->middlewareFor('update', 'permission:suppliers.edit')
         ->middlewareFor('destroy', 'permission:suppliers.delete');
 
     /*

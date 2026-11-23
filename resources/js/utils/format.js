@@ -127,3 +127,21 @@ export function formatDateTime(date) {
     }).format(parsed)
     return `${formattedDate} ${formattedTime}`
 }
+
+// Ô nhập tiền: hiển thị số có phân cách nghìn (rỗng nếu 0) và đọc ngược lại thành số nguyên.
+export function formatMoneyInput(value) {
+    const number = Number(value || 0)
+    return number > 0 ? formatNumber(number) : ''
+}
+
+export function parseMoneyInput(value) {
+    const digits = String(value ?? '').replace(/\D/g, '')
+    return digits ? Number(digits) : 0
+}
+
+// Escape chuỗi trước khi chèn vào HTML in ấn (hóa đơn, tem, hợp đồng).
+export function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
+    })[character])
+}

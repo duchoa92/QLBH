@@ -19,7 +19,7 @@ import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import api from '@/Services/api'
 import { filterByKeywords, highlightText } from '@/utils/searchHelper'
-import { formatNumber, formatDateTime } from '@/utils/format'
+import { formatNumber, formatDateTime, parseMoneyInput } from '@/utils/format'
 
 import {
     Plus,
@@ -723,10 +723,6 @@ const addEntry = async () => {
     }
 }
 
-const parseMoneyInput = (value) => {
-    const digits = String(value ?? '').replace(/[^\d]/g, '')
-    return digits ? Number(digits) : 0
-}
 const updateRowMoney = (row, key, event) => { row[key] = parseMoneyInput(event.target.value) }
 
 const complete = async () => {

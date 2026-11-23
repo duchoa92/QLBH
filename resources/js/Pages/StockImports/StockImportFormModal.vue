@@ -15,7 +15,7 @@ import { openModal } from '@/Stores/modal'
 import api from '@/Services/api'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
-import { formatNumber, formatDate } from '@/utils/format'
+import { formatNumber, formatDate, escapeHtml } from '@/utils/format'
 
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
@@ -525,9 +525,6 @@ const formErrorMessages = computed(() =>
         .filter(Boolean)
 )
 
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
-})[character])
 const printPreviewHtml = ref('')
 const defaultContractContent = 'Bên bán cam kết điện thoại ghi trong hợp đồng này thuộc quyền sở hữu hợp pháp của mình hoặc mình được chủ sở hữu ủy quyền hợp pháp để bán; điện thoại không do trộm cắp, cướp giật, lừa đảo, chiếm đoạt hoặc vi phạm pháp luật mà có. Bên bán chịu trách nhiệm trước pháp luật nếu cam kết này không đúng.'
 

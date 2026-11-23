@@ -2,7 +2,7 @@
 import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import axios from 'axios';
-import debounce from 'lodash/debounce';
+import debounce from '@/utils/debounce'
 import { closeModal } from '@/Stores/modal';
 
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue';

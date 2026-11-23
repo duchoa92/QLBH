@@ -2,7 +2,7 @@
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import axios from 'axios'
-import debounce from 'lodash/debounce'
+import debounce from '@/utils/debounce'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { toast } from 'vue-sonner'
 import { findProductByScannedCode } from '@/Modules/POS/Product/Services/productBarcodeLookup'

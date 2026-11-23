@@ -33,24 +33,6 @@ export const productService = {
         return response.data
     },
 
-    // Tìm kiếm sản phẩm theo mã vạch
-    async findByBarcode(
-        barcode
-    ) {
-
-        const response =
-            await api.get(
-                '/api/products/barcode',
-                {
-                    params: {
-                        barcode,
-                    },
-                }
-            )
-
-        return response.data
-    },
-
     // Quét barcode hoặc IMEI
     async scan(code) {
 

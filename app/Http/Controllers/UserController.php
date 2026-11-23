@@ -52,16 +52,6 @@ class UserController extends Controller
         );
     }
 
-    public function create(): Response
-    {
-        return Inertia::render(
-            'Users/Create',
-            [
-                'roles' => $this->roleData()->filter(fn (array $role) => ! $role['system'] || $this->canAssignProtectedRole())->values(),
-            ]
-        );
-    }
-
     public function store(
         StoreUserRequest $request
     ): RedirectResponse {
@@ -76,21 +66,6 @@ class UserController extends Controller
                 'success',
                 'Thêm user thành công'
             );
-    }
-
-    public function edit(User $user): Response
-    {
-        $user->load('roles');
-        $existingRoleIds = $user->roles->pluck('id')->all();
-
-        return Inertia::render(
-            'Users/Edit',
-            [
-                'user' => $user,
-
-                'roles' => $this->roleData()->filter(fn (array $role) => ! $role['system'] || $this->canAssignProtectedRole() || in_array($role['id'], $existingRoleIds, true))->values(),
-            ]
-        );
     }
 
     private function roleData()

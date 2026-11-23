@@ -1,10 +1,7 @@
 // In tem IMEI/Serial ngay trong trang hiện tại bằng iframe ẩn (không mở tab/điều hướng).
 // Dùng chung cho danh sách sản phẩm và cửa sổ chi tiết sản phẩm.
 import JsBarcode from 'jsbarcode'
-
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
-})[c])
+import { escapeHtml } from '@/utils/format'
 
 const normalizeStatus = (status) => ({ 0: 'in_stock', 1: 'sold', 2: 'repairing', 3: 'returned' }[status] ?? status)
 

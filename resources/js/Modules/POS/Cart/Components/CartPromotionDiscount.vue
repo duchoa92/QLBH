@@ -2,7 +2,7 @@
 
 import FloatingInput
 from '@/Components/UI/FloatingInput.vue'
-import { formatNumber } from '@/utils/format'
+import { formatNumber, formatMoneyInput, parseMoneyInput } from '@/utils/format'
 import { CircleX } from 'lucide-vue-next'
 
 defineProps({
@@ -12,17 +12,6 @@ defineProps({
     normalizeDiscount:
         Function,
 })
-
-const formatMoneyInput = (value) => {
-    const number = Number(value || 0)
-
-    return number > 0
-        ? formatNumber(number)
-        : ''
-}
-
-const parseMoneyInput = (value) =>
-    Number(String(value || '').replace(/\D/g, ''))
 
 const handleDiscountInput = (item, event, normalizeDiscount) => {
     if (!item.discount_type) {

@@ -235,12 +235,4 @@ class CategoryController extends Controller
         return back()->with('success', 'Đã cập nhật trạng thái');
     }
 
-    public function create()
-    {
-        return Inertia::render('Categories/Form', [
-            'category' => null
-        ]);
-    }
-
-
 }

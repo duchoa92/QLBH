@@ -67,13 +67,6 @@ def nchw(image: np.ndarray, *, swap_rb: bool = False) -> np.ndarray:
     return np.ascontiguousarray(image.transpose(2, 0, 1)[None].astype(np.float32))
 
 
-def yunet_tensor(image: np.ndarray) -> np.ndarray:
-    """Match OpenCV Zoo YuNet preprocessing: RGB image, then RGB mean removal."""
-    rgb = image[..., ::-1].astype(np.float32)
-    rgb -= np.asarray((104.0, 117.0, 123.0), dtype=np.float32)
-    return np.ascontiguousarray(rgb.transpose(2, 0, 1)[None])
-
-
 def letterbox(image: np.ndarray, size: int = INPUT) -> tuple[np.ndarray, float, int, int]:
     """Preserve face geometry while fitting the fixed-size YuNet input."""
     height, width = image.shape[:2]

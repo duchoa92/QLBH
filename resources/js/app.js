@@ -16,6 +16,7 @@ import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
 import { installInsecureNotice, syncInsecureNotice } from '@/utils/insecureNotice'
 import { installMobileTables } from '@/utils/mobileTables'
 import { installViewportFix } from '@/utils/viewportFix'
+import { pageTitles } from '@/utils/pageTitles'
 
 const AdminLayout = defineAsyncComponent(() => import('@/Layouts/AdminLayout.vue'))
 const pageComponents = import.meta.glob([
@@ -23,7 +24,6 @@ const pageComponents = import.meta.glob([
     '!./Pages/Backups/Index.vue',
     '!./Pages/Brands/Form.vue',
     '!./Pages/Customers/CustomerFormModal.vue',
-    '!./Pages/Customers/Partials/**/*.vue',
     '!./Pages/ProductImeis/PriceFormModal.vue',
     '!./Pages/Products/*Modal.vue',
     '!./Pages/Profile/Partials/**/*.vue',
@@ -65,24 +65,7 @@ if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 const pageTitleFor = (page) => {
-    const titles = {
-        Dashboard: 'Dashboard',
-        'Products/Index': 'Sản phẩm', 'Products/Form': 'Thông tin sản phẩm', 'Products/Show': 'Chi tiết sản phẩm',
-        'ProductImeis/Index': 'IMEI', 'ProductImeis/Lookup': 'Tra cứu', 'ProductImeis/Show': 'Chi tiết IMEI',
-        'Categories/Index': 'Danh mục', 'Categories/Form': 'Thông tin danh mục', 'Brands/Index': 'Thương hiệu',
-        'Customers/Index': 'Khách hàng', 'Customers/Create': 'Thêm khách hàng', 'Customers/Edit': 'Sửa khách hàng', 'Customers/Show': 'Chi tiết khách hàng',
-        'Sales/Index': 'Hóa đơn bán hàng', 'Sales/Edit': 'Sửa hóa đơn', 'Sales/Receipt': 'Hóa đơn bán hàng',
-        'StockImports/List': 'Phiếu nhập hàng',
-        'Suppliers/Index': 'Nhà cung cấp', 'Suppliers/Create': 'Thêm nhà cung cấp', 'Suppliers/Edit': 'Sửa nhà cung cấp',
-        'Repairs/Index': 'Sửa chữa thiết bị', 'Users/Index': 'Nhân viên', 'Users/Create': 'Thêm nhân viên', 'Users/Edit': 'Sửa nhân viên',
-        'Debts/Index': 'Quản lý công nợ', 'Expenses/Index': 'Chi phí cửa hàng',
-        'Taxes/Index': 'Khai thuế', 'Reports/Index': 'Báo cáo & Thống kê', 'WorkShifts/History': 'Lịch sử kiểm kê',
-        'Settings/Index': 'Thiết lập', 'Profile/Edit': 'Tài khoản cá nhân',
-        'Pos/Index': 'POS bán hàng', 'Auth/Login': 'Đăng nhập',
-        'Auth/ForgotPassword': 'Quên mật khẩu', 'Auth/ResetPassword': 'Đặt lại mật khẩu', 'Auth/VerifyEmail': 'Xác minh email',
-        'Auth/ConfirmPassword': 'Xác nhận mật khẩu', 'Setup/Index': 'Thiết lập ban đầu',
-    }
-    const title = page?.props?.title || titles[page?.component]
+    const title = page?.props?.title || pageTitles[page?.component]
         || page?.component?.split('/').at(-1)?.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
         || 'Dashboard'
     const shopName = page?.props?.settings?.shop_name

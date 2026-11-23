@@ -10,7 +10,6 @@ use App\Http\Controllers\CustomerVisitController;
 use App\Http\Controllers\Api\PosScanController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
-use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\ReferenceDataController;
 use App\Http\Controllers\Api\DataVersionController;
 use App\Http\Controllers\Api\SaleController;
@@ -53,15 +52,6 @@ Route::middleware(['web', 'auth'])->group(function ()
         '/pos/scan',
         [PosScanController::class, 'scan']
     )->middleware('permission:pos.access');
-
-    // Tìm kiếm sản phẩm theo mã vạch
-    Route::get(
-        '/products/barcode',
-        [
-            ProductApiController::class,
-            'findByBarcode',
-        ]
-    )->middleware('permission:products.view|pos.access');
 
     // Lấy danh sách sản phẩm
     Route::get('/products', [ProductController::class, 'index'])->middleware('permission:products.view|pos.access|stock_imports.create');

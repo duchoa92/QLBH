@@ -107,13 +107,6 @@ class SupplierController extends Controller
         return is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? $value : '';
     }
 
-    public function create(): Response
-    {
-        return Inertia::render(
-            'Suppliers/Create'
-        );
-    }
-
     public function store(Request $request): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
@@ -165,19 +158,6 @@ class SupplierController extends Controller
             'success' => 'Tạo nhà cung cấp thành công',
             'newSupplier' => $supplier
         ]);
-    }
-
-    public function edit(
-        Supplier $supplier
-    ): Response {
-
-        return Inertia::render(
-            'Suppliers/Edit',
-            [
-                'supplier' =>
-                    $supplier,
-            ]
-        );
     }
 
     public function update(

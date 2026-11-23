@@ -5,7 +5,7 @@ import PaymentMethodSelect from './PaymentMethodSelect.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import QrPayment from './QrPayment.vue'
 import { X, Receipt, Loader2, CheckCircle2 } from 'lucide-vue-next'
-import { formatCurrency, formatNumber } from '@/utils/format'
+import { formatCurrency, formatNumber, formatMoneyInput, parseMoneyInput } from '@/utils/format'
 import { announceBankPayment, armBankPaymentAudio } from '@/Modules/POS/Payment/Utils/paymentAlerts'
 import axios from 'axios'
 import { buildCheckoutItems } from '@/Modules/POS/Payment/Utils/checkoutPayload'
@@ -172,14 +172,6 @@ const balanceAmount = computed(() => {
 })
 
 const formatMoney = formatCurrency
-
-const formatMoneyInput = (value) => {
-    const number = Number(value || 0)
-    return number > 0 ? formatNumber(number) : ''
-}
-
-const parseMoneyInput = (value) =>
-    Number(String(value || '').replace(/\D/g, ''))
 
 const handlePaidAmountInput = (event) => {
     paidAmount.value = parseMoneyInput(event.target.value)

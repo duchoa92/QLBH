@@ -99,10 +99,6 @@ class Customer extends Model
         return $this->hasMany(CustomerDebt::class);
     }
 
-    public function logs(): HasMany
-    {
-        return $this->hasMany(CustomerLog::class);
-    }
 
     public function sales(): HasMany
     {

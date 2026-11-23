@@ -115,16 +115,6 @@ class CustomerController extends Controller
 
     /*
     |--------------------------------------------------
-    | CREATE
-    |--------------------------------------------------
-    */
-    public function create(): Response
-    {
-        return Inertia::render('Customers/Create');
-    }
-
-    /*
-    |--------------------------------------------------
     | STORE
     |--------------------------------------------------
     */
@@ -220,18 +210,6 @@ class CustomerController extends Controller
     |--------------------------------------------------
     */
 
-
-    // Sửa khách hàng
-    public function edit(Customer $customer): Response
-    {
-        $customer->load([
-            'images'
-        ]);
-
-        return Inertia::render('Customers/Edit', [
-            'customer' => $customer,
-        ]);
-    }
 
 
     // Cập nhật khách hàng

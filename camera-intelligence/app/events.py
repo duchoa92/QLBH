@@ -15,14 +15,6 @@ class EventPublisher:
         # reaching Laravel.
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def publish(self, event: dict) -> None:
-        body = json.dumps({"events": [event]}, separators=(",", ":")).encode()
-        request = urllib.request.Request(self.url, data=body, method="POST", headers={
-            "Content-Type": "application/json", "Accept": "application/json", "X-Camera-Key": self.key,
-        })
-        with self.opener.open(request, timeout=self.timeout):
-            pass
-
     def post(self, path: str, payload: dict) -> dict:
         body = json.dumps(payload, separators=(",", ":")).encode()
         request = urllib.request.Request(self.url.rstrip('/') + path, data=body, method="POST", headers={
