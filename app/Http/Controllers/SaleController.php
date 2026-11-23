@@ -776,6 +776,234 @@ class SaleController extends Controller
         return redirect()->route('sales.index')->with('success', 'Đã hủy hóa đơn thành công!');
     }
 
+    /**
+     * Hủy MỘT PHẦN hóa đơn: chọn sản phẩm và số lượng cần hủy (lý do có thể để trống).
+     * - Hoàn kho đúng số lượng hủy (IMEI, lô FIFO, số lượng đã bán). Hủy hết số lượng của dòng thì dòng (kèm quà tặng) bị xóa;
+     *   hủy bớt thì dòng giảm số lượng và giữ nguyên quà tặng kèm.
+     * - Tính lại tạm tính/giảm giá/VAT/tổng tiền; khách đã trả dư thì ghi nhận là tiền thừa phải hoàn.
+     * - Điều chỉnh công nợ khách và điểm tích lũy theo tổng mới.
+     */
+    public function cancelItems(Request $request, Sale $sale)
+    {
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.id' => ['required', 'integer'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $fail = fn (string $message) => throw \Illuminate\Validation\ValidationException::withMessages(['sale' => $message]);
+        $requested = collect($data['items'])->groupBy('id')->map(fn ($rows) => (int) $rows->sum('quantity'));
+        $refund = 0.0;
+
+        DB::transaction(function () use ($sale, $data, $requested, $fail, &$refund): void {
+            $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
+
+            if ($sale->status !== 'completed') {
+                $fail('Chỉ hủy được sản phẩm của hóa đơn đang hoàn thành.');
+            }
+            if (CustomerDebt::query()->where('source_type', Sale::class)->where('source_id', $sale->id)->where('type', 'decrease')->exists()) {
+                $fail('Hóa đơn đã có lịch sử thu công nợ / trích tiền thừa nên không thể hủy một phần. Hãy hủy cả hóa đơn.');
+            }
+
+            $lines = SaleItem::query()
+                ->where('sale_id', $sale->id)
+                ->with(['product', 'variant', 'productImei', 'stockBatchAllocations', 'gifts.product', 'gifts.stockBatchAllocations'])
+                ->lockForUpdate()
+                ->get();
+
+            $plan = []; // [line, cancelQty, full]
+            foreach ($requested as $lineId => $qty) {
+                $line = $lines->firstWhere('id', (int) $lineId);
+                if (! $line) {
+                    $fail('Có sản phẩm không còn trong hóa đơn (có thể đã được hủy). Hãy tải lại và thử lại.');
+                }
+                if ($qty > (int) $line->quantity) {
+                    $fail('Số lượng hủy của "' . ($line->product?->name ?? 'sản phẩm') . '" vượt quá số lượng trong hóa đơn.');
+                }
+                $plan[] = ['line' => $line, 'qty' => $qty, 'full' => $qty >= (int) $line->quantity];
+            }
+            if (collect($plan)->every(fn ($row) => $row['full']) && count($plan) >= $lines->count()) {
+                $fail('Bạn đã chọn hủy toàn bộ sản phẩm. Hãy dùng chức năng hủy cả hóa đơn.');
+            }
+
+            $oldTotal = max(0, (float) $sale->grand_total);
+            $oldTax = max(0, (float) $sale->tax);
+            $oldChange = max(0, (float) $sale->change_amount);
+            $oldDebt = max(0, $oldTotal - min($oldTotal, max(0, (float) $sale->paid_amount - $oldChange)));
+            $vatRate = (float) setting('pos_vat_rate', 10);
+
+            $lineDiscount = function (array $row): float {
+                $lineTotal = $row['unit_price'] * $row['quantity'];
+                $value = max(0, $row['discount_value']);
+
+                return match ($row['discount_type']) {
+                    'percent' => $lineTotal * min(100, $value) / 100,
+                    'amount' => min($lineTotal, $value),
+                    default => 0.0,
+                };
+            };
+            $toRow = fn (SaleItem $row, ?int $quantity = null, ?float $discountValue = null): array => [
+                'unit_price' => (float) $row->unit_price,
+                'quantity' => $quantity ?? (int) $row->quantity,
+                'discount_type' => $row->discount_type,
+                'discount_value' => $discountValue ?? (float) $row->discount_value,
+                'vat_applied' => (bool) $row->vat_applied,
+            ];
+            $vatOf = fn (array $rows, float $invoiceDiscount): int => PosVatCalculator::calculate(
+                array_map(fn (array $row) => [
+                    'price' => $row['unit_price'],
+                    'quantity' => $row['quantity'],
+                    'discount_type' => $row['discount_type'],
+                    'discount_value' => $row['discount_value'],
+                    'apply_vat' => $row['vat_applied'],
+                ], $rows),
+                $invoiceDiscount,
+                $vatRate
+            );
+
+            $before = $lines->map(fn (SaleItem $row) => $toRow($row))->all();
+            $after = [];
+            $planById = collect($plan)->keyBy(fn ($row) => $row['line']->id);
+
+            foreach ($lines as $line) {
+                $step = $planById->get($line->id);
+                if (! $step) {
+                    $after[] = $toRow($line);
+                    continue;
+                }
+
+                $oldQty = (int) $line->quantity;
+                $cancelQty = $step['qty'];
+                $newQty = $oldQty - $cancelQty;
+                $factor = max(1, (int) ($line->conversion_factor ?: 1));
+                $baseCancel = $cancelQty * $factor;
+
+                $newDiscountValue = (float) $line->discount_value;
+                if (! $step['full'] && $line->discount_type === 'amount' && $oldQty > 0) {
+                    $newDiscountValue = round($newDiscountValue * $newQty / $oldQty, 2);
+                }
+                $oldRow = $toRow($line);
+                $newRow = $toRow($line, $newQty, $newDiscountValue);
+                $cancelledAmount = (float) $line->subtotal;
+                if (! $step['full']) {
+                    $cancelledAmount = max(0, round($cancelledAmount - ($newRow['unit_price'] * $newQty - $lineDiscount($newRow)), 2));
+                }
+
+                \App\Models\OrderItemCancellation::query()->create([
+                    'order_type' => Sale::class,
+                    'order_id' => $sale->id,
+                    'product_id' => $line->product_id,
+                    'product_name' => $line->product?->name ?? 'Sản phẩm đã xóa',
+                    'variant_label' => \App\Models\OrderItemCancellation::variantLabel($line->variant),
+                    'imeis' => $line->productImei ? array_values(array_filter([$line->productImei->imei])) : null,
+                    'quantity' => $cancelQty,
+                    'unit_name' => $line->unit_name,
+                    'unit_price' => (float) $line->unit_price,
+                    'amount' => $cancelledAmount,
+                    'meta' => $step['full'] ? ['gifts' => $line->gifts->map(fn ($gift) => [
+                        'product_name' => $gift->product?->name,
+                        'quantity' => (int) $gift->quantity,
+                    ])->values()->all()] : null,
+                    'reason' => trim((string) ($data['reason'] ?? '')) ?: null,
+                    'user_id' => auth()->id(),
+                    'cancelled_at' => now(),
+                ]);
+
+                if ($step['full']) {
+                    $this->restoreSaleItemStock($line); // hoàn cả quà tặng kèm
+                    $line->delete();
+                    continue;
+                }
+
+                // Hủy bớt số lượng: hoàn đúng phần hủy, giữ dòng và quà tặng.
+                app(StockBatchAllocator::class)->restorePartial($line, $baseCancel);
+                if ($line->variant) {
+                    ProductVariant::query()->whereKey($line->variant->id)->increment('stock', $baseCancel);
+                }
+                if ($line->product) {
+                    Product::query()->whereKey($line->product->id)->increment('stock', $baseCancel);
+                    $this->decrementSoldCount($line->product, $cancelQty);
+                }
+                $line->update([
+                    'quantity' => $newQty,
+                    'base_quantity' => max(0, (int) ($line->base_quantity ?: $oldQty * $factor) - $baseCancel),
+                    'discount_value' => $newDiscountValue,
+                    'subtotal' => max(0, round($newRow['unit_price'] * $newQty - $lineDiscount($newRow), 2)),
+                ]);
+                $after[] = $newRow;
+            }
+
+            // Tính lại tiền theo các dòng còn lại.
+            $subtotal = (float) collect($after)->sum(fn (array $row) => $row['unit_price'] * $row['quantity']);
+            $discount = (float) collect($after)->sum(fn (array $row) => $lineDiscount($row));
+            $oldBase = max(0, (float) $sale->subtotal - (float) $sale->discount);
+            $newBase = max(0, $subtotal - $discount);
+            $invoiceDiscount = $oldBase > 0
+                ? min($newBase, round((float) $sale->invoice_discount * $newBase / $oldBase, 2))
+                : 0.0;
+
+            // VAT: giữ đúng thuế suất đã áp lúc bán bằng cách co giãn theo tỉ lệ trước/sau khi hủy.
+            $taxBefore = $vatOf($before, (float) $sale->invoice_discount);
+            $taxAfter = $vatOf($after, $invoiceDiscount);
+            $tax = $taxBefore > 0 ? (int) round($oldTax * $taxAfter / $taxBefore) : 0;
+
+            $extraFee = max(0, (float) $sale->extra_fee);
+            $newTotal = max(0, round($subtotal - $discount - $invoiceDiscount + $tax + $extraFee, 2));
+            $paidAmount = max(0, (float) $sale->paid_amount);
+            $newChange = max(0, round($paidAmount - $newTotal, 2));
+            $newDebt = max(0, round($newTotal - $paidAmount, 2));
+            $refund = max(0, $newChange - $oldChange);
+
+            $sale->update([
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'invoice_discount' => $invoiceDiscount,
+                'tax' => $tax,
+                'extra_fee' => $extraFee,
+                'grand_total' => $newTotal,
+                'change_amount' => $newChange,
+            ]);
+
+            // Công nợ khách hàng.
+            $debtDelta = round($newDebt - $oldDebt, 2);
+            if ($sale->customer_id && abs($debtDelta) > 0.001) {
+                $customer = Customer::query()->lockForUpdate()->find($sale->customer_id);
+                if ($customer) {
+                    $customer->increment('debt_balance', $debtDelta);
+                    $debtEntry = CustomerDebt::query()
+                        ->where('source_type', Sale::class)
+                        ->where('source_id', $sale->id)
+                        ->where('type', 'increase')
+                        ->first();
+                    if ($debtEntry) {
+                        $debtEntry->update(['amount' => $newDebt]);
+                    } elseif ($newDebt > 0) {
+                        CustomerDebt::query()->create([
+                            'customer_id' => $customer->id,
+                            'type' => 'increase',
+                            'amount' => $newDebt,
+                            'source_type' => Sale::class,
+                            'source_id' => $sale->id,
+                            'note' => 'Điều chỉnh công nợ hóa đơn ' . $sale->code . ' (hủy sản phẩm)',
+                        ]);
+                    }
+                }
+            }
+
+            app(\App\Services\CustomerPointService::class)->syncSale($sale);
+        });
+
+        $message = 'Đã hủy sản phẩm đã chọn khỏi hóa đơn và hoàn kho.';
+        if ($refund > 0) {
+            $message .= ' Cần hoàn lại cho khách ' . number_format($refund, 0, ',', '.') . ' đ.';
+        }
+
+        if ($this->wantsPlainJson($request)) return response()->json(['success' => true, 'message' => $message, 'refund' => $refund]);
+
+        return back()->with('success', $message);
+    }
+
     // Gọi bằng axios (lịch sử hóa đơn trong POS) thì trả JSON, không redirect về trang danh sách nặng.
     private function wantsPlainJson(Request $request): bool
     {

@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock;
 
+use App\Models\OrderItemCancellation;
 use App\Models\StockImport;
 use App\Models\Supplier;
 use App\Models\SupplierDebt;
@@ -199,6 +200,229 @@ class StockImportService
             });
 
             return $import->fresh();
+        });
+    }
+
+    /**
+     * Hủy MỘT PHẦN phiếu nhập: chọn dòng nhập và số lượng cần hủy (lý do có thể để trống).
+     * Hủy hết số lượng của dòng thì dòng bị xóa; hủy bớt (chỉ hàng không IMEI) thì dòng giảm số lượng.
+     * Trừ lại tồn + lô + IMEI tương ứng, tính lại tổng tiền phiếu và công nợ nhà cung cấp.
+     *
+     * @param  array<int,int>  $selection  [stock_import_item_id => số lượng cần hủy]
+     * @return array{import: StockImport, refund: float} refund = số tiền đã trả dư so với tổng mới (NCC/khách hoàn lại cửa hàng)
+     */
+    public function cancelItems(StockImport $stockImport, array $selection, ?string $reason = null): array
+    {
+        $selection = collect($selection)->mapWithKeys(fn ($qty, $id) => [(int) $id => (int) $qty])->filter(fn ($qty, $id) => $id > 0 && $qty > 0);
+        if ($selection->isEmpty()) {
+            throw ValidationException::withMessages(['import' => 'Chưa chọn sản phẩm cần hủy.']);
+        }
+
+        return DB::transaction(function () use ($stockImport, $selection, $reason): array {
+            $import = StockImport::query()->lockForUpdate()->findOrFail($stockImport->id);
+            if ($import->status !== 'completed') {
+                throw ValidationException::withMessages(['import' => 'Chỉ hủy được sản phẩm của phiếu nhập đang hoàn thành.']);
+            }
+
+            $allItems = StockImportItem::query()
+                ->where('stock_import_id', $import->id)
+                ->with(['product:id,name,manage_stock_by_serial', 'variant'])
+                ->lockForUpdate()
+                ->get();
+            $selected = $allItems->whereIn('id', $selection->keys()->all())->values();
+            if ($selected->count() !== $selection->count()) {
+                throw ValidationException::withMessages(['import' => 'Có sản phẩm không còn trong phiếu nhập (có thể đã được hủy). Hãy tải lại và thử lại.']);
+            }
+
+            $plan = $selected->map(function (StockImportItem $item) use ($selection) {
+                $qty = (int) $selection[$item->id];
+                if ($qty > (int) $item->quantity) {
+                    throw ValidationException::withMessages(['import' => 'Số lượng hủy của "' . ($item->product?->name ?? 'sản phẩm') . '" vượt quá số lượng đã nhập.']);
+                }
+
+                return ['item' => $item, 'qty' => $qty, 'full' => $qty >= (int) $item->quantity];
+            });
+            if ($plan->every(fn ($row) => $row['full']) && $plan->count() >= $allItems->count()) {
+                throw ValidationException::withMessages(['import' => 'Bạn đã chọn hủy toàn bộ sản phẩm. Hãy dùng chức năng hủy cả phiếu.']);
+            }
+
+            $this->assertNoLaterSupplierActivity($import, 'hủy sản phẩm của');
+
+            $batchesByItem = ProductStockBatch::query()
+                ->whereIn('stock_import_item_id', $selected->pluck('id'))
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->get()
+                ->groupBy('stock_import_item_id');
+
+            $histories = ProductImeiHistory::query()
+                ->where('reference_type', StockImport::class)
+                ->where('reference_id', $import->id)
+                ->where('type', 'import')
+                ->with('productImei')
+                ->lockForUpdate()
+                ->get();
+
+            $reverseItems = collect();
+            $applyBatches = [];   // callbacks sau khi kiểm tra xong
+            $removeHistories = collect();
+            $groups = [];         // product_id => dữ liệu snapshot
+
+            foreach ($plan as $row) {
+                /** @var StockImportItem $item */
+                $item = $row['item'];
+                $qty = $row['qty'];
+                $factor = max(1, (int) ($item->conversion_factor ?: 1));
+                $baseCancel = $qty * $factor;
+                $batches = $batchesByItem->get($item->id, collect());
+                $itemHistories = $histories->filter(fn (ProductImeiHistory $history) => (int) ($history->meta['stock_import_item_id'] ?? 0) === (int) $item->id)->values();
+                $isSerial = $itemHistories->isNotEmpty() || $item->product?->manage_stock_by_serial;
+
+                if ($row['full']) {
+                    if ($batches->contains(fn (ProductStockBatch $batch) => (int) $batch->remaining_quantity !== (int) $batch->initial_quantity)) {
+                        throw ValidationException::withMessages(['import' => 'Không thể hủy "' . ($item->product?->name ?? 'sản phẩm') . '" vì một phần hàng của dòng nhập này đã được bán.']);
+                    }
+                    if ($itemHistories->contains(fn (ProductImeiHistory $history) => $history->productImei?->status !== ProductImei::STATUS_IN_STOCK)) {
+                        throw ValidationException::withMessages(['import' => 'Không thể hủy "' . ($item->product?->name ?? 'sản phẩm') . '" vì có IMEI đã bán hoặc không còn trong kho.']);
+                    }
+                    $reverseItems->push($item);
+                    $removeHistories = $removeHistories->merge($itemHistories);
+                    $applyBatches[] = function () use ($item, $batches) {
+                        ProductStockBatch::query()->whereIn('id', $batches->pluck('id'))->delete();
+                        $item->delete();
+                    };
+                } else {
+                    if ($isSerial) {
+                        throw ValidationException::withMessages(['import' => '"' . ($item->product?->name ?? 'Sản phẩm') . '" quản lý theo IMEI nên chỉ hủy được cả dòng, không hủy bớt số lượng.']);
+                    }
+                    if ((int) $batches->sum('remaining_quantity') < $baseCancel) {
+                        throw ValidationException::withMessages(['import' => 'Không thể hủy bớt "' . ($item->product?->name ?? 'sản phẩm') . '" vì số lượng còn trong kho ít hơn số lượng cần hủy (hàng đã bán).']);
+                    }
+                    $reverseItems->push((clone $item)->setAttribute('base_quantity', $baseCancel));
+                    $applyBatches[] = function () use ($item, $batches, $qty, $baseCancel) {
+                        $need = $baseCancel;
+                        foreach ($batches as $batch) {
+                            if ($need <= 0) {
+                                break;
+                            }
+                            $take = min($need, (int) $batch->remaining_quantity);
+                            if ($take <= 0) {
+                                continue;
+                            }
+                            $newInitial = (int) $batch->initial_quantity - $take;
+                            $newRemaining = (int) $batch->remaining_quantity - $take;
+                            if ($newInitial <= 0) {
+                                $batch->delete();
+                            } else {
+                                $batch->update(['initial_quantity' => $newInitial, 'remaining_quantity' => $newRemaining]);
+                            }
+                            $need -= $take;
+                        }
+                        $item->update([
+                            'quantity' => (int) $item->quantity - $qty,
+                            'base_quantity' => max(0, (int) $item->base_quantity - $baseCancel),
+                        ]);
+                    };
+                }
+
+                $groups[$item->product_id] ??= ['item' => $item, 'quantity' => 0, 'amount' => 0.0, 'variants' => collect(), 'imeis' => collect()];
+                $groups[$item->product_id]['quantity'] += $qty;
+                $groups[$item->product_id]['amount'] += round($qty * (float) $item->cost_price, 2);
+                $groups[$item->product_id]['variants']->push(OrderItemCancellation::variantLabel($item->variant));
+                if ($row['full']) {
+                    $groups[$item->product_id]['imeis'] = $groups[$item->product_id]['imeis']->merge($itemHistories->pluck('imei'));
+                }
+            }
+
+            $lineAmount = round((float) collect($groups)->sum('amount'), 2);
+
+            // Tồn kho / lô / IMEI.
+            $this->reverseImportedStock($reverseItems);
+            $removeHistories->each(fn (ProductImeiHistory $history) => $history->productImei?->delete());
+            ProductImeiHistory::query()->whereKey($removeHistories->pluck('id'))->delete();
+            foreach ($applyBatches as $apply) {
+                $apply();
+            }
+            foreach ($groups as $group) {
+                $first = $group['item'];
+                $variants = $group['variants']->filter()->unique()->values();
+                OrderItemCancellation::query()->create([
+                    'order_type' => StockImport::class,
+                    'order_id' => $import->id,
+                    'product_id' => $first->product_id,
+                    'product_name' => $first->product?->name ?? 'Sản phẩm đã xóa',
+                    'variant_label' => $variants->isNotEmpty() ? $variants->implode(', ') : null,
+                    'imeis' => $group['imeis']->filter()->values()->all() ?: null,
+                    'quantity' => $group['quantity'],
+                    'unit_name' => $first->unit_name,
+                    'unit_price' => $group['quantity'] > 0 ? round($group['amount'] / $group['quantity'], 2) : 0,
+                    'amount' => $group['amount'],
+                    'reason' => trim((string) $reason) ?: null,
+                    'user_id' => auth()->id(),
+                    'cancelled_at' => now(),
+                ]);
+            }
+
+            // Tính lại tiền phiếu.
+            $oldTotalAmount = (float) $import->total_amount;
+            $newTotalAmount = max(0, round($oldTotalAmount - $lineAmount, 2));
+            $newDiscount = $oldTotalAmount > 0
+                ? round(min($newTotalAmount, (float) $import->discount * $newTotalAmount / $oldTotalAmount), 2)
+                : 0.0;
+            $extraFee = (float) $import->extra_fee;
+            $oldGrand = (float) $import->grand_total;
+            $newGrand = max(0, round($newTotalAmount - $newDiscount + $extraFee, 2));
+            $oldPaid = (float) $import->paid_amount;
+            $oldDebtPaid = (float) $import->old_debt_paid;
+
+            $newPaid = $import->supplier_id
+                ? min($oldPaid, $newGrand)
+                : ($oldPaid > 0 ? $newGrand : 0.0); // mua lại từ khách lẻ: luôn chi đủ theo tổng phiếu
+            $refund = max(0, round($oldPaid - $newPaid, 2));
+
+            if ($import->supplier_id) {
+                $supplier = Supplier::query()->lockForUpdate()->find($import->supplier_id);
+                $debtDelta = round(($newGrand - $newPaid) - ($oldGrand - $oldPaid), 2);
+                if ($supplier && abs($debtDelta) > 0.001) {
+                    $supplier->increment('debt_balance', $debtDelta);
+                }
+
+                $increase = SupplierDebt::query()
+                    ->where('source_type', StockImport::class)
+                    ->where('source_id', $import->id)
+                    ->where('type', 'increase')
+                    ->first();
+                if ($increase) {
+                    $newGrand > 0 ? $increase->update(['amount' => $newGrand]) : $increase->delete();
+                }
+
+                $payment = SupplierDebt::query()
+                    ->where('source_type', StockImport::class)
+                    ->where('source_id', $import->id)
+                    ->where('type', 'decrease')
+                    ->where('note', 'like', 'Thanh toán khi tạo phiếu nhập%')
+                    ->first();
+                if ($payment) {
+                    $newPaid > 0 ? $payment->update(['amount' => $newPaid]) : $payment->delete();
+                }
+            }
+
+            $import->update([
+                'total_amount' => $newTotalAmount,
+                'discount' => $newDiscount,
+                'grand_total' => $newGrand,
+                'paid_amount' => $newPaid,
+                'tendered_amount' => $import->supplier_id ? $newPaid + $oldDebtPaid : $newPaid,
+                'change_amount' => 0,
+            ]);
+
+            foreach ($groups as $productId => $group) {
+                if ($group['item']->product?->manage_stock_by_serial) {
+                    app(ImeiStockSynchronizer::class)->sync((int) $productId);
+                }
+            }
+
+            return ['import' => $import->fresh(), 'refund' => $refund];
         });
     }
 

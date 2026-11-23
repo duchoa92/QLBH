@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- Phủ toàn màn hình, nằm trên menu/sidebar của trang quản trị -->
-  <div class="fixed inset-0 z-40 flex flex-col overflow-hidden bg-slate-100">
+  <div class="pos-root fixed inset-0 z-40 flex flex-col overflow-hidden bg-slate-100">
 
     <!-- Thanh trên cùng: tiêu đề + nút đóng -->
     <header class="relative flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:justify-between sm:px-3">
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <nav class="flex min-h-[56px] shrink-0 items-stretch gap-2 border-t border-slate-200 bg-white px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(15,23,42,0.06)] lg:hidden" aria-label="Chuyển khu vực POS">
+    <nav class="pos-mobile-nav flex min-h-[56px] shrink-0 items-stretch gap-2 border-t border-slate-200 bg-white px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(15,23,42,0.06)] lg:hidden" aria-label="Chuyển khu vực POS">
       <button type="button" class="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition" :class="mobilePanel === 'products' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" @click="mobilePanel = 'products'">
         <PackageSearch class="h-4 w-4 shrink-0" />
         <span>Sản phẩm</span>

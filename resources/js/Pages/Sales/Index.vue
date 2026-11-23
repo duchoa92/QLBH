@@ -33,6 +33,8 @@ import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import api from '@/Services/api'
+import CancelOrderModal from '@/Components/CancelOrderModal.vue'
+import { loadSaleForCancel, saleCancelItems, saleCancelRequest } from '@/utils/cancelOrder'
 import { DEFAULT_CANCEL_REASONS, openReceiptInTab, printReceiptFrame as printReceiptInFrame } from '@/utils/receiptPrint'
 
 defineOptions({
@@ -92,7 +94,6 @@ const perPage = ref(Number(props.filters?.per_page ?? 10))
 
 const detailSale = ref(null)
 const editSale = ref(null)
-const cancelReason = ref('')
 const showCancelModal = ref(false)
 const selectedSaleForCancel = ref(null)
 const printFrameUrl = ref('')
@@ -293,30 +294,50 @@ const printReceiptFrame = (event) => printReceiptInFrame(event, page.props.setti
     printFrameUrl.value = ''
 })
 
-// Xác nhận Hủy
-const confirmCancel = (sale) => {
+// Hủy hóa đơn: modal dùng chung, chọn sản phẩm + số lượng cần hủy (chọn hết = hủy cả hóa đơn), lý do không bắt buộc
+const cancelSaleItems = ref([])
+const cancelLoading = ref(false)
+const cancelSubmitting = ref(false)
+const cancelError = ref('')
+
+const confirmCancel = async (sale) => {
     selectedSaleForCancel.value = sale
-    cancelReason.value = ''
+    cancelError.value = ''
+    cancelSaleItems.value = saleCancelItems(sale)
     showCancelModal.value = true
+
+    if (!sale.items?.length) {
+        cancelLoading.value = true
+        const detail = await loadSaleForCancel(sale.id)
+        cancelLoading.value = false
+        if (detail && selectedSaleForCancel.value?.id === sale.id) cancelSaleItems.value = saleCancelItems(detail)
+    }
 }
 
-// Xử lý Hủy hóa đơn
-const handleCancelSale = () => {
-    if (!selectedSaleForCancel.value) return
-    const reasonText = cancelReason.value.trim()
+const closeCancelModal = () => {
+    if (cancelSubmitting.value) return
+    showCancelModal.value = false
+    selectedSaleForCancel.value = null
+}
 
-    router.post(
-        route('sales.cancel', selectedSaleForCancel.value.id),
-        { reason: reasonText, cancel_reason: reasonText },
-        {
-            onSuccess: () => {
-                showCancelModal.value = false
-                selectedSaleForCancel.value = null
-                cancelReason.value = ''
-                router.reload({ only: ['sales'] })
-            }
-        }
-    )
+const handleCancelSale = (payload) => {
+    if (!selectedSaleForCancel.value || cancelSubmitting.value) return
+    const { url, data } = saleCancelRequest(selectedSaleForCancel.value.id, payload)
+
+    cancelSubmitting.value = true
+    cancelError.value = ''
+    router.post(url, data, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showCancelModal.value = false
+            selectedSaleForCancel.value = null
+            router.reload({ only: ['sales', 'selectedSale', 'stats'], preserveScroll: true })
+        },
+        onError: (errors) => {
+            cancelError.value = Object.values(errors || {})[0] || 'Không thể hủy hóa đơn. Vui lòng thử lại.'
+        },
+        onFinish: () => { cancelSubmitting.value = false },
+    })
 }
 
 // Sửa ngay từ modal chi tiết: đóng chi tiết rồi mở form sửa của đúng hóa đơn đó.
@@ -812,79 +833,18 @@ const highlightedSearchSegments = (value) => {
             @saved="onSaleEdited"
         />
 
-        <!-- MODAL XÁC NHẬN HỦY HÓA ĐƠN -->
-        <BaseModal
+        <!-- MODAL HỦY HÓA ĐƠN (dùng chung với POS): chọn sản phẩm + số lượng cần hủy -->
+        <CancelOrderModal
             v-if="showCancelModal"
-            title="Xác nhận hủy hóa đơn"
-            size="md"
-            @close="showCancelModal = false"
-        >
-            <div class="space-y-4 p-1">
-                <div class="flex items-start gap-3 p-3.5 bg-amber-50 rounded-2xl border border-amber-200">
-                    <AlertTriangle class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div class="text-xs text-amber-800 leading-relaxed">
-                        <strong>Lưu ý quan trọng:</strong> Khi hủy hóa đơn <strong>#{{ selectedSaleForCancel?.code }}</strong>, toàn bộ số lượng sản phẩm và mã IMEI/Serial liên quan sẽ được <strong>tự động hoàn trả về kho</strong>.
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">
-                        Lý do hủy hóa đơn:
-                    </label>
-
-                    <textarea
-                        v-model="cancelReason"
-                        rows="3"
-                        list="cancel-reasons-list"
-                        placeholder="Nhập lý do hủy hoặc chọn từ các gợi ý bên dưới..."
-                        class="w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100 transition"
-                    ></textarea>
-
-                    <datalist id="cancel-reasons-list">
-                        <option v-for="(reason, index) in predefinedCancelReasons" :key="index" :value="reason" />
-                    </datalist>
-
-                    <div class="mt-2.5">
-                        <div class="text-[11px] font-semibold text-slate-400 mb-1.5">
-                            💡 Gợi ý lý do phổ biến (Bấm để chọn nhanh):
-                        </div>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="(reason, idx) in predefinedCancelReasons"
-                                :key="idx"
-                                type="button"
-                                @click="cancelReason = reason"
-                                :class="[
-                                    'px-2.5 py-1 rounded-lg text-xs font-medium transition border',
-                                    cancelReason === reason
-                                        ? 'bg-rose-50 border-rose-300 text-rose-700 font-bold'
-                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                                ]"
-                            >
-                                {{ reason }}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                    <button
-                        type="button"
-                        @click="showCancelModal = false"
-                        class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
-                    >
-                        Bỏ qua
-                    </button>
-                    <button
-                        type="button"
-                        @click="handleCancelSale"
-                        :disabled="!cancelReason.trim()"
-                        class="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Xác nhận Hủy Đơn
-                    </button>
-                </div>
-            </div>
-        </BaseModal>
+            order-label="hóa đơn"
+            :code="selectedSaleForCancel?.code || ''"
+            :items="cancelSaleItems"
+            :reasons="predefinedCancelReasons"
+            :loading="cancelLoading"
+            :submitting="cancelSubmitting"
+            :error="cancelError"
+            @close="closeCancelModal"
+            @confirm="handleCancelSale"
+        />
     </div>
 </template>

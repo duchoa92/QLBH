@@ -9,6 +9,9 @@ use App\Models\SaleItem;
 
 class Sale extends Model
 {
+    /** Luôn kèm danh sách sản phẩm đã hủy riêng lẻ để modal chi tiết hiển thị được. */
+    protected $with = ['cancelledItems'];
+
     protected $fillable = [
 
         'code',
@@ -39,6 +42,11 @@ class Sale extends Model
         return $this->hasMany(
             SaleItem::class
         );
+    }
+
+    public function cancelledItems(): MorphMany
+    {
+        return $this->morphMany(OrderItemCancellation::class, 'order')->orderBy('id');
     }
 
     public function customerDebtEntries(): MorphMany

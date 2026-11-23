@@ -50,6 +50,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'cancel', 'print', 'edit'])
+
+const cancelledItems = computed(() => props.invoice?.cancelled_items || [])
 const openWarrantyNoteId = ref(null)
 
 const toggleWarrantyNote = (item) => {
@@ -495,6 +497,28 @@ const cancelReason = computed(() =>
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <!-- SẢN PHẨM ĐÃ HỦY RIÊNG LẺ -->
+                <div v-if="cancelledItems.length" class="overflow-hidden rounded-xl border border-rose-200 bg-rose-50/50">
+                    <div class="flex items-center gap-1.5 border-b border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-rose-700">
+                        <XCircle :size="13" /> Sản phẩm đã hủy ({{ cancelledItems.length }})
+                    </div>
+                    <ul class="divide-y divide-rose-100 text-xs">
+                        <li v-for="row in cancelledItems" :key="row.id" class="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
+                            <div class="min-w-0">
+                                <div class="font-bold text-slate-600 line-through">{{ row.product_name }}<span v-if="row.variant_label" class="ml-1 font-semibold">({{ row.variant_label }})</span></div>
+                                <div class="mt-0.5 text-[11px] text-slate-500">
+                                    SL: {{ formatNumber(row.quantity) }}<span v-if="row.unit_name"> {{ row.unit_name }}</span>
+                                    <span v-if="row.imeis?.length"> · IMEI: <span class="font-mono">{{ row.imeis.join(', ') }}</span></span>
+                                </div>
+                                <div class="mt-0.5 text-[11px] italic text-rose-700">
+                                    Lý do: {{ row.reason || '—' }}<span v-if="row.cancelled_at"> · {{ formatDate(row.cancelled_at) }}</span>
+                                </div>
+                            </div>
+                            <div class="font-bold text-slate-500 line-through whitespace-nowrap">{{ money(row.amount) }}</div>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- TỔNG TÍNH TIỀN & GHI CHÚ -->

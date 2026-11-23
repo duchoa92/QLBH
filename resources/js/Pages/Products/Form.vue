@@ -1356,11 +1356,22 @@ const submit = () => {
                                 </div>
                             </div>
 
-                            <div v-if="addingAttributeFor[variantDraftKey(i)]" class="relative" :ref="el => setDropdownRef(el, 'attr', i)">
+                            <div v-if="addingAttributeFor[variantDraftKey(i)]" class="flex items-start gap-2" :ref="el => setDropdownRef(el, 'attr', i)">
+                              <div class="relative min-w-0 flex-1">
                                 <input :id="'attr-input-' + i" :value="pendingAttributeDrafts[variantDraftKey(i)] || ''" class="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Nhập hoặc chọn nhóm thuộc tính..." @focus="openAttrDropdown(i)" @input="e => { pendingAttributeDrafts[variantDraftKey(i)] = e.target.value; dropdown.type = 'attr'; dropdown.variantIndex = i; dropdown.keyword = e.target.value }" @keydown="e => handleKeyDown(e, null, i)" @blur="e => handleAttributeInputBlur(i, e)" />
                                 <div v-if="dropdown.type === 'attr' && dropdown.variantIndex === i && suggestions.length" class="absolute z-10 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
                                     <div v-for="(item, idx) in suggestions" :key="idx" :class="['cursor-pointer px-3 py-2 text-sm', idx === activeIndex ? 'bg-blue-100' : 'hover:bg-slate-50']" @mousedown.prevent="selectSuggestion(item)">{{ item }}</div>
                                 </div>
+                              </div>
+                              <!-- Nút thêm nhóm thuộc tính: dùng khi không bấm Enter (bàn phím điện thoại) -->
+                              <button
+                                  type="button"
+                                  class="inline-flex h-10 shrink-0 items-center gap-1 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                  :disabled="!String(pendingAttributeDrafts[variantDraftKey(i)] || '').trim()"
+                                  aria-label="Thêm nhóm thuộc tính"
+                                  @mousedown.prevent
+                                  @click="createAttribute(pendingAttributeDrafts[variantDraftKey(i)] || '', i)"
+                              ><Plus :size="16" />Thêm</button>
                             </div>
                         </div>
                     </div>

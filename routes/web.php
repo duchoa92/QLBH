@@ -211,6 +211,11 @@ Route::middleware(['auth'])->group(function () {
         [StockImportController::class, 'cancel']
     )->middleware('permission:stock_imports.create')->name('stock.import.cancel');
 
+    Route::post(
+        '/stock-import/{stockImport}/items/cancel',
+        [StockImportController::class, 'cancelItems']
+    )->middleware('permission:stock_imports.create')->name('stock.import.items.cancel');
+
     Route::put(
         '/stock-import/{stockImport}',
         [StockImportController::class, 'update']
@@ -292,6 +297,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{sale}', 'show')->middleware('permission:sales.view')->name('show');
         // Hủy hóa đơn
         Route::post('/{sale}/cancel', 'cancel')->middleware('permission:sales.cancel')->name('cancel');
+        // Hủy riêng từng sản phẩm của hóa đơn
+        Route::post('/{sale}/items/cancel', 'cancelItems')->middleware('permission:sales.cancel')->name('items.cancel');
     });
     Route::get('/sales/{sale}/receipt', [SaleReceiptController::class, 'show'])->middleware('permission:sales.view')->name('sales.receipt');
 

@@ -6,12 +6,16 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class StockImport extends Model
 {
     use HasFactory;
 
     protected $table = 'stock_imports';
+
+    /** Luôn kèm danh sách sản phẩm đã hủy riêng lẻ để modal chi tiết hiển thị được. */
+    protected $with = ['cancelledItems'];
 
     /**
      * Các thuộc tính có thể gán hàng loạt (Mass Assignment).
@@ -91,5 +95,13 @@ class StockImport extends Model
     public function items(): HasMany
     {
         return $this->hasMany(StockImportItem::class, 'stock_import_id');
+    }
+
+    /**
+     * Các sản phẩm đã bị hủy riêng lẻ khỏi phiếu nhập (dòng đã xóa khỏi items).
+     */
+    public function cancelledItems(): MorphMany
+    {
+        return $this->morphMany(OrderItemCancellation::class, 'order')->orderBy('id');
     }
 }

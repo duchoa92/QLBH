@@ -7,6 +7,8 @@ import { SquarePen, Undo2, X, CircleCheck, CircleX, Clock3, Copy, Printer, Chevr
 import { isDebtSale, effectivePaymentMethod } from '@/utils/salePayment'
 import InvoiceDetailModal from '@/Components/InvoiceDetailModal.vue'
 import SaleEditModal from '@/Components/SaleEditModal.vue'
+import CancelOrderModal from '@/Components/CancelOrderModal.vue'
+import { loadSaleForCancel, saleCancelItems, saleCancelRequest } from '@/utils/cancelOrder'
 import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
@@ -34,7 +36,6 @@ const canCancelSales = computed(() => page.props.auth?.permissions?.includes('sa
 const editSale = ref(null)
 const showCancelModal = ref(false)
 const saleToCancel = ref(null)
-const cancelReason = ref('')
 const cancelError = ref('')
 const printPreviewUrl = ref('')
 const datePreset = ref('all')
@@ -131,27 +132,46 @@ const openEdit = async (invoice) => {
     }
 }
 
-const confirmCancel = (invoice) => {
+const cancelSaleItems = ref([])
+const cancelLoading = ref(false)
+const cancelSubmitting = ref(false)
+
+const confirmCancel = async (invoice) => {
     saleToCancel.value = invoice
-    cancelReason.value = ''
     cancelError.value = ''
+    cancelSaleItems.value = saleCancelItems(invoice)
     showCancelModal.value = true
+
+    if (!invoice.items?.length) {
+        cancelLoading.value = true
+        const detail = await loadSaleForCancel(invoice.id)
+        cancelLoading.value = false
+        if (detail && saleToCancel.value?.id === invoice.id) cancelSaleItems.value = saleCancelItems(detail)
+    }
 }
 
-const cancelInvoice = async () => {
-    if (!saleToCancel.value) return
+const closeCancelModal = () => {
+    if (cancelSubmitting.value) return
+    showCancelModal.value = false
+    saleToCancel.value = null
+}
+
+const cancelInvoice = async (payload) => {
+    if (!saleToCancel.value || cancelSubmitting.value) return
+    const { url, data } = saleCancelRequest(saleToCancel.value.id, payload)
     cancelError.value = ''
+    cancelSubmitting.value = true
     try {
-        await axios.post(route('sales.cancel', saleToCancel.value.id), {
-            reason: cancelReason.value.trim(),
-            cancel_reason: cancelReason.value.trim(),
-        })
+        await axios.post(url, data)
         showCancelModal.value = false
         showDetail.value = false
         saleToCancel.value = null
         await loadInvoices(currentPage.value)
     } catch (error) {
-        cancelError.value = error.response?.data?.message || 'Không thể hủy hóa đơn. Vui lòng thử lại.'
+        const errors = error.response?.data?.errors
+        cancelError.value = (errors && Object.values(errors)[0]?.[0]) || error.response?.data?.message || 'Không thể hủy hóa đơn. Vui lòng thử lại.'
+    } finally {
+        cancelSubmitting.value = false
     }
 }
 
@@ -279,19 +299,17 @@ const refreshInvoices = () => {
 
     <SaleEditModal v-if="editSale" :sale="editSale" @close="editSale = null" @saved="refreshInvoices" />
 
-    <BaseModal v-if="showCancelModal" title="Xác nhận hủy hóa đơn" size="md" @close="showCancelModal = false">
-        <div class="space-y-4 p-1">
-            <p class="text-sm text-slate-700">Hủy hóa đơn <strong>#{{ saleToCancel?.code }}</strong> sẽ hoàn số lượng sản phẩm và IMEI liên quan về kho.</p>
-            <p v-if="cancelError" class="text-sm text-rose-600">{{ cancelError }}</p>
-            <div>
-                <label class="mb-1.5 block text-xs font-bold text-slate-700">Lý do hủy</label>
-                <textarea v-model="cancelReason" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-rose-400 focus:outline-none" placeholder="Nhập lý do hủy hóa đơn"></textarea>
-            </div>
-            <div class="flex justify-end gap-2">
-                <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" @click="showCancelModal = false">Quay lại</button>
-                <button type="button" class="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white hover:bg-rose-700" @click="cancelInvoice">Xác nhận hủy</button>
-            </div>
-        </div>
-    </BaseModal>
+    <CancelOrderModal
+        v-if="showCancelModal"
+        order-label="hóa đơn"
+        :code="saleToCancel?.code || ''"
+        :items="cancelSaleItems"
+        :loading="cancelLoading"
+        :submitting="cancelSubmitting"
+        :error="cancelError"
+        layer-class="z-[1300]"
+        @close="closeCancelModal"
+        @confirm="cancelInvoice"
+    />
     <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hóa đơn" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
 </template>

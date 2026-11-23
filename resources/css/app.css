@@ -385,7 +385,7 @@ html.kb-open .base-modal-sheet {
 
 /* Các hộp thoại cũ chưa dùng BaseModal cũng bám lên đầu khi đang nhập liệu.
    :has() đã có trên Safari iOS 15.4+, Chrome Android và các trình duyệt hiện hành. */
-html.kb-open .fixed.inset-0:has([role="dialog"]) {
+html.kb-open .fixed.inset-0:not(.pos-root):has([role="dialog"]) {
     align-items: flex-start !important;
     overflow: hidden !important;
     padding: 0 !important;
@@ -398,16 +398,32 @@ html.kb-open [role="dialog"]:not(.base-modal-sheet) {
 
 /* Modal viết riêng cũng được phủ bởi quy tắc này ngay lúc một ô nhập nhận focus.
    Không cần phải đổi từng màn hình sang BaseModal mới tránh được việc sót form. */
-html.kb-open .fixed.inset-0:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) {
+html.kb-open .fixed.inset-0:not(.pos-root):has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) {
     align-items: flex-start !important;
     overflow: hidden !important;
     padding: 0 !important;
 }
 
-html.kb-open .fixed.inset-0:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) > :not(.absolute) {
+html.kb-open .fixed.inset-0:not(.pos-root):has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) > :not(.absolute) {
     height: var(--vv-h, 100dvh) !important;
     max-height: var(--vv-h, 100dvh) !important;
     border-radius: 0 !important;
+}
+
+/* POS trên điện thoại: khi bàn phím mở, khung POS chỉ chiếm đúng vùng nhìn thấy (không bị đẩy lên/che mất đầu trang),
+   thanh chuyển Sản phẩm/Giỏ hàng ở đáy ẩn đi để danh sách sản phẩm còn đủ chỗ hiển thị phía trên bàn phím. */
+html.kb-open.pos-fullscreen .pos-root {
+    position: fixed;
+    top: var(--vv-top, 0px);
+    left: 0;
+    right: 0;
+    bottom: auto;
+    height: var(--vv-h, 100dvh);
+    max-height: var(--vv-h, 100dvh);
+}
+
+html.kb-open.pos-fullscreen .pos-mobile-nav {
+    display: none;
 }
 
 /* POS toàn màn hình: khóa cuộn trang nền, không kéo giãn/nảy làm lộ thanh trình duyệt. */

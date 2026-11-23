@@ -23,6 +23,9 @@ export function installViewportFix() {
         const field = document.activeElement
         if (!(field instanceof HTMLElement) || !field.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')) return
 
+        // Trang POS toàn màn hình là khung cố định: không cuộn trang để "đưa ô nhập ra giữa" (làm vỡ bố cục).
+        if (root.classList.contains('pos-fullscreen') && !field.closest('[role="dialog"], .base-modal-sheet')) return
+
         // Chờ Safari/Chrome hoàn tất animation mở bàn phím rồi cuộn ngay vùng chứa ô nhập.
         window.setTimeout(() => {
             if (root.classList.contains('kb-open') && document.activeElement === field) {
@@ -58,6 +61,11 @@ export function installViewportFix() {
         }
 
         root.classList.toggle('kb-open', keyboardOpen)
+
+        // iOS tự trượt cả trang lên khi bật bàn phím: POS là khung cố định nên đưa về đầu trang.
+        if (keyboardOpen && root.classList.contains('pos-fullscreen') && (window.scrollY || window.scrollX)) {
+            window.scrollTo(0, 0)
+        }
 
         if (keyboardOpen) revealFocusedField()
     }

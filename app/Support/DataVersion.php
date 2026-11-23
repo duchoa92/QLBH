@@ -50,6 +50,7 @@ class DataVersion
         'sale_items' => ['sales', 'products'],
         'sale_item_gifts' => ['sales'],
         'sale_item_stock_batches' => ['sales', 'products'],
+        'order_item_cancellations' => ['sales', 'stock_imports'],
 
         'repairs' => ['repairs', 'customers'],
         'repair_images' => ['repairs'],

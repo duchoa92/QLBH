@@ -146,4 +146,49 @@ class StockBatchAllocator
         }
         $line->stockBatchAllocations()->delete();
     }
+
+    /**
+     * Hoàn một PHẦN số lượng (đơn vị cơ sở) của dòng bán về lô, ưu tiên các lô phân bổ sau cùng.
+     */
+    public function restorePartial(SaleItem|SaleItemGift $line, int $baseQuantity): void
+    {
+        $need = max(0, $baseQuantity);
+        if ($need === 0) {
+            return;
+        }
+
+        $line->loadMissing('stockBatchAllocations');
+        if ($line->stockBatchAllocations->isEmpty()) {
+            // Hóa đơn cũ chưa có phân bổ lô: tạo lô phục hồi cho đúng phần hoàn (giống restore()).
+            $this->ensureCoverage((int) $line->product_id, $line->variant_id ? (int) $line->variant_id : null);
+            $factor = max(1, (int) ($line->conversion_factor ?: 1));
+            ProductStockBatch::create([
+                'product_id' => $line->product_id,
+                'variant_id' => $line->variant_id,
+                'initial_quantity' => $need,
+                'remaining_quantity' => $need,
+                'cost_price' => round((float) $line->unit_cost / $factor, 2),
+                'sell_price' => 0,
+                'imported_at' => now()->toDateString(),
+                'is_opening_balance' => true,
+            ]);
+
+            return;
+        }
+
+        foreach ($line->stockBatchAllocations->sortByDesc('id') as $allocation) {
+            if ($need <= 0) {
+                break;
+            }
+            $take = min($need, (int) $allocation->quantity);
+            ProductStockBatch::query()->whereKey($allocation->product_stock_batch_id)->lockForUpdate()->increment('remaining_quantity', $take);
+            if ($take >= (int) $allocation->quantity) {
+                $allocation->delete();
+            } else {
+                $allocation->update(['quantity' => (int) $allocation->quantity - $take]);
+            }
+            $need -= $take;
+        }
+        $line->unsetRelation('stockBatchAllocations');
+    }
 }

@@ -619,12 +619,37 @@ class StockImportController extends Controller
     public function cancel(Request $request, StockImport $stockImport): RedirectResponse
     {
         $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
+            'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $this->service->cancel($stockImport, $data['reason']);
+        $this->service->cancel($stockImport, $data['reason'] ?? null);
 
         return back()->with('success', 'Đã hủy phiếu nhập và hoàn tác tồn kho, công nợ.');
+    }
+
+    /** Hủy riêng một sản phẩm của phiếu nhập (không hủy cả phiếu). */
+    public function cancelItems(Request $request, StockImport $stockImport): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.id' => ['required', 'integer'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $selection = collect($data['items'])->groupBy('id')->map(fn ($rows) => (int) $rows->sum('quantity'))->all();
+        $result = $this->service->cancelItems($stockImport, $selection, $data['reason'] ?? null);
+
+        $message = 'Đã hủy sản phẩm khỏi phiếu nhập, hoàn tác tồn kho và công nợ.';
+        if ($result['refund'] > 0) {
+            $message .= ' Số tiền đã trả dư cần được hoàn lại: ' . number_format($result['refund'], 0, ',', '.') . ' đ.';
+        }
+
+        if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+            return response()->json(['success' => true, 'message' => $message, 'refund' => $result['refund']]);
+        }
+
+        return back()->with('success', $message);
     }
 
     public function update(Request $request, StockImport $stockImport): RedirectResponse

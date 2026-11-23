@@ -15,6 +15,8 @@ import ListToolbar from '@/Components/UI/ListToolbar.vue'
 import ListFilterSelect from '@/Components/UI/ListFilterSelect.vue'
 import DateRangeFilter from '@/Components/UI/DateRangeFilter.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
+import CancelOrderModal from '@/Components/CancelOrderModal.vue'
+import { importCancelItems, importCancelRequest } from '@/utils/cancelOrder'
 import PrintPreviewModal from '@/Components/PrintPreviewModal.vue'
 import PaginationBar from '@/Components/UI/PaginationBar.vue'
 import HighlightText from '@/Components/UI/HighlightText.vue'
@@ -109,7 +111,6 @@ const printPreviewUrl = ref('')
 const loadingDetail = ref(false)
 const showCancelModal = ref(false)
 const importToCancel = ref(null)
-const cancelReason = ref('')
 
 
 const openCreateModal = (partyType = 'supplier') => {
@@ -533,6 +534,7 @@ const displayImportItems = computed(() => {
                 grouped.set(key, {
                     ...item,
                     _key: key,
+                    _itemIds: [item.id],
                     _variantRows: item.variant ? [variantRowOf(item)] : [],
                     _costPrices: [Number(item.cost_price || 0)],
                     _priceRows: [{ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) }],
@@ -542,6 +544,7 @@ const displayImportItems = computed(() => {
 
             existing.quantity = Number(existing.quantity || 0) + Number(item.quantity || 0)
             existing.base_quantity = Number(existing.base_quantity || 0) + Number(item.base_quantity || 0)
+            existing._itemIds.push(item.id)
             existing._costPrices.push(Number(item.cost_price || 0))
             existing._priceRows.push({ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) })
             if (item.variant) existing._variantRows.push(variantRowOf(item))
@@ -556,6 +559,7 @@ const displayImportItems = computed(() => {
             grouped.set(key, {
                 ...item,
                 _key: key,
+                _itemIds: [item.id],
                 import_imeis: [...itemImportImeis(item)],
                 _costPrices: [Number(item.cost_price || 0)],
                 _priceRows: [{ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) }],
@@ -565,6 +569,7 @@ const displayImportItems = computed(() => {
 
         existing.quantity = Number(existing.quantity || 0) + Number(item.quantity || 0)
         existing.base_quantity = Number(existing.base_quantity || 0) + Number(item.base_quantity || 0)
+        existing._itemIds.push(item.id)
         existing._costPrices.push(Number(item.cost_price || 0))
         existing._priceRows.push({ quantity: Number(item.quantity || 0), costPrice: Number(item.cost_price || 0) })
         const histories = [...itemImportImeis(existing), ...itemImportImeis(item)]
@@ -599,10 +604,36 @@ const showImport = (id) => {
 
 }
 
-const requestCancelImport = (stockImport) => {
+
+const cancelledImportItems = computed(() => detailImport.value?.cancelled_items || [])
+
+const cancelImportRows = ref([])
+const cancelLoading = ref(false)
+const cancelSubmitting = ref(false)
+const cancelError = ref('')
+
+// Modal hủy dùng chung: chọn sản phẩm + số lượng cần hủy (chọn hết = hủy cả phiếu), lý do không bắt buộc.
+const requestCancelImport = async (stockImport) => {
     importToCancel.value = stockImport
-    cancelReason.value = ''
+    cancelError.value = ''
+    cancelImportRows.value = importCancelItems(stockImport)
     showCancelModal.value = true
+
+    if (!stockImport.items?.length) {
+        cancelLoading.value = true
+        try {
+            const response = await api.get(`/stock-import/${stockImport.id}`)
+            if (importToCancel.value?.id === stockImport.id) cancelImportRows.value = importCancelItems(response.data)
+        } catch { /* giữ chế độ hủy cả phiếu */ } finally {
+            cancelLoading.value = false
+        }
+    }
+}
+
+const closeCancelImport = () => {
+    if (cancelSubmitting.value) return
+    showCancelModal.value = false
+    importToCancel.value = null
 }
 
 const editImport = async (stockImport) => {
@@ -622,16 +653,26 @@ const editImport = async (stockImport) => {
     }
 }
 
-const cancelImport = () => {
-    if (!importToCancel.value || !cancelReason.value.trim()) return
-    router.post(`/stock-import/${importToCancel.value.id}/cancel`, { reason: cancelReason.value.trim() }, {
+const cancelImport = (payload) => {
+    if (!importToCancel.value || cancelSubmitting.value) return
+    const importId = importToCancel.value.id
+    const { url, data } = importCancelRequest(importId, payload)
+
+    cancelSubmitting.value = true
+    cancelError.value = ''
+    router.post(url, data, {
         preserveScroll: true,
         onSuccess: () => {
             showCancelModal.value = false
-            detailImport.value = null
             importToCancel.value = null
+            if (payload.whole) detailImport.value = null
+            else if (detailImport.value?.id === importId) showImport(importId)
             router.reload({ only: ['imports'] })
         },
+        onError: (errors) => {
+            cancelError.value = Object.values(errors || {})[0] || 'Không thể hủy. Vui lòng thử lại.'
+        },
+        onFinish: () => { cancelSubmitting.value = false },
     })
 }
 
@@ -1039,12 +1080,35 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
                                             </div>
                                         </td>
                                         <td class="px-3 py-2.5 text-right whitespace-nowrap text-slate-700">{{ displayCostPrice(item) }}</td>
-                                        <td class="px-3 py-2.5 text-right whitespace-nowrap text-sm font-extrabold text-slate-900">{{ money(displayItemTotal(item)) }}</td>
+                                        <td class="px-3 py-2.5 text-right whitespace-nowrap text-sm font-extrabold text-slate-900">{{ money(displayItemTotal(item)) }}
+                                        </td>
                                     </tr>
                                 </template>
                             </tbody>
                         </table>
                         </div>
+                    </div>
+
+                    <!-- Sản phẩm đã hủy riêng lẻ -->
+                    <div v-if="cancelledImportItems.length" class="overflow-hidden rounded-xl border border-rose-200 bg-rose-50/50">
+                        <div class="flex items-center gap-1.5 border-b border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-rose-700">
+                            <XCircle class="h-3.5 w-3.5" /> Sản phẩm đã hủy ({{ cancelledImportItems.length }})
+                        </div>
+                        <ul class="divide-y divide-rose-100 text-xs">
+                            <li v-for="row in cancelledImportItems" :key="row.id" class="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
+                                <div class="min-w-0">
+                                    <div class="font-bold text-slate-600 line-through">{{ row.product_name }}<span v-if="row.variant_label" class="ml-1 font-semibold">({{ row.variant_label }})</span></div>
+                                    <div class="mt-0.5 text-[11px] text-slate-500">
+                                        SL: {{ row.quantity }}<span v-if="row.unit_name"> {{ row.unit_name }}</span>
+                                        <span v-if="row.imeis?.length"> · IMEI: <span class="font-mono">{{ row.imeis.join(', ') }}</span></span>
+                                    </div>
+                                    <div class="mt-0.5 text-[11px] italic text-rose-700">
+                                        Lý do: {{ row.reason || '—' }}<span v-if="row.cancelled_at"> · {{ formatDate(row.cancelled_at) }}</span>
+                                    </div>
+                                </div>
+                                <div class="font-bold text-slate-500 line-through whitespace-nowrap">{{ money(row.amount) }}</div>
+                            </li>
+                        </ul>
                     </div>
 
                     <!-- Ghi chú & tổng kết -->
@@ -1170,18 +1234,18 @@ watch(() => page.url, openImportFromGlobalSearch, { immediate: true })
 
     <PrintPreviewModal :show="Boolean(printPreviewUrl)" title="Xem trước hợp đồng mua bán" :src="printPreviewUrl" @close="printPreviewUrl = ''" />
 
-    <BaseModal v-if="showCancelModal" title="Hủy phiếu nhập" size="sm" @close="showCancelModal = false">
-        <div class="space-y-3">
-            <p class="text-sm text-slate-600">Tồn kho và công nợ của phiếu sẽ được hoàn tác. Chỉ hủy được khi hàng chưa bán hoặc xuất kho.</p>
-            <textarea v-model="cancelReason" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-rose-500 focus:ring-rose-500" placeholder="Lý do hủy phiếu nhập" />
-        </div>
-        <template #footer>
-            <div class="flex justify-end gap-2">
-                <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700" @click="showCancelModal = false">Quay lại</button>
-                <button type="button" :disabled="!cancelReason.trim()" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" @click="cancelImport">Xác nhận hủy</button>
-            </div>
-        </template>
-    </BaseModal>
+
+    <CancelOrderModal
+        v-if="showCancelModal"
+        order-label="phiếu nhập"
+        :code="importToCancel?.code || ''"
+        :items="cancelImportRows"
+        :loading="cancelLoading"
+        :submitting="cancelSubmitting"
+        :error="cancelError"
+        @close="closeCancelImport"
+        @confirm="cancelImport"
+    />
 
     <div
         v-if="loadingDetail"
