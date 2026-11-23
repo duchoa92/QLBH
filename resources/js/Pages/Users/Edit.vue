@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import TextInput from '@/Components/TextInput.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -129,12 +130,12 @@ const submit = () => {
                                     Mật khẩu mới
                                 </label>
 
-                                <input
+                                <TextInput
                                     v-model="form.password"
                                     type="password"
                                     class="w-full rounded border-gray-300"
                                     placeholder="Để trống nếu không đổi mật khẩu"
-                                >
+                                />
                             </div>
 
                             <!-- Confirm Password -->
@@ -143,11 +144,11 @@ const submit = () => {
                                     Xác nhận mật khẩu mới
                                 </label>
 
-                                <input
+                                <TextInput
                                     v-model="form.password_confirmation"
                                     type="password"
                                     class="w-full rounded border-gray-300"
-                                >
+                                />
                             </div>
 
                             <!-- Role -->

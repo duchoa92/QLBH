@@ -1,12 +1,9 @@
 <script setup>
 import Checkbox from '@/Components/Checkbox.vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
-import { KeyRound, User } from 'lucide-vue-next';
+import { ArrowRight, ShieldCheck } from 'lucide-vue-next';
 
 defineProps({
     canResetPassword: {
@@ -32,70 +29,71 @@ const submit = () => {
 
 <template>
     <GuestLayout>
-        <Head title="Log in" />
+        <Head title="Đăng nhập" />
 
-        <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
-            {{ status }}
-        </div>
+        <section class="space-y-6">
+            <header class="text-center">
+                <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-sm ring-1 ring-emerald-100">
+                    <ShieldCheck class="h-6 w-6" />
+                </span>
+                <h1 class="mt-4 text-2xl font-bold tracking-tight text-slate-900">Chào mừng bạn trở lại</h1>
+                <p class="mt-2 text-sm leading-6 text-slate-500">Đăng nhập để tiếp tục quản lý cửa hàng của bạn.</p>
+            </header>
 
-        <form @submit.prevent="submit">
-            <div>
-                <User />
-                <FloatingInput
-                    id="login"
-                    type="text"
-                    class="mt-1 block w-full"
-                    v-model="form.login"
-                    required
-                    autofocus
-                    autocomplete="username"
-                    label="Tên đăng nhập, email hoặc số điện thoại"
-                    :error="form.errors.login"
-                />
-
+            <div v-if="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-800">
+                {{ status }}
             </div>
 
-            <div class="mt-4">
-                <KeyRound />
-                <FloatingInput
-                    id="password"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password"
-                    required
-                    autocomplete="current-password"
-                    label="Nhập mật khẩu"
-                    :error="form.errors.password"
-                />
+            <form class="space-y-5" @submit.prevent="submit">
+                <div>
+                    <FloatingInput
+                        id="login"
+                        v-model="form.login"
+                        class="block w-full"
+                        required
+                        autofocus
+                        autocomplete="username"
+                        label="Tên đăng nhập, email hoặc số điện thoại"
+                        :error="form.errors.login"
+                    />
+                </div>
 
-            </div>
+                <div>
+                    <FloatingInput
+                        id="password"
+                        v-model="form.password"
+                        type="password"
+                        class="block w-full"
+                        required
+                        autocomplete="current-password"
+                        label="Mật khẩu"
+                        :error="form.errors.password"
+                    />
+                </div>
 
-            <div class="mt-4 block">
-                <label class="flex items-center">
-                    <Checkbox name="remember" v-model:checked="form.remember" />
-                    <span class="ms-2 text-sm text-gray-600"
-                        >Ghi nhớ đăng nhập</span
-                    >
-                </label>
-            </div>
+                <div class="flex items-center justify-between gap-3">
+                    <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                        <Checkbox name="remember" v-model:checked="form.remember" />
+                        Ghi nhớ đăng nhập
+                    </label>
+                    <Link
+                        v-if="canResetPassword"
+                        :href="route('password.request')"
+                        class="text-sm font-semibold text-emerald-700 transition hover:text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                    >Quên mật khẩu?</Link>
+                </div>
 
-            <div class="mt-4 flex items-center justify-end">
-                <Link
-                    v-if="canResetPassword"
-                    :href="route('password.request')"
-                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                >
-                    Quên mật khẩu?
-                </Link>
-
-                <PrimaryButton
-                    class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
+                <button
+                    type="submit"
+                    class="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
                     :disabled="form.processing"
                 >
-                    Đăng nhập
-                </PrimaryButton>
-            </div>
-        </form>
+                    {{ form.processing ? 'Đang đăng nhập...' : 'Đăng nhập' }}
+                    <ArrowRight v-if="!form.processing" class="h-4 w-4" />
+                </button>
+            </form>
+
+            <p class="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400"><ShieldCheck class="h-3.5 w-3.5" /> Thông tin đăng nhập được bảo vệ an toàn.</p>
+        </section>
     </GuestLayout>
 </template>

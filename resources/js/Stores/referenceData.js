@@ -1,7 +1,9 @@
 import { computed, onBeforeUnmount, onMounted, reactive } from 'vue'
 import api from '@/Services/api'
 
-const REFRESH_INTERVAL = 3000
+// Danh mục chỉ thay đổi khi người dùng lưu dữ liệu; sự kiện cùng tab, tab khác
+// và live sync đã xử lý ngay lúc đó. Polling thưa hơn chỉ là phương án dự phòng.
+const REFRESH_INTERVAL = 15000
 const CHANGE_EVENT = 'reference-data:changed'
 const VERSION_KEY = 'reference-data:version'
 const CHANNEL_NAME = 'reference-data'
@@ -119,9 +121,8 @@ export const useReferenceData = (initialData = {}) => {
             }
 
             startPolling()
+            void refreshReferenceData()
         }
-
-        void refreshReferenceData()
     })
 
     onBeforeUnmount(() => {

@@ -10,14 +10,16 @@ import api from '@/Services/api'
  *   (useAutoRefresh / useLiveList) tự tải lại phần dữ liệu của mình, ngầm.
  * - Tạm dừng khi tab ẩn; quay lại tab là kiểm tra ngay. Máy rảnh lâu thì hỏi thưa hơn.
  */
-const POLL_MS = 3000
-const IDLE_POLL_MS = 10000
+// Đồng bộ theo phiên bản không cần chạy sát từng vài giây: mỗi thay đổi đã có
+// một số phiên bản riêng. Nhịp 10 giây vẫn đủ gần thời gian thực, nhưng giảm
+// đáng kể request nền trên tất cả trang đang đăng nhập.
+const POLL_MS = 10000
+const IDLE_POLL_MS = 30000
 const IDLE_AFTER_MS = 5 * 60 * 1000
 const MAX_BACKOFF_MS = 30000
 // Khi cơ chế phiên bản không chạy (chưa migrate, chưa có thay đổi nào được ghi nhận), cứ chừng này ms lại
 // báo mọi trang tự nạp lại ngầm một lần để dữ liệu vẫn được cập nhật.
 const FALLBACK_MS = 15000
-const SAFETY_NET_MS = 30000
 
 const emitter = mitt()
 const state = { versions: null, started: false, timer: null, inflight: false, again: false, failures: 0, lastActivity: Date.now(), lastFallback: Date.now() }
@@ -61,9 +63,11 @@ export const pollNow = async () => {
         state.failures = 0
         const versions = data?.versions && !Array.isArray(data.versions) ? data.versions : {}
         applyVersions(versions)
-        // Lưới an toàn: ngoài tín hiệu phiên bản, thỉnh thoảng vẫn nạp lại ngầm một lần (thưa hơn nếu cơ chế đang chạy tốt).
+        // Chỉ dùng lưới an toàn khi cơ chế phiên bản chưa sẵn sàng. Khi đã có
+        // phiên bản, phát '*' định kỳ sẽ làm mọi trang tải lại dữ liệu dù không
+        // hề có thay đổi.
         const degraded = data?.ready === false || Object.keys(versions).length === 0
-        if (Date.now() - state.lastFallback >= (degraded ? FALLBACK_MS : SAFETY_NET_MS)) {
+        if (degraded && Date.now() - state.lastFallback >= FALLBACK_MS) {
             state.lastFallback = Date.now()
             emitter.emit('changed', ['*'])
         }

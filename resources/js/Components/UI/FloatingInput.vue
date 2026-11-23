@@ -1,6 +1,6 @@
 <script setup>
-import { computed } from 'vue'
-import { X } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Eye, EyeOff, X } from 'lucide-vue-next'
 import { formatThousandsInput, formatThousandsText } from '@/utils/format'
 
 const props = defineProps({
@@ -90,6 +90,9 @@ const displayValue = computed(() => props.formatThousands
     ? formatThousandsText(props.modelValue)
     : props.modelValue)
 const inputType = computed(() => props.formatThousands ? 'text' : props.type)
+const passwordVisible = ref(false)
+const isPassword = computed(() => !props.formatThousands && props.type === 'password')
+const resolvedInputType = computed(() => isPassword.value && passwordVisible.value ? 'text' : inputType.value)
 
 </script>
 
@@ -109,13 +112,21 @@ const inputType = computed(() => props.formatThousands ? 'text' : props.type)
             @blur="emit('blur', $event)"
             @keydown="emit('keydown', $event)"
             @keyup="emit('keyup', $event)"
-            :type="inputType"
+            :type="resolvedInputType"
             :inputmode="formatThousands ? ($attrs.inputmode || 'numeric') : $attrs.inputmode"
             placeholder=" "
-            :class="['peer w-full border border-gray-300 rounded-lg px-2 pt-2.5 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all', inputClass]"
+            :class="['peer w-full border border-gray-300 rounded-lg px-2 pt-2.5 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all', isPassword ? 'pr-10' : '', inputClass]"
         />
         <button
-            v-if="clearable && String(modelValue ?? '') !== ''"
+            v-if="isPassword"
+            type="button"
+            class="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            :title="passwordVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+            :aria-label="passwordVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+            @click="passwordVisible = !passwordVisible"
+        ><EyeOff v-if="passwordVisible" class="h-4 w-4" /><Eye v-else class="h-4 w-4" /></button>
+        <button
+            v-if="clearable && !isPassword && String(modelValue ?? '') !== ''"
             type="button"
             class="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300"
             title="Xóa nội dung"

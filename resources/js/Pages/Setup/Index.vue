@@ -6,6 +6,7 @@ const step = ref(0);
 const status = ref('');
 const showPassword = ref(false);
 const showConfirmation = ref(false);
+const showDatabasePassword = ref(false);
 const page = usePage();
 const form = useForm({
     database_driver: 'mysql', database_host: '127.0.0.1', database_port: '3306',
@@ -98,7 +99,7 @@ function changeDriver() {
                         <label v-if="form.database_driver !== 'sqlite'">Cổng kết nối<input v-model="form.database_port" placeholder="3306"></label>
                         <label>Tên database <b>*</b><input v-model="form.database_name" :placeholder="form.database_driver === 'sqlite' ? 'qlbh' : 'ten_database'"><small v-if="form.errors.database_name">{{ form.errors.database_name }}</small></label>
                         <label v-if="form.database_driver !== 'sqlite'">Tên người dùng <b>*</b><input v-model="form.database_username" placeholder="ten_nguoi_dung"><small v-if="form.errors.database_username">{{ form.errors.database_username }}</small></label>
-                        <label v-if="form.database_driver !== 'sqlite'">Mật khẩu database<input v-model="form.database_password" type="password" placeholder="Nhập mật khẩu"></label>
+                        <label v-if="form.database_driver !== 'sqlite'">Mật khẩu database<span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" placeholder="Nhập mật khẩu"><button type="button" @click="showDatabasePassword = !showDatabasePassword">{{ showDatabasePassword ? 'Ẩn' : 'Hiện' }}</button></span></label>
                     </div>
                     <p v-if="errors.database" class="error-banner">{{ errors.database }}</p>
                     <p v-if="status" class="success-banner">{{ status }}</p>

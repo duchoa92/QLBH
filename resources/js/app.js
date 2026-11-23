@@ -155,21 +155,6 @@ if (!window._inertiaToastRegistered) {
         }, 100)
     })
 
-    // Lưu dữ liệu bằng form Inertia (nhập hàng, sửa sản phẩm, điều chỉnh kho...) không đi qua axios nên không tự báo
-    // cho các tab khác. Phát cùng tín hiệu 'reference-data' để POS và các ô chọn tự nạp lại ngầm.
-    let lastVisitMethod = 'get'
-    router.on('start', (event) => { lastVisitMethod = String(event.detail?.visit?.method || 'get').toLowerCase() })
-    router.on('success', () => {
-        if (['get', 'head'].includes(lastVisitMethod)) return
-        window.dispatchEvent(new Event('reference-data:changed'))
-        try { window.localStorage.setItem('reference-data:version', String(Date.now())) } catch { /* không ảnh hưởng thao tác vừa lưu */ }
-        if ('BroadcastChannel' in window) {
-            const channel = new BroadcastChannel('reference-data')
-            channel.postMessage({ type: 'reference-data:changed' })
-            channel.close()
-        }
-    })
-
     router.on('success', (event) => {
 
     const method = event.detail.visit?.method?.toLowerCase()

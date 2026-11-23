@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import TextInput from '@/Components/TextInput.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 
 defineProps({
@@ -125,11 +126,11 @@ const submit = () => {
                                     Mật khẩu
                                 </label>
 
-                                <input
+                                <TextInput
                                     v-model="form.password"
                                     type="password"
                                     class="w-full rounded border-gray-300"
-                                >
+                                />
 
                                 <div
                                     v-if="form.errors.password"
@@ -145,11 +146,11 @@ const submit = () => {
                                     Xác nhận mật khẩu
                                 </label>
 
-                                <input
+                                <TextInput
                                     v-model="form.password_confirmation"
                                     type="password"
                                     class="w-full rounded border-gray-300"
-                                >
+                                />
                             </div>
 
                             <!-- Role -->
