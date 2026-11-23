@@ -438,10 +438,11 @@ const submit = () => {
 </script>
 
 <template>
-    <div
-        v-if="show"
-        class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in"
-    >
+    <Teleport to="body">
+        <div
+            v-if="show"
+            class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in"
+        >
         <div class="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
 
             <!-- HEADER -->
@@ -674,7 +675,8 @@ const submit = () => {
             </div>
 
         </div>
-    </div>
+        </div>
+    </Teleport>
 </template>
 
 <style scoped>

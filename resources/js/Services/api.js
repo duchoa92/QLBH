@@ -5,6 +5,11 @@ const api = axios.create({
 
     baseURL: appBaseUrl,
 
+    // Di động có thể giữ request mở rất lâu khi Wi-Fi báo có mạng nhưng
+    // máy chủ không phản hồi. Kết thúc request để POS thoát trạng thái tải
+    // và dùng được dữ liệu offline đã lưu nếu có.
+    timeout: 20000,
+
     headers: {
 
         Accept: 'application/json',

@@ -475,6 +475,34 @@ const resetContractDefaults = () => {
     form.purchase_contract_content = props.purchase_contract_defaults.content || ''
 }
 
+// Each settings dialog owns a small part of the shared form.  Send only that
+// part so data opened in another dialog cannot overwrite a newer value.
+const save = () => {
+    const section = activeModal.value
+    const keys = SECTION_KEYS[section]
+    if (!keys || form.processing) return
+
+    form.transform(data => Object.fromEntries(
+        keys.map(key => [key, data[key]])
+    ))
+
+    // The response keeps ?section=... for a reloadable URL.  It updates the
+    // active_section prop before Inertia calls onSuccess, so ignore it now;
+    // otherwise the first successful save opens this dialog again.
+    ignoreServerSectionForAWhile()
+
+    form.post(route('settings.update', { section }), {
+        preserveScroll: true,
+        onSuccess: () => {
+            liveSettings.value = props.settings
+            form.defaults(buildFormValues())
+            form.reset()
+            form.clearErrors()
+            closeModal()
+        },
+    })
+}
+
 const selectedBankAccountId = ref(String(form.bank_accounts.find(account => account.is_default)?.id || form.bank_accounts[0]?.id || ''))
 const selectedBankAccount = computed(() => form.bank_accounts.find(account => String(account.id) === String(selectedBankAccountId.value)) || null)
 const selectedBankAccountIndex = computed(() => form.bank_accounts.findIndex(account => String(account.id) === String(selectedBankAccountId.value)))

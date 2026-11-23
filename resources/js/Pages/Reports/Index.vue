@@ -551,7 +551,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Tổng chiết khấu</div>
+                        <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Tổng chiết khấu / Giảm giá</div>
                         <div class="mt-2 text-2xl font-black text-rose-600">
                             {{ formatMoney(revenue.summary?.total_discount) }}
                         </div>
