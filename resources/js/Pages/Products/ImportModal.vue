@@ -4,7 +4,7 @@ import BaseModal from '@/Components/UI/BaseModal.vue'
 import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { closeModal } from '@/Stores/modal'
 import axios from 'axios'
-import { ArrowDownToLine, Check, CircleFadingArrowUp, Download, Folder, Image, Lightbulb, Sheet, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
+import { ArrowDownToLine, Check, CircleCheck, CircleFadingArrowUp, CircleX, Download, Minus, Plus, RefreshCw, Folder, Image, Lightbulb, Sheet, SquareMousePointer, TriangleAlert, Undo2, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import JSZip from 'jszip'
 
@@ -25,6 +25,8 @@ const summary = ref({ total: 0, create: 0, update: 0, skip: 0, error: 0 })
 const step = ref('upload') // upload | preview
 const checking = ref(false)
 const importing = ref(false)
+const importPercent = ref(0)
+const importMessage = ref('')
 
 const uploadingImages = ref(false)
 const uploadProgress = ref(0)
@@ -33,6 +35,46 @@ let uploadedSignature = ''
 
 const report = ref(null)
 const showReport = ref(false)
+
+const MAX_REPORT_ERRORS = 100
+
+// Giao diện bảng kết quả: màu và tiêu đề theo kết quả (thành công / xong nhưng có lỗi / chưa nhập được gì).
+const reportView = computed(() => {
+    const r = report.value
+    if (!r) return null
+
+    const errorCount = r.error_count || 0
+
+    if (!r.success) {
+        return {
+            tone: 'border-red-200 bg-red-50 text-red-800',
+            icon: CircleX,
+            iconClass: 'text-red-600',
+            title: 'Chưa nhập được sản phẩm nào',
+            note: r.aborted
+                ? 'Bạn đã chọn dừng khi có lỗi. Hãy sửa các dòng lỗi bên dưới rồi nhập lại.'
+                : 'Hệ thống đã hoàn tác, dữ liệu hiện tại không bị thay đổi.',
+        }
+    }
+
+    if (errorCount > 0) {
+        return {
+            tone: 'border-amber-200 bg-amber-50 text-amber-800',
+            icon: TriangleAlert,
+            iconClass: 'text-amber-600',
+            title: 'Đã nhập xong, còn một số dòng lỗi chưa nhập',
+            note: 'Các dòng hợp lệ đã được lưu. Xuất file lỗi để sửa và nhập lại riêng các dòng này.',
+        }
+    }
+
+    return {
+        tone: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        icon: CircleCheck,
+        iconClass: 'text-emerald-600',
+        title: 'Nhập sản phẩm thành công',
+        note: `Đã xử lý ${(r.created || 0) + (r.updated || 0)} sản phẩm.`,
+    }
+})
 
 /* ================= LỰA CHỌN XỬ LÝ ================= */
 // Các lựa chọn gửi lên máy chủ ở bước kiểm tra và bước nhập (máy chủ đối chiếu với danh sách cho phép).
@@ -107,6 +149,7 @@ let recheckTimer = null
 
 onBeforeUnmount(() => {
     if (recheckTimer) clearTimeout(recheckTimer)
+    stopProgressPolling()
 })
 
 /* ================= TIỆN ÍCH ================= */
@@ -169,6 +212,10 @@ const ensureImagesUploaded = async () => {
             const res = await axios.post(route('products.import.images'), form)
             token = res.data.token
             uploadProgress.value = Math.round(((i + 1) / batches.length) * 100)
+            if (importing.value) {
+                importPercent.value = Math.round(uploadProgress.value / 10)
+                importMessage.value = `Đang tải ảnh... ${uploadProgress.value}%`
+            }
         }
 
         imageToken.value = token
@@ -194,13 +241,54 @@ const buildForm = async () => {
     return form
 }
 
+// Mã định danh lần nhập để hỏi tiến độ trên máy chủ (randomUUID chỉ có trên https/localhost nên có dự phòng).
+const newProgressId = () => (globalThis.crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+}))
+
+let progressTimer = null
+const stopProgressPolling = () => {
+    clearInterval(progressTimer)
+    progressTimer = null
+}
+const startProgressPolling = (id) => {
+    stopProgressPolling()
+    progressTimer = setInterval(async () => {
+        try {
+            const { data } = await axios.get(route('products.import.progress', id))
+            // Chỉ cho % tăng, tránh nhấp nháy khi 2 lần hỏi về lệch thứ tự.
+            if (data.percent >= importPercent.value) importPercent.value = data.percent
+            if (data.message) importMessage.value = data.message
+        } catch {
+            // Bỏ qua: lần hỏi sau sẽ cập nhật tiếp, kết quả cuối cùng vẫn lấy từ phản hồi của lần nhập.
+        }
+    }, 700)
+}
+
 const doImport = async () => {
     if (importing.value || !canImport.value) return
 
     importing.value = true
+    importPercent.value = 0
+    importMessage.value = 'Đang chuẩn bị...'
 
     try {
-        const res = await axios.post(route('products.import'), await buildForm())
+        const form = await buildForm()
+        const progressId = newProgressId()
+        form.append('progress_id', progressId)
+
+        startProgressPolling(progressId)
+        const res = await axios.post(route('products.import'), form, {
+            // Giai đoạn tải file lên máy chủ: chiếm 0–10% đầu của thanh tiến độ.
+            onUploadProgress: (e) => {
+                if (e.total && importPercent.value < 10) {
+                    importPercent.value = Math.min(10, Math.round((e.loaded / e.total) * 10))
+                    importMessage.value = 'Đang tải file lên...'
+                }
+            },
+        })
+        importPercent.value = 100
 
         report.value = res.data
         showReport.value = true
@@ -225,6 +313,7 @@ const doImport = async () => {
     } catch (e) {
         toast.error(apiError(e, 'Import thất bại'))
     } finally {
+        stopProgressPolling()
         importing.value = false
     }
 }
@@ -740,6 +829,15 @@ const downloadTemplate = () => {
 
             <!-- BƯỚC 2: KIỂM TRA + LỰA CHỌN -->
             <div v-if="step === 'preview'" class="space-y-3">
+            <div v-if="importing" class="sticky top-0 z-10 -mx-1 rounded-lg border border-green-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur" role="progressbar" :aria-valuenow="importPercent" aria-valuemin="0" aria-valuemax="100">
+                <div class="mb-1 flex items-center justify-between text-sm text-slate-600">
+                    <span class="truncate">{{ importMessage }}</span>
+                    <strong class="ml-3 tabular-nums text-green-700">{{ importPercent }}%</strong>
+                </div>
+                <div class="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div class="h-full rounded-full bg-green-600 transition-all duration-500" :style="{ width: importPercent + '%' }"></div>
+                </div>
+            </div>
 
                 <!-- File không có dòng tiêu đề -->
                 <div v-if="notice" class="flex items-start gap-2 rounded bg-yellow-100 p-3 text-sm">
@@ -878,7 +976,7 @@ const downloadTemplate = () => {
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a12 12 0 00-12 12h4z" />
                     </svg>
-                    <template v-if="importing">Đang nhập...</template>
+                    <template v-if="importing">Đang nhập... {{ importPercent }}%</template>
                     <template v-else>
                         <CircleFadingArrowUp />
                         Nhập sản phẩm
@@ -889,28 +987,88 @@ const downloadTemplate = () => {
         </template>
     </BaseModal>
 
-    <BaseModal v-if="showReport" title="Kết quả nhập sản phẩm" @close="showReport = false">
-        <div class="p-4 space-y-3">
-            <div v-if="report?.message" class="rounded bg-yellow-100 p-3 text-sm">{{ report.message }}</div>
-
-            <div class="flex text-emerald-600"><Check /> Đã thêm mới: {{ report?.created || 0 }}</div>
-            <div class="flex text-sky-600"><Check /> Đã cập nhật: {{ report?.updated || 0 }}</div>
-            <div class="flex text-slate-500"><X /> Bỏ qua: {{ report?.skipped || 0 }}</div>
-            <div class="flex text-red-600"><X /> Lỗi: {{ report?.error_count || 0 }}</div>
-
-            <div v-if="report?.errors?.length" class="max-h-48 overflow-auto rounded border text-xs">
-                <div v-for="(e, i) in report.errors.slice(0, 50)" :key="i" class="border-b px-2 py-1 last:border-b-0">
-                    <strong>Dòng {{ e.row }}</strong> {{ e.name }}: <span class="text-red-600">{{ e.error }}</span>
+    <BaseModal v-if="showReport" title="Kết quả nhập sản phẩm" size="lg" @close="showReport = false">
+        <div v-if="reportView" class="space-y-4 p-4">
+            <!-- Kết luận -->
+            <div class="flex items-start gap-3 rounded-lg border p-4" :class="reportView.tone">
+                <component :is="reportView.icon" class="mt-0.5 h-7 w-7 shrink-0" :class="reportView.iconClass" />
+                <div class="min-w-0">
+                    <div class="text-base font-semibold">{{ reportView.title }}</div>
+                    <div class="mt-0.5 text-sm">{{ report?.message || reportView.note }}</div>
+                    <div v-if="report?.message && reportView.note" class="mt-0.5 text-sm opacity-80">{{ reportView.note }}</div>
                 </div>
-                <div v-if="report.errors.length > 50" class="px-2 py-1 text-slate-500">... và {{ report.errors.length - 50 }} dòng lỗi khác (xem trong file lỗi).</div>
             </div>
 
-            <div class="flex">
-                <button v-if="report?.errors?.length" @click="downloadErrorFile" class="flex m-1 px-3 py-1 bg-red-500 text-white rounded">
-                    <Download /> Xuất file lỗi
-                </button>
-                <button @click="showReport = false; if (report?.success) closeModal()" class="m-1 px-3 py-1 bg-gray-500 text-white rounded">Đóng</button>
+            <!-- Số liệu -->
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="rounded-lg border border-emerald-200 bg-white p-3 text-center">
+                    <Plus class="mx-auto h-5 w-5 text-emerald-600" />
+                    <div class="mt-1 text-2xl font-bold tabular-nums text-emerald-600">{{ report?.created || 0 }}</div>
+                    <div class="text-xs text-slate-500">Thêm mới</div>
+                </div>
+                <div class="rounded-lg border border-sky-200 bg-white p-3 text-center">
+                    <RefreshCw class="mx-auto h-5 w-5 text-sky-600" />
+                    <div class="mt-1 text-2xl font-bold tabular-nums text-sky-600">{{ report?.updated || 0 }}</div>
+                    <div class="text-xs text-slate-500">Cập nhật</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white p-3 text-center">
+                    <Minus class="mx-auto h-5 w-5 text-slate-500" />
+                    <div class="mt-1 text-2xl font-bold tabular-nums text-slate-600">{{ report?.skipped || 0 }}</div>
+                    <div class="text-xs text-slate-500">Bỏ qua</div>
+                </div>
+                <div class="rounded-lg border bg-white p-3 text-center" :class="(report?.error_count || 0) > 0 ? 'border-red-300' : 'border-slate-200'">
+                    <X class="mx-auto h-5 w-5" :class="(report?.error_count || 0) > 0 ? 'text-red-600' : 'text-slate-400'" />
+                    <div class="mt-1 text-2xl font-bold tabular-nums" :class="(report?.error_count || 0) > 0 ? 'text-red-600' : 'text-slate-400'">{{ report?.error_count || 0 }}</div>
+                    <div class="text-xs text-slate-500">Dòng lỗi</div>
+                </div>
+            </div>
+
+            <!-- Chi tiết lỗi -->
+            <div v-if="report?.errors?.length">
+                <div class="mb-1.5 text-sm font-semibold text-slate-700">Chi tiết dòng lỗi</div>
+                <div class="max-h-64 overflow-auto rounded-lg border border-slate-200">
+                    <table class="w-full text-left text-sm">
+                        <thead class="sticky top-0 bg-slate-100 text-xs uppercase text-slate-600">
+                            <tr>
+                                <th class="w-16 px-3 py-2">Dòng</th>
+                                <th class="px-3 py-2">Sản phẩm</th>
+                                <th class="px-3 py-2">Lý do lỗi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(e, i) in report.errors.slice(0, MAX_REPORT_ERRORS)" :key="i" class="border-t border-slate-100 align-top odd:bg-white even:bg-slate-50/60">
+                                <td class="px-3 py-2 font-semibold tabular-nums text-slate-700">{{ e.row }}</td>
+                                <td class="px-3 py-2">
+                                    <div class="font-medium text-slate-800">{{ e.name || '—' }}</div>
+                                    <div v-if="e.sku" class="text-xs text-slate-500">{{ e.sku }}</div>
+                                </td>
+                                <td class="px-3 py-2 text-red-600">{{ e.error }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p v-if="report.errors.length > MAX_REPORT_ERRORS" class="mt-1.5 text-xs text-slate-500">
+                    Đang hiển thị {{ MAX_REPORT_ERRORS }} dòng đầu, còn {{ report.errors.length - MAX_REPORT_ERRORS }} dòng lỗi khác, xem đầy đủ trong file lỗi.
+                </p>
             </div>
         </div>
+
+        <template #footer>
+            <div class="flex flex-wrap justify-end gap-2 px-4">
+                <button
+                    v-if="report?.errors?.length"
+                    @click="downloadErrorFile"
+                    class="flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+                >
+                    <Download class="h-4 w-4" /> Xuất file lỗi
+                </button>
+                <button
+                    @click="showReport = false; if (report?.success) closeModal()"
+                    class="rounded-lg bg-slate-600 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                >
+                    Đóng
+                </button>
+            </div>
+        </template>
     </BaseModal>
 </template>

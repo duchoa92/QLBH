@@ -346,10 +346,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                     </div>
 
                     <p v-if="error" class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
-                </div>
 
-                <!-- FOOTER -->
-                <div class="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3 sm:px-6">
+                    <!-- FOOTER (trượt theo nội dung) -->
+                    <div class="-mx-4 -mb-4 mt-4 flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3 sm:-mx-5 sm:-mb-5 sm:px-6">
                     <div class="min-w-0 text-xs text-slate-500">
                         {{ isCustomer ? 'Thu' : 'Chi' }}: <b class="text-sm text-slate-900">{{ formatMoney(applied) }}</b>
                         <template v-if="discountAmount > 0"> · Giảm: <b class="text-emerald-700">{{ formatMoney(discountAmount) }}</b></template>
@@ -357,6 +356,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                     <div class="flex shrink-0 gap-2">
                         <button type="button" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="emit('close')">Hủy</button>
                         <button type="button" :disabled="!canSubmit" class="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50" @click="submit">{{ form.processing ? 'Đang lưu…' : 'Xác nhận' }}</button>
+                    </div>
                     </div>
                 </div>
             </section>

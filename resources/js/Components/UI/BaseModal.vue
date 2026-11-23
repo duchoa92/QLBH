@@ -90,14 +90,21 @@ onBeforeUnmount(() => {
                 </slot>
             </div>
 
-            <!-- BODY -->
-            <div class="base-modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white modal-scrollbar" :class="bodyClass">
-                <slot />
+            <!-- Có chân (nút thao tác): thân + chân cùng nằm trong một vùng cuộn, chân trượt theo nội dung
+                 và chỉ hiện ở cuối, không cố định đè lên nội dung nên không bị nhầm với các nút xử lý bên trên. -->
+            <div v-if="$slots.footer" class="base-modal-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-white modal-scrollbar">
+                <div class="base-modal-body shrink-0 bg-white" :class="bodyClass">
+                    <slot />
+                </div>
+
+                <div class="base-modal-footer mt-auto border-t border-slate-200 bg-slate-50 px-4" :class="footerClass">
+                    <slot name="footer" />
+                </div>
             </div>
 
-            <!-- FOOTER -->
-            <div v-if="$slots.footer" class="base-modal-footer shrink-0 border-t border-slate-200 bg-slate-50 px-4" :class="footerClass">
-                <slot name="footer" />
+            <!-- Không có chân: thân tự cuộn như trước -->
+            <div v-else class="base-modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white modal-scrollbar" :class="bodyClass">
+                <slot />
             </div>
 
         </section>

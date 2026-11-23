@@ -770,8 +770,8 @@ useBarcodeScanner(
                             </div>
                         </details>
                     </div>
+                    <footer class="mt-4 flex justify-end gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><button class="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="shiftModal = false">Đóng</button><button :disabled="shiftLoading" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="submitShift">{{ shiftLoading ? 'Đang lưu…' : shiftMode === 'open' ? 'Bắt đầu ca' : 'Kết thúc ca' }}</button></footer>
                 </div>
-                <footer class="-mx-4 -mb-4 mt-3 flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5"><button class="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" @click="shiftModal = false">Đóng</button><button :disabled="shiftLoading" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="submitShift">{{ shiftLoading ? 'Đang lưu…' : shiftMode === 'open' ? 'Bắt đầu ca' : 'Kết thúc ca' }}</button></footer>
             </template>
             <template v-else>
                 <header class="-mx-4 -mt-4 shrink-0 border-b border-slate-200 bg-slate-50 px-4 pb-3 pt-4 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5"><h2 class="text-lg font-bold text-slate-900">Tổng kết ca làm</h2></header>
@@ -810,8 +810,8 @@ useBarcodeScanner(
 
 
                     <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span>Chênh lệch tiền mặt (thực tế so với dự kiến)</span><strong :class="shiftResult.difference < 0 ? 'text-rose-600' : 'text-emerald-700'">{{ formatMoney(shiftResult.difference) }}</strong></div>
+                    <footer class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><button class="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white" @click="shiftModal = false">Hoàn tất</button></footer>
                 </div>
-                <footer class="-mx-4 -mb-4 mt-3 shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5"><button class="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white" @click="shiftModal = false">Hoàn tất</button></footer>
             </template>
         </section>
     </div>

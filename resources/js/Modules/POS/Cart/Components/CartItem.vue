@@ -241,15 +241,15 @@ const editorTitle = computed(() => ({
                         <p v-if="promotionError" role="alert" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{{ promotionError }}</p>
                         <CartItemGiftList :gifts="draft.gifts" @remove="removeGift(draft, $event)" @delete="deleteGift(draft, $event)" />
                     </div>
-                </div>
 
-                <footer class="flex gap-2 border-t border-slate-200 bg-slate-50/70 p-3 sm:px-5">
+                    <footer class="-mx-4 -mb-4 mt-4 flex gap-2 border-t border-slate-200 bg-slate-50/70 p-3 sm:-mx-5 sm:-mb-5 sm:px-5">
                     <button v-if="activeEditor === 'warranty'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasWarrantyDetails" @click="clearWarranty"><X class="mr-1 inline h-4 w-4" />Xóa bảo hành</button>
                     <button v-else-if="activeEditor === 'note'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasNote" @click="clearNote"><X class="mr-1 inline h-4 w-4" />Xóa ghi chú</button>
                     <button v-else-if="activeEditor === 'promotion'" type="button" class="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400" :disabled="!hasPromotionDetails" @click="clearPromotion"><X class="mr-1 inline h-4 w-4" />Xóa</button>
                     <button v-else type="button" class="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50" @click="closeEditor">Hủy</button>
                     <button type="button" class="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-blue-200 hover:bg-blue-700" @click="saveEditor">Lưu</button>
-                </footer>
+                    </footer>
+                </div>
             </section>
         </div>
         </Teleport>
