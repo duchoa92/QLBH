@@ -145,7 +145,7 @@ const primaryValue = row => row?.name || row?.full_name || row?.description || r
             </div>
             </slot>
             </div>
-            <div v-if="$slots['mobile-actions']" class="pt-0.5">
+            <div v-if="$slots['mobile-actions']" class="flex justify-end pt-0.5 [&>div]:justify-end">
                 <slot name="mobile-actions" :row="row" />
             </div>
         </article>

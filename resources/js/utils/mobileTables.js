@@ -2,7 +2,7 @@
 // Hàm này chỉ gắn nhãn cột (data-label) cho từng ô dựa vào tiêu đề cột để CSS hiển thị "Nhãn: giá trị".
 // Không đổi cấu trúc DOM, không ảnh hưởng dữ liệu hay sự kiện; trên desktop bảng giữ nguyên.
 
-const ACTION_HEADER = /^(thao\s*t[aá]c|actions?|)$/i
+const ACTION_HEADER = /^(thao\s*t[aá]c|h[aà]nh\s*[dđ][oộ]ng|t[aá]c\s*v[uụ]|ch[uứ]c\s*n[aă]ng|t[uù]y\s*ch[oọ]n|actions?|)$/i
 
 const labelTable = (table) => {
     const headRows = table.tHead ? Array.from(table.tHead.rows) : []

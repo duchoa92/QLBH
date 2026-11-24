@@ -242,7 +242,8 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
             </template>
 
             <template #mobile-actions="{ row }">
-                <div class="flex flex-wrap gap-2" @click.stop>
+                <div class="flex w-full flex-col items-end gap-1.5" @click.stop>
+                <div class="flex flex-wrap justify-end gap-2">
                     <button type="button" title="Sửa" aria-label="Sửa" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 active:bg-blue-100" @click="openEdit(row)"><SquarePen class="h-5 w-5" /></button>
                     <button type="button" title="Khuôn mặt" aria-label="Khuôn mặt" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 active:bg-indigo-100" @click="openFace(row)"><ScanFace class="h-5 w-5" /></button>
                     <template v-if="canManageCustomers">
@@ -252,7 +253,8 @@ watch(() => page.url, openDetailFromGlobalSearch, { immediate: true })
                         <button type="button" title="Xóa" aria-label="Xóa" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700 active:bg-rose-100" :class="row.has_transactions ? 'cursor-not-allowed opacity-40' : ''" :disabled="row.has_transactions" @click="removeCustomer(row)"><Trash2 class="h-5 w-5" /></button>
                     </template>
                 </div>
-                <p v-if="canManageCustomers && row.has_transactions" class="text-[11px] text-slate-400">Khách đã có phát sinh nên không xóa được, hãy dùng Chặn.</p>
+                <p v-if="canManageCustomers && row.has_transactions" class="text-right text-[11px] text-slate-400">Khách đã có phát sinh nên không xóa được, hãy dùng Chặn.</p>
+                </div>
             </template>
             </BaseTable>
         </DataPanel>
