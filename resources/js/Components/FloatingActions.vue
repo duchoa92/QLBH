@@ -150,7 +150,7 @@ const panelClass = computed(() => [
         <Transition name="fa-pop">
             <div
                 v-show="open"
-                class="floating-actions__panel absolute w-max min-w-[10.5rem] max-w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-2xl shadow-slate-900/15 backdrop-blur"
+                class="floating-actions__panel absolute w-max min-w-[10.5rem] max-w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-300 bg-white p-1.5 shadow-2xl shadow-slate-900/15"
                 :class="panelClass"
                 :style="{ '--fa-shift': openUp ? '10px' : '-10px' }"
                 @click="onPanelClick"
@@ -237,6 +237,7 @@ const panelClass = computed(() => [
     margin-top: 0.25rem; display: flex; width: 100%; align-items: center; gap: 0.5rem; border-top: 1px solid rgb(241 245 249);
     border-radius: 0.75rem; padding: 0.5rem 0.75rem; font-size: 0.75rem; font-weight: 600; color: rgb(71 85 105); transition: background 0.15s ease;
 }
+.floating-actions__search:last-child { margin-bottom: 0; }
 .floating-actions__search:hover { background: rgb(241 245 249); }
 
 @keyframes fa-item-in { from { opacity: 0; transform: translateX(8px) scale(0.96); } to { opacity: 1; transform: none; } }

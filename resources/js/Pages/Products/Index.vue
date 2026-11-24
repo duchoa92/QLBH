@@ -1,11 +1,3 @@
-Claude
-
-
-
-
-
-
-Index · VUE
 <script setup>
 import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
@@ -428,41 +420,39 @@ const openImeiList = (row) => {
     </ListToolbar>
  
     <!-- BULK ACTION -->
-    <div 
+    <div
         v-if="selectedIds.length"
-        class="flex items-center gap-3 bg-blue-50 border rounded p-2 mb-3"
+        class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2"
     >
- 
-        <span class="text-sm text-gray-600">
-            Đã chọn <b>{{ selectedIds.length }}</b> sản phẩm
-        </span>
- 
-        <button
-            :disabled="!canPrintSelected"
-            :title="canPrintSelected ? '' : 'Các sản phẩm đã chọn không có mã để in'"
-            @click="printImei"
-            class="flex items-center gap-1 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-60 disabled:hover:bg-transparent"
-        >
-            In IMEI
-        </button>
- 
-        <button
-            type="button"
-            @click="openBulkPriceUpdate"
-            class="flex items-center gap-1 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded"
-        >
-            <DollarSign :size="16" />Sửa giá đã chọn
-        </button>
- 
-        <button
-            @click="bulkDelete"
-            class="flex items-center gap-1 text-red-600 hover:bg-red-100 px-2 py-1 rounded"
-        >
-            Xóa
-        </button>
- 
+        <span class="text-xs text-slate-600 sm:text-sm">Đã chọn <b class="text-slate-900">{{ selectedIds.length }}</b></span>
+
+        <div class="flex flex-wrap items-center gap-1.5">
+            <button
+                type="button"
+                :disabled="!canPrintSelected"
+                :title="canPrintSelected ? 'In IMEI' : 'Các sản phẩm đã chọn không có mã để in'"
+                @click="printImei"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+            >
+                <Printer :size="14" />In IMEI
+            </button>
+            <button
+                type="button"
+                @click="openBulkPriceUpdate"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+            >
+                <DollarSign :size="14" />Sửa giá
+            </button>
+            <button
+                type="button"
+                @click="bulkDelete"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 border-red-200 bg-white text-red-600 hover:bg-red-50"
+            >
+                <Trash2 :size="14" />Xóa
+            </button>
+        </div>
     </div>
- 
+
     <BaseTable
         :data="productsData"
         :columns="columns"
@@ -598,4 +588,3 @@ const openImeiList = (row) => {
   animation: scaleIn 0.15s ease;
 }
 </style>
- 

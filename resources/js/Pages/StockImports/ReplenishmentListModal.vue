@@ -13,6 +13,7 @@ import {
     LoaderCircle,
     Save,
     ShoppingBasket,
+    Trash2,
     X,
 } from 'lucide-vue-next'
 
@@ -612,7 +613,7 @@ onMounted(() => {
                         <p class="mt-2 text-xs">Chọn sản phẩm bên trái để lên danh sách.</p>
                     </div>
                     <div v-else class="overflow-x-auto">
-                        <table class="m-cards w-full min-w-[500px] table-fixed border-collapse text-xs">
+                        <table class="m-cards rep-table w-full min-w-[500px] table-fixed border-collapse text-xs">
                             <thead class="border-b border-slate-200 bg-slate-50 text-left font-semibold text-slate-600">
                                 <tr>
                                     <th class="w-[30%] px-2 py-2">Sản phẩm</th>
@@ -623,24 +624,26 @@ onMounted(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <tr v-for="item in selectedItems" :key="itemKey(item.id, item.variant_id)" class="hover:bg-slate-50/70">
-                                    <td class="break-words px-2 py-2 font-semibold leading-4 text-slate-900">{{ item.name }}<span v-if="item.variant" class="mt-0.5 block text-[10px] font-medium text-indigo-600">{{ variantLabel(item.variant) }}</span></td>
-                                    <td class="px-1 py-2">
+                                <tr v-for="item in selectedItems" :key="itemKey(item.id, item.variant_id)" class="rep-row hover:bg-slate-50/70">
+                                    <td class="rep-name-cell break-words px-2 py-2 font-semibold leading-4 text-slate-900">{{ item.name }}<span v-if="item.variant" class="mt-0.5 block text-[10px] font-medium text-indigo-600">{{ variantLabel(item.variant) }}</span></td>
+                                    <td class="rep-input-cell px-1 py-2">
                                         <FloatingInput
                                             v-model.number="item.quantity"
                                             :name="`quantity_${item.id}`"
-                                            label="SL"
+                                            label="Số lượng"
+                                            label-class="md:hidden"
                                             type="number"
                                             min="1"
                                             step="1"
                                             input-class="h-8 px-1 text-center text-xs font-semibold"
                                         />
                                     </td>
-                                    <td class="px-1 py-2">
+                                    <td class="rep-input-cell px-1 py-2">
                                         <FloatingInput
                                             v-model.number="item.cost_price"
                                             :name="`cost_price_${item.id}`"
                                             label="Giá"
+                                            label-class="md:hidden"
                                             type="number"
                                             min="0"
                                             step="1000"
@@ -649,8 +652,8 @@ onMounted(() => {
                                         />
                                     </td>
                                     <td class="px-2 py-2 text-right font-semibold tabular-nums text-slate-700">{{ formatCurrency(Math.max(0, Number(item.quantity) || 0) * Math.max(0, Number(item.cost_price) || 0)) }}</td>
-                                    <td class="px-1 py-2 text-center">
-                                        <button type="button" class="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" :aria-label="`Bỏ ${item.name} khỏi danh sách`" @click="removeItem(item)"><X class="h-4 w-4" /></button>
+                                    <td class="rep-remove-cell px-1 py-2 text-center">
+                                        <button type="button" class="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" :aria-label="`Bỏ ${item.name} khỏi danh sách`" @click="removeItem(item)"><Trash2 class="h-4 w-4" /></button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -682,3 +685,17 @@ onMounted(() => {
         </div>
     </BaseModal>
 </template>
+
+<style scoped>
+/* Mobile: tên SP ở đầu thẻ (không nhãn) + thùng rác góc phải; Số lượng + Giá nhập chung một hàng. */
+@media screen and (max-width: 767px) {
+    table.rep-table tr.rep-row { position: relative; display: grid; grid-template-columns: 1fr 1.6fr; column-gap: 0.5rem; }
+    table.rep-table tr.rep-row > td { grid-column: 1 / -1; }
+    table.rep-table tr.rep-row > td.rep-name-cell { display: block !important; text-align: left !important; padding: 0.25rem 2rem 0.25rem 0 !important; }
+    table.rep-table tr.rep-row > td.rep-name-cell::before { display: none; }
+    table.rep-table tr.rep-row > td.rep-input-cell { grid-column: auto; display: block !important; padding: 0.5rem 0 0.25rem !important; border-bottom: 0 !important; }
+    table.rep-table tr.rep-row > td.rep-input-cell::before { display: none; }
+    table.rep-table tr.rep-row > td.rep-remove-cell { position: absolute; top: 0.375rem; right: 0.5rem; display: block !important; width: auto !important; margin: 0; padding: 0 !important; border: 0 !important; }
+    table.rep-table tr.rep-row > td.rep-remove-cell::before { display: none; }
+}
+</style>

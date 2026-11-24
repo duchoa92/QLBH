@@ -298,12 +298,12 @@ const submit = () => {
                 </div>
                 <div class="min-w-0">
                     <h2 class="truncate text-base font-bold text-slate-900">Cập nhật giá bán: {{ isSingleProduct ? product.name : 'Nhiều sản phẩm' }}</h2>
-                    <p v-if="isSingleProduct" class="mt-0.5 text-xs text-slate-500">
-                        <template v-if="singleMode === 'imei'">Mã SP: {{ product.sku || product.id }} · Tồn kho: {{ inStockImeis }} máy · Giá nhập TB: {{ formatCurrency(averageCost) }}</template>
-                        <template v-else-if="singleMode === 'variant'">Phân loại: Sản phẩm có biến thể</template>
-                        <template v-else>Loại: Sản phẩm đơn thể / Phụ kiện</template>
+                    <p v-if="isSingleProduct" class="mt-0.5 truncate text-xs text-slate-500">
+                        <template v-if="singleMode === 'imei'">{{ product.sku || product.id }} · Tồn {{ inStockImeis }} máy · Nhập TB {{ formatCurrency(averageCost) }}</template>
+                        <template v-else-if="singleMode === 'variant'">Sản phẩm có biến thể</template>
+                        <template v-else>Sản phẩm đơn thể / phụ kiện</template>
                     </p>
-                    <p class="mt-0.5 text-[11px] text-slate-500">Giá mới áp dụng cho toàn bộ hàng còn trong kho; giá vốn và lịch sử lô không thay đổi.</p>
+                    <p class="mt-0.5 text-[11px] text-slate-500">Chỉ đổi giá bán của hàng còn trong kho, không ảnh hưởng giá vốn.</p>
                 </div>
             </div>
             <button type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-700" aria-label="Đóng" @click="emit('close')"><X :size="19" /></button>
@@ -397,9 +397,7 @@ const submit = () => {
                     <p class="text-xs text-slate-500">Giá nhập vào:<strong class="mt-1 block text-sm text-slate-900">{{ formatCurrency(singleUpdates[0].cost_price) }}</strong></p>
                     <p class="text-xs text-slate-500">Giá bán hiện tại:<strong class="mt-1 block text-sm text-slate-900">{{ formatCurrency(singleUpdates[0].original_sell_price) }}</strong></p>
                 </div>
-                <label class="block text-xs font-bold text-slate-800">GIÁ BÁN MỚI (VNĐ)
-                    <div class="relative mt-2"><FloatingInput v-model.number="singleUpdates[0].sell_price" type="number" format-thousands :floating-label="false" input-class="!h-14 !w-full !rounded-xl !border-2 !border-emerald-500 !bg-slate-50 !px-4 !py-3 !pr-12 !text-left !text-lg !font-bold !text-slate-900 focus:!ring-emerald-200" /><span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">đ</span></div>
-                </label>
+                <div class="relative"><FloatingInput v-model.number="singleUpdates[0].sell_price" name="new_sell_price" label="Giá bán mới (VNĐ)" type="number" format-thousands input-class="!h-14 !w-full !rounded-xl !border-2 !border-emerald-500 !bg-white !px-4 !pb-1 !pt-4 !pr-12 !text-left !text-lg !font-bold !text-slate-900 focus:!ring-emerald-200" /><span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">đ</span></div>
                 <div class="flex flex-wrap items-center gap-2 text-xs">
                     <span class="text-slate-500">Gợi ý nhanh theo giá vốn:</span>
                     <button v-for="markup in [30, 50, 100]" :key="markup" type="button" :disabled="singleUpdates[0].cost_price <= 0" class="rounded-md bg-slate-100 px-2.5 py-1.5 font-semibold text-slate-700 hover:bg-emerald-100 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50" @click="setSingleMarkup(markup)">+{{ markup }}%</button>
