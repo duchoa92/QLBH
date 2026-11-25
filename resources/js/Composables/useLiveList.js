@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { reloadWhenIdle } from '@/utils/pageBusy'
 import { usePage } from '@inertiajs/vue3'
 import { fetchPartialProps, isCanceled } from '@/Services/partialFetch'
 import { useModal } from '@/Stores/modal'
@@ -93,7 +94,7 @@ export function useLiveList({ props, dataKey, filtersKey = 'filters', extraKeys 
             lastLoaded = Date.now()
         } catch (error) {
             if (isCanceled(error)) return
-            if (error?.response?.status === 409) { window.location.reload(); return }
+            if (error?.response?.status === 409) { reloadWhenIdle(); return }
             if (id === seq) console.error(error)
         } finally {
             // Luôn tắt trạng thái tải của lượt mới nhất (kể cả lượt ngầm đã hủy lượt có loading trước đó, tránh bị kẹt).

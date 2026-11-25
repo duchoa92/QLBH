@@ -678,3 +678,11 @@ summary,
         overflow-x: visible;
     }
 }
+
+/* Modal / hộp thoại: vuốt tới cuối vùng cuộn của modal không được "chảy" sang trang nền. */
+.fixed.inset-0,
+[role="dialog"],
+.base-modal-body,
+.base-modal-scroll {
+    overscroll-behavior: contain;
+}

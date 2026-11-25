@@ -12,6 +12,10 @@
         h1 { margin: 0 0 8px; font-size: 22px }
         p { margin: 0 0 20px; color: #475569 }
         button { width: 100%; border: 0; border-radius: 10px; padding: 12px; color: white; background: #4f46e5; font: inherit; font-weight: 700; cursor: pointer }
+        button[disabled] { opacity: .6; cursor: default }
+        .secondary { margin-top: 10px; color: #4f46e5; background: #eef2ff }
+        .hint { margin: 14px 0 0; font-size: 13px; color: #64748b }
+        #status { margin: 14px 0 0; font-size: 13px; color: #64748b }
     </style>
 </head>
 <body>
@@ -19,6 +23,48 @@
         <h1>Bạn đang mất kết nối</h1>
         <p>Trang này chưa có bản lưu offline trên thiết bị. Hãy kết nối mạng, mở trang cần dùng ít nhất một lần rồi thử lại. Các thao tác ghi dữ liệu vẫn cần máy chủ, ngoại trừ đơn POS đủ điều kiện đã được xếp hàng trên thiết bị.</p>
         <button type="button" onclick="location.reload()">Thử kết nối lại</button>
+        <button type="button" id="reset" class="secondary">Đặt lại và thử lại</button>
+        <p class="hint">Nếu máy chủ đã chạy mà trang vẫn không vào được, hãy bấm "Đặt lại và thử lại". Thao tác này xóa bản lưu tạm của ứng dụng trên thiết bị này; đơn POS đang xếp hàng không bị xóa.</p>
+        <p id="status" role="status"></p>
     </main>
+    <script>
+        (function () {
+            var statusEl = document.getElementById('status')
+            var resetButton = document.getElementById('reset')
+
+            // Tự vào lại khi máy chủ đã sẵn sàng. Yêu cầu fetch này không phải
+            // điều hướng nên service worker không chặn mà đi thẳng ra mạng.
+            var probe = function () {
+                if (document.hidden) return
+                fetch(location.href, { cache: 'no-store', credentials: 'same-origin' })
+                    .then(function () { location.reload() })
+                    .catch(function () {})
+            }
+            setInterval(probe, 5000)
+            window.addEventListener('online', probe)
+            document.addEventListener('visibilitychange', probe)
+
+            resetButton.addEventListener('click', function () {
+                resetButton.disabled = true
+                statusEl.textContent = 'Đang đặt lại...'
+                var work = []
+                try {
+                    if ('serviceWorker' in navigator) {
+                        work.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+                            return Promise.all(regs.map(function (reg) { return reg.unregister() }))
+                        }))
+                    }
+                    if (window.caches) {
+                        work.push(caches.keys().then(function (keys) {
+                            return Promise.all(keys
+                                .filter(function (key) { return key.indexOf('qlbh-offline-shell-') === 0 })
+                                .map(function (key) { return caches.delete(key) }))
+                        }))
+                    }
+                } catch (error) { /* vẫn tải lại bên dưới */ }
+                Promise.all(work).catch(function () {}).then(function () { location.reload() })
+            })
+        })()
+    </script>
 </body>
 </html>

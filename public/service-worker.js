@@ -1,7 +1,14 @@
-// v5 drops the old snapshots of authenticated pages. Those snapshots could
-// make an ordinary F5 render yesterday's Camera Intelligence/POS state until
-// the operator forced a hard reload.
-const CACHE_NAME = 'qlbh-offline-shell-v5'
+// v6 on top of v5 (v5 drops the old snapshots of authenticated pages, which
+// could make an ordinary F5 render yesterday's Camera Intelligence/POS state
+// until the operator forced a hard reload). v6 changes:
+//  - Only a failed network fetch can send a page to the offline fallback. An
+//    error while writing the cache used to be treated as "offline" as well, so
+//    a server that answered fine could still end on the offline page.
+//  - Login/logout clear the authenticated snapshots but keep offline.html.
+//    Deleting the whole cache removed the offline page for good, leaving only
+//    the plain-text 503 fallback until the next service worker install.
+//  - Cache writes never delay or fail a response that already succeeded.
+const CACHE_NAME = 'qlbh-offline-shell-v6'
 const OFFLINE_PAGE = new URL('offline.html', self.registration.scope).href
 const APP_SHELL = new URL('__offline_app_shell__.html', self.registration.scope).href
 
@@ -64,9 +71,33 @@ const cachePageSnapshot = async ({ html: sourceHtml, page }) => {
     await cache.put(new Request(pageUrl.href), response)
 }
 
+// Drop every snapshot of an authenticated page, but keep the offline fallback.
+const clearAuthenticatedSnapshots = async () => {
+    const cache = await caches.open(CACHE_NAME)
+    const requests = await cache.keys()
+    await Promise.all(requests
+        .filter(cachedRequest => cachedRequest.url !== OFFLINE_PAGE)
+        .map(cachedRequest => cache.delete(cachedRequest, { ignoreVary: true })))
+}
+
+// Used only after the network fetch itself failed.
+const offlineFallback = async (request, url) => {
+    try {
+        if (isOfflinePosPage(url)) {
+            const cachedPage = await caches.match(request)
+            if (cachedPage) return cachedPage
+        }
+        const cachedShell = await caches.match(OFFLINE_PAGE)
+        if (cachedShell) return cachedShell
+    } catch (error) {
+        console.warn('[sw] offline fallback lookup failed:', error)
+    }
+    return new Response('Mất kết nối mạng.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+}
+
 self.addEventListener('message', event => {
     if (event.data?.type === 'CACHE_OFFLINE_PAGE') {
-        event.waitUntil(cachePageSnapshot(event.data))
+        event.waitUntil(cachePageSnapshot(event.data).catch(error => console.warn('[sw] could not store page snapshot:', error)))
     }
 })
 
@@ -88,7 +119,9 @@ self.addEventListener('fetch', event => {
         const requestUrl = new URL(request.url)
         if (requestUrl.origin === self.location.origin && /\/(login|logout)$/.test(requestUrl.pathname)) {
             event.respondWith(fetch(request).then(async response => {
-                if (response.ok || response.redirected) await caches.delete(CACHE_NAME)
+                if (response.ok || response.redirected) {
+                    try { await clearAuthenticatedSnapshots() } catch (error) { console.warn('[sw] could not clear snapshots:', error) }
+                }
                 return response
             }))
         }
@@ -100,35 +133,41 @@ self.addEventListener('fetch', event => {
 
     if (request.mode === 'navigate') {
         event.respondWith((async () => {
-            const mayUseOfflineSnapshot = isOfflinePosPage(url)
+            let response
             try {
                 // Never let a normal F5 reuse a browser HTTP-cache entry for
                 // dynamic, authenticated data. The app therefore behaves the
                 // same for F5 and Shift+F5 while the server is reachable.
-                const response = await fetch(request, { cache: 'no-store' })
-                const finalUrl = new URL(response.url || request.url)
-                const isSignInPage = /\/(login|register|forgot-password|reset-password)(\/|$)/.test(finalUrl.pathname)
-                if (mayUseOfflineSnapshot && response.ok && !isSignInPage && response.headers.get('content-type')?.includes('text/html')) {
-                    const cache = await caches.open(CACHE_NAME)
-                    await cache.put(APP_SHELL, response.clone())
-                    await cache.put(request, response.clone())
-                }
-                return response
-            } catch {
-                if (mayUseOfflineSnapshot) {
-                    const cachedPage = await caches.match(request)
-                    if (cachedPage) return cachedPage
-                }
-                const cachedShell = await caches.match(OFFLINE_PAGE)
-                return cachedShell || new Response('Mất kết nối mạng.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+                response = await fetch(request, { cache: 'no-store' })
+            } catch (error) {
+                console.warn('[sw] navigation fetch failed:', error)
+                return offlineFallback(request, url)
             }
+
+            const finalUrl = new URL(response.url || request.url)
+            const isSignInPage = /\/(login|register|forgot-password|reset-password)(\/|$)/.test(finalUrl.pathname)
+            if (isOfflinePosPage(url) && response.ok && !isSignInPage && response.headers.get('content-type')?.includes('text/html')) {
+                const shellCopy = response.clone()
+                const pageCopy = response.clone()
+                event.waitUntil((async () => {
+                    try {
+                        const cache = await caches.open(CACHE_NAME)
+                        await cache.put(APP_SHELL, shellCopy)
+                        await cache.put(request, pageCopy)
+                    } catch (error) {
+                        console.warn('[sw] could not store POS snapshot:', error)
+                    }
+                })())
+            }
+            return response
         })())
         return
     }
 
     if (request.headers.get('X-Inertia') === 'true') {
-        event.respondWith(fetch(request, { cache: 'no-store' }).then(async response => {
-            await cacheInertiaPage(request, response.clone())
+        event.respondWith(fetch(request, { cache: 'no-store' }).then(response => {
+            const copy = response.clone()
+            event.waitUntil(cacheInertiaPage(request, copy).catch(error => console.warn('[sw] could not store Inertia page:', error)))
             return response
         }))
         return
@@ -136,11 +175,18 @@ self.addEventListener('fetch', event => {
 
     if (['script', 'style', 'font', 'image'].includes(request.destination)) {
         event.respondWith((async () => {
-            const cache = await caches.open(CACHE_NAME)
-            const cached = await cache.match(request)
-            if (cached) return cached
+            try {
+                const cache = await caches.open(CACHE_NAME)
+                const cached = await cache.match(request)
+                if (cached) return cached
+            } catch (error) {
+                console.warn('[sw] asset cache lookup failed:', error)
+            }
             const response = await fetch(request)
-            if (response.ok) await cache.put(request, response.clone())
+            if (response.status === 200) {
+                const copy = response.clone()
+                event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, copy)).catch(error => console.warn('[sw] could not store asset:', error)))
+            }
             return response
         })())
     }

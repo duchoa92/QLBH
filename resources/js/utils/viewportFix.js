@@ -13,6 +13,34 @@ export function installViewportFix() {
     if (!coarse || !coarse.matches) return
 
     const root = document.documentElement
+
+    // Chống tự phóng to khi chạm vào ô nhập và khi thu bàn phím (iOS Safari/Chrome iOS vẫn giữ trang bị zoom dù ô nhập đã 16px,
+    // ví dụ khi ô nằm trong khung cố định hoặc bị bọc transform). Khi một ô nhập đang được focus, tạm đặt maximum-scale=1 để
+    // trình duyệt không zoom và kéo trang về mức 1x; rời ô nhập thì trả lại meta viewport gốc nên chụm hai ngón vẫn zoom được.
+    const viewportMeta = document.querySelector('meta[name="viewport"]')
+    if (viewportMeta) {
+        const baseViewportContent = viewportMeta.getAttribute('content') || 'width=device-width, initial-scale=1'
+        const lockedViewportContent = `${baseViewportContent.replace(/,?\s*(maximum-scale|user-scalable)\s*=\s*[^,]*/gi, '')}, maximum-scale=1`
+        const focusableField = 'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [contenteditable="true"]'
+        let restoreTimer = 0
+
+        document.addEventListener('focusin', (event) => {
+            if (!(event.target instanceof HTMLElement) || !event.target.matches(focusableField)) return
+            window.clearTimeout(restoreTimer)
+            if (viewportMeta.getAttribute('content') !== lockedViewportContent) viewportMeta.setAttribute('content', lockedViewportContent)
+        })
+
+        document.addEventListener('focusout', () => {
+            window.clearTimeout(restoreTimer)
+            // Chuyển giữa hai ô nhập sẽ có focusin ngay sau đó và hủy bước trả lại này.
+            restoreTimer = window.setTimeout(() => {
+                if (!(document.activeElement instanceof HTMLElement) || !document.activeElement.matches(focusableField)) {
+                    viewportMeta.setAttribute('content', baseViewportContent)
+                }
+            }, 400)
+        })
+    }
+
     const isEditable = el => el instanceof HTMLElement
         && el.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [contenteditable="true"]')
     let frame = 0

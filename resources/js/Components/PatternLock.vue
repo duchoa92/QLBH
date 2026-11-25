@@ -1,11 +1,5 @@
 <script setup>
-import {
-    ref,
-    computed,
-    onMounted,
-    onBeforeUnmount,
-    watch,
-} from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps({
     modelValue: {
@@ -30,51 +24,20 @@ const dots = [
 
 const selectedDots = ref([]);
 const isDrawing = ref(false);
+const pad = ref(null);
 
 watch(() => props.modelValue, (value) => {
+    // Đang vẽ thì giữ trạng thái cục bộ, không để giá trị từ cha ghi đè giữa chừng
+    if (isDrawing.value) return;
     selectedDots.value = value
         ? value.split('-').map(Number).filter((dot) => dots.includes(dot))
         : [];
 }, { immediate: true });
 
-// Bắt đầu vẽ
-const startDraw = (dot) => {
-    if (props.readonly) return;
-    isDrawing.value = true;
-    selectedDots.value = [dot];
-    updateValue();
-};
-
-// Rê qua chấm khác
-const handleEnter = (dot) => {
-    if (!isDrawing.value) return;
-    if (!selectedDots.value.includes(dot)) {
-        selectedDots.value.push(dot);
-        updateValue();
-    }
-};
-
-// Kết thúc vẽ
-const stopDraw = () => {
-    isDrawing.value = false;
-};
-
-// Cập nhật giá trị
-const updateValue = () => {
-    emit('update:modelValue', selectedDots.value.join('-'));
-};
-
-// Reset
-const reset = () => {
-    selectedDots.value = [];
-    emit('update:modelValue', '');
-};
-
 /*
 |--------------------------------------------------------------------------
-| Tọa độ SVG để vẽ đường nối có MŨI TÊN CHỈ HƯỚNG
+| Tọa độ SVG (khung 192x192): tâm mỗi chấm
 |--------------------------------------------------------------------------
-| Khung 192x192px (W:48 x H:48 x gap:24) -> Tọa độ tâm mỗi nút (x, y):
 | 1: (24, 24)   2: (96, 24)   3: (168, 24)
 | 4: (24, 96)   5: (96, 96)   6: (168, 96)
 | 7: (24, 168)  8: (96, 168)  9: (168, 168)
@@ -86,6 +49,55 @@ const getDotCenter = (dot) => {
         x: 24 + col * 72,
         y: 24 + row * 72,
     };
+};
+
+// Tìm chấm nằm dưới ngón tay / con trỏ theo TỌA ĐỘ (cảm ứng không bắn mouseenter
+// sang chấm khác, nên phải tự dò vị trí).
+const dotAtPoint = (event) => {
+    const rect = pad.value?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    const x = ((event.clientX - rect.left) / rect.width) * 192;
+    const y = ((event.clientY - rect.top) / rect.height) * 192;
+    return dots.find((dot) => {
+        const center = getDotCenter(dot);
+        return Math.hypot(x - center.x, y - center.y) <= 30;
+    }) ?? null;
+};
+
+const updateValue = () => {
+    emit('update:modelValue', selectedDots.value.join('-'));
+};
+
+const onPointerDown = (event) => {
+    if (props.readonly) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const dot = dotAtPoint(event);
+    if (!dot) return;
+    event.preventDefault();
+    try { pad.value?.setPointerCapture(event.pointerId); } catch (_) {}
+    isDrawing.value = true;
+    selectedDots.value = [dot];
+    updateValue();
+};
+
+const onPointerMove = (event) => {
+    if (!isDrawing.value) return;
+    const dot = dotAtPoint(event);
+    if (dot && !selectedDots.value.includes(dot)) {
+        selectedDots.value.push(dot);
+        updateValue();
+    }
+};
+
+const stopDraw = (event) => {
+    if (!isDrawing.value) return;
+    isDrawing.value = false;
+    try { pad.value?.releasePointerCapture(event.pointerId); } catch (_) {}
+};
+
+const reset = () => {
+    selectedDots.value = [];
+    emit('update:modelValue', '');
 };
 
 const lines = computed(() => {
@@ -102,25 +114,22 @@ const lines = computed(() => {
     }
     return result;
 });
-
-onMounted(() => {
-    window.addEventListener('mouseup', stopDraw);
-    window.addEventListener('touchend', stopDraw);
-});
-
-onBeforeUnmount(() => {
-    window.removeEventListener('mouseup', stopDraw);
-    window.removeEventListener('touchend', stopDraw);
-});
 </script>
 
 <template>
     <div>
-        <!-- KHUNG CHÍNH CHỨA LƯỚI & LỚP VẼ SVG MŨI TÊN -->
-        <div class="relative w-48 h-48 mx-auto select-none">
-            <!-- LỚP SVG TỰ ĐỘNG VẼ ĐƯỜNG NỐI VÀ MŨI TÊN HƯỚNG VUỐT -->
-            <svg 
-                class="absolute inset-0 w-full h-full pointer-events-none z-10" 
+        <!-- Khung vẽ: touch-action:none để trình duyệt không cuộn trang khi kéo ngón tay -->
+        <div
+            ref="pad"
+            class="relative w-48 h-48 mx-auto select-none"
+            style="touch-action: none;"
+            @pointerdown="onPointerDown"
+            @pointermove="onPointerMove"
+            @pointerup="stopDraw"
+            @pointercancel="stopDraw"
+        >
+            <svg
+                class="absolute inset-0 w-full h-full pointer-events-none z-10"
                 viewBox="0 0 192 192"
             >
                 <defs>
@@ -151,8 +160,7 @@ onBeforeUnmount(() => {
                 />
             </svg>
 
-            <!-- LƯỚI 9 CHẤM CỦA PATTERN LOCK -->
-            <div class="grid grid-cols-3 gap-6 w-full h-full relative z-20">
+            <div class="grid grid-cols-3 gap-6 w-full h-full relative z-20 pointer-events-none">
                 <div
                     v-for="dot in dots"
                     :key="dot"
@@ -160,20 +168,15 @@ onBeforeUnmount(() => {
                     :class="[
                         selectedDots.includes(dot)
                             ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200'
-                            : 'bg-white border-slate-300 text-slate-500 hover:border-blue-400',
+                            : 'bg-white border-slate-300 text-slate-500',
                         readonly ? 'cursor-default' : 'cursor-pointer'
                     ]"
-                    @mousedown="startDraw(dot)"
-                    @mouseenter="handleEnter(dot)"
-                    @touchstart.prevent="startDraw(dot)"
-                    @touchmove.prevent
                 >
                     {{ dot }}
                 </div>
             </div>
         </div>
 
-        <!-- MÔ TẢ MẪU HÌNH -->
         <div class="mt-3 text-center text-xs font-semibold text-slate-600">
             Mẫu hình:
             <span class="text-blue-600 font-mono font-bold">{{ modelValue || 'Chưa nhập' }}</span>

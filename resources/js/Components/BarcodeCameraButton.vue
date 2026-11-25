@@ -1,12 +1,12 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref } from 'vue'
-import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { scanImageData } from '@undecaf/zbar-wasm'
+import { ensureZbarModule } from '@/utils/zbarSetup'
 import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-vue-next'
-import zbarWasmUrl from '@undecaf/zbar-wasm/dist/zbar.wasm?url'
 
 defineOptions({ inheritAttrs: false })
 
-setModuleArgs({ locateFile: filename => filename === 'zbar.wasm' ? zbarWasmUrl : filename })
+ensureZbarModule()
 
 const emit = defineEmits(['scanned'])
 const open = ref(false)
@@ -34,6 +34,7 @@ let nativeScanBusy = false
 let nativeFallbackStarted = false
 let zbarScanTimer = null
 let zbarScanBusy = false
+let zbarFailures = 0
 let scanSession = 0
 
 const withTimeout = (promise, message, timeout = 15000) => {
@@ -73,6 +74,7 @@ const stop = () => {
     nativeScanBusy = false
     nativeFallbackStarted = false
     zbarScanBusy = false
+    zbarFailures = 0
     const element = video.value
     const stream = activeStream || element?.srcObject
     activeStream = null
@@ -83,6 +85,44 @@ const stop = () => {
         element.pause()
         element.srcObject = null
     }
+}
+
+// Camera có thể bị hệ điều hành ngắt khi chuyển tab / sang ứng dụng khác / khóa màn hình (track 'ended', hoặc video đứng hình).
+// Khi quay lại, luồng cũ không còn ra khung hình nên quét mãi không có kết quả. Phát hiện và mở lại camera.
+let recoveryAttempts = 0
+let recoveryResetTimer = null
+
+const cameraTrack = () => activeStream?.getVideoTracks?.()[0]
+
+const recoverCamera = (session) => {
+    if (session !== scanSession || !open.value || readingPhoto.value) return
+    if (recoveryAttempts >= 3) {
+        stop()
+        error.value = 'Camera bị gián đoạn. Bấm "Thử lại" để mở lại.'
+        return
+    }
+    recoveryAttempts += 1
+    clearTimeout(recoveryResetTimer)
+    recoveryResetTimer = setTimeout(() => { recoveryAttempts = 0 }, 10000)
+    stop()
+    start()
+}
+
+const watchStream = (stream, session) => {
+    stream?.getVideoTracks?.().forEach(track => track.addEventListener('ended', () => recoverCamera(session)))
+}
+
+const checkCameraAfterReturn = async () => {
+    if (document.hidden || !open.value || readingPhoto.value || !cameraReady.value) return
+    const session = scanSession
+    const element = video.value
+    if (cameraTrack()?.readyState !== 'ended' && element?.paused) {
+        try { await element.play() } catch (_) { /* thử mở lại bên dưới nếu vẫn không chạy */ }
+    }
+    await new Promise(resolve => setTimeout(resolve, 400))
+    if (session !== scanSession || !open.value) return
+    const track = cameraTrack()
+    if (!track || track.readyState === 'ended' || track.muted || video.value?.paused) recoverCamera(session)
 }
 
 const scanVideoWithZBar = async (session) => {
@@ -99,13 +139,18 @@ const scanVideoWithZBar = async (session) => {
             if (!context) throw new Error('canvas-unavailable')
             context.drawImage(element, 0, 0, canvas.width, canvas.height)
             const symbols = await withTimeout(scanImageData(context.getImageData(0, 0, canvas.width, canvas.height)), 'scan-timeout', 8000)
+            zbarFailures = 0
             const symbol = symbols.find(item => item.decode?.('utf-8')?.trim())
             if (symbol) {
                 acceptResult({ getText: () => symbol.decode('utf-8').trim() }, session)
                 return
             }
-        } catch (_) {
-            // Skip a frame when the device decoder cannot process it.
+        } catch (cause) {
+            zbarFailures += 1
+            console.error('[BarcodeCameraButton] Lỗi giải mã:', cause)
+            if (zbarFailures >= 5) {
+                error.value = `Không đọc được mã: ${cause?.message || cause}`
+            }
         } finally {
             zbarScanBusy = false
         }
@@ -143,8 +188,8 @@ const cameraConstraints = (deviceId = '') => ({
         ...(deviceId
             ? { deviceId: { exact: deviceId } }
             : { facingMode: { ideal: 'environment' } }),
-        width: { min: 640, ideal: 1920 },
-        height: { min: 480, ideal: 1080 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
         frameRate: { ideal: 30, max: 30 },
     },
 })
@@ -419,6 +464,7 @@ const start = async () => {
                     stop()
                     return
                 }
+                watchStream(activeStream, session)
 
                 video.value.srcObject = activeStream
                 await video.value.play()
@@ -470,6 +516,7 @@ const start = async () => {
             stop()
             return
         }
+        watchStream(activeStream, session)
         video.value.srcObject = activeStream
         await video.value.play()
         const videoTrack = activeStream?.getVideoTracks?.()[0]
@@ -491,7 +538,14 @@ const close = () => {
     stop()
     open.value = false
 }
+onMounted(() => {
+    document.addEventListener('visibilitychange', checkCameraAfterReturn)
+    window.addEventListener('pageshow', checkCameraAfterReturn)
+})
 onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', checkCameraAfterReturn)
+    window.removeEventListener('pageshow', checkCameraAfterReturn)
+    clearTimeout(recoveryResetTimer)
     stop()
 })
 </script>

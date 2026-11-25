@@ -16,6 +16,8 @@ import { installAppPathSupport, appBaseUrl } from '@/utils/appPaths'
 import { installInsecureNotice, syncInsecureNotice } from '@/utils/insecureNotice'
 import { installMobileTables } from '@/utils/mobileTables'
 import { installViewportFix } from '@/utils/viewportFix'
+import { reloadWhenIdle } from '@/utils/pageBusy'
+import { installModalScrollLock } from '@/utils/modalScrollLock'
 import { pageTitles } from '@/utils/pageTitles'
 
 const AdminLayout = defineAsyncComponent(() => import('@/Layouts/AdminLayout.vue'))
@@ -43,6 +45,7 @@ installAppPathSupport(router)
 installInsecureNotice()
 installMobileTables()
 installViewportFix()
+installModalScrollLock()
 
 if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname === 'localhost')) {
     // A newly activated worker owns an already-open tab only after
@@ -52,7 +55,8 @@ if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (reloadedForServiceWorker) return
         reloadedForServiceWorker = true
-        window.location.reload()
+        // Không tải lại giữa lúc đang nhập liệu: đợi trang rảnh (xem utils/pageBusy.js).
+        reloadWhenIdle()
     })
 
     navigator.serviceWorker.register(new URL('service-worker.js', appBaseUrl), {
