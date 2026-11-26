@@ -5,7 +5,6 @@ import {
     onBeforeUnmount,
     onMounted,
     ref,
-    shallowRef,
     watch,
 } from 'vue'
 
@@ -15,8 +14,7 @@ import FloatingSelect from '@/Components/UI/FloatingSelect.vue'
 import { WARRANTY_UNIT_OPTIONS_PLURAL, formatWarranty } from '@/utils/warranty'
 import UnitInput from '@/Components/UI/UnitInput.vue'
 import BarcodeCameraButton from '@/Components/BarcodeCameraButton.vue'
-import { BrowserMultiFormatReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import { toast } from 'vue-sonner'
 import api from '@/Services/api'
 import { filterByKeywords, highlightText } from '@/utils/searchHelper'
 import { formatNumber, formatDateTime, parseMoneyInput } from '@/utils/format'
@@ -28,8 +26,6 @@ import {
     Check,
     X,
     QrCode,
-    Camera,
-    CameraOff,
 } from 'lucide-vue-next'
 
 /* PROPS / EMITS */
@@ -43,30 +39,8 @@ const emit = defineEmits(['close', 'completed'])
 /* REFS */
 const entryFormRef = ref(null)
 const dropdownVariantRef = ref(null)
-const videoRef = ref(null)
-const scanning = ref(false)
-const scanError = ref('')
-const scanStatus = ref('')
-const codeReader = new BrowserMultiFormatReader(new Map([
-    [DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.QR_CODE,
-        BarcodeFormat.DATA_MATRIX,
-        BarcodeFormat.PDF_417,
-        BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.CODE_93,
-        BarcodeFormat.ITF,
-        BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
-        BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
-    ]],
-    [DecodeHintType.TRY_HARDER, true],
-]), { delayBetweenScanAttempts: 120, delayBetweenScanSuccess: 300 })
-const scanBusy = ref(false)
-const lastScanned = shallowRef({ value: '', at: 0 })
-let scanSession = 0
-let scanControls = null
+const imeiScannerRef = ref(null)
+let imeiScanChain = Promise.resolve()
 
 const showVariantDropdown = ref(false)
 const variantSearch = ref('')
@@ -99,95 +73,34 @@ const entryModal = ref({
 const entryError = ref('')
 const warrantyUnitOptions = WARRANTY_UNIT_OPTIONS_PLURAL
 
-const stopCamera = () => {
-    scanSession += 1
-    scanning.value = false
-    scanBusy.value = false
-    const stream = videoRef.value?.srcObject
-    try {
-        scanControls?.stop()
-    } catch (error) {
-        console.warn('Không thể dừng vòng quét IMEI:', error)
-    }
-    scanControls = null
-    try {
-        codeReader.reset()
-    } catch (error) {
-        console.warn('Không thể giải phóng reader IMEI:', error)
-    }
-    try {
-        stream?.getTracks().forEach(track => track.stop())
-    } catch (error) {
-        console.warn('Không thể giải phóng video track:', error)
-    }
-    if (videoRef.value) {
-        try {
-            videoRef.value.pause()
-        } catch (error) {
-            console.warn('Không thể dừng phần xem trước camera:', error)
-        }
-        try {
-            videoRef.value.srcObject = null
-        } catch (error) {
-            console.warn('Không thể xóa luồng camera khỏi phần xem trước:', error)
-        }
-    }
-}
+// Camera quét IMEI dùng chung BarcodeCameraButton (chế độ quét liên tiếp).
+// Mỗi mã quét được (hoặc chọn từ danh sách nhiều mã trên khung quét) được thêm lần lượt, không chồng lệnh.
+const handleImeiScanned = (code) => {
+    const value = String(code || '').trim()
+    if (!value) return
 
-const startCamera = async () => {
-    if (scanning.value) return
-    const session = ++scanSession
-    scanError.value = ''
-    scanStatus.value = ''
-    scanning.value = true
-    await nextTick()
+    imeiScanChain = imeiScanChain.then(async () => {
+        const modal = entryModal.value
+        if (modal.mode !== 'imei') return
 
-    try {
-        if (!globalThis.isSecureContext || typeof globalThis.navigator?.mediaDevices?.getUserMedia !== 'function') {
-            throw new Error('Trình duyệt chỉ cho phép quét camera trên HTTPS hoặc localhost. Hãy mở website bằng HTTPS (có thể cần bật SSL trong Laragon).')
+        if (modal.item?.type === 'imei_variant' && !modal.variant_input) {
+            if (!modal.imei_input) modal.imei_input = value
+            entryError.value = 'Đã quét được IMEI. Hãy chọn biến thể rồi bấm Thêm.'
+            imeiScannerRef.value?.close()
+            return
         }
 
-        // Request the rear camera directly; device enumeration is unavailable in some contexts.
-        const controls = await codeReader.decodeFromConstraints({
-            audio: false,
-            video: {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-            },
-        }, videoRef.value, async (result) => {
-            if (session !== scanSession || !result || scanBusy.value) return
-            const value = result.getText().trim()
-            const now = Date.now()
-            if (!value || (value === lastScanned.value.value && now - lastScanned.value.at < 1600)) return
-
-            lastScanned.value = { value, at: now }
-            scanBusy.value = true
-            entryModal.value.imei_input = value
-            scanStatus.value = `Đã đọc mã: ${value}`
-            try {
-                if (entryModal.value.item?.type === 'imei_variant' && !entryModal.value.variant_input) {
-                    entryError.value = 'Đã quét được IMEI. Hãy chọn biến thể rồi bấm Thêm.'
-                    stopCamera()
-                    return
-                }
-                await addEntry()
-            } finally {
-                scanBusy.value = false
-            }
-        })
-        if (session !== scanSession) {
-            controls.stop()
-            codeReader.reset()
+        modal.imei_input = value
+        const added = await addEntry()
+        if (added) {
+            toast.success(`Đã thêm IMEI ${value}`, { id: `imei-added-${value}`, duration: 2000 })
         } else {
-            scanControls = controls
+            // Khung quét che form nên báo lỗi bằng toast để thấy ngay.
+            toast.error(entryError.value || `Không thêm được IMEI ${value}`, { id: 'imei-add-error', duration: 3500 })
         }
-    } catch (error) {
-        if (session !== scanSession) return
-        console.error('Không thể mở camera quét IMEI:', error)
-        scanError.value = error?.message || 'Không thể mở camera. Hãy kiểm tra quyền truy cập camera.'
-        stopCamera()
-    }
+    }).catch((error) => {
+        console.error('Lỗi thêm IMEI vừa quét:', error)
+    })
 }
 
 /* HELPERS */
@@ -747,7 +660,6 @@ const complete = async () => {
         props.item.supplier_warranty_unit = props.customerImport ? null : (entryModal.value.warranty_duration_unit_input || 'months')
         props.item.extra_info = buildExtraInfo(entryModal.value)
     }
-    stopCamera()
     emit('completed', props.item)
     emit('close')
 }
@@ -780,7 +692,7 @@ const handleClickOutside = (event) => {
     showVariantDropdown.value = false
 }
 
-const close = () => { stopCamera(); resetEntryModal(); emit('close') }
+const close = () => { resetEntryModal(); emit('close') }
 
 onMounted(() => {
     document.addEventListener('click', handleClickOutside)
@@ -791,7 +703,6 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', handleClickOutside)
     clearTimeout(imeiLookupTimeout)
     imeiLookupRequest++
-    stopCamera()
 })
 </script>
 
@@ -835,26 +746,6 @@ onBeforeUnmount(() => {
 
             <!-- KHU VỰC 1: KHUNG DỰT FORM NHẬP TẬP TRUNG (CONTROL PANEL) -->
             <div ref="entryFormRef" class="order-1 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div v-if="scanning" class="relative mb-3 overflow-hidden rounded-lg bg-slate-950">
-                    <video ref="videoRef" autoplay muted playsinline class="h-44 w-full object-cover sm:h-52" />
-                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <div class="flex aspect-[1.7/1] w-[72%] items-center justify-center rounded-lg border border-white/80 shadow-[0_0_0_999px_rgba(15,23,42,0.24)]">
-                            <span class="rounded bg-slate-950/60 px-2 py-1 text-[11px] font-medium text-white">Đưa mã IMEI vào khung quét</span>
-                        </div>
-                    </div>
-                    <div class="absolute left-2 top-2 rounded bg-slate-950/65 px-2 py-1 text-[11px] text-white">
-                        {{ scanBusy ? `Đã đọc ${entryModal.imei_input}, đang thêm...` : (scanStatus || 'Đưa mã vào khung để quét') }}
-                    </div>
-                    <button
-                        type="button"
-                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-slate-950/65 text-white hover:bg-rose-600"
-                        title="Tắt camera"
-                        aria-label="Tắt camera"
-                        @click="stopCamera"
-                    >
-                        <CameraOff class="h-4 w-4" />
-                    </button>
-                </div>
                 <div v-if="entryModal.item?.has_unit_conversion && Number(entryModal.item.conversion_factor || 1) > 1" class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
                     <span class="font-semibold text-slate-700">Nhập giá theo:</span>
                     <label v-for="basis in ['base', 'conversion']" :key="basis" class="inline-flex cursor-pointer items-center gap-1.5">
@@ -892,16 +783,12 @@ onBeforeUnmount(() => {
                                 for="stock-import-imei-input"
                                 class="pointer-events-none absolute -top-2 left-3 bg-white px-1 text-xs text-gray-500 transition-all peer-focus:text-blue-600"
                             >IMEI / Serial</label>
-                            <button
-                                type="button"
-                                class="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                                :aria-label="scanning ? 'Tắt camera' : 'Bật camera quét IMEI'"
-                                :title="scanning ? 'Tắt camera' : 'Bật camera quét IMEI'"
-                                @click.stop="scanning ? stopCamera() : startCamera()"
-                            >
-                                <CameraOff v-if="scanning" class="h-3.5 w-3.5" />
-                                <Camera v-else class="h-3.5 w-3.5" />
-                            </button>
+                            <BarcodeCameraButton
+                                ref="imeiScannerRef"
+                                continuous
+                                class="absolute right-1 top-1 z-10"
+                                @scanned="handleImeiScanned"
+                            />
                         </div>
                     </div>
 
@@ -1035,8 +922,6 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
                 </div>
-
-                <p v-if="scanError" class="mt-2 text-xs font-medium text-rose-600">{{ scanError }}</p>
 
                 <div v-if="entryModal.item && entryModal.mode !== 'normal'" class="mt-3 flex items-center justify-center gap-2">
                     <button

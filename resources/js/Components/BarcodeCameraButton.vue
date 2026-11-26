@@ -1,11 +1,18 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { scanImageData } from '@undecaf/zbar-wasm'
-import { ensureZbarModule } from '@/utils/zbarSetup'
 import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
+import { ensureZbarModule } from '@/utils/zbarSetup'
 
 defineOptions({ inheritAttrs: false })
 
+// continuous: quét liên tiếp nhiều mã (vd nhập danh sách IMEI) - quét xong KHÔNG đóng khung, mỗi mã phát ra một sự kiện 'scanned'.
+const props = defineProps({
+    continuous: { type: Boolean, default: false },
+})
+
+// Chỉ cấu hình ZBar một lần cho cả ứng dụng; gọi lại setModuleArgs mỗi khi chuyển trang sẽ đặt lại bộ giải mã.
 ensureZbarModule()
 
 const emit = defineEmits(['scanned'])
@@ -27,6 +34,7 @@ const zoomMin = ref(1)
 const zoomMax = ref(1)
 const zoomLevel = ref(1)
 const error = ref('')
+const pendingCodes = ref([])
 let activeStream = null
 let nativeScanTimer = null
 let nativeFallbackTimer = null
@@ -35,6 +43,9 @@ let nativeFallbackStarted = false
 let zbarScanTimer = null
 let zbarScanBusy = false
 let zbarFailures = 0
+let collectTimer = null
+let seenCounts = new Map()
+const acceptedCodes = new Set()
 let scanSession = 0
 
 const withTimeout = (promise, message, timeout = 15000) => {
@@ -45,18 +56,132 @@ const withTimeout = (promise, message, timeout = 15000) => {
     ]).finally(() => clearTimeout(timer))
 }
 
+// Tín hiệu báo đã quét được mã: tiếng bíp + rung (Android) + thông báo hiện mã vừa quét.
+// Dùng chung một AudioContext cho cả ứng dụng (trình duyệt giới hạn số lượng AudioContext, mỗi trang mới không tạo thêm).
+// Gọi trong lúc người dùng bấm nút (cử chỉ chạm) để trình duyệt cho phép phát âm thanh sau đó.
+const prepareFeedback = () => {
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext
+        if (!AudioContextClass) return
+        window.__posAudioContext = window.__posAudioContext || new AudioContextClass()
+        if (window.__posAudioContext.state === 'suspended') window.__posAudioContext.resume()
+    } catch (_) {
+        // Không có âm thanh thì vẫn còn rung và thông báo.
+    }
+}
+
+const beep = () => {
+    try {
+        const audioContext = window.__posAudioContext
+        if (!audioContext) return
+        const now = audioContext.currentTime
+        const oscillator = audioContext.createOscillator()
+        const gain = audioContext.createGain()
+        oscillator.type = 'sine'
+        oscillator.frequency.value = 1200
+        gain.gain.setValueAtTime(0.0001, now)
+        gain.gain.exponentialRampToValueAtTime(0.3, now + 0.01)
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15)
+        oscillator.connect(gain)
+        gain.connect(audioContext.destination)
+        oscillator.start(now)
+        oscillator.stop(now + 0.16)
+    } catch (_) {
+        // Bỏ qua lỗi âm thanh.
+    }
+}
+
+const signalScanned = (code) => {
+    beep()
+    try { navigator.vibrate?.(80) } catch (_) { /* iOS không hỗ trợ rung */ }
+    toast.success(`Đã quét: ${code}`, { id: 'barcode-scanned', duration: 2500 })
+}
+
 const acceptResult = (result, session) => {
     const code = result?.getText?.().trim()
     if (!code || session !== scanSession || !open.value) return
-    stop()
-    open.value = false
+    if (!props.continuous) {
+        stop()
+        open.value = false
+    }
+    signalScanned(code)
     emit('scanned', code)
+    if (props.continuous) {
+        acceptedCodes.add(code)
+        pendingCodes.value = pendingCodes.value.filter(item => item !== code)
+    }
+}
+
+const uniqueCodes = list => [...new Set(list.map(value => String(value ?? '').trim()).filter(Boolean))]
+
+// Hiện các mã tìm được ngay trên khung quét để chạm chọn; camera vẫn chạy nên có thể thêm mã khi xoay máy.
+const showCandidates = (list) => {
+    const merged = uniqueCodes([...pendingCodes.value, ...list]).filter(code => !acceptedCodes.has(code))
+    if (merged.length === pendingCodes.value.length) return
+    const firstTime = pendingCodes.value.length === 0
+    pendingCodes.value = merged
+    if (firstTime) {
+        beep()
+        try { navigator.vibrate?.([60, 40, 60]) } catch (_) { /* iOS không hỗ trợ rung */ }
+    }
+}
+
+// Chốt kết quả: 1 mã thì nhận luôn; nhiều mã thì hiện danh sách chọn trên khung quét.
+const finishCodes = (codes, session) => {
+    const list = uniqueCodes(codes).filter(code => !acceptedCodes.has(code))
+    if (!list.length || session !== scanSession || !open.value) return
+    if (list.length === 1) {
+        acceptResult({ getText: () => list[0] }, session)
+        return
+    }
+    showCandidates(list)
+}
+
+// Camera: gom mã của các khung hình liên tiếp trong ~0,5 giây rồi mới chốt, để thấy đủ mã khi trong khung có nhiều mã.
+const collectCodes = (codes, session) => {
+    if (session !== scanSession || !open.value) return
+    const list = uniqueCodes(codes).filter(code => !acceptedCodes.has(code))
+    if (!list.length) return
+    list.forEach(code => seenCounts.set(code, (seenCounts.get(code) || 0) + 1))
+    if (pendingCodes.value.length) {
+        // Danh sách chọn đang hiện: bổ sung mã mới (thấy từ 2 khung trở lên) thay vì tự nhận.
+        showCandidates([...seenCounts].filter(([, count]) => count >= 2).map(([code]) => code))
+        return
+    }
+    if (collectTimer) return
+    collectTimer = setTimeout(() => {
+        collectTimer = null
+        const entries = [...seenCounts.entries()]
+        seenCounts = new Map()
+        // Loại mã chỉ xuất hiện đúng 1 khung khi đã có mã khác xuất hiện nhiều lần (thường là đọc nhầm).
+        const strongest = Math.max(0, ...entries.map(([, count]) => count))
+        const kept = strongest >= 2 ? entries.filter(([, count]) => count >= 2) : entries
+        finishCodes(kept.map(([code]) => code), session)
+    }, 500)
+}
+
+const chooseCode = (code) => {
+    acceptResult({ getText: () => code }, scanSession)
+}
+
+const acceptAllCandidates = () => {
+    [...pendingCodes.value].forEach(chooseCode)
+}
+
+const clearCandidates = () => {
+    pendingCodes.value = []
+    seenCounts = new Map()
 }
 
 const stop = () => {
     // Invalidate a pending getUserMedia request too (for example, if the modal
     // is closed while the browser is still asking for camera permission).
     scanSession += 1
+    if (collectTimer) clearTimeout(collectTimer)
+    collectTimer = null
+    seenCounts = new Map()
+    acceptedCodes.clear()
+    pendingCodes.value = []
     scanning.value = false
     cameraReady.value = false
     torchAvailable.value = false
@@ -74,7 +199,6 @@ const stop = () => {
     nativeScanBusy = false
     nativeFallbackStarted = false
     zbarScanBusy = false
-    zbarFailures = 0
     const element = video.value
     const stream = activeStream || element?.srcObject
     activeStream = null
@@ -85,44 +209,6 @@ const stop = () => {
         element.pause()
         element.srcObject = null
     }
-}
-
-// Camera có thể bị hệ điều hành ngắt khi chuyển tab / sang ứng dụng khác / khóa màn hình (track 'ended', hoặc video đứng hình).
-// Khi quay lại, luồng cũ không còn ra khung hình nên quét mãi không có kết quả. Phát hiện và mở lại camera.
-let recoveryAttempts = 0
-let recoveryResetTimer = null
-
-const cameraTrack = () => activeStream?.getVideoTracks?.()[0]
-
-const recoverCamera = (session) => {
-    if (session !== scanSession || !open.value || readingPhoto.value) return
-    if (recoveryAttempts >= 3) {
-        stop()
-        error.value = 'Camera bị gián đoạn. Bấm "Thử lại" để mở lại.'
-        return
-    }
-    recoveryAttempts += 1
-    clearTimeout(recoveryResetTimer)
-    recoveryResetTimer = setTimeout(() => { recoveryAttempts = 0 }, 10000)
-    stop()
-    start()
-}
-
-const watchStream = (stream, session) => {
-    stream?.getVideoTracks?.().forEach(track => track.addEventListener('ended', () => recoverCamera(session)))
-}
-
-const checkCameraAfterReturn = async () => {
-    if (document.hidden || !open.value || readingPhoto.value || !cameraReady.value) return
-    const session = scanSession
-    const element = video.value
-    if (cameraTrack()?.readyState !== 'ended' && element?.paused) {
-        try { await element.play() } catch (_) { /* thử mở lại bên dưới nếu vẫn không chạy */ }
-    }
-    await new Promise(resolve => setTimeout(resolve, 400))
-    if (session !== scanSession || !open.value) return
-    const track = cameraTrack()
-    if (!track || track.readyState === 'ended' || track.muted || video.value?.paused) recoverCamera(session)
 }
 
 const scanVideoWithZBar = async (session) => {
@@ -140,11 +226,7 @@ const scanVideoWithZBar = async (session) => {
             context.drawImage(element, 0, 0, canvas.width, canvas.height)
             const symbols = await withTimeout(scanImageData(context.getImageData(0, 0, canvas.width, canvas.height)), 'scan-timeout', 8000)
             zbarFailures = 0
-            const symbol = symbols.find(item => item.decode?.('utf-8')?.trim())
-            if (symbol) {
-                acceptResult({ getText: () => symbol.decode('utf-8').trim() }, session)
-                return
-            }
+            collectCodes(symbols.map(item => item.decode?.('utf-8')), session)
         } catch (cause) {
             zbarFailures += 1
             console.error('[BarcodeCameraButton] Lỗi giải mã:', cause)
@@ -328,6 +410,7 @@ const toggleTorch = async () => {
 }
 
 const openPhoneCamera = () => {
+    prepareFeedback()
     error.value = ''
     stop()
 }
@@ -380,13 +463,14 @@ const readCapturedPhoto = async (event) => {
                     'qr_code', 'upc_a', 'upc_e',
                 ].filter(format => formats.includes(format))
                 if (imageFormats.length) {
-                    const [result] = await withTimeout(
+                    const results = await withTimeout(
                         new globalThis.BarcodeDetector({ formats: imageFormats }).detect(bitmap),
                         'scan-timeout',
                         6000,
                     )
-                    if (result?.rawValue?.trim()) {
-                        acceptResult({ getText: () => result.rawValue.trim() }, session)
+                    const nativeCodes = uniqueCodes(results.map(result => result.rawValue))
+                    if (nativeCodes.length) {
+                        finishCodes(nativeCodes, session)
                         return
                     }
                 }
@@ -419,9 +503,9 @@ const readCapturedPhoto = async (event) => {
             'scan-timeout',
             8000,
         )
-        const symbol = symbols.find(item => item.decode?.('utf-8')?.trim())
-        if (!symbol) throw new Error('barcode-not-found')
-        acceptResult({ getText: () => symbol.decode('utf-8').trim() }, session)
+        const photoCodes = uniqueCodes(symbols.map(item => item.decode?.('utf-8')))
+        if (!photoCodes.length) throw new Error('barcode-not-found')
+        finishCodes(photoCodes, session)
     } catch (_) {
         if (session === scanSession && open.value) {
             error.value = 'Không đọc được mã trong ảnh. Hãy thử ảnh rõ hơn hoặc chọn nguồn camera khác.'
@@ -434,6 +518,7 @@ const readCapturedPhoto = async (event) => {
 }
 
 const start = async () => {
+    prepareFeedback()
     open.value = true
     if (scanning.value) return
     error.value = ''
@@ -464,7 +549,6 @@ const start = async () => {
                     stop()
                     return
                 }
-                watchStream(activeStream, session)
 
                 video.value.srcObject = activeStream
                 await video.value.play()
@@ -491,11 +575,7 @@ const start = async () => {
                         nativeScanBusy = true
                         try {
                             const results = await detector.detect(video.value)
-                            const code = results.find(result => result.rawValue?.trim())?.rawValue?.trim()
-                            if (code && session === scanSession && open.value) {
-                                acceptResult({ getText: () => code }, session)
-                                return
-                            }
+                            collectCodes(results.map(result => result.rawValue), session)
                         } catch (_) {
                             // A frame can be undecodable while focus or exposure adjusts.
                         } finally {
@@ -516,7 +596,6 @@ const start = async () => {
             stop()
             return
         }
-        watchStream(activeStream, session)
         video.value.srcObject = activeStream
         await video.value.play()
         const videoTrack = activeStream?.getVideoTracks?.()[0]
@@ -538,16 +617,11 @@ const close = () => {
     stop()
     open.value = false
 }
-onMounted(() => {
-    document.addEventListener('visibilitychange', checkCameraAfterReturn)
-    window.addEventListener('pageshow', checkCameraAfterReturn)
-})
 onBeforeUnmount(() => {
-    document.removeEventListener('visibilitychange', checkCameraAfterReturn)
-    window.removeEventListener('pageshow', checkCameraAfterReturn)
-    clearTimeout(recoveryResetTimer)
     stop()
 })
+
+defineExpose({ start, close })
 </script>
 
 <template>
@@ -571,6 +645,16 @@ onBeforeUnmount(() => {
                         <video ref="video" class="absolute inset-0 h-full w-full object-cover" autoplay muted playsinline webkit-playsinline @click="focusCamera" />
                         <div class="pointer-events-none absolute inset-[5%] rounded-lg border-2 border-emerald-400/90">
                             <span class="absolute inset-x-1 top-1/2 border-t border-dashed border-emerald-200/90" />
+                        </div>
+                        <div v-if="pendingCodes.length" class="absolute inset-x-2 bottom-2 z-10 flex max-h-[72%] flex-col rounded-lg bg-black/70 p-2 backdrop-blur-sm">
+                            <p class="mb-1.5 px-1 text-xs font-semibold text-emerald-200">Có {{ pendingCodes.length }} mã trong khung. Chạm để chọn:</p>
+                            <div class="grid min-h-0 gap-1.5 overflow-y-auto">
+                                <button v-for="code in pendingCodes" :key="code" type="button" class="w-full break-all rounded-md bg-white/95 px-3 py-2 text-left font-mono text-sm font-bold text-slate-900 active:bg-emerald-100" @click="chooseCode(code)">{{ code }}</button>
+                            </div>
+                            <div class="mt-1.5 flex items-center justify-between gap-2 px-1">
+                                <button type="button" class="text-xs text-slate-200 underline decoration-dotted underline-offset-4" @click="clearCandidates">Bỏ qua</button>
+                                <button v-if="continuous" type="button" class="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white" @click="acceptAllCandidates">Thêm tất cả ({{ pendingCodes.length }})</button>
+                            </div>
                         </div>
                     </div>
                     <div v-if="cameraReady && torchAvailable" class="mt-2 flex justify-center">
