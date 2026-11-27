@@ -45,6 +45,7 @@ Route::get('/setup', [InstallerController::class, 'index'])->name('setup.index')
 Route::post('/setup/prepare', [InstallerController::class, 'prepare'])->name('setup.prepare');
 Route::post('/setup/test', [InstallerController::class, 'test'])->name('setup.test');
 Route::post('/setup/install', [InstallerController::class, 'install'])->name('setup.install');
+Route::get('/setup/complete', [InstallerController::class, 'complete'])->name('setup.complete');
 
 Route::get('/', function () {
     return auth()->check()

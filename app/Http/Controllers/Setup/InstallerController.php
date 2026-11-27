@@ -112,7 +112,11 @@ class InstallerController extends Controller
                 throw new RuntimeException('Không thể tạo khóa hoàn tất cài đặt trong storage/app.');
             }
 
-            Auth::logout();
+            try {
+                Auth::logout();
+            } catch (Throwable) {
+                // Không có ai đăng nhập hoặc cookie ghi nhớ cũ: bỏ qua, session sẽ bị hủy ngay bên dưới.
+            }
             $request->session()->invalidate();
             $request->session()->regenerateToken();
         } catch (Throwable $exception) {
@@ -124,14 +128,31 @@ class InstallerController extends Controller
 
         $notes = null;
         if (! empty($data['install_cron']) && ServerEnvironment::isLinux()) {
-            [$cronOk, $cronMessage] = ServerEnvironment::installCron();
-            $notes = $cronOk ? $cronMessage : 'Chưa tự cài được lịch chạy nền: '.$cronMessage;
+            try {
+                [$cronOk, $cronMessage] = ServerEnvironment::installCron();
+                $notes = $cronOk ? $cronMessage : 'Chưa tự cài được lịch chạy nền: '.$cronMessage;
+            } catch (Throwable $exception) {
+                report($exception);
+                $notes = 'Chưa tự cài được lịch chạy nền: '.$exception->getMessage();
+            }
         }
 
-        // Hiện màn hình "Thiết lập thành công" ngay tại trang cài đặt, người dùng bấm để sang đăng nhập.
-        return Inertia::render('Setup/Index', [
-            'done' => ['username' => $data['admin_username'], 'notes' => $notes],
-        ]);
+        // Không render trang ngay trong request này: nó vừa đổi DB, ghi .env, chạy migrate và hủy session nên
+        // dễ phát sinh lỗi 500. Chuyển sang một request mới (/setup/complete) để hiện màn hình thành công.
+        $request->session()->put('setup_done', ['username' => $data['admin_username'], 'notes' => $notes]);
+
+        return redirect('/setup/complete', 303);
+    }
+
+    /** Màn hình "Thiết lập thành công" (request mới, ứng dụng đã khởi động đầy đủ với database vừa cài). */
+    public function complete(Request $request): Response|RedirectResponse
+    {
+        $done = $request->session()->get('setup_done');
+        if (! is_array($done)) {
+            return redirect()->route('login');
+        }
+
+        return Inertia::render('Setup/Index', ['done' => $done]);
     }
 
     private function databaseRules(): array
