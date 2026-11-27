@@ -8,7 +8,7 @@
             </p>
             <p class="mt-0.5 text-sm text-slate-500">Vạn Xuân, Hưng Yên</p>
             <p class="mt-2 text-sm text-slate-600">
-                Hỗ trợ:
+                Hỗ trợ kỹ thuật:
                 ĐT: <a href="tel:0906064789" class="font-semibold text-emerald-700 hover:underline">0906064789</a>
                 · Zalo: <a href="https://zalo.me/0906064789" target="_blank" rel="noopener" class="font-semibold text-emerald-700 hover:underline">0906064789</a>
                 · FB: <a href="https://fb.com/duchoait" target="_blank" rel="noopener" class="font-semibold text-emerald-700 hover:underline">fb.com/duchoait</a>

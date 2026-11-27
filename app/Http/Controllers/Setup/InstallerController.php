@@ -27,6 +27,11 @@ class InstallerController extends Controller
         return Inertia::render('Setup/Index', [
             'environment' => ServerEnvironment::report(),
             'prepareResults' => session('setup_prepare'),
+            // Chỉ gửi tên tài khoản; mật khẩu do script cài đặt đặt sẵn KHÔNG bao giờ gửi ra trình duyệt.
+            'savedDatabase' => $this->savedDatabaseAccount() ? [
+                'username' => $this->savedDatabaseAccount()['username'],
+                'has_password' => true,
+            ] : null,
         ]);
     }
 
@@ -40,6 +45,7 @@ class InstallerController extends Controller
 
     public function test(Request $request): RedirectResponse
     {
+        $this->useSavedDatabasePassword($request);
         $data = $request->validate($this->databaseRules());
 
         try {
@@ -56,6 +62,7 @@ class InstallerController extends Controller
 
     public function install(Request $request): RedirectResponse
     {
+        $this->useSavedDatabasePassword($request);
         $data = $request->validate($this->databaseRules() + [
             'admin_username' => ['required', 'string', 'max:50', 'alpha_dash'],
             'admin_name' => ['required', 'string', 'max:255'],
@@ -112,6 +119,8 @@ class InstallerController extends Controller
                 throw new RuntimeException('Không thể tạo khóa hoàn tất cài đặt trong storage/app.');
             }
 
+            $this->clearSavedDatabaseAccount();
+
             try {
                 Auth::logout();
             } catch (Throwable) {
@@ -153,6 +162,60 @@ class InstallerController extends Controller
         }
 
         return Inertia::render('Setup/Index', ['done' => $done]);
+    }
+
+    /** Đọc SETUP_DB_USERNAME / SETUP_DB_PASSWORD do scripts/install-ubuntu.sh ghi vào .env (nếu có). */
+    private function savedDatabaseAccount(): ?array
+    {
+        $path = base_path('.env');
+        if (! is_file($path) || ! is_readable($path)) {
+            return null;
+        }
+
+        $values = [];
+        foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            if (! preg_match('/^(SETUP_DB_USERNAME|SETUP_DB_PASSWORD)=(.*)$/', $line, $m)) {
+                continue;
+            }
+            $value = trim($m[2]);
+            if (strlen($value) >= 2 && $value[0] === '"' && substr($value, -1) === '"') {
+                $value = stripcslashes(substr($value, 1, -1));
+            }
+            $values[$m[1]] = $value;
+        }
+
+        if (($values['SETUP_DB_USERNAME'] ?? '') === '' || ($values['SETUP_DB_PASSWORD'] ?? '') === '') {
+            return null;
+        }
+
+        return ['username' => $values['SETUP_DB_USERNAME'], 'password' => $values['SETUP_DB_PASSWORD']];
+    }
+
+    /** Ô mật khẩu để trống và đúng tài khoản script đã tạo: dùng mật khẩu đã lưu ở máy chủ. */
+    private function useSavedDatabasePassword(Request $request): void
+    {
+        if ($request->input('database_driver') === 'sqlite' || filled($request->input('database_password'))) {
+            return;
+        }
+
+        $saved = $this->savedDatabaseAccount();
+        if ($saved && $request->input('database_username') === $saved['username']) {
+            $request->merge(['database_password' => $saved['password']]);
+        }
+    }
+
+    /** Sau khi cài xong, xóa mật khẩu tạm khỏi .env (mật khẩu thật đã nằm ở DB_PASSWORD). */
+    private function clearSavedDatabaseAccount(): void
+    {
+        $path = base_path('.env');
+        $contents = @file_get_contents($path);
+        if ($contents === false) {
+            return;
+        }
+        $cleaned = preg_replace('/^(SETUP_DB_USERNAME|SETUP_DB_PASSWORD)=.*\R?/m', '', $contents);
+        if ($cleaned !== null && $cleaned !== $contents) {
+            @file_put_contents($path, $cleaned, LOCK_EX);
+        }
     }
 
     private function databaseRules(): array

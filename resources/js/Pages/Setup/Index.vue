@@ -5,6 +5,7 @@ import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 const props = defineProps({
     environment: { type: Object, default: () => ({ checks: [], drivers: {}, cron: {}, ready: true, os: '' }) },
     prepareResults: { type: Array, default: null },
+    savedDatabase: { type: Object, default: null },
     done: { type: Object, default: null },
 });
 
@@ -18,7 +19,7 @@ const preparing = ref(false);
 const page = usePage();
 const form = useForm({
     database_driver: 'mysql', database_host: '127.0.0.1', database_port: '3306',
-    database_name: '', database_username: 'root', database_password: '',
+    database_name: props.savedDatabase ? 'qlbh' : '', database_username: props.savedDatabase?.username ?? 'root', database_password: '',
     admin_username: 'admin', admin_name: '', admin_phone: '', admin_email: '',
     admin_password: '', admin_password_confirmation: '',
     install_cron: props.environment.os === 'Linux',
@@ -28,6 +29,7 @@ const errors = computed(() => page.props.errors ?? {});
 const isLinux = computed(() => props.environment.os === 'Linux');
 const failedChecks = computed(() => (props.environment.checks ?? []).filter((item) => !item.ok));
 const blockingChecks = computed(() => failedChecks.value.filter((item) => item.level === 'error'));
+const savedHint = computed(() => props.savedDatabase?.has_password && form.database_driver === 'mysql' && form.database_username === props.savedDatabase.username && !form.database_password);
 const driverMissing = computed(() => props.environment.drivers?.[form.database_driver] === false);
 
 function prepareServer() {
@@ -158,7 +160,8 @@ function goLogin() {
                             <label>Cổng<input v-model="form.database_port" inputmode="numeric" placeholder="3306"></label>
                             <label>Tài khoản<input v-model="form.database_username" placeholder="root"><small v-if="form.errors.database_username">{{ form.errors.database_username }}</small></label>
                             <label>Mật khẩu
-                                <span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" autocomplete="off"><button type="button" @click="showDatabasePassword = !showDatabasePassword">{{ showDatabasePassword ? 'Ẩn' : 'Hiện' }}</button></span>
+                                <span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" :placeholder="savedHint ? '••••••••  (đã đặt sẵn)' : ''" autocomplete="off"><button type="button" @click="showDatabasePassword = !showDatabasePassword">{{ showDatabasePassword ? 'Ẩn' : 'Hiện' }}</button></span>
+                                <small v-if="savedHint" class="hint">Mật khẩu đã được đặt sẵn khi chạy script cài đặt. Để trống ô này để dùng mật khẩu đó.</small>
                             </label>
                         </template>
                     </div>
@@ -172,9 +175,9 @@ function goLogin() {
                     <h1>Quản trị viên</h1>
                     <div class="grid">
                         <label>Tên đăng nhập<input v-model="form.admin_username" autocomplete="username"><small v-if="form.errors.admin_username">{{ form.errors.admin_username }}</small></label>
-                        <label>Họ và tên<input v-model="form.admin_name" autocomplete="name"><small v-if="form.errors.admin_name">{{ form.errors.admin_name }}</small></label>
-                        <label>Số điện thoại<input v-model="form.admin_phone" type="tel" autocomplete="tel"><small v-if="form.errors.admin_phone">{{ form.errors.admin_phone }}</small></label>
-                        <label>Email<input v-model="form.admin_email" type="email" autocomplete="email"><small v-if="form.errors.admin_email">{{ form.errors.admin_email }}</small></label>
+                        <label>Họ và tên<input v-model="form.admin_name" placeholder="Đức Hòa" autocomplete="name"><small v-if="form.errors.admin_name">{{ form.errors.admin_name }}</small></label>
+                        <label>Số điện thoại<input v-model="form.admin_phone" type="tel" placeholder="0906064789" autocomplete="tel"><small v-if="form.errors.admin_phone">{{ form.errors.admin_phone }}</small></label>
+                        <label>Email<input v-model="form.admin_email" type="email" placeholder="duchoa.92@gmail.com" autocomplete="email"><small v-if="form.errors.admin_email">{{ form.errors.admin_email }}</small></label>
                         <label>Mật khẩu
                             <span class="password"><input v-model="form.admin_password" :type="showPassword ? 'text' : 'password'" placeholder="Từ 8 ký tự" autocomplete="new-password"><button type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Ẩn' : 'Hiện' }}</button></span>
                             <small v-if="form.errors.admin_password">{{ form.errors.admin_password }}</small>
@@ -222,6 +225,7 @@ h1{font-size:26px;line-height:1.2;margin:0 0 20px;letter-spacing:-.4px}
 label{display:block;font-size:14px;font-weight:600;color:#3d4d44}
 input,select{display:block;width:100%;box-sizing:border-box;height:46px;margin-top:7px;padding:0 14px;border:1px solid #cfd8d2;border-radius:12px;background:#fff;color:#17231d;font:inherit;font-size:16px;outline:0}
 input:focus,select:focus{border-color:#157b59;box-shadow:0 0 0 4px #e6f4ee}
+small.hint{color:#69786f;font-weight:400}
 small{display:block;color:#b53f35;font-size:13px;margin-top:6px;font-weight:500}
 .password{position:relative;display:block}.password input{padding-right:68px}
 .password button{position:absolute;right:6px;top:11px;height:36px;padding:0 10px;background:none;border:0;color:#5f6f66;font:inherit;font-size:14px;cursor:pointer}

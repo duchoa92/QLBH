@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Chuẩn bị máy chủ Ubuntu 22.04/24.04 cho QLBH. Chạy một lần bằng root, sau đó mở http://<ip-máy-chủ>/setup để hoàn tất.
 #
-#   sudo bash scripts/install-ubuntu.sh [--php-version 8.4] [--server-name qlbh.local] [--https] [--with-mariadb] [--no-nginx] [--no-build]
+#   sudo bash scripts/install-ubuntu.sh [--php-version 8.4] [--server-name qlbh.local] [--https] [--with-mariadb] [--db-user admin --db-pass 'matkhau'] [--no-nginx] [--no-build]
 #
+#   --db-user / --db-pass: tạo sẵn tài khoản MySQL/MariaDB (quyền với database tên bắt đầu bằng qlbh) để nhập vào trang /setup.
+#                          Bỏ --db-pass thì script sẽ hỏi mật khẩu. Không cần --with-mariadb nếu máy đã có MySQL.
 #   --https: tạo CA nội bộ + chứng chỉ cho IP/tên máy chủ (camera điện thoại bắt buộc HTTPS); CA để tải ở /certs/rootCA.crt
 # Script chạy lại nhiều lần vẫn an toàn (không ghi đè .env, không tạo lại database).
 set -euo pipefail
@@ -10,6 +12,8 @@ set -euo pipefail
 SERVER_NAME="_"
 PHP_VERSION="8.4"
 WITH_MARIADB=0
+DB_USER=""
+DB_PASS=""
 WITH_NGINX=1
 WITH_HTTPS=0
 BUILD_ASSETS=1
@@ -21,10 +25,12 @@ while [[ $# -gt 0 ]]; do
         --server-name) SERVER_NAME="${2:?thiếu giá trị cho --server-name}"; shift 2 ;;
         --php-version) PHP_VERSION="${2:?thiếu giá trị cho --php-version}"; shift 2 ;;
         --with-mariadb) WITH_MARIADB=1; shift ;;
+        --db-user) DB_USER="${2:?thiếu giá trị cho --db-user}"; shift 2 ;;
+        --db-pass) DB_PASS="${2:?thiếu giá trị cho --db-pass}"; shift 2 ;;
         --https) WITH_HTTPS=1; shift ;;
         --no-nginx) WITH_NGINX=0; shift ;;
         --no-build) BUILD_ASSETS=0; shift ;;
-        -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
         *) echo "Tham số không hợp lệ: $1" >&2; exit 2 ;;
     esac
 done
@@ -195,16 +201,43 @@ NGINX
     fi
 fi
 
-if [[ $WITH_MARIADB -eq 1 ]]; then
-    log "Tạo tài khoản MariaDB cho trang setup"
-    systemctl enable --now mariadb
+if [[ $WITH_MARIADB -eq 1 || -n $DB_USER ]]; then
+    log "Tạo tài khoản database cho trang setup"
+    for svc in mariadb mysql; do
+        if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1 && systemctl enable --now "$svc" >/dev/null 2>&1; then break; fi
+    done
     CRED_FILE=/root/qlbh-db-credentials.txt
-    if [[ ! -f $CRED_FILE ]]; then
+
+    if [[ -n $DB_USER ]]; then
+        if [[ ! $DB_USER =~ ^[A-Za-z0-9_]{1,32}$ ]]; then
+            echo "--db-user chỉ gồm chữ, số, gạch dưới (tối đa 32 ký tự)." >&2; exit 2
+        fi
+        if [[ -z $DB_PASS ]]; then
+            read -r -s -p "Nhập mật khẩu cho tài khoản database '${DB_USER}': " DB_PASS; echo
+            read -r -s -p "Nhập lại mật khẩu: " DB_PASS2; echo
+            [[ $DB_PASS == "$DB_PASS2" ]] || { echo "Mật khẩu không khớp." >&2; exit 2; }
+        fi
+        [[ -n $DB_PASS ]] || { echo "Mật khẩu không được để trống." >&2; exit 2; }
+    elif [[ ! -f $CRED_FILE ]]; then
+        DB_USER="qlbh"
         DB_PASS="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
+    fi
+
+    if [[ -n $DB_USER ]]; then
+        SQL_PASS="${DB_PASS//\\/\\\\}"; SQL_PASS="${SQL_PASS//\'/\\\'}"
         # Quyền tạo database có tên bắt đầu bằng qlbh (trang setup sẽ tự tạo database).
-        mysql -e "CREATE USER IF NOT EXISTS 'qlbh'@'localhost' IDENTIFIED BY '${DB_PASS}'; ALTER USER 'qlbh'@'localhost' IDENTIFIED BY '${DB_PASS}'; GRANT ALL PRIVILEGES ON \`qlbh%\`.* TO 'qlbh'@'localhost'; FLUSH PRIVILEGES;"
+        mysql -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${SQL_PASS}'; ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${SQL_PASS}'; GRANT ALL PRIVILEGES ON \`qlbh%\`.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;"
         umask 077
-        printf 'Host: 127.0.0.1\nCổng: 3306\nNgười dùng: qlbh\nMật khẩu: %s\nTên database: qlbh (hoặc tên bắt đầu bằng qlbh)\n' "$DB_PASS" > "$CRED_FILE"
+        printf 'Host: 127.0.0.1\nCổng: 3306\nNgười dùng: %s\nMật khẩu: %s\nTên database: qlbh (hoặc tên bắt đầu bằng qlbh)\n' "$DB_USER" "$DB_PASS" > "$CRED_FILE"
+        # Ghi tạm vào .env để trang /setup tự điền sẵn (trang xóa 2 dòng này sau khi cài xong).
+        if [[ -f "$APP_DIR/.env" ]]; then
+            ENV_TMP="$(mktemp)"
+            grep -vE '^(SETUP_DB_USERNAME|SETUP_DB_PASSWORD)=' "$APP_DIR/.env" > "$ENV_TMP" || true
+            ENV_PASS="${DB_PASS//\\/\\\\}"; ENV_PASS="${ENV_PASS//\"/\\\"}"
+            printf 'SETUP_DB_USERNAME="%s"\nSETUP_DB_PASSWORD="%s"\n' "$DB_USER" "$ENV_PASS" >> "$ENV_TMP"
+            cat "$ENV_TMP" > "$APP_DIR/.env"   # ghi đè nội dung, giữ nguyên chủ sở hữu và quyền của .env
+            rm -f "$ENV_TMP"
+        fi
     fi
     echo "Thông tin kết nối database lưu ở ${CRED_FILE}"
 fi
