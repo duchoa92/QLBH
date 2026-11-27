@@ -124,6 +124,20 @@ if (-not $SkipFirewall) {
     }
 }
 
+Step 'Tự chạy Laragon khi đăng nhập Windows'
+$laragonExe = Join-Path $LaragonRoot 'laragon.exe'
+if (Test-Path $laragonExe) {
+    $taskName = 'QLBH Laragon Autostart'
+    $action = New-ScheduledTaskAction -Execute $laragonExe -WorkingDirectory $LaragonRoot
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
+    Write-Host "    Đã tạo tác vụ '$taskName': Laragon tự mở khi đăng nhập Windows."
+    Warn "Để Apache + MySQL tự chạy theo: Laragon > Menu > Preferences > General, tick 'Start All automatically' (và nên tick 'Run Laragon when Windows starts')."
+} else {
+    Warn "Không thấy $laragonExe, bỏ qua bước tự chạy Laragon."
+}
+
 $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(127|169\.254)\.' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1).IPAddress
 Step 'Hoàn tất phần tự động'
 Write-Host "    1) Mở Laragon > Start All (Apache + MySQL)."

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Setup;
 
 use App\Http\Controllers\Controller;
+use App\Models\Setting;
 use App\Models\User;
 use App\Support\ServerEnvironment;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +28,7 @@ class InstallerController extends Controller
         return Inertia::render('Setup/Index', [
             'environment' => ServerEnvironment::report(),
             'prepareResults' => session('setup_prepare'),
+            'certificateUrl' => $this->certificateUrl(),
             // Chỉ gửi tên tài khoản; mật khẩu do script cài đặt đặt sẵn KHÔNG bao giờ gửi ra trình duyệt.
             'savedDatabase' => $this->savedDatabaseAccount() ? [
                 'username' => $this->savedDatabaseAccount()['username'],
@@ -79,6 +81,15 @@ class InstallerController extends Controller
             'admin_email' => ['required', 'email', 'max:255'],
             'admin_password' => ['required', 'string', 'min:8', 'confirmed'],
             'install_cron' => ['nullable', 'boolean'],
+            // Cài đặt hệ thống ban đầu (sau này vẫn sửa được trong Cài đặt).
+            'shop_name' => ['required', 'string', 'max:150'],
+            'shop_phone' => ['nullable', 'string', 'max:50'],
+            'shop_address' => ['nullable', 'string', 'max:255'],
+            'app_locale' => ['required', 'in:vi,en'],
+            'app_timezone' => ['required', 'in:Asia/Ho_Chi_Minh,Asia/Bangkok,UTC'],
+            'date_format' => ['required', 'in:d/m/Y,Y-m-d,m/d/Y'],
+            'currency_symbol' => ['required', 'string', 'max:12'],
+            'currency_format' => ['required', 'in:vi-VN,en-US'],
         ]);
 
         try {
@@ -118,6 +129,22 @@ class InstallerController extends Controller
             ]);
             $admin->assignRole('Super Admin');
 
+            // Cài đặt hệ thống ban đầu: tên cửa hàng, ngôn ngữ, múi giờ, định dạng ngày và tiền tệ.
+            foreach ([
+                'shop_name' => $data['shop_name'],
+                'print_shop_phone' => $data['shop_phone'] ?? null,
+                'print_shop_address' => $data['shop_address'] ?? null,
+                'app_locale' => $data['app_locale'],
+                'app_timezone' => $data['app_timezone'],
+                'date_format' => $data['date_format'],
+                'currency_symbol' => $data['currency_symbol'],
+                'currency_format' => $data['currency_format'],
+            ] as $key => $value) {
+                if ($value !== null && $value !== '') {
+                    Setting::set($key, $value);
+                }
+            }
+
             File::ensureDirectoryExists(storage_path('app'));
             if (file_put_contents(storage_path('app/installed'), now()->toIso8601String().PHP_EOL, LOCK_EX) === false) {
                 throw new RuntimeException('Không thể tạo khóa hoàn tất cài đặt trong storage/app.');
@@ -152,7 +179,36 @@ class InstallerController extends Controller
 
         // Không render trang ngay trong request này: nó vừa đổi DB, ghi .env, chạy migrate và hủy session nên
         // dễ phát sinh lỗi 500. Chuyển sang một request mới (/setup/complete) để hiện màn hình thành công.
-        $request->session()->put('setup_done', ['username' => $data['admin_username'], 'notes' => $notes]);
+        // flash (chỉ tồn tại cho đúng 1 lần mở trang thành công): mật khẩu không bị lưu lại trong session.
+        $isSqlite = $data['database_driver'] === 'sqlite';
+        $request->session()->flash('setup_done', [
+            'username' => $data['admin_username'],
+            'password' => $data['admin_password'],
+            'name' => $data['admin_name'] ?? null,
+            'phone' => $data['admin_phone'] ?? null,
+            'email' => $data['admin_email'] ?? null,
+            'database' => [
+                'driver' => $data['database_driver'],
+                'host' => $isSqlite ? null : ($data['database_host'] ?? null),
+                'port' => $isSqlite ? null : ($data['database_port'] ?? null),
+                'name' => $data['database_name'],
+                'file' => $isSqlite ? $this->sqlitePath($data['database_name']) : null,
+                'username' => $isSqlite ? null : ($data['database_username'] ?? null),
+                'password' => $isSqlite ? null : ($data['database_password'] ?? null),
+            ],
+            'shop' => [
+                'name' => $data['shop_name'],
+                'phone' => $data['shop_phone'] ?? null,
+                'address' => $data['shop_address'] ?? null,
+                'locale' => $data['app_locale'],
+                'timezone' => $data['app_timezone'],
+                'date_format' => $data['date_format'],
+                'currency' => $data['currency_symbol'],
+                'currency_format' => $data['currency_format'],
+            ],
+            'notes' => $notes,
+            'system' => $this->systemSummary(),
+        ]);
 
         return redirect('/setup/complete', 303);
     }
@@ -165,7 +221,30 @@ class InstallerController extends Controller
             return redirect()->route('login');
         }
 
-        return Inertia::render('Setup/Index', ['done' => $done]);
+        return Inertia::render('Setup/Index', ['done' => $done, 'certificateUrl' => $this->certificateUrl()]);
+    }
+
+    /** Tình trạng chạy nền / tự khởi động / ổ đĩa để hiện ở màn hình "Thiết lập thành công". */
+    private function systemSummary(): array
+    {
+        try {
+            $disk = \App\Support\DiskHealth::report();
+        } catch (Throwable) {
+            $disk = null;
+        }
+
+        return [
+            'linux' => ServerEnvironment::isLinux(),
+            'cron' => ServerEnvironment::cronStatus()['installed'] ?? null,
+            'autostart' => ServerEnvironment::autostartStatus(),
+            'disk' => $disk ? ['used_percent' => $disk['used_percent'], 'free_gb' => $disk['free_gb'], 'total_gb' => $disk['total_gb'], 'level' => $disk['level']] : null,
+        ];
+    }
+
+    /** Đường dẫn tải chứng chỉ gốc (do script --https / windows-https.ps1 chép vào public/certs), nếu có. */
+    private function certificateUrl(): ?string
+    {
+        return is_file(public_path('certs/rootCA.crt')) ? '/certs/rootCA.crt' : null;
     }
 
     /** Đọc SETUP_DB_USERNAME / SETUP_DB_PASSWORD do scripts/install-ubuntu.sh ghi vào .env (nếu có). */

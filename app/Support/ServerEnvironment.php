@@ -167,6 +167,44 @@ class ServerEnvironment
         return true;
     }
 
+    /**
+     * Dịch vụ nào đã được bật tự chạy khi khởi động máy (Linux/systemd). Giá trị null: máy không có dịch vụ đó.
+     *
+     * @return array<string, bool|null>
+     */
+    public static function autostartStatus(): array
+    {
+        if (! self::isLinux()) {
+            return [];
+        }
+
+        $php = 'php'.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION.'-fpm';
+        $services = ['Web server (nginx)' => ['nginx'], 'PHP' => [$php], 'Cơ sở dữ liệu' => ['mariadb', 'mysql'], 'Lịch chạy nền (cron)' => ['cron'], 'Docker (camera)' => ['docker']];
+        $result = [];
+
+        foreach ($services as $label => $names) {
+            $result[$label] = null;
+            foreach ($names as $name) {
+                try {
+                    $process = new Process(['systemctl', 'is-enabled', $name], null, null, null, 3);
+                    $process->run();
+                    $output = trim($process->getOutput());
+                } catch (Throwable) {
+                    continue;
+                }
+                if ($output === '') {
+                    continue; // dịch vụ không tồn tại
+                }
+                $result[$label] = in_array($output, ['enabled', 'enabled-runtime', 'static', 'alias', 'indirect'], true);
+                if ($result[$label]) {
+                    break;
+                }
+            }
+        }
+
+        return $result;
+    }
+
     public static function cronLine(): string
     {
         $php = (new PhpExecutableFinder())->find(false) ?: '/usr/bin/php';

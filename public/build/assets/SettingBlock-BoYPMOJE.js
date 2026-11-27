@@ -1,1 +1,0 @@
-import{o as e,g as s,t as o,k as l,p as c}from"./app-DJ4B-y8w.js";const n={class:"space-y-3 p-4"},r={key:0,class:"text-[11px] font-bold uppercase tracking-wide text-slate-400"},d={__name:"SettingBlock",props:{title:{type:String,default:""}},setup(t){return(a,i)=>(e(),s("div",n,[t.title?(e(),s("h4",r,o(t.title),1)):l("",!0),c(a.$slots,"default")]))}};export{d as default};

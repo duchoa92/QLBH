@@ -35,14 +35,14 @@ Muốn không để lộ mật khẩu trong lệnh, bỏ `--db-pass`, script s�
 ```bash
 sudo bash scripts/install-ubuntu.sh --https --db-user admin
 ```
-Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch chạy nền, tường lửa **và tạo tài khoản database** đó. Chạy lại nhiều lần vẫn an toàn (chạy lại với mật khẩu mới sẽ đổi mật khẩu).
+Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch chạy nền, tường lửa, **Docker (camera)**, công cụ giám sát ổ đĩa **và tạo tài khoản database** đó. Các dịch vụ (nginx, PHP, MySQL, cron, Docker) được bật **tự chạy khi bật máy**. Chạy lại nhiều lần vẫn an toàn (chạy lại với mật khẩu mới sẽ đổi mật khẩu).
 
 | Tùy chọn | Tác dụng |
 |---|---|
 | `--https` | Bật HTTPS (**cần để dùng camera điện thoại**) |
 | `--db-user admin` | Tên tài khoản database (chữ, số, gạch dưới) |
 | `--db-pass 'MatKhau123'` | Mật khẩu database. Để trong dấu nháy đơn `' '` |
-| `--with-camera` | Cài Docker và chạy nền tảng camera/nhận diện khuôn mặt (chỉ cần nếu dùng camera cửa) |
+| `--no-camera` | **Không** cài Docker / nền tảng camera. Mặc định script **cài Docker** và chạy `deploy/camera-platform` (nếu thư mục này có trong dự án) |
 | `--with-mariadb` | Cài thêm MariaDB nếu máy **chưa có** MySQL/MariaDB |
 | `--server-name qlbh.local` | Dùng tên miền thay vì IP |
 
@@ -50,6 +50,11 @@ Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch c
 - Thông tin được lưu ở `/root/qlbh-db-credentials.txt` (xem lại bằng `sudo cat /root/qlbh-db-credentials.txt`).
 - Trang `/setup` sẽ **tự điền sẵn** tên tài khoản này, và ô mật khẩu hiện `••••••••  (đã đặt sẵn)`: bạn **để trống** ô đó là được. Mật khẩu không bị gửi ra trình duyệt, và được xóa khỏi file cấu hình tạm sau khi cài xong.
 - Không dùng `--db-user` và có `--with-mariadb`: script tự tạo user `qlbh` với mật khẩu ngẫu nhiên.
+
+### Tự chạy khi bật máy và cảnh báo ổ đĩa
+
+- **Tự chạy khi bật máy:** script bật khởi động cùng hệ thống cho nginx, PHP-FPM, MySQL/MariaDB, cron và Docker (các container camera được đặt tự chạy lại). Bật máy lên là website dùng được, không cần gõ lệnh.
+- **Cảnh báo ổ đĩa ngay trên màn hình:** cứ 15 phút máy chủ kiểm tra ổ đĩa một lần. Khi ổ **đã dùng từ 85%** (vàng) hoặc **từ 95% / còn dưới 2 GB** (đỏ), hoặc có **lỗi đọc/ghi ổ đĩa**, **SMART báo hỏng**, **ổ bị chuyển sang chỉ đọc**, thanh cảnh báo hiện ở đầu mọi trang quản trị kèm nút **Sao lưu ngay**. Chỉ người có quyền *Quản lý sao lưu* nhìn thấy. Máy ảo thường không đọc được SMART, khi đó vẫn cảnh báo theo dung lượng và lỗi hệ thống.
 
 ### Bước 3. Tạo tài khoản database bằng tay (chỉ khi không dùng `--db-user`)
 
@@ -94,7 +99,7 @@ Mở `https://<IP-máy-chủ>/setup` (hoặc `http://` nếu không dùng `--htt
 
 ## C. Điền trang `/setup`
 
-Có 3 bước. Trang chỉ chạy một lần, xong sẽ chuyển về trang đăng nhập.
+Có 4 bước (Database → Quản trị → Cửa hàng → Xác nhận). Trang chỉ chạy một lần, xong sẽ chuyển về trang đăng nhập.
 
 **1. Cơ sở dữ liệu**
 
@@ -108,7 +113,12 @@ Nếu đã chạy script với `--db-user`, hai ô **Tên người dùng** và *
 
 **2. Quản trị viên:** tên đăng nhập, họ tên, số điện thoại, email, mật khẩu (từ 8 ký tự). Các ô họ tên, số điện thoại, email có chữ gợi ý mờ (Đức Hòa, 0906064789, duchoa.92@gmail.com): bạn nhập thông tin thật của mình. Ghi nhớ tài khoản này.
 
-**3. Xác nhận:** bấm **Khởi tạo**. Khi thấy "Thiết lập thành công" bấm **Đăng nhập**.
+**3. Cửa hàng và hệ thống** (cài đặt luôn, sau này vẫn sửa được trong *Cài đặt*): **tên cửa hàng**, số điện thoại, địa chỉ (in trên hóa đơn), **ngôn ngữ** (Tiếng Việt / English), **múi giờ**, **định dạng ngày** (có hiện ví dụ ngày hôm nay), **định dạng số tiền** và **ký hiệu tiền tệ** (mặc định ₫).
+
+**4. Xác nhận:**
+- Ô **Lịch chạy nền (cron)** là công tắc có hiện rõ **✓ BẬT** (xanh) hoặc **✗ TẮT** (đỏ). Cron là "đồng hồ" chạy mỗi phút để website tự làm: **sao lưu tự động** theo giờ hẹn, **nhắc việc** lúc 08:00 mỗi ngày, **nhắc công nợ** sáng thứ Hai, **dọn dữ liệu cũ** hằng đêm. **Nên để BẬT**; nếu TẮT, các việc đó sẽ không tự chạy. Nếu script đã cài sẵn thì trang hiện "ĐÃ BẬT SẴN".
+- Bấm **Khởi tạo**. Khi thấy **"Thiết lập thành công"**, trang hiện đầy đủ: địa chỉ đăng nhập, tài khoản và mật khẩu quản trị, thông tin cửa hàng và hệ thống, cấu hình database (máy chủ, tên, tài khoản, mật khẩu), tình trạng lịch chạy nền, các dịch vụ tự chạy khi bật máy và dung lượng ổ đĩa. **Thông tin này chỉ hiện một lần**: bấm **Tải file (.txt)** hoặc **Sao chép** để lưu lại, rồi bấm **Đăng nhập**.
+- Cuối trang có mục **"Cài chứng chỉ tin cậy"** (khi dùng HTTPS) kèm nút tải và hướng dẫn cho Android, iPhone, Windows.
 
 ---
 
@@ -145,7 +155,7 @@ sudo php artisan optimize:clear
 ```bash
 sudo chown -R www-data:www-data storage bootstrap/cache
 ```
-Windows: bỏ `sudo`, dùng thư mục `C:\laragon\www\qlbh`.
+Windows: bỏ `sudo`, dùng thư mục `C:\laragon\www\qlbh`. Windows: script cũng tạo tác vụ để Laragon tự mở khi đăng nhập Windows; trong Laragon → Preferences → General hãy tick *Start All automatically*.
 
 Sau khi cập nhật, trên điện thoại tải lại trang (hoặc xóa dữ liệu trang) để lấy giao diện mới.
 

@@ -1,1 +1,0 @@
-import{a as e,f as o}from"./floatingActions-CRG-vQ6B.js";import{B as n,G as s,b as a,o as r,c,p as u,a0 as l,k as m}from"./app-DJ4B-y8w.js";const d={__name:"PageActions",setup(f){return n(()=>{e.value+=1}),s(()=>{e.value=Math.max(0,e.value-1)}),(t,p)=>a(o)?(r(),c(l,{key:0,to:a(o)},[u(t.$slots,"default")],8,["to"])):m("",!0)}};export{d as _};

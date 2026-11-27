@@ -6,8 +6,80 @@ const props = defineProps({
     environment: { type: Object, default: () => ({ checks: [], drivers: {}, cron: {}, ready: true, os: '' }) },
     prepareResults: { type: Array, default: null },
     savedDatabase: { type: Object, default: null },
+    certificateUrl: { type: String, default: null },
     done: { type: Object, default: null },
 });
+
+const copied = ref(false);
+const shopError = computed(() => Object.entries(form.errors).find(([key]) => /^(shop_|app_|date_format|currency_)/.test(key))?.[1] ?? '');
+const cronInstalled = computed(() => props.environment.cron?.installed === true);
+const loginUrl = computed(() => `${window.location.origin}/login`);
+function shopLines(shop) {
+    if (!shop) return [];
+    return ['', '[Cửa hàng và hệ thống]', `Tên cửa hàng: ${shop.name}`,
+        shop.phone ? `Điện thoại: ${shop.phone}` : null, shop.address ? `Địa chỉ: ${shop.address}` : null,
+        `Ngôn ngữ: ${localeLabels[shop.locale]}`, `Múi giờ: ${timezoneLabels[shop.timezone]}`,
+        `Định dạng ngày: ${formatDate(shop.date_format)}`, `Tiền tệ: ${shop.currency}`].filter((line) => line !== null);
+}
+function systemLines(system) {
+    if (!system) return [];
+    const lines = ['', '[Chạy nền và tự khởi động]'];
+    if (system.linux) {
+        lines.push(`Lịch chạy nền (cron): ${system.cron === true ? 'Đã bật' : system.cron === false ? 'CHƯA bật (sao lưu tự động, nhắc việc sẽ không chạy)' : 'Không kiểm tra được'}`);
+        for (const [name, enabled] of Object.entries(system.autostart || {})) {
+            if (enabled !== null) lines.push(`Tự chạy khi bật máy - ${name}: ${enabled ? 'Có' : 'KHÔNG'}`);
+        }
+    }
+    if (system.disk && system.disk.used_percent !== null) {
+        lines.push(`Ổ đĩa: đã dùng ${system.disk.used_percent}%, còn trống ${system.disk.free_gb} GB / ${system.disk.total_gb} GB`);
+    }
+    return lines;
+}
+const doneText = computed(() => {
+    const d = props.done;
+    if (!d) return '';
+    const db = d.database || {};
+    const lines = [
+        'THÔNG TIN QLBH', '',
+        '[Đăng nhập website]',
+        `Địa chỉ: ${loginUrl.value}`,
+        `Tên đăng nhập: ${d.username}`,
+        `Mật khẩu: ${d.password}`,
+        d.name ? `Họ và tên: ${d.name}` : null,
+        d.phone ? `Điện thoại: ${d.phone}` : null,
+        d.email ? `Email: ${d.email}` : null,
+        '', '[Cơ sở dữ liệu]',
+        `Loại: ${db.driver === 'sqlite' ? 'SQLite' : 'MySQL / MariaDB'}`,
+        ...(db.file
+            ? [`Tệp dữ liệu: ${db.file}`]
+            : [`Máy chủ: ${db.host}:${db.port}`, `Tên database: ${db.name}`, `Tài khoản: ${db.username}`, `Mật khẩu: ${db.password}`]),
+        ...shopLines(d.shop),
+        ...systemLines(d.system),
+    ];
+    return lines.filter((line) => line !== null).join('\n');
+});
+async function copyInfo() {
+    try {
+        await navigator.clipboard.writeText(doneText.value);
+    } catch {
+        const area = document.createElement('textarea');
+        area.value = doneText.value;
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+    }
+    copied.value = true;
+    setTimeout(() => { copied.value = false; }, 2500);
+}
+function downloadInfo() {
+    const blob = new Blob(['\ufeff' + doneText.value + '\n'], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'qlbh-thong-tin-cai-dat.txt';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
 
 const step = ref(0);
 const status = ref('');
@@ -22,9 +94,23 @@ const form = useForm({
     database_name: props.savedDatabase ? 'qlbh' : '', database_username: props.savedDatabase?.username ?? 'root', database_password: '',
     admin_username: 'admin', admin_name: '', admin_phone: '', admin_email: '',
     admin_password: '', admin_password_confirmation: '',
-    install_cron: props.environment.os === 'Linux',
+    shop_name: '', shop_phone: '', shop_address: '',
+    app_locale: 'vi', app_timezone: 'Asia/Ho_Chi_Minh', date_format: 'd/m/Y', currency_symbol: '₫', currency_format: 'vi-VN',
+    install_cron: props.environment.os === 'Linux' && props.environment.cron?.installed !== true,
 });
-const steps = ['Database', 'Quản trị', 'Xác nhận'];
+const steps = ['Database', 'Quản trị', 'Cửa hàng', 'Xác nhận'];
+const LAST_STEP = 3;
+const localeLabels = { vi: 'Tiếng Việt', en: 'English' };
+const timezoneLabels = { 'Asia/Ho_Chi_Minh': 'Việt Nam (GMT+7)', 'Asia/Bangkok': 'Bangkok (GMT+7)', UTC: 'UTC (GMT+0)' };
+const dateFormats = { 'd/m/Y': 'Ngày/tháng/năm', 'Y-m-d': 'Năm-tháng-ngày', 'm/d/Y': 'Tháng/ngày/năm' };
+const currencyFormats = { 'vi-VN': 'Kiểu Việt Nam (1.234.567)', 'en-US': 'Kiểu quốc tế (1,234,567)' };
+function formatDate(pattern) {
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    return pattern.replace('d', d).replace('m', m).replace('Y', y);
+}
 const errors = computed(() => page.props.errors ?? {});
 const isLinux = computed(() => props.environment.os === 'Linux');
 const failedChecks = computed(() => (props.environment.checks ?? []).filter((item) => !item.ok));
@@ -72,8 +158,15 @@ function next() {
             return;
         }
     }
+    if (step.value === 2) {
+        const missing = ['shop_name', 'currency_symbol'].find((field) => !String(form[field] ?? '').trim());
+        if (missing) {
+            form.setError(missing, 'Bắt buộc');
+            return;
+        }
+    }
     form.clearErrors();
-    step.value = Math.min(step.value + 1, 2);
+    step.value = Math.min(step.value + 1, LAST_STEP);
 }
 function back() { status.value = ''; step.value = Math.max(0, step.value - 1); }
 function testConnection() {
@@ -114,9 +207,63 @@ function goLogin() {
             <section v-if="done" class="done" role="status">
                 <div class="done-icon">✓</div>
                 <h1>Thiết lập thành công</h1>
-                <p class="done-sub">Tài khoản quản trị: <b>{{ done.username }}</b></p>
+                <p class="save-warn">⚠ Thông tin dưới đây <b>chỉ hiện một lần</b>. Hãy lưu lại ngay: bấm <b>Tải file</b> hoặc <b>Sao chép</b>.</p>
+
+                <div class="info">
+                    <h2>Đăng nhập website</h2>
+                    <dl>
+                        <div><dt>Địa chỉ</dt><dd>{{ loginUrl }}</dd></div>
+                        <div><dt>Tên đăng nhập</dt><dd>{{ done.username }}</dd></div>
+                        <div><dt>Mật khẩu</dt><dd>{{ done.password }}</dd></div>
+                        <div v-if="done.name"><dt>Họ và tên</dt><dd>{{ done.name }}</dd></div>
+                        <div v-if="done.phone"><dt>Điện thoại</dt><dd>{{ done.phone }}</dd></div>
+                        <div v-if="done.email"><dt>Email</dt><dd>{{ done.email }}</dd></div>
+                    </dl>
+                    <template v-if="done.shop">
+                        <h2>Cửa hàng và hệ thống</h2>
+                        <dl>
+                            <div><dt>Tên cửa hàng</dt><dd>{{ done.shop.name }}</dd></div>
+                            <div v-if="done.shop.phone"><dt>Điện thoại</dt><dd>{{ done.shop.phone }}</dd></div>
+                            <div v-if="done.shop.address"><dt>Địa chỉ</dt><dd>{{ done.shop.address }}</dd></div>
+                            <div><dt>Ngôn ngữ</dt><dd>{{ localeLabels[done.shop.locale] }}</dd></div>
+                            <div><dt>Múi giờ</dt><dd>{{ timezoneLabels[done.shop.timezone] }}</dd></div>
+                            <div><dt>Định dạng ngày</dt><dd>{{ formatDate(done.shop.date_format) }}</dd></div>
+                            <div><dt>Tiền tệ</dt><dd>{{ done.shop.currency }} · {{ currencyFormats[done.shop.currency_format] }}</dd></div>
+                        </dl>
+                    </template>
+                    <h2>Cơ sở dữ liệu</h2>
+                    <dl v-if="done.database">
+                        <div><dt>Loại</dt><dd>{{ done.database.driver === 'sqlite' ? 'SQLite' : 'MySQL / MariaDB' }}</dd></div>
+                        <div v-if="done.database.file"><dt>Tệp dữ liệu</dt><dd>{{ done.database.file }}</dd></div>
+                        <template v-else>
+                            <div><dt>Máy chủ</dt><dd>{{ done.database.host }}:{{ done.database.port }}</dd></div>
+                            <div><dt>Tên database</dt><dd>{{ done.database.name }}</dd></div>
+                            <div><dt>Tài khoản</dt><dd>{{ done.database.username }}</dd></div>
+                            <div><dt>Mật khẩu</dt><dd>{{ done.database.password }}</dd></div>
+                        </template>
+                    </dl>
+                </div>
+
+                <div v-if="done.system" class="info">
+                    <h2>Chạy nền và tự khởi động</h2>
+                    <dl>
+                        <template v-if="done.system.linux">
+                            <div><dt>Lịch chạy nền</dt><dd :class="done.system.cron === true ? 'good' : 'warn'">{{ done.system.cron === true ? '✓ Đã bật (sao lưu tự động, nhắc việc, dọn dữ liệu cũ)' : done.system.cron === false ? '✗ Chưa bật: sao lưu tự động và nhắc việc sẽ KHÔNG chạy' : 'Không kiểm tra được' }}</dd></div>
+                            <template v-for="(enabled, name) in done.system.autostart" :key="name">
+                                <div v-if="enabled !== null"><dt>{{ name }}</dt><dd :class="enabled ? 'good' : 'warn'">{{ enabled ? '✓ Tự chạy khi bật máy' : '✗ Không tự chạy khi bật máy' }}</dd></div>
+                            </template>
+                        </template>
+                        <div v-if="done.system.disk && done.system.disk.used_percent !== null"><dt>Ổ đĩa</dt><dd :class="done.system.disk.level === 'ok' ? 'good' : 'warn'">Đã dùng {{ done.system.disk.used_percent }}% · còn trống {{ done.system.disk.free_gb }} GB / {{ done.system.disk.total_gb }} GB</dd></div>
+                    </dl>
+                    <p class="hint-line">Website sẽ tự cảnh báo trên màn hình quản trị khi ổ đĩa gần đầy hoặc có lỗi ổ đĩa (cần sao lưu ngay).</p>
+                </div>
+
                 <p v-if="done.notes" class="note">{{ done.notes }}</p>
-                <button class="btn primary big" type="button" @click="goLogin">Đăng nhập</button>
+                <div class="done-actions">
+                    <button class="btn sm" type="button" @click="copyInfo">{{ copied ? 'Đã sao chép ✓' : 'Sao chép' }}</button>
+                    <button class="btn sm" type="button" @click="downloadInfo">Tải file (.txt)</button>
+                    <button class="btn primary big" type="button" @click="goLogin">Đăng nhập</button>
+                </div>
             </section>
 
             <template v-else>
@@ -165,6 +312,7 @@ function goLogin() {
                             </label>
                         </template>
                     </div>
+                    <p v-if="shopError" class="banner error">Thông tin cửa hàng chưa hợp lệ: {{ shopError }} (bấm <b>Sửa</b> ở dòng Cửa hàng).</p>
                     <p v-if="errors.database" class="banner error">{{ errors.database }}</p>
                     <p v-if="status" class="banner success">{{ status }}</p>
                     <footer class="actions"><button class="btn outline" type="button" :disabled="form.processing" @click="testConnection">Kiểm tra kết nối</button><button class="btn primary" type="button" @click="next">Tiếp tục</button></footer>
@@ -191,20 +339,74 @@ function goLogin() {
                 </section>
 
                 <!-- Bước 3: xác nhận -->
+                <!-- Bước 3: cửa hàng và cài đặt hệ thống -->
+                <section v-else-if="step === 2">
+                    <h1>Cửa hàng và hệ thống</h1>
+                    <p class="lead">Các thông tin này dùng cho hóa đơn, ngày giờ và tiền tệ. Sau này vẫn sửa được trong <b>Cài đặt</b>.</p>
+                    <div class="grid">
+                        <label style="grid-column:1/-1">Tên cửa hàng<input v-model="form.shop_name" placeholder="Ví dụ: Đức Hòa Computer"><small v-if="form.errors.shop_name">{{ form.errors.shop_name }}</small></label>
+                        <label>Số điện thoại cửa hàng<input v-model="form.shop_phone" type="tel" placeholder="0906064789"></label>
+                        <label>Địa chỉ<input v-model="form.shop_address" placeholder="Vạn Xuân, Hưng Yên"></label>
+                        <label>Ngôn ngữ
+                            <select v-model="form.app_locale"><option v-for="(label, value) in localeLabels" :key="value" :value="value">{{ label }}</option></select>
+                        </label>
+                        <label>Múi giờ
+                            <select v-model="form.app_timezone"><option v-for="(label, value) in timezoneLabels" :key="value" :value="value">{{ label }}</option></select>
+                        </label>
+                        <label>Định dạng ngày
+                            <select v-model="form.date_format"><option v-for="(label, value) in dateFormats" :key="value" :value="value">{{ label }} ({{ formatDate(value) }})</option></select>
+                        </label>
+                        <label>Định dạng số tiền
+                            <select v-model="form.currency_format"><option v-for="(label, value) in currencyFormats" :key="value" :value="value">{{ label }}</option></select>
+                        </label>
+                        <label>Ký hiệu tiền tệ<input v-model="form.currency_symbol" placeholder="₫" maxlength="12"><small v-if="form.errors.currency_symbol">{{ form.errors.currency_symbol }}</small></label>
+                    </div>
+                    <footer class="actions"><button class="btn outline" type="button" @click="back">Quay lại</button><button class="btn primary" type="button" @click="next">Tiếp tục</button></footer>
+                </section>
+
                 <section v-else>
                     <h1>Xác nhận</h1>
                     <dl class="summary">
                         <div><dt>Database</dt><dd>{{ form.database_driver.toUpperCase() }} · {{ form.database_name }}</dd><button type="button" @click="step = 0">Sửa</button></div>
                         <div v-if="form.database_driver !== 'sqlite'"><dt>Máy chủ</dt><dd>{{ form.database_host }}:{{ form.database_port }} · {{ form.database_username }}</dd><button type="button" @click="step = 0">Sửa</button></div>
                         <div><dt>Quản trị</dt><dd>{{ form.admin_username }} · {{ form.admin_name }}</dd><button type="button" @click="step = 1">Sửa</button></div>
+                        <div><dt>Cửa hàng</dt><dd>{{ form.shop_name }} · {{ localeLabels[form.app_locale] }} · {{ formatDate(form.date_format) }} · {{ form.currency_symbol }}</dd><button type="button" @click="step = 2">Sửa</button></div>
                         <div><dt>Liên hệ</dt><dd>{{ form.admin_phone }} · {{ form.admin_email }}</dd><button type="button" @click="step = 1">Sửa</button></div>
+                        <div v-if="isLinux"><dt>Lịch chạy nền</dt><dd :class="cronInstalled || form.install_cron ? 'good' : 'warn'">{{ cronInstalled ? 'Đã bật sẵn' : form.install_cron ? 'BẬT' : 'TẮT (không tự sao lưu)' }}</dd><button v-if="!cronInstalled" type="button" @click="form.install_cron = !form.install_cron">Đổi</button></div>
                     </dl>
-                    <label v-if="isLinux" class="check"><input v-model="form.install_cron" type="checkbox"><span>Tự cài lịch chạy nền (cron)</span></label>
+                    <div v-if="isLinux" class="cron" :class="{ on: cronInstalled || form.install_cron }">
+                        <div v-if="cronInstalled" class="cron-head"><span class="state on">✓ ĐÃ BẬT SẴN</span><b>Lịch chạy nền (cron)</b></div>
+                        <label v-else class="cron-head switch">
+                            <input v-model="form.install_cron" type="checkbox">
+                            <span class="track" aria-hidden="true"><span class="knob"></span></span>
+                            <span class="state" :class="{ on: form.install_cron }">{{ form.install_cron ? '✓ BẬT' : '✗ TẮT' }}</span>
+                            <b>Lịch chạy nền (cron)</b>
+                        </label>
+                        <p class="cron-desc">Máy chủ cần một "đồng hồ" chạy mỗi phút để website tự làm các việc định kỳ mà không cần ai mở trang:</p>
+                        <ul class="cron-list">
+                            <li><b>Sao lưu tự động</b> theo giờ bạn hẹn trong Cài đặt</li>
+                            <li><b>Nhắc việc</b> mỗi ngày lúc 08:00 và <b>nhắc công nợ</b> thứ Hai hằng tuần</li>
+                            <li><b>Dọn dữ liệu cũ</b> hằng đêm (lịch sử ca làm việc, file xuất, lượt khách ra vào)</li>
+                        </ul>
+                        <p class="cron-desc"><b>Nên để BẬT.</b> Nếu TẮT, các việc trên sẽ không tự chạy (đặc biệt là sao lưu tự động). Bật lại sau bằng lệnh <code>sudo bash scripts/install-ubuntu.sh</code>.</p>
+                    </div>
                     <p v-if="errors.database" class="banner error">{{ errors.database }}</p>
                     <footer class="actions"><button class="btn outline" type="button" :disabled="form.processing" @click="back">Quay lại</button><button class="btn primary big" type="button" :disabled="form.processing" @click="install">{{ form.processing ? 'Đang khởi tạo…' : 'Khởi tạo' }}</button></footer>
                 </section>
             </template>
         </main>
+
+        <details v-if="certificateUrl" class="cert">
+            <summary>🔒 Cài chứng chỉ tin cậy để hết cảnh báo "Không bảo mật" và dùng được camera</summary>
+            <p>Làm một lần cho mỗi thiết bị (điện thoại, máy tính). Bấm tải chứng chỉ, rồi cài theo hướng dẫn:</p>
+            <a :href="certificateUrl" class="btn sm" download="rootCA.crt">Tải chứng chỉ (rootCA.crt)</a>
+            <ul>
+                <li><b>Android:</b> Cài đặt → Bảo mật → Cài đặt chứng chỉ → <b>Chứng chỉ CA</b> → chọn file vừa tải.</li>
+                <li><b>iPhone (dùng Safari):</b> mở link tải → Cho phép → Cài đặt → <i>Đã tải hồ sơ</i> → Cài đặt. Sau đó Cài đặt → Cài đặt chung → Giới thiệu → <b>Cài đặt tin cậy chứng nhận</b> → bật <i>QLBH Local CA</i>.</li>
+                <li><b>Windows (Chrome):</b> mở file → Install Certificate → Local Machine → <i>Trusted Root Certification Authorities</i>.</li>
+            </ul>
+            <p class="cert-note">Cài xong, mở lại trang bằng <b>https://</b>: không còn cảnh báo và trình duyệt sẽ xin quyền dùng camera.</p>
+        </details>
     </div>
 </template>
 
@@ -256,6 +458,39 @@ small{display:block;color:#b53f35;font-size:13px;margin-top:6px;font-weight:500}
 .done{text-align:center;padding:22px 0 8px}
 .done-icon{width:80px;height:80px;margin:0 auto 20px;border-radius:50%;background:#157b59;color:#fff;display:grid;place-items:center;font-size:42px;box-shadow:0 0 0 10px #e6f4ee}
 .done h1{margin-bottom:12px}.done-sub{font-size:17px;color:#3d4d44;margin:0 0 6px}.done .note{color:#69786f;font-size:14px;margin:10px 0 0}
-.done .btn{margin-top:24px}
+.done .btn{margin-top:0}
+.save-warn{margin:0 0 14px;padding:10px 14px;border-radius:12px;background:#fff8e8;color:#7a5a12;font-size:14px}
+.info{text-align:left;border:1px solid #e3e8e4;border-radius:14px;padding:6px 16px 10px;margin:0 0 14px}
+.info h2{font-size:14px;margin:12px 0 4px;color:#157b59;text-transform:uppercase;letter-spacing:.4px}
+.info dl{margin:0}
+.info dl>div{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid #eef2ef}
+.info dl>div:last-child{border-bottom:0}
+.info dt{width:120px;flex:none;color:#69786f;font-size:14px}
+.info dd{margin:0;font-weight:600;word-break:break-all;user-select:all}
+.done-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:18px}
 @media(max-width:700px){.card{padding:20px 16px;border-radius:16px}.grid{grid-template-columns:1fr;gap:18px}.steps .label{display:none}.steps li{justify-content:center}.actions{flex-direction:column-reverse;align-items:stretch}.actions .btn{width:100%}.summary>div{flex-wrap:wrap}.summary dt{width:100%}h1{font-size:22px}}
+.cert{margin-top:16px;background:#fff;border:1px solid #e3e8e4;border-radius:14px;padding:12px 16px;font-size:14px;color:#41524a}
+.cert summary{cursor:pointer;font-weight:600;color:#17231d}
+.cert p{margin:10px 0}
+.cert ul{margin:12px 0 0;padding-left:18px;display:grid;gap:8px}
+.cert .btn{display:inline-flex;align-items:center;text-decoration:none}
+.cert-note{color:#69786f}
+.cron{margin-top:16px;padding:14px 16px;border:1px solid #e3e8e4;border-left:4px solid #c9493c;border-radius:14px;background:#fff;font-size:14px;color:#41524a}
+.cron.on{border-left-color:#157b59;background:#f4fbf7}
+.cron-head{display:flex;align-items:center;gap:10px;font-size:15px;cursor:default;flex-wrap:wrap}
+.cron-head.switch{cursor:pointer}
+.cron-head.switch input{position:absolute;opacity:0;width:0;height:0}
+.track{flex:none;width:46px;height:26px;border-radius:13px;background:#c4cdc7;position:relative;transition:background .15s}
+.knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0003;transition:transform .15s}
+.switch input:checked + .track{background:#157b59}
+.switch input:checked + .track .knob{transform:translateX(20px)}
+.switch input:focus-visible + .track{outline:3px solid #157b5955}
+.state{padding:3px 10px;border-radius:999px;background:#fbe4e1;color:#b53f35;font-weight:800;font-size:12px;letter-spacing:.3px}
+.state.on{background:#d7f0e4;color:#0f6a49}
+.cron-desc{margin:10px 0 0}
+.cron-list{margin:8px 0 0;padding-left:20px;display:grid;gap:4px}
+.cron code{padding:2px 6px;border-radius:6px;background:#eef2ef;font-size:13px}
+.good{color:#0f6a49}.warn{color:#b53f35}
+.hint-line{margin:6px 0 0;color:#69786f;font-size:13px}
+.lead{margin:-8px 0 18px;color:#5a6b62;font-size:14px}
 </style>

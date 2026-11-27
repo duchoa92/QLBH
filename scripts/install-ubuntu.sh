@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Chuẩn bị máy chủ Ubuntu 22.04/24.04 cho QLBH. Chạy một lần bằng root, sau đó mở http://<ip-máy-chủ>/setup để hoàn tất.
 #
-#   sudo bash scripts/install-ubuntu.sh [--php-version 8.4] [--server-name qlbh.local] [--https] [--with-mariadb] [--db-user admin --db-pass 'matkhau'] [--with-camera] [--no-nginx] [--no-build]
+#   sudo bash scripts/install-ubuntu.sh [--php-version 8.4] [--server-name qlbh.local] [--https] [--with-mariadb] [--db-user admin --db-pass 'matkhau'] [--no-camera] [--no-nginx] [--no-build]
 #
 #   --db-user / --db-pass: tạo sẵn tài khoản MySQL/MariaDB (quyền với database tên bắt đầu bằng qlbh) để nhập vào trang /setup.
 #                          Bỏ --db-pass thì script sẽ hỏi mật khẩu. Không cần --with-mariadb nếu máy đã có MySQL.
-#   --with-camera: cài Docker và chạy nền tảng camera/nhận diện khuôn mặt (deploy/camera-platform), nếu thư mục này có trong dự án.
+#   --no-camera: KHÔNG cài Docker / nền tảng camera (mặc định script cài Docker và chạy deploy/camera-platform nếu thư mục này có trong dự án).
 #   --https: tạo CA nội bộ + chứng chỉ cho IP/tên máy chủ (camera điện thoại bắt buộc HTTPS); CA để tải ở /certs/rootCA.crt
 # Script chạy lại nhiều lần vẫn an toàn (không ghi đè .env, không tạo lại database).
 set -euo pipefail
@@ -13,7 +13,7 @@ set -euo pipefail
 SERVER_NAME="_"
 PHP_VERSION="8.4"
 WITH_MARIADB=0
-WITH_CAMERA=0
+WITH_CAMERA=1
 DB_USER=""
 DB_PASS=""
 WITH_NGINX=1
@@ -30,6 +30,7 @@ while [[ $# -gt 0 ]]; do
         --db-user) DB_USER="${2:?thiếu giá trị cho --db-user}"; shift 2 ;;
         --db-pass) DB_PASS="${2:?thiếu giá trị cho --db-pass}"; shift 2 ;;
         --with-camera) WITH_CAMERA=1; shift ;;
+        --no-camera) WITH_CAMERA=0; shift ;;
         --https) WITH_HTTPS=1; shift ;;
         --no-nginx) WITH_NGINX=0; shift ;;
         --no-build) BUILD_ASSETS=0; shift ;;
@@ -249,6 +250,15 @@ if [[ $WITH_MARIADB -eq 1 || -n $DB_USER ]]; then
     echo "Thông tin kết nối database lưu ở ${CRED_FILE}"
 fi
 
+log "Giám sát ổ đĩa (cảnh báo gần đầy / lỗi ổ đĩa)"
+apt-get install -y smartmontools || echo "Không cài được smartmontools: vẫn cảnh báo được dung lượng, nhưng không đọc được SMART." >&2
+cat > /etc/cron.d/qlbh-disk-health <<CRON
+# QLBH: kiểm tra sức khỏe ổ đĩa mỗi 15 phút, kết quả hiển thị trên website
+*/15 * * * * root /bin/bash ${APP_DIR}/scripts/disk-health.sh >/dev/null 2>&1
+CRON
+chmod 644 /etc/cron.d/qlbh-disk-health
+bash "$APP_DIR/scripts/disk-health.sh" || true
+
 if [[ $WITH_CAMERA -eq 1 ]]; then
     log "Nền tảng camera (Docker)"
     CAM_DIR="$APP_DIR/deploy/camera-platform"
@@ -264,6 +274,8 @@ if [[ $WITH_CAMERA -eq 1 ]]; then
         systemctl enable --now docker
         if docker compose version >/dev/null 2>&1; then
             (cd "$CAM_DIR" && docker compose up -d --build) || echo "Chạy docker compose chưa thành công, xem lỗi ở trên." >&2
+            # Tự chạy lại các container khi bật máy / khi Docker khởi động lại.
+            (cd "$CAM_DIR" && docker compose ps -q | xargs -r docker update --restart unless-stopped >/dev/null) || true
         elif command -v docker-compose >/dev/null 2>&1; then
             (cd "$CAM_DIR" && docker-compose up -d --build) || echo "Chạy docker-compose chưa thành công, xem lỗi ở trên." >&2
         else
@@ -271,6 +283,13 @@ if [[ $WITH_CAMERA -eq 1 ]]; then
         fi
     fi
 fi
+
+log "Tự chạy khi bật máy"
+for svc in cron nginx "$PHP_FPM_SERVICE" mariadb mysql docker; do
+    if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "^${svc}.service"; then
+        systemctl enable "$svc" >/dev/null 2>&1 && echo "  ✓ ${svc}: tự chạy khi bật máy"
+    fi
+done
 
 log "Xong. Mở ${SCHEME}://${IP:-<ip-máy-chủ>}/setup để tạo database và tài khoản quản trị."
 if [[ $WITH_HTTPS -eq 1 ]]; then

@@ -59,6 +59,9 @@ class HandleInertiaRequests extends Middleware
 
                 ],
 
+                // Cảnh báo ổ đĩa: chỉ gửi cho người có quyền quản lý sao lưu và chỉ khi có vấn đề.
+                'diskHealth' => fn () => $this->diskHealthFor($request, $isSetupRequest),
+
                 'flash' => [
                     'success' => fn () => session()->pull('success'),
                     'error' => fn () => session()->pull('error'),
@@ -69,5 +72,20 @@ class HandleInertiaRequests extends Middleware
 
             ]
         );
+    }
+
+    private function diskHealthFor(Request $request, bool $isSetupRequest): ?array
+    {
+        if ($isSetupRequest || ! $request->user() || ! $request->user()->can('backups.manage')) {
+            return null;
+        }
+
+        try {
+            $report = \App\Support\DiskHealth::report();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $report['level'] === 'ok' ? null : $report;
     }
 }
