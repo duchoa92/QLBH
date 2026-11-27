@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Chuẩn bị máy chủ Ubuntu 22.04/24.04 cho QLBH. Chạy một lần bằng root, sau đó mở http://<ip-máy-chủ>/setup để hoàn tất.
 #
-#   sudo bash scripts/install-ubuntu.sh [--php-version 8.4] [--server-name qlbh.local] [--https] [--with-mariadb] [--db-user admin --db-pass 'matkhau'] [--no-nginx] [--no-build]
+#   sudo bash scripts/install-ubuntu.sh [--php-version 8.4] [--server-name qlbh.local] [--https] [--with-mariadb] [--db-user admin --db-pass 'matkhau'] [--with-camera] [--no-nginx] [--no-build]
 #
 #   --db-user / --db-pass: tạo sẵn tài khoản MySQL/MariaDB (quyền với database tên bắt đầu bằng qlbh) để nhập vào trang /setup.
 #                          Bỏ --db-pass thì script sẽ hỏi mật khẩu. Không cần --with-mariadb nếu máy đã có MySQL.
+#   --with-camera: cài Docker và chạy nền tảng camera/nhận diện khuôn mặt (deploy/camera-platform), nếu thư mục này có trong dự án.
 #   --https: tạo CA nội bộ + chứng chỉ cho IP/tên máy chủ (camera điện thoại bắt buộc HTTPS); CA để tải ở /certs/rootCA.crt
 # Script chạy lại nhiều lần vẫn an toàn (không ghi đè .env, không tạo lại database).
 set -euo pipefail
@@ -12,6 +13,7 @@ set -euo pipefail
 SERVER_NAME="_"
 PHP_VERSION="8.4"
 WITH_MARIADB=0
+WITH_CAMERA=0
 DB_USER=""
 DB_PASS=""
 WITH_NGINX=1
@@ -27,6 +29,7 @@ while [[ $# -gt 0 ]]; do
         --with-mariadb) WITH_MARIADB=1; shift ;;
         --db-user) DB_USER="${2:?thiếu giá trị cho --db-user}"; shift 2 ;;
         --db-pass) DB_PASS="${2:?thiếu giá trị cho --db-pass}"; shift 2 ;;
+        --with-camera) WITH_CAMERA=1; shift ;;
         --https) WITH_HTTPS=1; shift ;;
         --no-nginx) WITH_NGINX=0; shift ;;
         --no-build) BUILD_ASSETS=0; shift ;;
@@ -111,7 +114,10 @@ mkdir -p storage/app/public storage/framework/{cache/data,sessions,views} storag
 chown -R "$WEB_USER":"$WEB_USER" storage bootstrap/cache database .env
 chmod -R u+rwX,g+rwX storage bootstrap/cache database
 chmod 640 .env
-[[ -e public/storage ]] || sudo -u "$WEB_USER" "$PHP_BIN" artisan storage:link --no-interaction || true
+# Thư mục public thuộc root (do clone bằng sudo) nên www-data không tạo được liên kết: tạo bằng root rồi trao quyền.
+if [[ ! -e public/storage && ! -L public/storage ]]; then
+    "$PHP_BIN" artisan storage:link --no-interaction && chown -h "$WEB_USER":"$WEB_USER" public/storage || true
+fi
 
 log "Cài cron cho ${WEB_USER} (Laravel scheduler, mỗi phút)"
 CRON_LINE="* * * * * cd '${APP_DIR}' && ${PHP_BIN} artisan schedule:run >> /dev/null 2>&1"
@@ -159,6 +165,7 @@ if [[ $WITH_NGINX -eq 1 ]]; then
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
+        fastcgi_read_timeout 600;
     }
     location ~ /\.(?!well-known).* { deny all; }
     location = /service-worker.js { add_header Cache-Control \"no-cache\"; try_files \$uri =404; }"
@@ -240,6 +247,29 @@ if [[ $WITH_MARIADB -eq 1 || -n $DB_USER ]]; then
         fi
     fi
     echo "Thông tin kết nối database lưu ở ${CRED_FILE}"
+fi
+
+if [[ $WITH_CAMERA -eq 1 ]]; then
+    log "Nền tảng camera (Docker)"
+    CAM_DIR="$APP_DIR/deploy/camera-platform"
+    if [[ ! -d $CAM_DIR ]]; then
+        echo "Không thấy thư mục deploy/camera-platform trong dự án, bỏ qua bước camera." >&2
+    else
+        if ! command -v docker >/dev/null 2>&1; then
+            apt-get install -y docker.io
+        fi
+        if ! docker compose version >/dev/null 2>&1; then
+            apt-get install -y docker-compose-v2 || apt-get install -y docker-compose-plugin || apt-get install -y docker-compose
+        fi
+        systemctl enable --now docker
+        if docker compose version >/dev/null 2>&1; then
+            (cd "$CAM_DIR" && docker compose up -d --build) || echo "Chạy docker compose chưa thành công, xem lỗi ở trên." >&2
+        elif command -v docker-compose >/dev/null 2>&1; then
+            (cd "$CAM_DIR" && docker-compose up -d --build) || echo "Chạy docker-compose chưa thành công, xem lỗi ở trên." >&2
+        else
+            echo "Không cài được Docker Compose. Cài thủ công rồi chạy: cd $CAM_DIR && sudo docker compose up -d --build" >&2
+        fi
+    fi
 fi
 
 log "Xong. Mở ${SCHEME}://${IP:-<ip-máy-chủ>}/setup để tạo database và tài khoản quản trị."

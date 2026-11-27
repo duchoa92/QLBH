@@ -62,6 +62,10 @@ class InstallerController extends Controller
 
     public function install(Request $request): RedirectResponse
     {
+        // Chạy migrate có thể mất vài chục giây: không để PHP tự ngắt giữa chừng (sẽ làm database dở dang).
+        @set_time_limit(0);
+        ignore_user_abort(true);
+
         $this->useSavedDatabasePassword($request);
         $data = $request->validate($this->databaseRules() + [
             'admin_username' => ['required', 'string', 'max:50', 'alpha_dash'],

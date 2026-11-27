@@ -42,6 +42,7 @@ Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch c
 | `--https` | Bật HTTPS (**cần để dùng camera điện thoại**) |
 | `--db-user admin` | Tên tài khoản database (chữ, số, gạch dưới) |
 | `--db-pass 'MatKhau123'` | Mật khẩu database. Để trong dấu nháy đơn `' '` |
+| `--with-camera` | Cài Docker và chạy nền tảng camera/nhận diện khuôn mặt (chỉ cần nếu dùng camera cửa) |
 | `--with-mariadb` | Cài thêm MariaDB nếu máy **chưa có** MySQL/MariaDB |
 | `--server-name qlbh.local` | Dùng tên miền thay vì IP |
 
