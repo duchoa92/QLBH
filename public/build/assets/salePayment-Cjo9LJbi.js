@@ -1,0 +1,1 @@
+const e=t=>!t||t.status==="cancelled"||Number(t.grand_total??t.total_amount??0)<=0?!1:Math.max(0,Number(t.paid_amount||0)-Number(t.old_debt_paid||0))<=.009,n=t=>e(t)?"debt":t?.payment_method;export{n as e,e as i};

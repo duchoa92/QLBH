@@ -1,0 +1,1 @@
+import{ae as i}from"./app-DJ4B-y8w.js";const o=t=>{if(!t)return null;const e=typeof t=="object"?t.url??t.path??t.image_url??null:t;if(!e)return null;const r=String(e);return/^(https?:|data:|blob:)/i.test(r)?r:r.startsWith("/")?i(r):i(`/storage/${r.replace(/^\/?(?:storage\/)?/,"")}`)};export{o as i};

@@ -1,0 +1,1 @@
+import{B as i,W as l,G as a}from"./app-DJ4B-y8w.js";function r(n,t,{debounce:u=500}={}){let e=null,o=null;i(()=>{o=l(n,()=>{clearTimeout(e),e=setTimeout(()=>{document.hidden||t()},u)})}),a(()=>{o?.(),clearTimeout(e)})}export{r as u};
