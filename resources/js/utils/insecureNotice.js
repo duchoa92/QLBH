@@ -19,10 +19,34 @@ const isImmersive = () => {
     }
 }
 
+// Thanh cố định ở đáy màn hình sẽ che chân trang, nên chừa chỗ trống bằng đúng chiều cao thanh để vẫn cuộn tới được nút cuối trang.
+let originalPaddingBottom = null
+let resizeObserver = null
+
+const reserveSpace = (bar) => {
+    if (originalPaddingBottom === null) originalPaddingBottom = document.body.style.paddingBottom
+    const apply = () => { document.body.style.paddingBottom = `${bar.offsetHeight}px` }
+    apply()
+    if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(apply)
+        resizeObserver.observe(bar)
+    }
+}
+
+const removeBar = () => {
+    document.getElementById('insecure-http-notice')?.remove()
+    resizeObserver?.disconnect()
+    resizeObserver = null
+    if (originalPaddingBottom !== null) {
+        document.body.style.paddingBottom = originalPaddingBottom
+        originalPaddingBottom = null
+    }
+}
+
 // Gỡ thanh cảnh báo nếu đang hiện mà người dùng vừa vào POS / toàn màn hình (gọi sau mỗi lần chuyển trang).
 export function syncInsecureNotice() {
     if (typeof document === 'undefined') return
-    if (isImmersive()) document.getElementById('insecure-http-notice')?.remove()
+    if (isImmersive()) removeBar()
 }
 
 // Truy cập bằng http:// (không phải máy chủ nội bộ) thì hiện thanh báo dẫn tới trang cài chứng chỉ để dùng https://.
@@ -66,12 +90,13 @@ export function installInsecureNotice() {
         close.setAttribute('aria-label', 'Đóng')
         close.style.cssText = 'border:0;background:transparent;color:#92400e;font-size:16px;cursor:pointer;padding:4px 8px'
         close.addEventListener('click', () => {
-            bar.remove()
+            removeBar()
             try { sessionStorage.setItem(DISMISS_KEY, '1') } catch (e) { /* bỏ qua */ }
         })
 
         bar.append(text, mkLink('Cài chứng chỉ để dùng https', guideUrl, true), mkLink('Mở bản https', httpsUrl, false), close)
         document.body.appendChild(bar)
+        reserveSpace(bar)
     }
 
     document.addEventListener('fullscreenchange', syncInsecureNotice)

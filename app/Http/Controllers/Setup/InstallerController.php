@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Setup;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
+use App\Support\ServerEnvironment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -24,7 +24,18 @@ class InstallerController extends Controller
 {
     public function index(): Response
     {
-        return Inertia::render('Setup/Index');
+        return Inertia::render('Setup/Index', [
+            'environment' => ServerEnvironment::report(),
+            'prepareResults' => session('setup_prepare'),
+        ]);
+    }
+
+    /** Tự chuẩn bị máy chủ (.env, thư mục, storage:link, cron trên Linux) rồi hiển thị lại kết quả. */
+    public function prepare(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['install_cron' => ['nullable', 'boolean']]);
+
+        return back()->with('setup_prepare', ServerEnvironment::prepare((bool) ($data['install_cron'] ?? false)));
     }
 
     public function test(Request $request): RedirectResponse
@@ -32,14 +43,15 @@ class InstallerController extends Controller
         $data = $request->validate($this->databaseRules());
 
         try {
+            $this->assertDriverAvailable($data['database_driver']);
             $this->probe($data);
         } catch (Throwable $exception) {
             return back()->withErrors([
-                'database' => 'Không thể kết nối: '.$exception->getMessage(),
+                'database' => 'Không thể kết nối: '.$this->describeDatabaseError($exception),
             ]);
         }
 
-        return back()->with('status', 'Đã kết nối được máy chủ. Database sẽ được tạo nếu chưa tồn tại khi bạn khởi tạo website.');
+        return back()->with('status', 'Kết nối thành công.');
     }
 
     public function install(Request $request): RedirectResponse
@@ -55,11 +67,14 @@ class InstallerController extends Controller
             }],
             'admin_email' => ['required', 'email', 'max:255'],
             'admin_password' => ['required', 'string', 'min:8', 'confirmed'],
+            'install_cron' => ['nullable', 'boolean'],
         ]);
 
-        $envPath = base_path('.env');
-        if (! is_file($envPath) || ! is_writable($envPath)) {
-            return back()->withErrors(['database' => 'Máy chủ không cho phép ghi file .env. Hãy cấp quyền ghi cho file này rồi thử lại.']);
+        try {
+            $this->assertDriverAvailable($data['database_driver']);
+            ServerEnvironment::ensureEnvFile();
+        } catch (Throwable $exception) {
+            return back()->withErrors(['database' => $exception->getMessage()]);
         }
 
         try {
@@ -82,15 +97,7 @@ class InstallerController extends Controller
                 throw new RuntimeException(trim(Artisan::output()) ?: 'Không thể tạo cấu trúc database.');
             }
 
-            $exitCode = Artisan::call('db:seed', [
-                '--class' => RolePermissionSeeder::class,
-                '--force' => true,
-                '--no-interaction' => true,
-            ]);
-            if ($exitCode !== 0) {
-                throw new RuntimeException(trim(Artisan::output()) ?: 'Không thể khởi tạo quyền quản trị.');
-            }
-
+            // Quyền và vai trò (Super Admin, Admin) đã được các migration tạo sẵn: không cần seeder.
             $admin = User::create([
                 'name' => $data['admin_name'],
                 'username' => $data['admin_username'],
@@ -111,11 +118,20 @@ class InstallerController extends Controller
         } catch (Throwable $exception) {
             report($exception);
             return back()->withErrors([
-                'database' => 'Cài đặt chưa hoàn tất: '.$exception->getMessage(),
+                'database' => 'Cài đặt chưa hoàn tất: '.$this->describeDatabaseError($exception),
             ]);
         }
 
-        return redirect()->route('login')->with('success', 'Thiết lập hoàn tất. Hãy đăng nhập bằng tài khoản quản trị vừa tạo.');
+        $notes = null;
+        if (! empty($data['install_cron']) && ServerEnvironment::isLinux()) {
+            [$cronOk, $cronMessage] = ServerEnvironment::installCron();
+            $notes = $cronOk ? $cronMessage : 'Chưa tự cài được lịch chạy nền: '.$cronMessage;
+        }
+
+        // Hiện màn hình "Thiết lập thành công" ngay tại trang cài đặt, người dùng bấm để sang đăng nhập.
+        return Inertia::render('Setup/Index', [
+            'done' => ['username' => $data['admin_username'], 'notes' => $notes],
+        ]);
     }
 
     private function databaseRules(): array
@@ -128,6 +144,38 @@ class InstallerController extends Controller
             'database_username' => ['nullable', 'string', 'max:255'],
             'database_password' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /** Giữ nguyên lỗi gốc nhưng thêm gợi ý cách xử lý cho các lỗi kết nối phổ biến. */
+    private function describeDatabaseError(Throwable $exception): string
+    {
+        $message = $exception->getMessage();
+        $linux = ServerEnvironment::isLinux();
+
+        if (stripos($message, 'refused') !== false || str_contains($message, '[2002]') || str_contains($message, 'Connection refused')) {
+            return $message.' → Máy chủ database chưa chạy hoặc sai Host/Cổng. '
+                .($linux
+                    ? 'Kiểm tra: sudo systemctl status mariadb (hoặc mysql), rồi sudo systemctl start mariadb.'
+                    : 'Với Laragon: bấm "Start All" và chờ MySQL báo đang chạy; nếu MySQL dùng cổng khác (ví dụ 3307) hãy nhập đúng cổng đó.');
+        }
+        if (str_contains($message, '[1045]') || stripos($message, 'Access denied') !== false) {
+            return $message.' → Sai tên người dùng hoặc mật khẩu database, hoặc user này chưa được phép đăng nhập từ máy này.';
+        }
+        if (str_contains($message, '[2002]') === false && stripos($message, 'getaddrinfo') !== false) {
+            return $message.' → Không phân giải được tên Host. Thử nhập 127.0.0.1.';
+        }
+
+        return $message;
+    }
+
+    private function assertDriverAvailable(string $driver): void
+    {
+        if (! extension_loaded('pdo_'.$driver)) {
+            $hint = ServerEnvironment::isLinux()
+                ? ' Trên Ubuntu: sudo apt install php'.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION.'-'.($driver === 'sqlite' ? 'sqlite3' : $driver).' rồi khởi động lại php-fpm.'
+                : '';
+            throw new RuntimeException("PHP chưa bật extension pdo_{$driver}.".$hint);
+        }
     }
 
     private function probe(array $data): void

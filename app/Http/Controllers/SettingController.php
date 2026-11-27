@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Support\DefaultPurchaseContract;
 use App\Support\DoorCameraAccess;
+use App\Support\MailSettings;
 use Symfony\Component\Process\Process;
 
 class SettingController extends Controller
@@ -119,6 +120,8 @@ class SettingController extends Controller
             'purchase_contract_defaults' => ['title' => DefaultPurchaseContract::TITLE, 'content' => DefaultPurchaseContract::CONTENT],
             'can_update_bank_settings' => $this->canUpdateBankSettings($request),
             'can_edit_settings' => $user?->can('settings.edit') ?? false,
+            // Cấu hình email gửi đi (SMTP) cho quên mật khẩu; không bao gồm mật khẩu.
+            'mail_settings' => $user?->can('settings.edit') ? MailSettings::forForm() : null,
             // Khóa camera tự sinh + địa chỉ máy chủ để hiện lệnh cài worker (chỉ người được sửa cài đặt).
             'door_camera' => $user?->can('settings.edit') ? DoorCameraSettingsController::info() : null,
             'can_manage_payment_accounts' => $user?->can('payment_accounts.manage') ?? false,

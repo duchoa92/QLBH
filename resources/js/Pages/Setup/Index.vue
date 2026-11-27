@@ -2,20 +2,43 @@
 import { computed, ref } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 
+const props = defineProps({
+    environment: { type: Object, default: () => ({ checks: [], drivers: {}, cron: {}, ready: true, os: '' }) },
+    prepareResults: { type: Array, default: null },
+    done: { type: Object, default: null },
+});
+
 const step = ref(0);
 const status = ref('');
 const showPassword = ref(false);
 const showConfirmation = ref(false);
 const showDatabasePassword = ref(false);
+const showEnvironment = ref(false);
+const preparing = ref(false);
 const page = usePage();
 const form = useForm({
     database_driver: 'mysql', database_host: '127.0.0.1', database_port: '3306',
     database_name: '', database_username: 'root', database_password: '',
     admin_username: 'admin', admin_name: '', admin_phone: '', admin_email: '',
     admin_password: '', admin_password_confirmation: '',
+    install_cron: props.environment.os === 'Linux',
 });
-const steps = ['Kết nối cơ sở dữ liệu', 'Tạo tài khoản quản trị', 'Xác nhận & hoàn tất'];
+const steps = ['Database', 'Quản trị', 'Xác nhận'];
 const errors = computed(() => page.props.errors ?? {});
+const isLinux = computed(() => props.environment.os === 'Linux');
+const failedChecks = computed(() => (props.environment.checks ?? []).filter((item) => !item.ok));
+const blockingChecks = computed(() => failedChecks.value.filter((item) => item.level === 'error'));
+const driverMissing = computed(() => props.environment.drivers?.[form.database_driver] === false);
+
+function prepareServer() {
+    preparing.value = true;
+    router.post('/setup/prepare', { install_cron: false }, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['environment', 'prepareResults'],
+        onFinish: () => { preparing.value = false; showEnvironment.value = true; },
+    });
+}
 
 function next() {
     status.value = '';
@@ -23,29 +46,31 @@ function next() {
         const required = form.database_driver === 'sqlite' ? ['database_name'] : ['database_host', 'database_name', 'database_username'];
         const missing = required.find((field) => !String(form[field] ?? '').trim());
         if (missing) {
-            form.setError(missing, 'Vui lòng điền trường bắt buộc.');
+            form.setError(missing, 'Bắt buộc');
+            return;
+        }
+        if (driverMissing.value) {
+            form.setError('database_driver', `PHP chưa bật pdo_${form.database_driver}`);
+            showEnvironment.value = true;
             return;
         }
     }
     if (step.value === 1) {
         const missing = ['admin_username', 'admin_name', 'admin_phone', 'admin_email', 'admin_password', 'admin_password_confirmation'].find((field) => !String(form[field] ?? '').trim());
         if (missing) {
-            form.setError(missing, 'Vui lòng điền trường bắt buộc.');
+            form.setError(missing, 'Bắt buộc');
             return;
         }
         if (form.admin_password.length < 8) {
-            form.setError('admin_password', 'Mật khẩu cần tối thiểu 8 ký tự.');
+            form.setError('admin_password', 'Tối thiểu 8 ký tự');
             return;
         }
         if (form.admin_password !== form.admin_password_confirmation) {
-            form.setError('admin_password_confirmation', 'Hai mật khẩu chưa trùng khớp.');
+            form.setError('admin_password_confirmation', 'Mật khẩu chưa khớp');
             return;
         }
     }
     form.clearErrors();
-    if (step.value === 1) {
-        status.value = '';
-    }
     step.value = Math.min(step.value + 1, 2);
 }
 function back() { status.value = ''; step.value = Math.max(0, step.value - 1); }
@@ -53,87 +78,180 @@ function testConnection() {
     status.value = '';
     form.post('/setup/test', {
         preserveScroll: true,
-        onSuccess: () => { status.value = page.props.flash?.status ?? ''; },
+        onSuccess: () => { status.value = page.props.flash?.status ?? 'Kết nối thành công.'; },
     });
 }
 function install() {
     form.post('/setup/install', {
         preserveScroll: true,
-        onSuccess: () => window.location.replace('/login'),
+        onSuccess: () => form.reset('admin_password', 'admin_password_confirmation', 'database_password'),
+        // Lỗi ở bước nào thì quay về đúng bước đó để sửa.
+        onError: (formErrors) => {
+            const keys = Object.keys(formErrors);
+            if (keys.some((key) => key.startsWith('database'))) step.value = 0;
+            else if (keys.some((key) => key.startsWith('admin'))) step.value = 1;
+        },
     });
 }
 function changeDriver() {
     form.database_port = form.database_driver === 'pgsql' ? '5432' : form.database_driver === 'mysql' ? '3306' : '';
     form.clearErrors();
 }
+function goLogin() {
+    window.location.href = route('login');
+}
 </script>
 
 <template>
-    <Head title="Thiết lập ban đầu" />
-    <div class="setup-shell">
-        <header class="topbar">
-            <a class="brand" href="/setup"><span class="brand-mark">N</span><span>NỀN TẢNG <i>/ SETUP</i></span></a>
-            <span class="secure">⌑&nbsp; Phiên thiết lập bảo mật</span>
-        </header>
-        <div class="layout">
-            <aside class="rail">
-                <div class="eyebrow">Chào mừng bạn</div>
-                <h1>Hãy bắt đầu với thiết lập ban đầu</h1>
-                <p>Chỉ mất vài phút để kết nối dữ liệu và chuẩn bị không gian làm việc.</p>
+    <Head title="Thiết lập" />
+    <div class="shell">
+        <header class="brand"><span class="mark">N</span><span>Thiết lập</span></header>
+
+        <main class="card">
+            <!-- Hoàn tất -->
+            <section v-if="done" class="done" role="status">
+                <div class="done-icon">✓</div>
+                <h1>Thiết lập thành công</h1>
+                <p class="done-sub">Tài khoản quản trị: <b>{{ done.username }}</b></p>
+                <p v-if="done.notes" class="note">{{ done.notes }}</p>
+                <button class="btn primary big" type="button" @click="goLogin">Đăng nhập</button>
+            </section>
+
+            <template v-else>
                 <ol class="steps">
                     <li v-for="(label, index) in steps" :key="label" :class="{ active: step === index, done: step > index }">
-                        <span class="stepnum">{{ step > index ? '✓' : index + 1 }}</span><span>{{ label }}</span>
+                        <span class="num">{{ step > index ? '✓' : index + 1 }}</span><span class="label">{{ label }}</span>
                     </li>
                 </ol>
-                <div class="rail-foot"><strong>Thiết lập một lần, sẵn sàng sử dụng</strong>Cấu hình sẽ được lưu an toàn trên máy chủ của bạn.</div>
-            </aside>
-            <main class="main">
-                <section v-if="step === 0" class="content">
-                    <div class="kicker"><i></i> BƯỚC 01 · KẾT NỐI</div>
-                    <h2>Kết nối cơ sở dữ liệu</h2>
-                    <p class="lead">Website cần cơ sở dữ liệu để lưu tài khoản và dữ liệu vận hành. Máy chủ sẽ tạo database nếu chưa tồn tại.</p>
-                    <div class="callout"><span>ⓘ</span><div><strong>Chưa có database? Không sao.</strong><p>Thông tin kết nối cần quyền tạo database mới. Trình cài đặt sẽ tạo bảng và cấu hình website sau khi kết nối thành công.</p></div></div>
-                    <div class="grid">
-                        <label>Loại cơ sở dữ liệu <b>*</b><select v-model="form.database_driver" @change="changeDriver"><option value="mysql">MySQL / MariaDB</option><option value="pgsql">PostgreSQL</option><option value="sqlite">SQLite</option></select></label>
-                        <label v-if="form.database_driver !== 'sqlite'">Máy chủ (Host) <b>*</b><input v-model="form.database_host" placeholder="127.0.0.1"><small>{{ form.errors.database_host }}</small></label>
-                        <label v-if="form.database_driver !== 'sqlite'">Cổng kết nối<input v-model="form.database_port" placeholder="3306"></label>
-                        <label>Tên database <b>*</b><input v-model="form.database_name" :placeholder="form.database_driver === 'sqlite' ? 'qlbh' : 'ten_database'"><small v-if="form.errors.database_name">{{ form.errors.database_name }}</small></label>
-                        <label v-if="form.database_driver !== 'sqlite'">Tên người dùng <b>*</b><input v-model="form.database_username" placeholder="ten_nguoi_dung"><small v-if="form.errors.database_username">{{ form.errors.database_username }}</small></label>
-                        <label v-if="form.database_driver !== 'sqlite'">Mật khẩu database<span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" placeholder="Nhập mật khẩu"><button type="button" @click="showDatabasePassword = !showDatabasePassword">{{ showDatabasePassword ? 'Ẩn' : 'Hiện' }}</button></span></label>
+
+                <!-- Bước 1: cơ sở dữ liệu -->
+                <section v-if="step === 0">
+                    <h1>Cơ sở dữ liệu</h1>
+
+                    <!-- Chỉ hiện khi máy chủ có vấn đề -->
+                    <div v-if="failedChecks.length" class="env" :class="{ bad: blockingChecks.length }">
+                        <span class="env-icon">!</span>
+                        <div class="env-text"><b>{{ blockingChecks.length ? 'Máy chủ chưa sẵn sàng' : 'Cần lưu ý' }}</b></div>
+                        <button class="btn ghost" type="button" @click="showEnvironment = !showEnvironment">{{ showEnvironment ? 'Ẩn' : 'Chi tiết' }}</button>
+                        <button class="btn primary sm" type="button" :disabled="preparing" @click="prepareServer">{{ preparing ? 'Đang cấu hình…' : 'Tự cấu hình' }}</button>
                     </div>
-                    <p v-if="errors.database" class="error-banner">{{ errors.database }}</p>
-                    <p v-if="status" class="success-banner">{{ status }}</p>
-                    <footer class="actions"><span class="note">Thông tin đăng nhập không được hiển thị trở lại.</span><div><button class="outline" type="button" :disabled="form.processing" @click="testConnection">↻ Kiểm tra kết nối</button><button class="primary" type="button" @click="next">Tiếp tục&nbsp; →</button></div></footer>
-                </section>
-                <section v-else-if="step === 1" class="content">
-                    <div class="kicker"><i></i> BƯỚC 02 · TÀI KHOẢN</div>
-                    <h2>Tạo tài khoản quản trị</h2>
-                    <p class="lead">Bạn có thể đăng nhập bằng tên đăng nhập, email hoặc số điện thoại.</p>
+                    <ul v-if="failedChecks.length && showEnvironment" class="checks">
+                        <li v-for="item in failedChecks" :key="item.key" :class="item.level">
+                            <span>{{ item.level === 'error' ? '✕' : '!' }}</span>
+                            <div>{{ item.label }}<small v-if="item.detail"> — {{ item.detail }}</small><code v-if="item.fix">{{ item.fix }}</code></div>
+                        </li>
+                    </ul>
+                    <ul v-if="prepareResults?.length" class="checks">
+                        <li v-for="result in prepareResults" :key="result.label" :class="result.ok ? 'ok' : 'error'"><span>{{ result.ok ? '✓' : '✕' }}</span><div>{{ result.label }}<small> — {{ result.message }}</small></div></li>
+                    </ul>
+
                     <div class="grid">
-                        <label>Tên đăng nhập <b>*</b><input v-model="form.admin_username" placeholder="admin" autocomplete="username"><small v-if="form.errors.admin_username">{{ form.errors.admin_username }}</small></label>
-                        <label>Họ và tên <b>*</b><input v-model="form.admin_name" placeholder="Nguyễn Văn An" autocomplete="name"><small v-if="form.errors.admin_name">{{ form.errors.admin_name }}</small></label>
-                        <label>Số điện thoại <b>*</b><input v-model="form.admin_phone" type="tel" placeholder="0912 345 678" autocomplete="tel"><small v-if="form.errors.admin_phone">{{ form.errors.admin_phone }}</small></label>
-                        <label>Email quản trị <b>*</b><input v-model="form.admin_email" type="email" placeholder="ban@congty.vn" autocomplete="email"><small v-if="form.errors.admin_email">{{ form.errors.admin_email }}</small></label>
-                        <label>Mật khẩu <b>*</b><span class="password"><input v-model="form.admin_password" :type="showPassword ? 'text' : 'password'" placeholder="Ít nhất 8 ký tự" autocomplete="new-password"><button type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Ẩn' : 'Hiện' }}</button></span><small v-if="form.errors.admin_password">{{ form.errors.admin_password }}</small></label>
-                        <label>Nhập lại mật khẩu <b>*</b><span class="password"><input v-model="form.admin_password_confirmation" :type="showConfirmation ? 'text' : 'password'" placeholder="Nhập lại mật khẩu" autocomplete="new-password"><button type="button" @click="showConfirmation = !showConfirmation">{{ showConfirmation ? 'Ẩn' : 'Hiện' }}</button></span><small v-if="form.errors.admin_password_confirmation">{{ form.errors.admin_password_confirmation }}</small></label>
+                        <label>Loại
+                            <select v-model="form.database_driver" @change="changeDriver"><option value="mysql">MySQL / MariaDB</option><option value="pgsql">PostgreSQL</option><option value="sqlite">SQLite</option></select>
+                            <small v-if="driverMissing || form.errors.database_driver">{{ form.errors.database_driver || `PHP chưa bật pdo_${form.database_driver}` }}</small>
+                        </label>
+                        <label>Tên database
+                            <input v-model="form.database_name" placeholder="qlbh"><small v-if="form.errors.database_name">{{ form.errors.database_name }}</small>
+                        </label>
+                        <template v-if="form.database_driver !== 'sqlite'">
+                            <label>Máy chủ<input v-model="form.database_host" placeholder="127.0.0.1"><small v-if="form.errors.database_host">{{ form.errors.database_host }}</small></label>
+                            <label>Cổng<input v-model="form.database_port" inputmode="numeric" placeholder="3306"></label>
+                            <label>Tài khoản<input v-model="form.database_username" placeholder="root"><small v-if="form.errors.database_username">{{ form.errors.database_username }}</small></label>
+                            <label>Mật khẩu
+                                <span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" autocomplete="off"><button type="button" @click="showDatabasePassword = !showDatabasePassword">{{ showDatabasePassword ? 'Ẩn' : 'Hiện' }}</button></span>
+                            </label>
+                        </template>
                     </div>
-                    <p v-if="errors.database" class="error-banner">{{ errors.database }}</p>
-                    <footer class="actions"><button class="outline" type="button" @click="back">← Quay lại</button><button class="primary" type="button" @click="next">Tiếp tục&nbsp; →</button></footer>
+                    <p v-if="errors.database" class="banner error">{{ errors.database }}</p>
+                    <p v-if="status" class="banner success">{{ status }}</p>
+                    <footer class="actions"><button class="btn outline" type="button" :disabled="form.processing" @click="testConnection">Kiểm tra kết nối</button><button class="btn primary" type="button" @click="next">Tiếp tục</button></footer>
                 </section>
-                <section v-else class="content">
-                    <div class="kicker"><i></i> BƯỚC 03 · RÀ SOÁT</div><h2>Kiểm tra lại thông tin</h2>
-                    <p class="lead">Mọi thứ đã sẵn sàng. Xác nhận cấu hình trước khi khởi tạo website.</p>
-                    <div class="summary"><div><h3>Cơ sở dữ liệu <button type="button" @click="step = 0">Chỉnh sửa</button></h3><p><span>Loại</span>{{ form.database_driver.toUpperCase() }}</p><p><span>Máy chủ</span>{{ form.database_driver === 'sqlite' ? 'SQLite trên máy chủ' : `${form.database_host}:${form.database_port}` }}</p><p><span>Database</span>{{ form.database_name }}</p><p><span>Người dùng</span>{{ form.database_driver === 'sqlite' ? '—' : form.database_username }}</p></div><div><h3>Tài khoản quản trị <button type="button" @click="step = 1">Chỉnh sửa</button></h3><p><span>Tên đăng nhập</span>{{ form.admin_username }}</p><p><span>Họ và tên</span>{{ form.admin_name }}</p><p><span>Số điện thoại</span>{{ form.admin_phone }}</p><p><span>Email</span>{{ form.admin_email }}</p></div></div>
-                    <div class="security">◈&nbsp; Mật khẩu được mã hóa và không hiển thị trong phần rà soát. Database hiện có dữ liệu sẽ không bị ghi đè.</div>
-                    <p v-if="errors.database" class="error-banner">{{ errors.database }}</p>
-                    <footer class="actions"><button class="outline" type="button" @click="back">← Quay lại</button><button class="primary" type="button" :disabled="form.processing" @click="install">{{ form.processing ? 'Đang khởi tạo…' : 'Khởi tạo website →' }}</button></footer>
+
+                <!-- Bước 2: quản trị viên -->
+                <section v-else-if="step === 1">
+                    <h1>Quản trị viên</h1>
+                    <div class="grid">
+                        <label>Tên đăng nhập<input v-model="form.admin_username" autocomplete="username"><small v-if="form.errors.admin_username">{{ form.errors.admin_username }}</small></label>
+                        <label>Họ và tên<input v-model="form.admin_name" autocomplete="name"><small v-if="form.errors.admin_name">{{ form.errors.admin_name }}</small></label>
+                        <label>Số điện thoại<input v-model="form.admin_phone" type="tel" autocomplete="tel"><small v-if="form.errors.admin_phone">{{ form.errors.admin_phone }}</small></label>
+                        <label>Email<input v-model="form.admin_email" type="email" autocomplete="email"><small v-if="form.errors.admin_email">{{ form.errors.admin_email }}</small></label>
+                        <label>Mật khẩu
+                            <span class="password"><input v-model="form.admin_password" :type="showPassword ? 'text' : 'password'" placeholder="Từ 8 ký tự" autocomplete="new-password"><button type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Ẩn' : 'Hiện' }}</button></span>
+                            <small v-if="form.errors.admin_password">{{ form.errors.admin_password }}</small>
+                        </label>
+                        <label>Nhập lại mật khẩu
+                            <span class="password"><input v-model="form.admin_password_confirmation" :type="showConfirmation ? 'text' : 'password'" autocomplete="new-password"><button type="button" @click="showConfirmation = !showConfirmation">{{ showConfirmation ? 'Ẩn' : 'Hiện' }}</button></span>
+                            <small v-if="form.errors.admin_password_confirmation">{{ form.errors.admin_password_confirmation }}</small>
+                        </label>
+                    </div>
+                    <footer class="actions"><button class="btn outline" type="button" @click="back">Quay lại</button><button class="btn primary" type="button" @click="next">Tiếp tục</button></footer>
                 </section>
-            </main>
-        </div>
+
+                <!-- Bước 3: xác nhận -->
+                <section v-else>
+                    <h1>Xác nhận</h1>
+                    <dl class="summary">
+                        <div><dt>Database</dt><dd>{{ form.database_driver.toUpperCase() }} · {{ form.database_name }}</dd><button type="button" @click="step = 0">Sửa</button></div>
+                        <div v-if="form.database_driver !== 'sqlite'"><dt>Máy chủ</dt><dd>{{ form.database_host }}:{{ form.database_port }} · {{ form.database_username }}</dd><button type="button" @click="step = 0">Sửa</button></div>
+                        <div><dt>Quản trị</dt><dd>{{ form.admin_username }} · {{ form.admin_name }}</dd><button type="button" @click="step = 1">Sửa</button></div>
+                        <div><dt>Liên hệ</dt><dd>{{ form.admin_phone }} · {{ form.admin_email }}</dd><button type="button" @click="step = 1">Sửa</button></div>
+                    </dl>
+                    <label v-if="isLinux" class="check"><input v-model="form.install_cron" type="checkbox"><span>Tự cài lịch chạy nền (cron)</span></label>
+                    <p v-if="errors.database" class="banner error">{{ errors.database }}</p>
+                    <footer class="actions"><button class="btn outline" type="button" :disabled="form.processing" @click="back">Quay lại</button><button class="btn primary big" type="button" :disabled="form.processing" @click="install">{{ form.processing ? 'Đang khởi tạo…' : 'Khởi tạo' }}</button></footer>
+                </section>
+            </template>
+        </main>
     </div>
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-:global(body){margin:0;background:#f6f7f5;color:#18231f;font-family:'DM Sans',sans-serif}.setup-shell{max-width:1180px;margin:auto;padding:24px 34px 52px}.topbar{height:48px;display:flex;align-items:center;justify-content:space-between;margin-bottom:30px}.brand{display:flex;align-items:center;gap:11px;color:#18231f;text-decoration:none;font:800 15px Manrope,sans-serif}.brand i{font-style:normal;color:#8e9a93;font-weight:500}.brand-mark{width:34px;height:34px;border-radius:11px;background:#157b59;display:grid;place-items:center;color:#fff}.secure{font-size:12px;color:#76827d}.layout{display:grid;grid-template-columns:290px minmax(0,1fr);min-height:640px;border:1px solid #e9ece8;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 22px 70px #1c332313}.rail{background:#f9faf8;border-right:1px solid #e6eae6;padding:42px 28px 28px;display:flex;flex-direction:column}.eyebrow,.kicker{font-size:10px;letter-spacing:1.3px;color:#84918b;font-weight:700}.rail h1{font:700 22px/1.35 Manrope,sans-serif;letter-spacing:-.6px;margin:14px 0 10px}.rail>p,.lead{font-size:13px;line-height:1.7;color:#76827d;margin:0}.steps{margin:38px 0 0;padding:0;list-style:none}.steps li{display:flex;gap:13px;position:relative;padding:0 0 25px;min-height:61px;color:#89948f;font-size:12px;font-weight:600}.steps li:not(:last-child):after{position:absolute;content:'';width:1px;background:#dde4de;left:13px;top:30px;bottom:0}.stepnum{flex:none;width:27px;height:27px;border-radius:50%;border:1px solid #dce3dd;background:#fff;display:grid;place-items:center;font-size:11px;z-index:1}.steps li.active{color:#18231f}.steps li.active .stepnum{background:#157b59;border-color:#157b59;color:#fff;box-shadow:0 0 0 4px #e9f4ef}.steps li.done{color:#157b59}.rail-foot{margin-top:auto;border-top:1px solid #e6eae6;padding-top:18px;font-size:11px;line-height:1.65;color:#85918a}.rail-foot strong{display:block;color:#4b5b53;margin-bottom:3px}.main{padding:43px clamp(28px,6vw,76px) 32px}.content{max-width:635px;margin:auto}.kicker{display:flex;align-items:center;gap:7px;color:#157b59}.kicker i{width:7px;height:7px;border-radius:50%;background:#42a67e}.content h2{font:700 clamp(24px,3vw,32px)/1.22 Manrope,sans-serif;letter-spacing:-1px;margin:12px 0 9px}.lead{margin-bottom:25px;max-width:560px}.callout{display:flex;gap:12px;padding:14px 15px;background:#f2f7f4;border:1px solid #e1eee6;border-radius:11px;margin-bottom:20px;color:#157b59}.callout strong{display:block;color:#18231f;font-size:12px;margin-bottom:3px}.callout p{color:#6c7b73;font-size:11px;line-height:1.55;margin:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid label{display:block;font-size:11px;font-weight:600;color:#43524a}.grid label b{color:#cf5c50}.grid input,.grid select{display:block;height:43px;width:100%;margin-top:7px;padding:0 12px;border:1px solid #dfe5e0;background:#fff;border-radius:8px;color:#26352d;font:12px 'DM Sans',sans-serif;outline:0}.grid input:focus,.grid select:focus{border-color:#63a98c;box-shadow:0 0 0 3px #e9f5ee}.grid small{display:block;color:#bc4a41;font-size:10px;margin-top:5px}.password{position:relative;display:block}.password input{padding-right:52px}.password button{position:absolute;right:9px;top:19px;background:none;border:0;color:#738078;font-size:10px;cursor:pointer}.actions{border-top:1px solid #e6eae6;padding-top:18px;margin-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px}.actions>div{display:flex;gap:9px}.actions button{border-radius:8px;padding:11px 15px;font:700 12px 'DM Sans',sans-serif;cursor:pointer}.primary{border:0;background:#157b59;color:white}.primary:hover{background:#0f6045}.primary:disabled{opacity:.6;cursor:wait}.outline{border:1px solid #dfe5e0;background:#fff;color:#385548}.note{font-size:10px;color:#8b9690}.error-banner,.success-banner{padding:10px 12px;border-radius:8px;font-size:11px;line-height:1.5}.error-banner{background:#fff2ef;color:#a2463a}.success-banner{background:#edf7f0;color:#247147}.summary{border:1px solid #e6eae6;border-radius:10px;overflow:hidden}.summary>div{padding:15px 16px;border-bottom:1px solid #e6eae6}.summary>div:last-child{border:0}.summary h3{display:flex;justify-content:space-between;margin:0 0 10px;font-size:11px}.summary h3 button{color:#157b59;border:0;background:none;font-size:10px;cursor:pointer}.summary p{display:grid;grid-template-columns:145px 1fr;gap:10px;font-size:11px;margin:7px 0}.summary p span{color:#87938c}.security{background:#faf7ef;border:1px solid #f0ead9;border-radius:9px;padding:12px 13px;margin-top:15px;color:#8a6b32;font-size:10px;line-height:1.55}@media(max-width:760px){.setup-shell{padding:15px 14px 30px}.topbar{margin-bottom:16px}.secure{font-size:0}.layout{grid-template-columns:1fr;min-height:0;border-radius:16px}.rail{padding:22px 22px 15px;border-right:0;border-bottom:1px solid #e6eae6}.rail h1{font-size:18px;margin:7px 0 5px}.rail>p{font-size:11px}.steps{display:flex;margin:20px 0 0;gap:0}.steps li{flex:1;padding:0;min-height:0;font-size:0;justify-content:center}.steps li:not(:last-child):after{height:1px;width:auto;left:50%;right:-50%;top:13px;bottom:auto}.stepnum{width:25px;height:25px;font-size:10px}.rail-foot{display:none}.main{padding:27px 19px 22px}.content h2{font-size:25px}.grid{gap:12px 10px}.actions{margin-top:18px}.note{display:none}}@media(max-width:440px){.grid{grid-template-columns:1fr}.summary p{grid-template-columns:110px 1fr}.actions button{padding:10px 12px}}
+:global(body){margin:0;background:#f4f6f4;color:#17231d;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:17px}
+.shell{max-width:880px;margin:0 auto;padding:36px 20px 72px}
+.brand{display:flex;align-items:center;gap:14px;font-weight:700;font-size:22px;margin-bottom:26px}
+.mark{width:48px;height:48px;border-radius:14px;background:#157b59;color:#fff;display:grid;place-items:center;font-size:24px}
+.card{background:#fff;border:1px solid #e3e8e4;border-radius:24px;padding:44px;box-shadow:0 18px 60px #1c33231a}
+h1{font-size:32px;line-height:1.2;margin:0 0 26px;letter-spacing:-.5px}
+.steps{list-style:none;margin:0 0 34px;padding:0;display:flex;gap:12px}
+.steps li{flex:1;display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:14px;background:#f4f6f4;color:#7d8a83;font-weight:600;font-size:17px}
+.steps li.active{background:#e6f4ee;color:#0f6045}
+.steps li.done{color:#157b59}
+.num{flex:none;width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid #d5ddd7;display:grid;place-items:center;font-size:15px}
+.steps li.active .num{background:#157b59;border-color:#157b59;color:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+label{display:block;font-size:16px;font-weight:600;color:#3d4d44}
+input,select{display:block;width:100%;box-sizing:border-box;height:58px;margin-top:9px;padding:0 16px;border:1px solid #cfd8d2;border-radius:14px;background:#fff;color:#17231d;font:inherit;font-size:18px;outline:0}
+input:focus,select:focus{border-color:#157b59;box-shadow:0 0 0 4px #e6f4ee}
+small{display:block;color:#b53f35;font-size:14px;margin-top:7px;font-weight:500}
+.password{position:relative;display:block}.password input{padding-right:76px}
+.password button{position:absolute;right:8px;top:17px;height:42px;padding:0 12px;background:none;border:0;color:#5f6f66;font:inherit;font-size:15px;cursor:pointer}
+.env{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:16px;background:#fff8e8;margin-bottom:14px;flex-wrap:wrap}
+.env.bad{background:#fff3f0}
+.env-icon{flex:none;width:34px;height:34px;border-radius:50%;background:#b0832f;color:#fff;display:grid;place-items:center;font-weight:700}
+.env.bad .env-icon{background:#c9493c}
+.env-text{flex:1;min-width:140px}.env-text b{font-size:17px}
+.checks{list-style:none;margin:0 0 16px;padding:16px 18px;border:1px solid #e3e8e4;border-radius:16px;display:grid;gap:12px;font-size:15px}
+.checks li{display:flex;gap:10px}.checks li>span{flex:none;width:16px;font-weight:700}
+.checks li.ok>span{color:#157b59}.checks li.error>span{color:#c9493c}.checks li.warning>span{color:#b0832f}
+.checks small{display:inline;color:#69786f;font-size:14px;font-weight:400}
+.checks code{display:block;margin-top:6px;padding:9px 11px;border-radius:8px;background:#17231d;color:#e8f5ee;font-size:13px;word-break:break-all;user-select:all}
+.actions{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:34px;padding-top:26px;border-top:1px solid #e9eee9}
+.btn{height:56px;padding:0 28px;border-radius:14px;font:inherit;font-size:18px;font-weight:700;cursor:pointer;border:1px solid transparent}
+.btn.primary{background:#157b59;color:#fff}.btn.primary:hover{background:#0f6045}.btn:disabled{opacity:.6;cursor:wait}
+.btn.outline{background:#fff;border-color:#cfd8d2;color:#2c4137}.btn.ghost{background:transparent;color:#2c4137;height:44px;padding:0 14px;font-size:16px}
+.btn.sm{height:44px;padding:0 18px;font-size:16px}
+.btn.big{height:60px;font-size:19px;padding:0 38px}
+.banner{margin:20px 0 0;padding:15px 18px;border-radius:14px;font-size:16px;line-height:1.5}
+.banner.error{background:#fff2ef;color:#9c3b30}.banner.success{background:#edf7f0;color:#1f6b42}
+.summary{margin:0;border:1px solid #e3e8e4;border-radius:16px;overflow:hidden}
+.summary>div{display:flex;align-items:center;gap:16px;padding:18px 20px;border-bottom:1px solid #e9eee9}.summary>div:last-child{border:0}
+.summary dt{width:120px;flex:none;color:#69786f;font-size:15px}.summary dd{margin:0;flex:1;font-weight:600;word-break:break-word}
+.summary button{background:none;border:0;color:#157b59;font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.check{display:flex;align-items:center;gap:12px;margin-top:20px;font-size:17px;font-weight:500;cursor:pointer}
+.check input{width:22px;height:22px;margin:0;accent-color:#157b59}
+.done{text-align:center;padding:34px 0 14px}
+.done-icon{width:104px;height:104px;margin:0 auto 26px;border-radius:50%;background:#157b59;color:#fff;display:grid;place-items:center;font-size:56px;box-shadow:0 0 0 12px #e6f4ee}
+.done h1{margin-bottom:12px}.done-sub{font-size:20px;color:#3d4d44;margin:0 0 6px}.done .note{color:#69786f;font-size:16px;margin:10px 0 0}
+.done .btn{margin-top:34px}
+@media(max-width:700px){.card{padding:24px 20px;border-radius:18px}.grid{grid-template-columns:1fr;gap:18px}.steps .label{display:none}.steps li{justify-content:center}.actions{flex-direction:column-reverse;align-items:stretch}.actions .btn{width:100%}.summary>div{flex-wrap:wrap}.summary dt{width:100%}h1{font-size:26px}}
 </style>

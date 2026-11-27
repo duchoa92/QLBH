@@ -8,6 +8,9 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\App;
 use App\Support\DataVersion;
 use App\Support\DefaultPurchaseContract;
+use App\Support\MailSettings;
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Notifications\Messages\MailMessage;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,6 +36,27 @@ class AppServiceProvider extends ServiceProvider
         $timezone = setting('app_timezone', config('app.timezone', 'Asia/Ho_Chi_Minh'));
         config(['app.timezone' => $timezone]);
         date_default_timezone_set($timezone);
+
+        // Email gửi đi (SMTP) cấu hình ở Thiết lập → Email gửi thư.
+        MailSettings::apply();
+
+        // Thư đặt lại mật khẩu bằng tiếng Việt.
+        ResetPassword::toMailUsing(function (object $notifiable, string $token): MailMessage {
+            $url = url(route('password.reset', [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false));
+            $minutes = (int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+
+            return (new MailMessage)
+                ->subject('Đặt lại mật khẩu')
+                ->greeting('Xin chào!')
+                ->line('Bạn nhận được thư này vì có yêu cầu đặt lại mật khẩu cho tài khoản của bạn.')
+                ->action('Đặt lại mật khẩu', $url)
+                ->line("Liên kết có hiệu lực trong {$minutes} phút.")
+                ->line('Nếu bạn không yêu cầu, hãy bỏ qua thư này.')
+                ->salutation('Trân trọng, '.setting('shop_name', config('app.name')));
+        });
 
         Inertia::share([
             // Mốc phiên bản dữ liệu lúc dựng trang: trình duyệt dùng làm mốc so sánh đầu tiên.

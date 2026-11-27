@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { scanImageData } from '@undecaf/zbar-wasm'
 import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -517,7 +517,7 @@ const readCapturedPhoto = async (event) => {
     }
 }
 
-const start = async () => {
+const start = async (allowRetry = true) => {
     prepareFeedback()
     open.value = true
     if (scanning.value) return
@@ -608,7 +608,17 @@ const start = async () => {
         cameraReady.value = true
         scanVideoWithZBar(session)
     } catch (cause) {
-        error.value = cause?.message || 'Không mở được camera. Hãy kiểm tra quyền truy cập camera.'
+        const busy = ['NotReadableError', 'TrackStartError', 'AbortError'].includes(cause?.name)
+        if (busy && allowRetry !== false && session === scanSession && open.value) {
+            // Camera có thể vừa được trang trước nhả ra chưa kịp: chờ một chút rồi mở lại 1 lần.
+            stop()
+            await new Promise(resolve => setTimeout(resolve, 700))
+            if (open.value) await start(false)
+            return
+        }
+        error.value = busy
+            ? 'Camera đang được trang hoặc ứng dụng khác sử dụng. Hãy đóng nơi đang mở camera rồi bấm Thử lại.'
+            : (cause?.message || 'Không mở được camera. Hãy kiểm tra quyền truy cập camera.')
         stop()
     }
 }
@@ -617,7 +627,32 @@ const close = () => {
     stop()
     open.value = false
 }
+// Rời tab / chuyển ứng dụng / rời trang: nhả camera ngay (camera chỉ cho một nơi dùng), quay lại thì mở lại.
+let resumeWhenVisible = false
+const handleVisibilityChange = () => {
+    if (document.visibilityState === 'hidden') {
+        if (open.value && scanning.value) {
+            resumeWhenVisible = true
+            stop()
+        }
+    } else if (resumeWhenVisible) {
+        resumeWhenVisible = false
+        if (open.value && !scanning.value) start()
+    }
+}
+const handlePageHide = () => {
+    resumeWhenVisible = false
+    stop()
+}
+
+onMounted(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', handlePageHide)
+})
+
 onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('pagehide', handlePageHide)
     stop()
 })
 

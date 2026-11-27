@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\DoorCameraSettingsController;
+use App\Http\Controllers\MailSettingsController;
 use App\Http\Controllers\Setup\InstallerController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\BackupCloudOAuthController;
@@ -41,6 +42,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 Route::get('/setup', [InstallerController::class, 'index'])->name('setup.index');
+Route::post('/setup/prepare', [InstallerController::class, 'prepare'])->name('setup.prepare');
 Route::post('/setup/test', [InstallerController::class, 'test'])->name('setup.test');
 Route::post('/setup/install', [InstallerController::class, 'install'])->name('setup.install');
 
@@ -83,6 +85,9 @@ Route::middleware(['auth'])->group(function () {
     // Settings
     Route::get('/settings', [SettingController::class, 'index'])->middleware('permission:settings.view')->name('settings.index');
     Route::post('/settings', [SettingController::class, 'update'])->middleware('permission:settings.edit|payment_accounts.manage|units.manage')->name('settings.update');
+    Route::post('/settings/mail', [MailSettingsController::class, 'update'])->middleware('permission:settings.edit')->name('settings.mail.update');
+    Route::delete('/settings/mail', [MailSettingsController::class, 'destroy'])->middleware('permission:settings.edit')->name('settings.mail.destroy');
+    Route::post('/settings/mail/test', [MailSettingsController::class, 'test'])->middleware('permission:settings.edit')->name('settings.mail.test');
     Route::get('/settings/door-camera/status', [DoorCameraSettingsController::class, 'status'])->middleware('permission:settings.edit')->name('settings.door-camera.status');
     Route::post('/settings/door-camera/key', [DoorCameraSettingsController::class, 'regenerateKey'])->middleware('permission:settings.edit')->name('settings.door-camera.key');
     Route::get('/settings/system-cleanup/scan', [SystemCleanupController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.cleanup.scan');

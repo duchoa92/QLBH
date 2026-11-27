@@ -290,7 +290,7 @@ const deleteRole = (role) => {
                 </div>
 
                 <p v-if="!permissionGroups.length" class="rounded-xl bg-amber-50 p-3 text-xs text-amber-800 border border-amber-200">
-                    Chưa có danh sách quyền. Vui lòng chạy bộ seeder phân quyền trên máy chủ.
+                    Chưa có danh sách quyền. Hãy chạy php artisan migrate trên máy chủ.
                 </p>
             </div>
 

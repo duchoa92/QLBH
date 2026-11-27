@@ -16,8 +16,9 @@ import SettingCollapse from './SettingCollapse.vue'
 import SettingBlock from './SettingBlock.vue'
 import DoorCameraSetup from './DoorCameraSetup.vue'
 import CloudStorageSettings from './CloudStorageSettings.vue'
+import MailSettings from './MailSettings.vue'
 import { mergeLabelTemplate } from '@/utils/printLabels'
-import { Plus, Save, Trash2, Store, DatabaseBackup, Cloud, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
+import { Plus, Save, Trash2, Mail, Store, DatabaseBackup, Cloud, ChevronRight, CreditCard, Boxes, Printer, QrCode, HardDrive, RefreshCw, Volume2, Award } from 'lucide-vue-next'
 import BackupsIndex from '@/Pages/Backups/Index.vue'
 import { VIET_QR_THEMES } from '@/Modules/POS/Payment/Utils/qrThemes'
 import { hasPaymentVoice, testPaymentVoice as playPaymentVoiceTest } from '@/Modules/POS/Payment/Utils/paymentAlerts'
@@ -30,6 +31,7 @@ const props = defineProps({
     banks: { type: Array, default: () => [] },
     can_update_bank_settings: Boolean,
     can_edit_settings: { type: Boolean, default: false },
+    mail_settings: { type: Object, default: null },
     door_camera: { type: Object, default: null },
     can_manage_payment_accounts: { type: Boolean, default: false },
     can_manage_inventory_settings: { type: Boolean, default: false },
@@ -166,6 +168,7 @@ const applySection = (section) => {
     else if (section === 'inventory' && props.can_manage_inventory_settings) activeModal.value = section
     else if (section === 'printing' && props.can_edit_settings) activeModal.value = section
     else if (section === 'loyalty' && props.can_edit_settings) activeModal.value = section
+    else if (section === 'mail' && props.can_edit_settings) activeModal.value = section
     else if (!section) activeModal.value = null
 }
 
@@ -449,6 +452,7 @@ const settingGroups = computed(() => [
         title: 'Cửa hàng',
         cards: [
             { key: 'system', title: 'Thông tin & hệ thống', description: 'Tên, địa chỉ, số điện thoại, tiền tệ, ngày giờ.', icon: Store, tone: 'bg-blue-50 text-blue-700', hover: 'hover:border-blue-300', visible: props.can_edit_settings },
+            { key: 'mail', title: 'Email gửi thư', description: 'SMTP để gửi liên kết quên mật khẩu.', icon: Mail, tone: 'bg-indigo-50 text-indigo-700', hover: 'hover:border-indigo-300', visible: props.can_edit_settings },
             { key: 'printing', title: 'In ấn', description: 'Hóa đơn, khổ giấy, tem sản phẩm, hợp đồng.', icon: Printer, tone: 'bg-sky-50 text-sky-700', hover: 'hover:border-sky-300', visible: props.can_edit_settings },
         ],
     },
@@ -1260,6 +1264,9 @@ const bankLockedText = computed(() =>
 
         <BaseModal v-if="activeModal === 'backups' && can_manage_backups" title="Sao lưu và khôi phục" size="xl" body-class="bg-slate-50 p-4 sm:p-5" @close="closeModal">
             <BackupsIndex hide-header :backups="backups" :cloud_connections="cloud_connections" :cloud_oauth="cloud_oauth" :schedule="schedule" :restore_preview="restore_preview" @manage-cloud="openModal('cloud')" />
+        </BaseModal>
+        <BaseModal v-if="activeModal === 'mail' && can_edit_settings" title="Email gửi thư" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">
+            <MailSettings :mail="mail_settings || {}" />
         </BaseModal>
         <BaseModal v-if="activeModal === 'cloud' && can_manage_backups" title="Kho lưu trữ đám mây" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">
             <CloudStorageSettings :connections="cloud_connections" :oauth="cloud_oauth" />
