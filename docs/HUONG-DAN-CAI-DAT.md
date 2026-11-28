@@ -35,13 +35,16 @@ Muốn không để lộ mật khẩu trong lệnh, bỏ `--db-pass`, script s�
 ```bash
 sudo bash scripts/install-ubuntu.sh --https --db-user admin
 ```
-Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch chạy nền, tường lửa, **Docker (camera)**, công cụ giám sát ổ đĩa **và tạo tài khoản database** đó. Các dịch vụ (nginx, PHP, MySQL, cron, Docker) được bật **tự chạy khi bật máy**. Chạy lại nhiều lần vẫn an toàn (chạy lại với mật khẩu mới sẽ đổi mật khẩu).
+Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch chạy nền, tường lửa, **Docker (camera)**, công cụ giám sát ổ đĩa **và tạo tài khoản database** đó. Các dịch vụ (nginx, PHP, MySQL, cron, Docker) được bật **tự chạy khi bật máy**. Nếu là **laptop**, script còn tắt chế độ ngủ và bỏ qua thao tác gập màn hình để website luôn chạy (nên cắm sạc thường xuyên). Chạy lại nhiều lần vẫn an toàn (chạy lại với mật khẩu mới sẽ đổi mật khẩu).
 
 | Tùy chọn | Tác dụng |
 |---|---|
 | `--https` | Bật HTTPS (**cần để dùng camera điện thoại**) |
 | `--db-user admin` | Tên tài khoản database (chữ, số, gạch dưới) |
 | `--db-pass 'MatKhau123'` | Mật khẩu database. Để trong dấu nháy đơn `' '` |
+| `--static-ip` | **Cố định IP** máy chủ (mặc định giữ IP hiện tại). Đặt IP khác: `--ip 192.168.100.124/24 --gateway 192.168.100.1` |
+| `--cloudflare-token <TOKEN>` | Cài **Cloudflare Tunnel** để truy cập từ internet (xem mục G) |
+| `--tailscale` | Cài **Tailscale** để chủ cửa hàng truy cập từ xa an toàn (xem mục G) |
 | `--no-camera` | **Không** cài Docker / nền tảng camera. Mặc định script **cài Docker** và chạy `deploy/camera-platform` (nếu thư mục này có trong dự án) |
 | `--with-mariadb` | Cài thêm MariaDB nếu máy **chưa có** MySQL/MariaDB |
 | `--server-name qlbh.local` | Dùng tên miền thay vì IP |
@@ -54,7 +57,8 @@ Script tự cài PHP, nginx, Composer, thư viện, quyền thư mục, lịch c
 ### Tự chạy khi bật máy và cảnh báo ổ đĩa
 
 - **Tự chạy khi bật máy:** script bật khởi động cùng hệ thống cho nginx, PHP-FPM, MySQL/MariaDB, cron và Docker (các container camera được đặt tự chạy lại). Bật máy lên là website dùng được, không cần gõ lệnh.
-- **Cảnh báo ổ đĩa ngay trên màn hình:** cứ 15 phút máy chủ kiểm tra ổ đĩa một lần. Khi ổ **đã dùng từ 85%** (vàng) hoặc **từ 95% / còn dưới 2 GB** (đỏ), hoặc có **lỗi đọc/ghi ổ đĩa**, **SMART báo hỏng**, **ổ bị chuyển sang chỉ đọc**, thanh cảnh báo hiện ở đầu mọi trang quản trị kèm nút **Sao lưu ngay**. Chỉ người có quyền *Quản lý sao lưu* nhìn thấy. Máy ảo thường không đọc được SMART, khi đó vẫn cảnh báo theo dung lượng và lỗi hệ thống.
+- **Cảnh báo ổ đĩa ngay trên màn hình:** cứ 15 phút máy chủ kiểm tra ổ đĩa một lần. Thanh cảnh báo hiện ở đầu các trang quản trị (người có quyền *Quản lý sao lưu* mới thấy), **nội dung lỗi hiện trước** (SMART báo hỏng, lỗi đọc/ghi ổ đĩa, ổ bị chuyển sang chỉ đọc), **dung lượng hiện bên dưới dạng thanh đồ họa** (xanh / vàng từ 85% / đỏ từ 95% hoặc còn dưới 2 GB) kèm nút **Sao lưu ngay**. Bấm **X** để thu gọn vào nút chức năng nổi. Máy ảo thường không đọc được SMART, khi đó vẫn cảnh báo theo dung lượng và lỗi hệ thống.
+- **Cảnh báo lịch chạy nền:** nếu cron ngừng chạy hơn 5 phút, website hiện thanh đỏ "Lịch chạy nền chưa hoạt động: sao lưu tự động KHÔNG chạy".
 
 ### Bước 3. Tạo tài khoản database bằng tay (chỉ khi không dùng `--db-user`)
 
@@ -113,7 +117,7 @@ Nếu đã chạy script với `--db-user`, hai ô **Tên người dùng** và *
 
 **2. Quản trị viên:** tên đăng nhập, họ tên, số điện thoại, email, mật khẩu (từ 8 ký tự). Các ô họ tên, số điện thoại, email có chữ gợi ý mờ (Đức Hòa, 0906064789, duchoa.92@gmail.com): bạn nhập thông tin thật của mình. Ghi nhớ tài khoản này.
 
-**3. Cửa hàng và hệ thống** (cài đặt luôn, sau này vẫn sửa được trong *Cài đặt*): **tên cửa hàng**, số điện thoại, địa chỉ (in trên hóa đơn), **ngôn ngữ** (Tiếng Việt / English), **múi giờ**, **định dạng ngày** (có hiện ví dụ ngày hôm nay), **định dạng số tiền** và **ký hiệu tiền tệ** (mặc định ₫).
+**3. Cửa hàng và hệ thống** (cài đặt luôn, sau này vẫn sửa được trong *Cài đặt*): **tên cửa hàng**, số điện thoại, địa chỉ (in trên hóa đơn), **ngôn ngữ** (Tiếng Việt / English), **múi giờ**, **định dạng ngày** (có hiện ví dụ ngày hôm nay), **định dạng số tiền** và **ký hiệu tiền tệ** (mặc định ₫). Cũng ở bước này có công tắc **Sao lưu tự động hằng ngày** (mặc định BẬT, 02:00): bật ngay từ khi cài, không phải vào Cài đặt.
 
 **4. Xác nhận:**
 - Ô **Lịch chạy nền (cron)** là công tắc có hiện rõ **✓ BẬT** (xanh) hoặc **✗ TẮT** (đỏ). Cron là "đồng hồ" chạy mỗi phút để website tự làm: **sao lưu tự động** theo giờ hẹn, **nhắc việc** lúc 08:00 mỗi ngày, **nhắc công nợ** sáng thứ Hai, **dọn dữ liệu cũ** hằng đêm. **Nên để BẬT**; nếu TẮT, các việc đó sẽ không tự chạy. Nếu script đã cài sẵn thì trang hiện "ĐÃ BẬT SẴN".
@@ -163,6 +167,80 @@ Sau khi cập nhật, trên điện thoại tải lại trang (hoặc xóa dữ 
 
 ---
 
+
+### Build giao diện ngay trên server (không cần build ở máy phát triển)
+
+Cập nhật bằng **một lệnh**, server tự lấy mã mới, cài thư viện, cập nhật database, **build giao diện** và xóa cache:
+```bash
+cd /var/www/qlbh
+sudo bash scripts/update.sh
+```
+- Lần đầu server tự cài Node.js 22. Build mất khoảng 1–5 phút; máy ít RAM (dưới 1,5 GB) script tạo thêm swap 2 GB tạm thời.
+- Đã đẩy sẵn `public/build` lên GitHub thì dùng `sudo bash scripts/update.sh --no-build` cho nhanh.
+- Chọn **một** cách để tránh xung đột: (a) build trên server và để `/public/build` trong `.gitignore`, hoặc (b) build ở máy phát triển và đẩy `public/build` lên GitHub. Script xử lý được cả hai.
+- Muốn build lại khi cài: `sudo bash scripts/install-ubuntu.sh --rebuild`.
+
+## G. Mạng: IP tĩnh và truy cập từ internet
+
+### G1. Cố định IP cho laptop làm máy chủ
+
+Nếu IP đổi (khi khởi động lại máy hoặc router), các máy khác sẽ không vào được. Cố định IP bằng **một** trong hai cách:
+
+- **Cách 1 (khuyến nghị): dùng script.** Giữ nguyên IP hiện tại nhưng chuyển sang IP tĩnh:
+  ```bash
+  cd /var/www/qlbh
+  sudo bash scripts/set-static-ip.sh
+  ```
+  Muốn đặt IP khác (cùng dải mạng, chưa có thiết bị nào dùng):
+  ```bash
+  sudo bash scripts/set-static-ip.sh --ip 192.168.100.124/24 --gateway 192.168.100.1 --dns 8.8.8.8,1.1.1.1
+  ```
+  Script tự kiểm tra mạng sau khi đổi và **tự quay lại cấu hình cũ nếu mất kết nối**. Muốn quay về tự động nhận IP: `sudo bash scripts/set-static-ip.sh --revert`.
+- **Cách 2: trên router** đặt "DHCP reservation" / "Gắn IP theo địa chỉ MAC" cho laptop. Nên làm thêm cả khi đã dùng cách 1, để router không cấp IP đó cho thiết bị khác.
+
+Có thể gộp vào lệnh cài: `sudo bash scripts/install-ubuntu.sh --https --db-user admin --static-ip`.
+**Sau khi đổi IP**, nếu dùng HTTPS hãy chạy lại `sudo bash scripts/install-ubuntu.sh --https` để cấp lại chứng chỉ cho IP mới (điện thoại không cần cài lại chứng chỉ gốc).
+
+### G2. Truy cập từ internet (ngoài cửa hàng)
+
+Có 2 cách, **không cần mở cổng trên router** (an toàn hơn mở cổng trực tiếp):
+
+**Cách A. Cloudflare Tunnel** (có tên miền riêng, HTTPS hợp lệ, điện thoại **không cần cài chứng chỉ**):
+1. Có tài khoản Cloudflare (miễn phí) và một tên miền đã thêm vào Cloudflare.
+2. Zero Trust → **Networks → Tunnels → Create a tunnel** → chọn *Cloudflared* → đặt tên → sao chép **token** (chuỗi dài sau `service install`).
+3. Trên server chạy (thay `<TOKEN>`):
+   ```bash
+   cd /var/www/qlbh
+   sudo bash scripts/install-ubuntu.sh --https --db-user admin --cloudflare-token '<TOKEN>'
+   ```
+4. Trong tunnel, tab **Public hostname** → thêm: tên miền (ví dụ `shop.tenmien.com`), **Service = HTTPS**, **URL = `localhost:443`**, mở *Additional settings → TLS* bật **No TLS Verify**. (Không dùng `--https` thì chọn HTTP và `localhost:80`.)
+5. Mở `https://shop.tenmien.com` từ bất kỳ đâu. Tunnel tự chạy khi bật máy.
+
+**Cách B. Tailscale** (mạng riêng, chỉ thiết bị của bạn vào được, không cần tên miền):
+```bash
+sudo bash scripts/install-ubuntu.sh --https --db-user admin --tailscale
+```
+Mở đường link hiện ra để đăng nhập, rồi cài ứng dụng Tailscale trên điện thoại/máy tính cùng tài khoản, truy cập `https://<địa chỉ Tailscale của máy chủ>`.
+
+> **An toàn:** khi để website ra internet, hãy đặt mật khẩu quản trị mạnh, không dùng tên `admin` với mật khẩu dễ đoán, và nên bật **Cloudflare Access** (đăng nhập bằng email) trước website nếu dùng Cloudflare.
+
+## H. Kiểm tra nhanh khi có sự cố (sao lưu tự động, mạng…)
+
+```bash
+cd /var/www/qlbh
+sudo bash scripts/qlbh-doctor.sh
+```
+Lệnh này kiểm tra và báo ✓ / ✗ cho: IP tĩnh, internet và DNS, truy cập từ xa, các dịch vụ (đang chạy và tự chạy khi bật máy), **lịch chạy nền (cron)**, **sao lưu tự động** (đang bật không, lần gần nhất, lỗi gần nhất, file mới nhất), ổ đĩa.
+
+**Sao lưu tự động không chạy thì kiểm tra theo thứ tự:**
+1. Công tắc **Sao lưu tự động** trong *Cài đặt → Sao lưu* phải **BẬT** (cài mới đã bật sẵn).
+2. **Lịch chạy nền (cron) phải đang chạy**: nếu không, website hiện thanh đỏ "Lịch chạy nền chưa hoạt động". Chạy lại `sudo bash scripts/install-ubuntu.sh`.
+3. Máy phải **đang bật** vào giờ sao lưu (mặc định 02:00). Máy tắt/ngủ vào giờ đó thì bản sao lưu được tạo ở lần chạy kế tiếp sau giờ hẹn trong ngày.
+4. Thư mục `storage` phải thuộc `www-data`: `sudo chown -R www-data:www-data /var/www/qlbh/storage`.
+5. Xem lỗi gần nhất ở trang *Sao lưu* hoặc trong `storage/logs/laravel.log`.
+
+---
+
 ## F. Lỗi thường gặp
 
 | Hiện tượng | Cách xử lý |
@@ -178,6 +256,7 @@ Sau khi cập nhật, trên điện thoại tải lại trang (hoặc xóa dữ 
 | 419 Page Expired | Chỉ dùng một địa chỉ (IP **hoặc** tên miền), xóa cookie. |
 | `git clone`: "destination path already exists" | Thư mục đã có nội dung. Đã clone rồi thì dùng `git pull` (mục E). Muốn clone lại: `sudo rm -rf /var/www/qlbh`. |
 | `git clone`: "Authentication failed" | Kho riêng tư, dùng token (bước A1). |
+| Sao lưu tự động không chạy | Chạy `sudo bash scripts/qlbh-doctor.sh` và xem mục H. |
+| IP máy chủ bị đổi, không vào được | Cố định IP: mục G1. |
 | Camera không mở | Dùng `https://`, đã cài chứng chỉ (mục D), cho phép quyền camera. |
-| Sao lưu tự động không chạy | Kiểm tra `sudo crontab -u www-data -l` (Ubuntu) hoặc Task Scheduler *QLBH Laravel Scheduler* (Windows); máy phải đang bật. |
 | Điện thoại hiện trang offline | Chờ máy chủ chạy xong rồi tải lại; nếu vẫn lỗi, xóa dữ liệu trang web. |

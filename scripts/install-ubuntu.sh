@@ -5,6 +5,10 @@
 #
 #   --db-user / --db-pass: tạo sẵn tài khoản MySQL/MariaDB (quyền với database tên bắt đầu bằng qlbh) để nhập vào trang /setup.
 #                          Bỏ --db-pass thì script sẽ hỏi mật khẩu. Không cần --with-mariadb nếu máy đã có MySQL.
+#   --static-ip [--ip 192.168.x.y/24 --gateway 192.168.x.1 --dns 8.8.8.8,1.1.1.1]: cố định IP máy chủ (mặc định giữ IP hiện tại).
+#   --cloudflare-token <TOKEN>: cài Cloudflare Tunnel để truy cập từ internet (HTTPS hợp lệ, không cần mở cổng router).
+#   --tailscale [--tailscale-key <KEY>]: cài Tailscale (mạng riêng) để chủ cửa hàng truy cập từ xa an toàn.
+#   --rebuild: build lại giao diện ngay trên server (mặc định chỉ build khi chưa có public/build). Cập nhật sau này: sudo bash scripts/update.sh
 #   --no-camera: KHÔNG cài Docker / nền tảng camera (mặc định script cài Docker và chạy deploy/camera-platform nếu thư mục này có trong dự án).
 #   --https: tạo CA nội bộ + chứng chỉ cho IP/tên máy chủ (camera điện thoại bắt buộc HTTPS); CA để tải ở /certs/rootCA.crt
 # Script chạy lại nhiều lần vẫn an toàn (không ghi đè .env, không tạo lại database).
@@ -14,11 +18,17 @@ SERVER_NAME="_"
 PHP_VERSION="8.4"
 WITH_MARIADB=0
 WITH_CAMERA=1
+STATIC_IP=0
+STATIC_ARGS=()
+CF_TOKEN=""
+WITH_TAILSCALE=0
+TS_KEY=""
 DB_USER=""
 DB_PASS=""
 WITH_NGINX=1
 WITH_HTTPS=0
 BUILD_ASSETS=1
+FORCE_BUILD=0
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_USER="www-data"
 
@@ -31,10 +41,18 @@ while [[ $# -gt 0 ]]; do
         --db-pass) DB_PASS="${2:?thiếu giá trị cho --db-pass}"; shift 2 ;;
         --with-camera) WITH_CAMERA=1; shift ;;
         --no-camera) WITH_CAMERA=0; shift ;;
+        --static-ip) STATIC_IP=1; shift ;;
+        --ip) STATIC_IP=1; STATIC_ARGS+=(--ip "${2:?thiếu giá trị cho --ip}"); shift 2 ;;
+        --gateway) STATIC_ARGS+=(--gateway "${2:?thiếu giá trị cho --gateway}"); shift 2 ;;
+        --dns) STATIC_ARGS+=(--dns "${2:?thiếu giá trị cho --dns}"); shift 2 ;;
+        --cloudflare-token) CF_TOKEN="${2:?thiếu giá trị cho --cloudflare-token}"; shift 2 ;;
+        --tailscale) WITH_TAILSCALE=1; shift ;;
+        --tailscale-key) WITH_TAILSCALE=1; TS_KEY="${2:?thiếu giá trị cho --tailscale-key}"; shift 2 ;;
         --https) WITH_HTTPS=1; shift ;;
         --no-nginx) WITH_NGINX=0; shift ;;
         --no-build) BUILD_ASSETS=0; shift ;;
-        -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+        --rebuild) FORCE_BUILD=1; shift ;;
+        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
         *) echo "Tham số không hợp lệ: $1" >&2; exit 2 ;;
     esac
 done
@@ -48,8 +66,19 @@ if ! grep -qi 'ubuntu' /etc/os-release; then
     exit 1
 fi
 
-export DEBIAN_FRONTEND=noninteractive
 log() { printf '\n==> %s\n' "$*"; }
+
+# Cần internet để tải PHP, thư viện, Docker...
+if ! getent hosts archive.ubuntu.com >/dev/null 2>&1 || ! (curl -fsS -m 8 -o /dev/null https://archive.ubuntu.com 2>/dev/null || ping -c1 -W3 1.1.1.1 >/dev/null 2>&1); then
+    echo "CẢNH BÁO: máy chủ chưa ra được internet (hoặc DNS lỗi). Kiểm tra dây mạng/Wi-Fi/router rồi chạy lại; bước tải gói sẽ thất bại." >&2
+fi
+
+if [[ $STATIC_IP -eq 1 ]]; then
+    log "Cố định địa chỉ IP"
+    bash "$APP_DIR/scripts/set-static-ip.sh" "${STATIC_ARGS[@]}" || echo "Chưa cố định được IP (xem lỗi ở trên). Chạy riêng: sudo bash scripts/set-static-ip.sh" >&2
+fi
+
+export DEBIAN_FRONTEND=noninteractive
 
 log "Cài gói hệ thống"
 apt-get update -y
@@ -100,7 +129,7 @@ if ! grep -qE '^APP_KEY=base64:' .env; then
     "$PHP_BIN" artisan key:generate --force --no-interaction
 fi
 
-if [[ $BUILD_ASSETS -eq 1 && ! -d public/build && -f package.json ]]; then
+if [[ $BUILD_ASSETS -eq 1 && ( $FORCE_BUILD -eq 1 || ! -d public/build ) && -f package.json ]]; then
     log "Build giao diện (cần Node.js)"
     if ! command -v npm >/dev/null 2>&1; then
         curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -281,6 +310,57 @@ if [[ $WITH_CAMERA -eq 1 ]]; then
         else
             echo "Không cài được Docker Compose. Cài thủ công rồi chạy: cd $CAM_DIR && sudo docker compose up -d --build" >&2
         fi
+    fi
+fi
+
+if ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+    log "Máy xách tay: không tự ngủ khi gập màn hình (để website luôn chạy)"
+    mkdir -p /etc/systemd/logind.conf.d
+    cat > /etc/systemd/logind.conf.d/qlbh-laptop.conf <<'LOGIND'
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+LOGIND
+    systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1 || true
+    systemctl kill -s HUP systemd-logind >/dev/null 2>&1 || true
+    echo "  ✓ Đã tắt ngủ/ngủ đông và bỏ qua thao tác gập màn hình. Nên cắm sạc thường xuyên."
+fi
+
+if [[ -n $CF_TOKEN ]]; then
+    log "Truy cập từ internet qua Cloudflare Tunnel"
+    if ! command -v cloudflared >/dev/null 2>&1; then
+        mkdir -p --mode=0755 /usr/share/keyrings
+        if curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg 2>/dev/null; then
+            echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
+            apt-get update && apt-get install -y cloudflared || true
+        fi
+        if ! command -v cloudflared >/dev/null 2>&1; then
+            ARCH="$(dpkg --print-architecture)"
+            curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}.deb" -o /tmp/cloudflared.deb && dpkg -i /tmp/cloudflared.deb || true
+        fi
+    fi
+    if command -v cloudflared >/dev/null 2>&1; then
+        cloudflared service uninstall >/dev/null 2>&1 || true
+        cloudflared service install "$CF_TOKEN" && systemctl enable --now cloudflared >/dev/null 2>&1
+        echo "  ✓ Cloudflare Tunnel đã cài và tự chạy khi bật máy."
+        echo "    Trên trang Cloudflare Zero Trust → Networks → Tunnels → tunnel này → Public hostname:"
+        echo "    đặt tên miền, Service = HTTPS, URL = localhost:443, bật 'No TLS Verify' (nếu dùng --https) hoặc HTTP + localhost:80 (nếu không dùng --https)."
+    else
+        echo "Không cài được cloudflared. Cài thủ công theo hướng dẫn của Cloudflare rồi chạy: sudo cloudflared service install <TOKEN>" >&2
+    fi
+fi
+
+if [[ $WITH_TAILSCALE -eq 1 ]]; then
+    log "Truy cập từ xa qua Tailscale"
+    command -v tailscale >/dev/null 2>&1 || curl -fsSL https://tailscale.com/install.sh | sh || true
+    if command -v tailscale >/dev/null 2>&1; then
+        systemctl enable --now tailscaled >/dev/null 2>&1 || true
+        if [[ -n $TS_KEY ]]; then tailscale up --authkey "$TS_KEY" || true; else echo "  Mở đường link hiện ra bên dưới trên điện thoại/máy tính để đăng nhập Tailscale:"; tailscale up || true; fi
+        echo "  ✓ Địa chỉ Tailscale của máy chủ: $(tailscale ip -4 2>/dev/null | head -n1) (cài Tailscale trên điện thoại/máy khác rồi mở https://<địa chỉ này>)"
+    else
+        echo "Không cài được Tailscale. Xem https://tailscale.com/download/linux" >&2
     fi
 fi
 

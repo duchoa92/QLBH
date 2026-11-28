@@ -21,6 +21,7 @@ import { globalSearchDialogOpen } from '@/Stores/globalSearch'
 import NotificationBell from '@/Components/NotificationBell.vue'
 import WorkShiftAutoOpen from '@/Components/WorkShiftAutoOpen.vue'
 import DiskHealthBanner from '@/Components/DiskHealthBanner.vue'
+import SchedulerBanner from '@/Components/SchedulerBanner.vue'
 import { openModal } from '@/Stores/modal'
 import { prepareOpenPos } from '@/utils/pos'
 import { imageUrl } from '@/utils/imageUrl'
@@ -349,6 +350,7 @@ onBeforeUnmount(() => {
                 <div class="px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3 sm:pb-3 sm:pt-1.5">
                     <div class="mx-auto w-full max-w-[1760px] space-y-3">
                         <DiskHealthBanner />
+                        <SchedulerBanner />
                         <slot :key="page.url" />
                     </div>
                 </div>

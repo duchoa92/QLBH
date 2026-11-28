@@ -19,7 +19,7 @@ function shopLines(shop) {
     return ['', '[Cửa hàng và hệ thống]', `Tên cửa hàng: ${shop.name}`,
         shop.phone ? `Điện thoại: ${shop.phone}` : null, shop.address ? `Địa chỉ: ${shop.address}` : null,
         `Ngôn ngữ: ${localeLabels[shop.locale]}`, `Múi giờ: ${timezoneLabels[shop.timezone]}`,
-        `Định dạng ngày: ${formatDate(shop.date_format)}`, `Tiền tệ: ${shop.currency}`].filter((line) => line !== null);
+        `Định dạng ngày: ${formatDate(shop.date_format)}`, `Tiền tệ: ${shop.currency}`, `Sao lưu tự động: ${shop.backup_enabled ? 'Hằng ngày lúc ' + shop.backup_time : 'Tắt'}`].filter((line) => line !== null);
 }
 function systemLines(system) {
     if (!system) return [];
@@ -94,7 +94,7 @@ const form = useForm({
     admin_username: 'admin', admin_name: '', admin_phone: '', admin_email: '',
     admin_password: '', admin_password_confirmation: '',
     shop_name: '', shop_phone: '', shop_address: '',
-    app_locale: 'vi', app_timezone: 'Asia/Ho_Chi_Minh', date_format: 'd/m/Y', currency_symbol: '₫', currency_format: 'vi-VN',
+    app_locale: 'vi', app_timezone: 'Asia/Ho_Chi_Minh', date_format: 'd/m/Y', currency_symbol: '₫', currency_format: 'vi-VN', backup_enabled: true, backup_time: '02:00',
     install_cron: props.environment.os === 'Linux' && props.environment.cron?.installed !== true,
 });
 const steps = ['Database', 'Quản trị', 'Cửa hàng', 'Xác nhận'];
@@ -231,6 +231,7 @@ function goLogin() {
                             <div><dt>Múi giờ</dt><dd>{{ timezoneLabels[done.shop.timezone] }}</dd></div>
                             <div><dt>Định dạng ngày</dt><dd>{{ formatDate(done.shop.date_format) }}</dd></div>
                             <div><dt>Tiền tệ</dt><dd>{{ done.shop.currency }} · {{ currencyFormats[done.shop.currency_format] }}</dd></div>
+                            <div><dt>Sao lưu tự động</dt><dd :class="done.shop.backup_enabled ? 'good' : 'warn'">{{ done.shop.backup_enabled ? `✓ Hằng ngày lúc ${done.shop.backup_time}` : '✗ Đang tắt' }}</dd></div>
                         </dl>
                     </template>
                     <h2>Cơ sở dữ liệu</h2>
@@ -362,6 +363,16 @@ function goLogin() {
                             <select v-model="form.currency_format"><option v-for="(label, value) in currencyFormats" :key="value" :value="value">{{ label }}</option></select>
                         </label>
                         <label>Ký hiệu tiền tệ<input v-model="form.currency_symbol" placeholder="ví dụ: ₫" maxlength="12"><small v-if="form.errors.currency_symbol">{{ form.errors.currency_symbol }}</small></label>
+                        <div class="backup-box" :class="{ on: form.backup_enabled }" style="grid-column:1/-1">
+                            <label class="switch">
+                                <input v-model="form.backup_enabled" type="checkbox">
+                                <span class="track" aria-hidden="true"><span class="knob"></span></span>
+                                <span class="state" :class="{ on: form.backup_enabled }">{{ form.backup_enabled ? '✓ BẬT' : '✗ TẮT' }}</span>
+                                <b>Sao lưu tự động hằng ngày</b>
+                            </label>
+                            <label v-if="form.backup_enabled" class="backup-time">Giờ sao lưu<input v-model="form.backup_time" type="time"></label>
+                            <p class="cron-desc">Tự tạo bản sao lưu dữ liệu mỗi ngày (cần "Lịch chạy nền" bật). Nên bật; có thể đổi tần suất, thêm lưu lên đám mây trong <b>Cài đặt → Sao lưu</b>.</p>
+                        </div>
                     </div>
                     <footer class="actions"><button class="btn outline" type="button" @click="back">Quay lại</button><button class="btn primary" type="button" @click="next">Tiếp tục</button></footer>
                 </section>
@@ -372,7 +383,7 @@ function goLogin() {
                         <div><dt>Database</dt><dd>{{ form.database_driver.toUpperCase() }} · {{ form.database_name }}</dd><button type="button" @click="step = 0">Sửa</button></div>
                         <div v-if="form.database_driver !== 'sqlite'"><dt>Máy chủ</dt><dd>{{ form.database_host }}:{{ form.database_port }} · {{ form.database_username }}</dd><button type="button" @click="step = 0">Sửa</button></div>
                         <div><dt>Quản trị</dt><dd>{{ form.admin_username }} · {{ form.admin_name }}</dd><button type="button" @click="step = 1">Sửa</button></div>
-                        <div><dt>Cửa hàng</dt><dd>{{ form.shop_name }} · {{ localeLabels[form.app_locale] }} · {{ formatDate(form.date_format) }} · {{ form.currency_symbol }}</dd><button type="button" @click="step = 2">Sửa</button></div>
+                        <div><dt>Cửa hàng</dt><dd>{{ form.shop_name }} · {{ localeLabels[form.app_locale] }} · {{ formatDate(form.date_format) }} · {{ form.currency_symbol }} · Sao lưu {{ form.backup_enabled ? 'tự động ' + form.backup_time : 'TẮT' }}</dd><button type="button" @click="step = 2">Sửa</button></div>
                         <div><dt>Liên hệ</dt><dd>{{ form.admin_phone }} · {{ form.admin_email }}</dd><button type="button" @click="step = 1">Sửa</button></div>
                         <div v-if="isLinux"><dt>Lịch chạy nền</dt><dd :class="cronInstalled || form.install_cron ? 'good' : 'warn'">{{ cronInstalled ? 'Đã bật sẵn' : form.install_cron ? 'BẬT' : 'TẮT (không tự sao lưu)' }}</dd><button v-if="!cronInstalled" type="button" @click="form.install_cron = !form.install_cron">Đổi</button></div>
                     </dl>
@@ -496,4 +507,9 @@ small{display:block;color:#b53f35;font-size:13px;margin-top:6px;font-weight:500}
 .good{color:#0f6a49}.warn{color:#b53f35}
 .hint-line{margin:6px 0 0;color:#69786f;font-size:13px}
 .lead{margin:-8px 0 18px;color:#5a6b62;font-size:14px}
+.backup-box{padding:12px 16px;border:1px solid #e3e8e4;border-left:4px solid #c9493c;border-radius:14px;background:#fff;font-size:14px;color:#41524a}
+.backup-box.on{border-left-color:#157b59;background:#f4fbf7}
+.backup-box .switch{display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer;font-size:15px}
+.backup-box .switch input{position:absolute;opacity:0;width:0;height:0}
+.backup-time{max-width:180px;margin-top:10px}
 </style>

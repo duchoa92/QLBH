@@ -93,6 +93,8 @@ class InstallerController extends Controller
             'date_format' => ['required', 'in:d/m/Y,Y-m-d,m/d/Y'],
             'currency_symbol' => ['required', 'string', 'max:12'],
             'currency_format' => ['required', 'in:vi-VN,en-US'],
+            'backup_enabled' => ['nullable', 'boolean'],
+            'backup_time' => ['nullable', 'date_format:H:i'],
         ]);
 
         try {
@@ -142,6 +144,10 @@ class InstallerController extends Controller
                 'date_format' => $data['date_format'],
                 'currency_symbol' => $data['currency_symbol'],
                 'currency_format' => $data['currency_format'],
+                // Sao lưu tự động hằng ngày (cần lịch chạy nền/cron đang chạy).
+                'backup_enabled' => ! empty($data['backup_enabled']) ? '1' : '0',
+                'backup_frequency' => 'daily',
+                'backup_time' => ($data['backup_time'] ?? null) ?: '02:00',
             ] as $key => $value) {
                 if ($value !== null && $value !== '') {
                     Setting::set($key, $value);
@@ -208,6 +214,8 @@ class InstallerController extends Controller
                 'date_format' => $data['date_format'],
                 'currency' => $data['currency_symbol'],
                 'currency_format' => $data['currency_format'],
+                'backup_enabled' => ! empty($data['backup_enabled']),
+                'backup_time' => ($data['backup_time'] ?? null) ?: '02:00',
             ],
             'notes' => $notes,
             'system' => $this->systemSummary(),

@@ -168,10 +168,13 @@ const panelClass = computed(() => [
                         <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
                         {{ diskDanger ? 'Cảnh báo ổ đĩa nghiêm trọng' : 'Cảnh báo ổ đĩa' }}
                     </p>
-                    <p v-if="disk.used_percent !== null" class="floating-actions__alert-meta">Đã dùng {{ disk.used_percent }}% · còn trống {{ disk.free_gb }} GB / {{ disk.total_gb }} GB</p>
                     <ul>
                         <li v-for="message in disk.messages" :key="message">{{ message }}</li>
                     </ul>
+                    <div v-if="disk.used_percent !== null" class="floating-actions__bar-wrap">
+                        <div class="floating-actions__bar"><span :class="'is-' + (disk.capacity_level || 'ok')" :style="{ width: Math.min(100, disk.used_percent) + '%' }" /></div>
+                        <p class="floating-actions__alert-meta">Đã dùng {{ disk.used_percent }}% · còn trống {{ disk.free_gb }} GB / {{ disk.total_gb }} GB</p>
+                    </div>
                     <div class="floating-actions__alert-actions">
                         <Link :href="route('backups.index')">{{ disk.backup_now ? 'Sao lưu ngay' : 'Mở trang sao lưu' }}</Link>
                         <button type="button" @click.stop="setDiskAlertCollapsed(null)">Hiện thanh cảnh báo</button>
@@ -286,6 +289,11 @@ const panelClass = computed(() => [
 .floating-actions__alert.is-danger { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
 .floating-actions__alert-title { display: flex; align-items: center; gap: 0.375rem; font-weight: 700; }
 .floating-actions__alert-meta { margin-top: 0.125rem; opacity: 0.85; }
+.floating-actions__bar-wrap { margin-top: 0.375rem; }
+.floating-actions__bar { height: 0.5rem; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.8); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.floating-actions__bar span { display: block; height: 100%; border-radius: 999px; background: #059669; }
+.floating-actions__bar span.is-warning { background: #f59e0b; }
+.floating-actions__bar span.is-danger { background: #dc2626; }
 .floating-actions__alert ul { margin-top: 0.25rem; list-style: disc; padding-left: 1rem; }
 .floating-actions__alert-actions { margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.375rem; }
 .floating-actions__alert-actions :is(a, button) { border-radius: 0.5rem; padding: 0.25rem 0.625rem; font-weight: 600; background: rgba(0, 0, 0, 0.07); }

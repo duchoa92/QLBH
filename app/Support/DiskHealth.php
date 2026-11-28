@@ -26,10 +26,32 @@ class DiskHealth
 
     private static function build(): array
     {
-        $level = 'ok';
-        $messages = [];
+        $errors = [];          // lỗi ổ đĩa (SMART, lỗi đọc/ghi, chỉ đọc): luôn hiện TRƯỚC
+        $capacityMessage = null;
+        $capacityLevel = 'ok';
+        $errorLevel = 'ok';
         $backupNow = false;
         $usedPercent = $freeGb = $totalGb = null;
+
+        $health = self::readHealthFile();
+        if ($health) {
+            if (($health['smart'] ?? '') === 'failed') {
+                $errorLevel = 'danger';
+                $errors[] = 'Ổ đĩa báo hỏng (SMART: FAILED). Sao lưu dữ liệu ngay và thay ổ đĩa.';
+            }
+            if (($health['read_only'] ?? false) === true) {
+                $errorLevel = 'danger';
+                $errors[] = 'Ổ đĩa đang bị chuyển sang chế độ chỉ đọc do lỗi hệ thống tệp. Sao lưu ngay và kiểm tra ổ đĩa.';
+            }
+            $ioErrors = (int) ($health['io_errors'] ?? 0);
+            if ($ioErrors > 0) {
+                if ($errorLevel !== 'danger') {
+                    $errorLevel = 'warning';
+                }
+                $errors[] = "Phát hiện {$ioErrors} lỗi đọc/ghi ổ đĩa trong 24 giờ qua. Nên sao lưu ngay và kiểm tra ổ đĩa.";
+            }
+            $backupNow = $errors !== [];
+        }
 
         try {
             $path = base_path();
@@ -41,39 +63,23 @@ class DiskHealth
                 $totalGb = round($total / 1024 ** 3, 1);
 
                 if ($usedPercent >= self::DANGER_PERCENT || $free < self::DANGER_FREE_BYTES) {
-                    $level = 'danger';
-                    $messages[] = "Ổ đĩa sắp hết chỗ: đã dùng {$usedPercent}%, còn trống {$freeGb} GB. Hãy giải phóng dung lượng và sao lưu ngay.";
+                    $capacityLevel = 'danger';
+                    $capacityMessage = 'Ổ đĩa sắp hết chỗ. Hãy giải phóng dung lượng và sao lưu ngay.';
                 } elseif ($usedPercent >= self::WARNING_PERCENT) {
-                    $level = 'warning';
-                    $messages[] = "Ổ đĩa gần đầy: đã dùng {$usedPercent}%, còn trống {$freeGb} GB.";
+                    $capacityLevel = 'warning';
+                    $capacityMessage = 'Ổ đĩa gần đầy. Nên dọn dẹp bớt dữ liệu và sao lưu.';
                 }
             }
         } catch (Throwable) {
             // Không đọc được dung lượng: bỏ qua, không làm hỏng trang.
         }
 
-        $health = self::readHealthFile();
-        if ($health) {
-            if (($health['smart'] ?? '') === 'failed') {
-                $level = 'danger';
-                $backupNow = true;
-                $messages[] = 'Ổ đĩa báo hỏng (SMART: FAILED). Sao lưu dữ liệu ngay và thay ổ đĩa.';
-            }
-            if (($health['read_only'] ?? false) === true) {
-                $level = 'danger';
-                $backupNow = true;
-                $messages[] = 'Ổ đĩa đang bị chuyển sang chế độ chỉ đọc do lỗi hệ thống tệp. Sao lưu ngay và kiểm tra ổ đĩa.';
-            }
-            $ioErrors = (int) ($health['io_errors'] ?? 0);
-            if ($ioErrors > 0) {
-                if ($level !== 'danger') {
-                    $level = 'warning';
-                }
-                $backupNow = true;
-                $messages[] = "Phát hiện {$ioErrors} lỗi đọc/ghi ổ đĩa trong 24 giờ qua. Nên sao lưu ngay và kiểm tra ổ đĩa.";
+        $level = 'ok';
+        foreach ([$errorLevel, $capacityLevel] as $candidate) {
+            if ($candidate === 'danger' || ($candidate === 'warning' && $level === 'ok')) {
+                $level = $candidate;
             }
         }
-
         if ($level === 'danger') {
             $backupNow = true;
         }
@@ -83,7 +89,12 @@ class DiskHealth
             'used_percent' => $usedPercent,
             'free_gb' => $freeGb,
             'total_gb' => $totalGb,
-            'messages' => $messages,
+            // Nội dung lỗi đứng trước, nội dung về dung lượng đứng sau.
+            'messages' => array_values(array_filter([...$errors, $capacityMessage])),
+            'has_errors' => $errors !== [],
+            'capacity_level' => $capacityLevel,
+            'warning_percent' => self::WARNING_PERCENT,
+            'danger_percent' => self::DANGER_PERCENT,
             'backup_now' => $backupNow,
         ];
     }

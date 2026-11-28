@@ -2,8 +2,11 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
+// Nhịp tim của lịch chạy nền: website dựa vào đây để cảnh báo khi cron/Scheduled Task không chạy.
+Schedule::call(fn () => Cache::forever('scheduler.heartbeat', now()->timestamp))->everyMinute()->name('scheduler-heartbeat');
 Schedule::command('backup:scheduled')->everyMinute()->withoutOverlapping();
 Schedule::command('work-shifts:prune')->dailyAt('00:10')->withoutOverlapping();
 Schedule::command('exports:prune')->dailyAt('00:20')->withoutOverlapping();

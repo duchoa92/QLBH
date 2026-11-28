@@ -62,6 +62,9 @@ class HandleInertiaRequests extends Middleware
                 // Cảnh báo ổ đĩa: chỉ gửi cho người có quyền quản lý sao lưu và chỉ khi có vấn đề.
                 'diskHealth' => fn () => $this->diskHealthFor($request, $isSetupRequest),
 
+                // Cảnh báo lịch chạy nền (sao lưu tự động, nhắc việc) đã ngừng: chỉ cho người quản lý sao lưu.
+                'schedulerHealth' => fn () => $this->schedulerHealthFor($request, $isSetupRequest),
+
                 'flash' => [
                     'success' => fn () => session()->pull('success'),
                     'error' => fn () => session()->pull('error'),
@@ -87,5 +90,14 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $report['level'] === 'ok' ? null : $report;
+    }
+
+    private function schedulerHealthFor(Request $request, bool $isSetupRequest): ?array
+    {
+        if ($isSetupRequest || ! $request->user() || ! $request->user()->can('backups.manage')) {
+            return null;
+        }
+
+        return \App\Support\SchedulerHealth::problem();
     }
 }
