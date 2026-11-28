@@ -21,6 +21,15 @@ if command -v nmcli >/dev/null 2>&1 && [[ -n $IFACE ]]; then
     [[ $M == *manual* ]] && ok "IP đã được cố định (tĩnh)" || warn "IP đang nhận tự động (DHCP), có thể đổi khi khởi động lại router: chạy sudo bash scripts/set-static-ip.sh"
 elif ls /etc/netplan/99-qlbh-static.yaml >/dev/null 2>&1; then ok "IP đã được cố định (netplan)"; else warn "Chưa cố định IP: chạy sudo bash scripts/set-static-ip.sh"; fi
 GW="$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')"
+# IP hiện tại có khớp với cấu hình QLBH (APP_URL) và chứng chỉ HTTPS không? (hay lệch sau khi đổi IP)
+APP_HOST="$(grep -E '^APP_URL=' "$APP_DIR/.env" 2>/dev/null | head -n1 | sed -E 's/^APP_URL=["'"'"']?[a-z]+:\/\/([^\/:"'"'"']+).*/\1/')"
+if [[ $APP_HOST =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ && -n $IPV4 ]]; then
+    ALL_IPS=" $(hostname -I 2>/dev/null) "
+    [[ $ALL_IPS == *" ${APP_HOST} "* ]] && ok "APP_URL trong .env khớp IP máy (${APP_HOST})" || bad "APP_URL trong .env là ${APP_HOST} nhưng IP máy là ${IPV4}: chạy sudo bash scripts/set-static-ip.sh (chọn giữ/đổi IP) để cập nhật"
+    if [[ -f /etc/ssl/qlbh/san.txt ]]; then
+        grep -q "IP:${IPV4}" /etc/ssl/qlbh/san.txt && ok "Chứng chỉ HTTPS có IP ${IPV4}" || bad "Chứng chỉ HTTPS không chứa IP ${IPV4}: chạy sudo bash scripts/install-ubuntu.sh --https"
+    fi
+fi
 [[ -n $GW ]] && { ping -c1 -W2 "$GW" >/dev/null 2>&1 && ok "Kết nối được router (${GW})" || bad "Không ping được router (${GW})"; }
 ping -c1 -W3 1.1.1.1 >/dev/null 2>&1 && ok "Ra được internet (ping 1.1.1.1)" || bad "Không ra được internet"
 getent hosts github.com >/dev/null 2>&1 && ok "DNS hoạt động (phân giải được github.com)" || bad "DNS lỗi: không phân giải được tên miền"

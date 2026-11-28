@@ -28,7 +28,9 @@ Gõ `ls`, phải thấy `app`, `public`, `scripts`, `artisan`.
 ### Bước 2. Chạy script cài đặt (kèm tạo tài khoản database)
 
 Chạy **một lệnh duy nhất**, đặt luôn tên và mật khẩu database (đổi `admin` và `MatKhau123` theo ý bạn):
+
 ```bash
+cd /var/www/qlbh
 sudo bash scripts/install-ubuntu.sh --https --db-user admin --db-pass 'MatKhau123'
 ```
 Muốn không để lộ mật khẩu trong lệnh, bỏ `--db-pass`, script sẽ hỏi bạn nhập (không hiện ký tự):
@@ -186,12 +188,17 @@ sudo bash scripts/update.sh
 
 Nếu IP đổi (khi khởi động lại máy hoặc router), các máy khác sẽ không vào được. Cố định IP bằng **một** trong hai cách:
 
-- **Cách 1 (khuyến nghị): dùng script.** Giữ nguyên IP hiện tại nhưng chuyển sang IP tĩnh:
+- **Cách 1 (khuyến nghị): dùng script.** Chạy lệnh dưới đây, script sẽ **quét mạng** rồi hiện:
+  - **Khoảng IP có thể đặt** (vd `192.168.100.1` đến `192.168.100.254`);
+  - **IP KHÔNG THỂ CHỌN**: địa chỉ mạng (`.0`), broadcast (`.255`), router, và mọi IP đang có thiết bị khác dùng (kèm địa chỉ MAC);
+  - **IP đang trống** và một **gợi ý** khoảng nên chọn.
   ```bash
   cd /var/www/qlbh
   sudo bash scripts/set-static-ip.sh
   ```
-  Muốn đặt IP khác (cùng dải mạng, chưa có thiết bị nào dùng):
+  Chỉ muốn xem danh sách IP (không đổi gì, không cần `sudo`): `bash scripts/set-static-ip.sh --list`.
+  Nhập IP không hợp lệ hoặc đang bị dùng, script báo lý do và hỏi lại. Có thể gõ đủ 4 số hoặc **chỉ số cuối** (vd `210`).
+  Muốn đặt IP khác ngay trên dòng lệnh (cùng dải mạng, chưa có thiết bị nào dùng; cũng được kiểm tra như trên):
   ```bash
   sudo bash scripts/set-static-ip.sh --ip 192.168.100.124/24 --gateway 192.168.100.1 --dns 8.8.8.8,1.1.1.1
   ```
@@ -207,7 +214,7 @@ DNS, cách nhau bằng dấu phẩy [Enter = 192.168.100.1,8.8.8.8,1.1.1.1]:
 Áp dụng cấu hình này? [Y/n]:
 ```
 Bạn chỉ cần nhập **IP** (ví dụ `192.168.100.168`, không cần gõ `/24`); các mục còn lại bấm **Enter** để dùng giá trị hiện tại. Script kiểm tra IP hợp lệ, đổi xong tự kiểm tra mạng và **tự quay lại cấu hình cũ nếu mất kết nối**. Nếu đang điều khiển máy qua SSH, đổi IP sẽ ngắt kết nối: kết nối lại bằng IP mới. Muốn bỏ qua bước này: thêm `--no-static-ip`. Chạy không hỏi: `--static-ip --ip 192.168.100.168/24 --gateway 192.168.100.1`.
-**Sau khi đổi IP**, nếu dùng HTTPS hãy chạy lại `sudo bash scripts/install-ubuntu.sh --https` để cấp lại chứng chỉ cho IP mới (điện thoại không cần cài lại chứng chỉ gốc).
+**Đổi IP sau khi hệ thống đã chạy:** chạy lại `sudo bash scripts/set-static-ip.sh` bất cứ lúc nào và nhập IP mới. Sau khi đổi, script **tự cập nhật** `APP_URL` trong `.env`, cấu hình camera, **cấp lại chứng chỉ HTTPS** cho IP mới (điện thoại không cần cài lại chứng chỉ gốc), xóa cache Laravel, nạp lại nginx rồi **kiểm tra** card mạng, router, internet, DNS và website tại IP mới (✓/✗). Bản sao các file đã sửa nằm ở `/var/backups/qlbh`. Nếu đang SSH, phiên bị ngắt khi đổi IP nhưng script vẫn chạy nốt; kết nối lại bằng IP mới và xem kết quả bằng `sudo cat /var/log/qlbh-set-static-ip.log`. Kiểm tra lại bất cứ lúc nào bằng `sudo bash scripts/qlbh-doctor.sh` (báo ✗ nếu `APP_URL`/chứng chỉ không khớp IP máy). Các máy khác phải mở lại bằng địa chỉ mới.
 
 ### G2. Truy cập từ internet (ngoài cửa hàng)
 

@@ -5,7 +5,7 @@
 #
 #   --db-user / --db-pass: tạo sẵn tài khoản MySQL/MariaDB (quyền với database tên bắt đầu bằng qlbh) để nhập vào trang /setup.
 #                          Bỏ --db-pass thì script sẽ hỏi mật khẩu. Không cần --with-mariadb nếu máy đã có MySQL.
-#   (Khi chạy trong terminal, script tự hỏi có cố định IP không và cho nhập IP; --no-static-ip để bỏ qua bước này.)
+#   (Khi chạy trong terminal, script tự hỏi có cố định/đổi IP không, quét mạng, hiện IP dùng được/không dùng được rồi cho nhập IP; --no-static-ip để bỏ qua.)
 #   --static-ip [--ip 192.168.x.y/24 --gateway 192.168.x.1 --dns 8.8.8.8,1.1.1.1]: cố định IP máy chủ (mặc định giữ IP hiện tại).
 #   --cloudflare-token <TOKEN>: cài Cloudflare Tunnel để truy cập từ internet (HTTPS hợp lệ, không cần mở cổng router).
 #   --tailscale [--tailscale-key <KEY>]: cài Tailscale (mạng riêng) để chủ cửa hàng truy cập từ xa an toàn.
@@ -89,7 +89,9 @@ ip_is_static() {
 # Chạy trong terminal và chưa chọn --no-static-ip: hỏi có cố định IP không.
 if [[ $STATIC_IP -eq 0 && $NO_STATIC_IP -eq 0 && -t 0 ]]; then
     if ip_is_static; then
-        echo "IP máy chủ đã được cố định: $(hostname -I | awk '{print $1}') (bỏ qua bước đặt IP)."
+        echo "IP máy chủ đã được cố định: $(hostname -I | awk '{print $1}')."
+        read -r -p "Đổi sang IP khác? (script sẽ hiện IP nào dùng được/không) [y/N]: " ANS_IP
+        [[ $ANS_IP =~ ^[YyCc] ]] && STATIC_IP=1
     else
         echo
         echo "Địa chỉ IP hiện tại của máy chủ: $(hostname -I | awk '{print $1}')"
