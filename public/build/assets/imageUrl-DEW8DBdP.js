@@ -1,0 +1,1 @@
+import{af as n}from"./app-Dveu71-q.js";const o=t=>{if(!t)return null;const i=typeof t=="object"?t.url??t.path??t.image_url??null:t;if(!i)return null;const r=String(i);return/^(https?:|data:|blob:)/i.test(r)?r:r.startsWith("/")?n(r):n(`/storage/${r.replace(/^\/?(?:storage\/)?/,"")}`)};export{o as i};
