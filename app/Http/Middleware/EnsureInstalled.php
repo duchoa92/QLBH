@@ -24,10 +24,9 @@ class EnsureInstalled
             return redirect('/setup');
         }
         if ($alreadyInstalled && $isSetupRoute) {
-            // Màn hình "Thiết lập thành công" được phép hiện một lần ngay sau khi cài xong.
-            $showingDone = $request->is('setup/complete')
-                && $request->hasSession()
-                && $request->session()->has('setup_done');
+            // Màn hình "Thiết lập thành công" được phép hiện sau khi cài xong (dữ liệu nằm trong session hoặc theo mã ?t=
+            // trong đường dẫn; controller tự chuyển về đăng nhập nếu không có dữ liệu).
+            $showingDone = $request->is('setup/complete');
 
             if (! $showingDone) {
                 return redirect()->route('login');

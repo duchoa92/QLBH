@@ -83,8 +83,7 @@ function downloadInfo() {
 
 const step = ref(0);
 const status = ref('');
-const showPassword = ref(false);
-const showConfirmation = ref(false);
+const showPassword = ref(false); // dùng chung cho cả 2 ô mật khẩu quản trị
 const showDatabasePassword = ref(false);
 const showEnvironment = ref(false);
 const preparing = ref(false);
@@ -207,14 +206,17 @@ function goLogin() {
             <section v-if="done" class="done" role="status">
                 <div class="done-icon">✓</div>
                 <h1>Thiết lập thành công</h1>
-                <p class="save-warn">⚠ Thông tin dưới đây <b>chỉ hiện một lần</b>. Hãy lưu lại ngay: bấm <b>Tải file</b> hoặc <b>Sao chép</b>.</p>
+                <p class="save-warn">⚠ Hãy lưu lại tên đăng nhập và mật khẩu bên dưới: bấm <b>Tải file</b> hoặc <b>Sao chép</b>. Thông tin sẽ biến mất sau khi bạn đăng nhập.</p>
+
+                <div class="cred" aria-label="Tài khoản đăng nhập">
+                    <div><span>Tên đăng nhập</span><strong>{{ done.username }}</strong></div>
+                    <div><span>Mật khẩu</span><strong>{{ done.password }}</strong></div>
+                </div>
 
                 <div class="info">
                     <h2>Đăng nhập website</h2>
                     <dl>
                         <div><dt>Địa chỉ</dt><dd>{{ loginUrl }}</dd></div>
-                        <div><dt>Tên đăng nhập</dt><dd>{{ done.username }}</dd></div>
-                        <div><dt>Mật khẩu</dt><dd>{{ done.password }}</dd></div>
                         <div v-if="done.name"><dt>Họ và tên</dt><dd>{{ done.name }}</dd></div>
                         <div v-if="done.phone"><dt>Điện thoại</dt><dd>{{ done.phone }}</dd></div>
                         <div v-if="done.email"><dt>Email</dt><dd>{{ done.email }}</dd></div>
@@ -300,14 +302,14 @@ function goLogin() {
                             <small v-if="driverMissing || form.errors.database_driver">{{ form.errors.database_driver || `PHP chưa bật pdo_${form.database_driver}` }}</small>
                         </label>
                         <label>Tên database
-                            <input v-model="form.database_name" placeholder="qlbh"><small v-if="form.errors.database_name">{{ form.errors.database_name }}</small>
+                            <input v-model="form.database_name" placeholder="ví dụ: qlbh"><small v-if="form.errors.database_name">{{ form.errors.database_name }}</small>
                         </label>
                         <template v-if="form.database_driver !== 'sqlite'">
-                            <label>Máy chủ<input v-model="form.database_host" placeholder="127.0.0.1"><small v-if="form.errors.database_host">{{ form.errors.database_host }}</small></label>
-                            <label>Cổng<input v-model="form.database_port" inputmode="numeric" placeholder="3306"></label>
-                            <label>Tài khoản<input v-model="form.database_username" placeholder="root"><small v-if="form.errors.database_username">{{ form.errors.database_username }}</small></label>
+                            <label>Máy chủ<input v-model="form.database_host" placeholder="ví dụ: 127.0.0.1"><small v-if="form.errors.database_host">{{ form.errors.database_host }}</small></label>
+                            <label>Cổng<input v-model="form.database_port" inputmode="numeric" placeholder="ví dụ: 3306"></label>
+                            <label>Tài khoản<input v-model="form.database_username" placeholder="ví dụ: root"><small v-if="form.errors.database_username">{{ form.errors.database_username }}</small></label>
                             <label>Mật khẩu
-                                <span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" :placeholder="savedHint ? '••••••••  (đã đặt sẵn)' : ''" autocomplete="off"><button type="button" @click="showDatabasePassword = !showDatabasePassword">{{ showDatabasePassword ? 'Ẩn' : 'Hiện' }}</button></span>
+                                <span class="password"><input v-model="form.database_password" :type="showDatabasePassword ? 'text' : 'password'" :placeholder="savedHint ? '••••••••  (đã đặt sẵn)' : ''" autocomplete="off"><button type="button" class="eye" :title="showDatabasePassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" :aria-label="showDatabasePassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" @click="showDatabasePassword = !showDatabasePassword"><template v-if="showDatabasePassword"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19c-6.5 0-10-7-10-7a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m2 2 20 20"/></svg></template><template v-else><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></template></button></span>
                                 <small v-if="savedHint" class="hint">Mật khẩu đã được đặt sẵn khi chạy script cài đặt. Để trống ô này để dùng mật khẩu đó.</small>
                             </label>
                         </template>
@@ -323,15 +325,15 @@ function goLogin() {
                     <h1>Quản trị viên</h1>
                     <div class="grid">
                         <label>Tên đăng nhập<input v-model="form.admin_username" autocomplete="username"><small v-if="form.errors.admin_username">{{ form.errors.admin_username }}</small></label>
-                        <label>Họ và tên<input v-model="form.admin_name" placeholder="Đức Hòa" autocomplete="name"><small v-if="form.errors.admin_name">{{ form.errors.admin_name }}</small></label>
-                        <label>Số điện thoại<input v-model="form.admin_phone" type="tel" placeholder="0906064789" autocomplete="tel"><small v-if="form.errors.admin_phone">{{ form.errors.admin_phone }}</small></label>
-                        <label>Email<input v-model="form.admin_email" type="email" placeholder="duchoa.92@gmail.com" autocomplete="email"><small v-if="form.errors.admin_email">{{ form.errors.admin_email }}</small></label>
+                        <label>Họ và tên<input v-model="form.admin_name" placeholder="ví dụ: Đức Hòa" autocomplete="name"><small v-if="form.errors.admin_name">{{ form.errors.admin_name }}</small></label>
+                        <label>Số điện thoại<input v-model="form.admin_phone" type="tel" placeholder="ví dụ: 0906064789" autocomplete="tel"><small v-if="form.errors.admin_phone">{{ form.errors.admin_phone }}</small></label>
+                        <label>Email<input v-model="form.admin_email" type="email" placeholder="ví dụ: duchoa.92@gmail.com" autocomplete="email"><small v-if="form.errors.admin_email">{{ form.errors.admin_email }}</small></label>
                         <label>Mật khẩu
-                            <span class="password"><input v-model="form.admin_password" :type="showPassword ? 'text' : 'password'" placeholder="Từ 8 ký tự" autocomplete="new-password"><button type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Ẩn' : 'Hiện' }}</button></span>
+                            <span class="password"><input v-model="form.admin_password" :type="showPassword ? 'text' : 'password'" placeholder="Từ 8 ký tự" autocomplete="new-password"><button type="button" class="eye" :title="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" @click="showPassword = !showPassword"><template v-if="showPassword"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19c-6.5 0-10-7-10-7a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m2 2 20 20"/></svg></template><template v-else><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></template></button></span>
                             <small v-if="form.errors.admin_password">{{ form.errors.admin_password }}</small>
                         </label>
                         <label>Nhập lại mật khẩu
-                            <span class="password"><input v-model="form.admin_password_confirmation" :type="showConfirmation ? 'text' : 'password'" autocomplete="new-password"><button type="button" @click="showConfirmation = !showConfirmation">{{ showConfirmation ? 'Ẩn' : 'Hiện' }}</button></span>
+                            <span class="password"><input v-model="form.admin_password_confirmation" :type="showPassword ? 'text' : 'password'" autocomplete="new-password"><button type="button" class="eye" :title="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" @click="showPassword = !showPassword"><template v-if="showPassword"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19c-6.5 0-10-7-10-7a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m2 2 20 20"/></svg></template><template v-else><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></template></button></span>
                             <small v-if="form.errors.admin_password_confirmation">{{ form.errors.admin_password_confirmation }}</small>
                         </label>
                     </div>
@@ -344,9 +346,9 @@ function goLogin() {
                     <h1>Cửa hàng và hệ thống</h1>
                     <p class="lead">Các thông tin này dùng cho hóa đơn, ngày giờ và tiền tệ. Sau này vẫn sửa được trong <b>Cài đặt</b>.</p>
                     <div class="grid">
-                        <label style="grid-column:1/-1">Tên cửa hàng<input v-model="form.shop_name" placeholder="Ví dụ: Đức Hòa Computer"><small v-if="form.errors.shop_name">{{ form.errors.shop_name }}</small></label>
-                        <label>Số điện thoại cửa hàng<input v-model="form.shop_phone" type="tel" placeholder="0906064789"></label>
-                        <label>Địa chỉ<input v-model="form.shop_address" placeholder="Vạn Xuân, Hưng Yên"></label>
+                        <label style="grid-column:1/-1">Tên cửa hàng<input v-model="form.shop_name" placeholder="ví dụ: Đức Hòa Computer"><small v-if="form.errors.shop_name">{{ form.errors.shop_name }}</small></label>
+                        <label>Số điện thoại cửa hàng<input v-model="form.shop_phone" type="tel" placeholder="ví dụ: 0906064789"></label>
+                        <label>Địa chỉ<input v-model="form.shop_address" placeholder="ví dụ: Vạn Xuân, Hưng Yên"></label>
                         <label>Ngôn ngữ
                             <select v-model="form.app_locale"><option v-for="(label, value) in localeLabels" :key="value" :value="value">{{ label }}</option></select>
                         </label>
@@ -359,7 +361,7 @@ function goLogin() {
                         <label>Định dạng số tiền
                             <select v-model="form.currency_format"><option v-for="(label, value) in currencyFormats" :key="value" :value="value">{{ label }}</option></select>
                         </label>
-                        <label>Ký hiệu tiền tệ<input v-model="form.currency_symbol" placeholder="₫" maxlength="12"><small v-if="form.errors.currency_symbol">{{ form.errors.currency_symbol }}</small></label>
+                        <label>Ký hiệu tiền tệ<input v-model="form.currency_symbol" placeholder="ví dụ: ₫" maxlength="12"><small v-if="form.errors.currency_symbol">{{ form.errors.currency_symbol }}</small></label>
                     </div>
                     <footer class="actions"><button class="btn outline" type="button" @click="back">Quay lại</button><button class="btn primary" type="button" @click="next">Tiếp tục</button></footer>
                 </section>
@@ -429,8 +431,8 @@ input,select{display:block;width:100%;box-sizing:border-box;height:46px;margin-t
 input:focus,select:focus{border-color:#157b59;box-shadow:0 0 0 4px #e6f4ee}
 small.hint{color:#69786f;font-weight:400}
 small{display:block;color:#b53f35;font-size:13px;margin-top:6px;font-weight:500}
-.password{position:relative;display:block}.password input{padding-right:68px}
-.password button{position:absolute;right:6px;top:11px;height:36px;padding:0 10px;background:none;border:0;color:#5f6f66;font:inherit;font-size:14px;cursor:pointer}
+.password{position:relative;display:block}.password input{padding-right:52px}
+.password button.eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;display:grid;place-items:center;background:none;border:0;border-radius:8px;color:#5f6f66;cursor:pointer}.password button.eye:hover{background:#eef3f0;color:#157b59}
 .env{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:#fff8e8;margin-bottom:12px;flex-wrap:wrap}
 .env.bad{background:#fff3f0}
 .env-icon{flex:none;width:28px;height:28px;border-radius:50%;background:#b0832f;color:#fff;display:grid;place-items:center;font-weight:700}
@@ -467,6 +469,7 @@ small{display:block;color:#b53f35;font-size:13px;margin-top:6px;font-weight:500}
 .info dl>div:last-child{border-bottom:0}
 .info dt{width:120px;flex:none;color:#69786f;font-size:14px}
 .info dd{margin:0;font-weight:600;word-break:break-all;user-select:all}
+.cred{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;padding:16px;border:2px solid #157b59;border-radius:16px;background:#e6f4ee;text-align:left}.cred span{display:block;font-size:13px;font-weight:600;color:#3d4d44}.cred strong{display:block;margin-top:4px;font-size:20px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#0f5a43;word-break:break-all;user-select:all}@media(max-width:560px){.cred{grid-template-columns:1fr}}
 .done-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:18px}
 @media(max-width:700px){.card{padding:20px 16px;border-radius:16px}.grid{grid-template-columns:1fr;gap:18px}.steps .label{display:none}.steps li{justify-content:center}.actions{flex-direction:column-reverse;align-items:stretch}.actions .btn{width:100%}.summary>div{flex-wrap:wrap}.summary dt{width:100%}h1{font-size:22px}}
 .cert{margin-top:16px;background:#fff;border:1px solid #e3e8e4;border-radius:14px;padding:12px 16px;font-size:14px;color:#41524a}

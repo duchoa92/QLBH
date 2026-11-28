@@ -10,6 +10,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -181,7 +184,7 @@ class InstallerController extends Controller
         // dễ phát sinh lỗi 500. Chuyển sang một request mới (/setup/complete) để hiện màn hình thành công.
         // flash (chỉ tồn tại cho đúng 1 lần mở trang thành công): mật khẩu không bị lưu lại trong session.
         $isSqlite = $data['database_driver'] === 'sqlite';
-        $request->session()->flash('setup_done', [
+        $donePayload = [
             'username' => $data['admin_username'],
             'password' => $data['admin_password'],
             'name' => $data['admin_name'] ?? null,
@@ -208,9 +211,20 @@ class InstallerController extends Controller
             ],
             'notes' => $notes,
             'system' => $this->systemSummary(),
-        ]);
+        ];
 
-        return redirect('/setup/complete', 303);
+        // Lưu cả trong session và (mã hóa) trong cache 30 phút: nếu một request nền làm mất flash của session thì
+        // màn hình thành công vẫn hiện được qua mã trong đường dẫn.
+        $token = Str::random(40);
+        try {
+            Cache::put('setup_done:'.$token, Crypt::encryptString(json_encode($donePayload)), now()->addMinutes(30));
+        } catch (Throwable $exception) {
+            report($exception);
+            $token = null;
+        }
+        $request->session()->put('setup_done', $donePayload);
+
+        return redirect($token ? '/setup/complete?t='.$token : '/setup/complete', 303);
     }
 
     /** Màn hình "Thiết lập thành công" (request mới, ứng dụng đã khởi động đầy đủ với database vừa cài). */
@@ -218,8 +232,24 @@ class InstallerController extends Controller
     {
         $done = $request->session()->get('setup_done');
         if (! is_array($done)) {
+            $token = (string) $request->query('t', '');
+            if (preg_match('/^[A-Za-z0-9]{40}$/', $token)) {
+                try {
+                    $encrypted = Cache::get('setup_done:'.$token);
+                    $decoded = $encrypted ? json_decode(Crypt::decryptString($encrypted), true) : null;
+                    $done = is_array($decoded) ? $decoded : null;
+                } catch (Throwable) {
+                    $done = null;
+                }
+            }
+        }
+        if (! is_array($done)) {
             return redirect()->route('login');
         }
+
+        // Giữ thông tin cho đến khi đăng nhập thành công: tải lại trang (F5) hoặc request nền không làm mất
+        // tên đăng nhập/mật khẩu vừa tạo. Đăng nhập xong sẽ bị xóa (AuthenticatedSessionController::store).
+        $request->session()->put('setup_done', $done);
 
         return Inertia::render('Setup/Index', ['done' => $done, 'certificateUrl' => $this->certificateUrl()]);
     }
@@ -232,11 +262,21 @@ class InstallerController extends Controller
         } catch (Throwable) {
             $disk = null;
         }
+        try {
+            $cron = ServerEnvironment::cronStatus()['installed'] ?? null;
+        } catch (Throwable) {
+            $cron = null;
+        }
+        try {
+            $autostart = ServerEnvironment::autostartStatus();
+        } catch (Throwable) {
+            $autostart = [];
+        }
 
         return [
             'linux' => ServerEnvironment::isLinux(),
-            'cron' => ServerEnvironment::cronStatus()['installed'] ?? null,
-            'autostart' => ServerEnvironment::autostartStatus(),
+            'cron' => $cron,
+            'autostart' => $autostart,
             'disk' => $disk ? ['used_percent' => $disk['used_percent'], 'free_gb' => $disk['free_gb'], 'total_gb' => $disk['total_gb'], 'level' => $disk['level']] : null,
         ];
     }

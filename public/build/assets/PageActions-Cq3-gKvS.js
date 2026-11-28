@@ -1,0 +1,1 @@
+import{a as e,f as o}from"./floatingActions-Bd3DhoiS.js";import{C as n,H as s,b as a,o as r,c,q as u,a1 as l,k as m}from"./app-CI9SmI5S.js";const d={__name:"PageActions",setup(f){return n(()=>{e.value+=1}),s(()=>{e.value=Math.max(0,e.value-1)}),(t,i)=>a(o)?(r(),c(l,{key:0,to:a(o)},[u(t.$slots,"default")],8,["to"])):m("",!0)}};export{d as _};

@@ -19,6 +19,7 @@ import { installViewportFix } from '@/utils/viewportFix'
 import { reloadWhenIdle } from '@/utils/pageBusy'
 import { installModalScrollLock } from '@/utils/modalScrollLock'
 import { pageTitles } from '@/utils/pageTitles'
+import { refreshCsrfCookie } from '@/utils/csrf'
 
 const AdminLayout = defineAsyncComponent(() => import('@/Layouts/AdminLayout.vue'))
 const pageComponents = import.meta.glob([
@@ -137,6 +138,17 @@ if (!window._inertiaToastRegistered) {
 
     document.addEventListener('input', clearSubmitInvalid, true)
     document.addEventListener('change', clearSubmitInvalid, true)
+
+    // 419 (token CSRF/phiên hết hạn): không hiện hộp thoại "PAGE EXPIRED" toàn màn hình của Inertia.
+    // Lấy lại token rồi báo người dùng thao tác lại; trang chưa đăng nhập thì nạp lại để có phiên mới.
+    router.on('invalid', (event) => {
+        if (event.detail.response?.status !== 419) return
+        event.preventDefault()
+        refreshCsrfCookie().finally(() => {
+            toast.error('Phiên làm việc đã được làm mới. Vui lòng thực hiện lại thao tác.', { id: 'csrf-expired' })
+            if (/\/(login|forgot-password|reset-password)(\/|$)/.test(window.location.pathname)) window.setTimeout(() => window.location.reload(), 800)
+        })
+    })
 
     router.on('error', (event) => {
 

@@ -1,3 +1,12 @@
+// v7: stop trapping the phone on the offline page after the server PC restarts.
+//  - Only POS pages are handled for navigation. Every other page goes straight
+//    to the browser, so a server that is still booting (or a certificate prompt)
+//    shows the browser's own error and a plain reload works, instead of the
+//    service worker answering "offline" and staying stuck until site data is cleared.
+//  - POS navigation retries the network a few times before falling back, which
+//    covers the first seconds after the server PC is switched on.
+//  - The offline page is re-downloaded (cache: 'reload') on install and resets
+//    the service worker by itself when the server answers but the page stays offline.
 // v6 on top of v5 (v5 drops the old snapshots of authenticated pages, which
 // could make an ordinary F5 render yesterday's Camera Intelligence/POS state
 // until the operator forced a hard reload). v6 changes:
@@ -8,7 +17,7 @@
 //    Deleting the whole cache removed the offline page for good, leaving only
 //    the plain-text 503 fallback until the next service worker install.
 //  - Cache writes never delay or fail a response that already succeeded.
-const CACHE_NAME = 'qlbh-offline-shell-v6'
+const CACHE_NAME = 'qlbh-offline-shell-v7'
 const OFFLINE_PAGE = new URL('offline.html', self.registration.scope).href
 const APP_SHELL = new URL('__offline_app_shell__.html', self.registration.scope).href
 
@@ -102,7 +111,7 @@ self.addEventListener('message', event => {
 })
 
 self.addEventListener('install', event => {
-    event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.add(OFFLINE_PAGE)))
+    event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.add(new Request(OFFLINE_PAGE, { cache: 'reload' }))))
     self.skipWaiting()
 })
 
@@ -132,13 +141,26 @@ self.addEventListener('fetch', event => {
     if (url.origin !== self.location.origin) return
 
     if (request.mode === 'navigate') {
+        // Non-POS pages have no offline copy, so the service worker adds nothing
+        // there except a way to get stuck: let the browser load them itself.
+        if (!isOfflinePosPage(url)) return
         event.respondWith((async () => {
             let response
             try {
                 // Never let a normal F5 reuse a browser HTTP-cache entry for
                 // dynamic, authenticated data. The app therefore behaves the
                 // same for F5 and Shift+F5 while the server is reachable.
-                response = await fetch(request, { cache: 'no-store' })
+                // Retry briefly: right after the server PC starts, the first
+                // requests fail while the web server / database are still booting.
+                for (let attempt = 0; ; attempt++) {
+                    try {
+                        response = await fetch(request, { cache: 'no-store' })
+                        break
+                    } catch (error) {
+                        if (attempt >= 2) throw error
+                        await new Promise(resolve => setTimeout(resolve, 1500))
+                    }
+                }
             } catch (error) {
                 console.warn('[sw] navigation fetch failed:', error)
                 return offlineFallback(request, url)

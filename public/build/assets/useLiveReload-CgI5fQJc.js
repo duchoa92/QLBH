@@ -1,0 +1,1 @@
+import{C as i,X as l,H as a}from"./app-CI9SmI5S.js";function r(n,t,{debounce:u=500}={}){let e=null,o=null;i(()=>{o=l(n,()=>{clearTimeout(e),e=setTimeout(()=>{document.hidden||t()},u)})}),a(()=>{o?.(),clearTimeout(e)})}export{r as u};

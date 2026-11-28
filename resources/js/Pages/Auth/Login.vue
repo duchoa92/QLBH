@@ -4,6 +4,7 @@ import GuestLayout from '@/Layouts/GuestLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import FloatingInput from '@/Components/UI/FloatingInput.vue';
 import { ArrowRight, ShieldCheck } from 'lucide-vue-next';
+import { refreshCsrfCookie } from '@/utils/csrf';
 
 defineProps({
     canResetPassword: {
@@ -20,7 +21,9 @@ const form = useForm({
     remember: false,
 });
 
-const submit = () => {
+const submit = async () => {
+    // Làm mới token CSRF ngay trước khi gửi để lần đăng nhập đầu tiên không bị 419 "Page expired".
+    await refreshCsrfCookie();
     form.post(route('login'), {
         onFinish: () => form.reset('password'),
     });

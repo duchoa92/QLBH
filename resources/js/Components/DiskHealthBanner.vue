@@ -1,18 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
+import { X } from 'lucide-vue-next'
+import { diskAlertCollapsedLevel, setDiskAlertCollapsed } from '@/Stores/diskAlert'
 
 const page = usePage()
-const dismissed = ref(false)
 
 const health = computed(() => page.props.diskHealth || null)
 const danger = computed(() => health.value?.level === 'danger')
-const visible = computed(() => health.value && (danger.value || !dismissed.value))
+// Đã ẩn thì thông báo được gộp vào nút chức năng nổi (xem FloatingActions.vue): bấm nút đó để xem lại.
+const collapsed = computed(() => !!health.value && diskAlertCollapsedLevel.value === health.value.level)
+const collapse = () => setDiskAlertCollapsed(health.value?.level ?? null)
 </script>
 
 <template>
     <div
-        v-if="visible"
+        v-if="health && !collapsed"
         role="alert"
         class="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 text-sm shadow-sm"
         :class="danger ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'"
@@ -38,12 +41,14 @@ const visible = computed(() => health.value && (danger.value || !dismissed.value
                 {{ health.backup_now ? 'Sao lưu ngay' : 'Mở trang sao lưu' }}
             </Link>
             <button
-                v-if="!danger"
                 type="button"
-                class="rounded-md px-2 py-1.5 font-medium hover:bg-black/5"
-                @click="dismissed = true"
+                class="flex h-8 w-8 items-center justify-center rounded-md hover:bg-black/10 focus:outline-none focus:ring-2"
+                :class="danger ? 'focus:ring-red-400' : 'focus:ring-amber-400'"
+                title="Ẩn thông báo (vẫn còn biểu tượng cảnh báo trên nút chức năng)"
+                aria-label="Ẩn thông báo"
+                @click="collapse"
             >
-                Ẩn
+                <X class="h-4 w-4" />
             </button>
         </div>
     </div>

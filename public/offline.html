@@ -34,10 +34,20 @@
 
             // Tự vào lại khi máy chủ đã sẵn sàng. Yêu cầu fetch này không phải
             // điều hướng nên service worker không chặn mà đi thẳng ra mạng.
+            // Nếu máy chủ đã trả lời nhưng trang vẫn rơi về đây nhiều lần liên tiếp thì bản lưu tạm trên máy bị kẹt:
+            // tự đặt lại (giống xóa dữ liệu web) thay vì bắt người dùng làm tay.
+            var KEY = 'qlbh-offline-reload-count'
+            var count = 0
+            try { count = parseInt(sessionStorage.getItem(KEY) || '0', 10) || 0 } catch (e) {}
+
             var probe = function () {
                 if (document.hidden) return
                 fetch(location.href, { cache: 'no-store', credentials: 'same-origin' })
-                    .then(function () { location.reload() })
+                    .then(function () {
+                        try { sessionStorage.setItem(KEY, String(count + 1)) } catch (e) {}
+                        if (count >= 2) { resetButton.click(); return }
+                        location.reload()
+                    })
                     .catch(function () {})
             }
             setInterval(probe, 5000)
@@ -46,6 +56,7 @@
 
             resetButton.addEventListener('click', function () {
                 resetButton.disabled = true
+                try { sessionStorage.removeItem(KEY) } catch (e) {}
                 statusEl.textContent = 'Đang đặt lại...'
                 var work = []
                 try {

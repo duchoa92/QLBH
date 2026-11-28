@@ -32,7 +32,7 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
-        $request->session()->forget('work_shift_auto_open_dismissed');
+        $request->session()->forget(['work_shift_auto_open_dismissed', 'setup_done']);
 
         return redirect($request->user()->landingPath());
     }

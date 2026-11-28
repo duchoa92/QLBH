@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useUrlView } from '@/Composables/useUrlState'
 import { Head } from '@inertiajs/vue3'
-import { AlertCircle, Banknote, FileSpreadsheet, FilterX, Landmark, ListFilter, ReceiptText, ShoppingCart, Wallet } from 'lucide-vue-next'
+import { Banknote, FileSpreadsheet, FilterX, Landmark, ListFilter, ReceiptText, ShoppingCart, Wallet } from 'lucide-vue-next'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import PageHeader from '@/Components/UI/PageHeader.vue'
 import ListToolbar from '@/Components/UI/ListToolbar.vue'
@@ -107,10 +107,6 @@ const bankAccountSelectOptions = computed(() => [
             <select v-model.number="year" aria-label="Năm kê khai" class="rounded-xl border-slate-200 text-sm font-medium">
                 <option v-for="item in years" :key="item" :value="item">Năm {{ item }}</option>
             </select>
-        </div>
-
-        <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-            <div class="flex gap-2"><AlertCircle :size="18" class="mt-0.5 shrink-0" /><div><strong>Bảng tổng hợp tham khảo · {{ quarterLabel }} ({{ formatDate(range.from) }} – {{ formatDate(range.to) }})</strong><p class="mt-1 text-amber-900">Thuế đầu ra lấy từ trường thuế đã lưu trên hóa đơn bán. Phiếu nhập mới chỉ ghi nhận cờ “Có VAT” và giá nhập, chưa lưu số thuế VAT trên hóa đơn đầu vào; vì vậy số tiền mua hàng có VAT dưới đây không phải thuế GTGT đầu vào được khấu trừ và hệ thống chưa tính số thuế phải nộp. Vui lòng đối chiếu hóa đơn chứng từ trước khi nộp tờ khai.</p></div></div>
         </div>
 
         <ListToolbar v-model="search" placeholder="Tìm mã hóa đơn, khách hàng, sản phẩm, SKU, IMEI..." :loading="loading">
