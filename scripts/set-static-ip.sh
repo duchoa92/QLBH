@@ -10,6 +10,7 @@
 set -euo pipefail
 
 IP_CIDR=""; GATEWAY=""; DNS=""; IFACE=""; REVERT=0; ASSUME_YES=0; LIST_ONLY=0
+JSON_ONLY=0; CHECK_IP=""; APPLY_REQ=0; WEB_MODE=0; STATUS_DONE=0; QUIET=0   # JSON_ONLY/CHECK_IP/APPLY_REQ: dùng cho trang Cài đặt của website
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --ip) IP_CIDR="${2:?thiếu giá trị cho --ip}"; shift 2 ;;
@@ -18,19 +19,62 @@ while [[ $# -gt 0 ]]; do
         --iface) IFACE="${2:?thiếu giá trị cho --iface}"; shift 2 ;;
         --revert) REVERT=1; shift ;;
         --list) LIST_ONLY=1; shift ;;
+        --json) JSON_ONLY=1; QUIET=1; shift ;;
+        --check) CHECK_IP="${2:?thiếu giá trị cho --check}"; QUIET=1; shift 2 ;;
+        --apply-request) APPLY_REQ=1; ASSUME_YES=1; shift ;;
         --yes|-y) ASSUME_YES=1; shift ;;
         -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
         *) echo "Tham số không hợp lệ: $1" >&2; exit 2 ;;
     esac
 done
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Bản cài ở /usr/local/sbin không nằm trong thư mục dự án: lấy đường dẫn dự án từ /etc/qlbh/app_dir (do root ghi).
+if [[ -r /etc/qlbh/app_dir ]]; then APP_DIR="$(head -n1 /etc/qlbh/app_dir)"
+else APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; fi
 WEB_USER="www-data"
 log() { printf '\n==> %s\n' "$*"; }
 ok()  { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
-[[ $EUID -eq 0 || $LIST_ONLY -eq 1 ]] || { echo "Hãy chạy bằng root: sudo bash $0" >&2; exit 1; }
+[[ $EUID -eq 0 || $LIST_ONLY -eq 1 || $JSON_ONLY -eq 1 || -n $CHECK_IP ]] || { echo "Hãy chạy bằng root: sudo bash $0" >&2; exit 1; }
+[[ -z $IFACE || $IFACE =~ ^[A-Za-z0-9._-]{1,15}$ ]] || { echo "Tên card mạng không hợp lệ." >&2; exit 2; }
+
+# ---------- Yêu cầu đổi IP từ trang Cài đặt của website ----------
+# Website (www-data) chỉ ghi file yêu cầu; dịch vụ systemd qlbh-ip-change chạy bằng root gọi script này với --apply-request.
+# Mọi giá trị đọc từ file đều bị kiểm tra lại ở đây, không tin dữ liệu từ website.
+STATE_DIR=/var/lib/qlbh; STATUS_FILE=$STATE_DIR/network-change.json; REQ_FILE=$STATE_DIR/inbox/ip-change.req; WEB_LOG=/var/log/qlbh-set-static-ip.log
+json_escape() { sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr -d '\n\r\t'; }
+write_status() {  # state message
+    local tmp; mkdir -p "$STATE_DIR"; tmp="$(mktemp "$STATE_DIR/.status.XXXXXX")"
+    printf '{"state":"%s","message":"%s","old_ip":"%s","new_ip":"%s","time":%s}\n' "$1" "$(printf '%s' "$2" | json_escape)" "${CUR_IP:-}" "${REQ_IP:-}" "$(date +%s)" > "$tmp"
+    chmod 644 "$tmp"; mv -f "$tmp" "$STATUS_FILE"
+}
+finish_web() {
+    local rc=$? msg=""
+    [[ $WEB_MODE -eq 1 && $STATUS_DONE -eq 0 ]] || return 0
+    if [[ $rc -eq 0 ]]; then write_status ok "Đã đổi IP xong."
+    else
+        msg="$(tail -n +$((LOG_START + 1)) "$WEB_LOG" 2>/dev/null | grep -v -E '^[[:space:]]*$|^(═|===|Chạy |----|NetworkManager|[0-9]+: |default |[0-9.]+/[0-9]+ dev|[[:space:]])' | tail -n 2 | tr '\n' ' ')"
+        write_status failed "${msg:-Không đổi được IP, máy giữ nguyên cấu hình cũ.}"
+    fi
+}
+if [[ $APPLY_REQ -eq 1 ]]; then
+    WEB_MODE=1; REQ_IP=""
+    exec >>"$WEB_LOG" 2>&1
+    LOG_START="$(wc -l < "$WEB_LOG")"
+    echo; echo "=== $(date '+%F %T') yêu cầu đổi IP từ website ==="
+    trap finish_web EXIT
+    [[ -f $REQ_FILE && ! -L $REQ_FILE && $(stat -c %s "$REQ_FILE") -lt 1024 ]] || { echo "Không có yêu cầu đổi IP hợp lệ."; exit 1; }
+    REQ_PREFIX=""
+    while IFS='=' read -r k v; do
+        [[ $v =~ ^[0-9./,]{0,100}$ ]] || { echo "Yêu cầu có ký tự không hợp lệ."; rm -f "$REQ_FILE"; exit 1; }
+        case "$k" in ip) REQ_IP="$v" ;; prefix) REQ_PREFIX="$v" ;; gateway) GATEWAY="$v" ;; dns) DNS="$v" ;; esac
+    done < "$REQ_FILE"
+    rm -f "$REQ_FILE"
+    [[ -n $REQ_IP ]] || { echo "Yêu cầu thiếu IP."; exit 1; }
+    IP_CIDR="$REQ_IP"; [[ -n $REQ_PREFIX ]] && IP_CIDR="${REQ_IP}/${REQ_PREFIX}"
+    write_status running "Đang đổi IP..."
+fi
 
 IFACE="${IFACE:-$(ip -4 route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')}"
 [[ -n $IFACE ]] || { echo "Không tìm thấy card mạng đang kết nối (chưa có mạng?)." >&2; exit 1; }
@@ -60,13 +104,24 @@ valid_ip() {  # a.b.c.d hoặc a.b.c.d/nn
     [[ -z $prefix ]] || { [[ $prefix =~ ^[0-9]+$ ]] && (( prefix >= 8 && prefix <= 30 )); }
 }
 
-ping_gateway() { ping -c 2 -W 2 "$1" >/dev/null 2>&1; }
+# Router có liên lạc được không? Thử ping, rồi ARP, rồi cổng TCP 80/443/53 (nhiều router chặn ping nhưng vẫn hoạt động bình thường).
+ping_gateway() {
+    local g="$1" p
+    ip neigh flush to "$g" dev "$IFACE" >/dev/null 2>&1 || true   # bỏ bản ghi ARP cũ để không bị "đúng giả"
+    ping -c 2 -W 2 "$g" >/dev/null 2>&1 && return 0
+    ip -4 neigh show dev "$IFACE" 2>/dev/null | awk -v g="$g" '$1==g && /lladdr/ && $NF!="FAILED" && $NF!="INCOMPLETE" {f=1} END{exit !f}' && return 0
+    for p in 80 443 53; do
+        timeout 2 bash -c "exec 3<>/dev/tcp/${g}/${p}" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+has_ip() { [[ "$(ip -4 addr show dev "$IFACE" 2>/dev/null)" == *"inet ${NEW_IP}/"* ]]; }
 
 # Chờ tối đa ~40 giây cho đến khi card mạng có IP mới và liên lạc được với router.
 wait_net() {
     local i
     for i in $(seq 1 20); do
-        if ip -4 addr show dev "$IFACE" | grep -q "inet ${NEW_IP}/" && ping_gateway "$GATEWAY"; then return 0; fi
+        if has_ip && ping_gateway "$GATEWAY"; then return 0; fi
         sleep 2
     done
     return 1
@@ -77,6 +132,9 @@ show_diag() {
     ip -4 route >&2 || true
     echo "NetworkManager: $(systemctl is-active NetworkManager 2>&1)   systemd-networkd: $(systemctl is-active systemd-networkd 2>&1)" >&2
     ls /etc/netplan/ >&2 || true
+    command -v ping >/dev/null 2>&1 || echo "!! Máy KHÔNG có lệnh ping (sudo apt install iputils-ping)" >&2
+    echo "ping router ${GATEWAY}:" >&2; ping -c 2 -W 2 "$GATEWAY" 2>&1 | tail -n 3 >&2 || true
+    echo "Bảng ARP:" >&2; ip -4 neigh show dev "$IFACE" >&2 || true
     echo "----------------------------------------------------------------" >&2
 }
 
@@ -143,7 +201,7 @@ update_app_for_new_ip() {  # old new
 verify_after_change() {
     local code scheme=http gw
     log "Kiểm tra sau khi đổi IP"
-    ip -4 addr show dev "$IFACE" | grep -q "inet ${NEW_IP}/" && ok "Card ${IFACE} đang dùng IP ${NEW_IP}" || bad "Card ${IFACE} chưa có IP ${NEW_IP}"
+    has_ip && ok "Card ${IFACE} đang dùng IP ${NEW_IP}" || bad "Card ${IFACE} chưa có IP ${NEW_IP}"
     gw="$GATEWAY"; ping_gateway "$gw" && ok "Kết nối được router (${gw})" || bad "Không ping được router (${gw})"
     ping -c1 -W3 1.1.1.1 >/dev/null 2>&1 && ok "Ra được internet" || warn "Chưa ra được internet (kiểm tra DNS/gateway/router)"
     getent hosts github.com >/dev/null 2>&1 && ok "DNS hoạt động" || warn "DNS chưa phân giải được tên miền"
@@ -264,9 +322,39 @@ short_range() {  # 192.168.1.5 192.168.1.9 -> 192.168.1.5 – .9 (nếu cùng /2
     if [[ ${a%.*} == "${b%.*}" ]]; then (( $1 == $2 )) && echo "$a" || echo "$a – ${b##*.}"; else echo "$a – $b"; fi
 }
 
-SUGGEST_RANGE=""; SUGGEST_EXAMPLE=""
+FREE_RANGES=(); SUGGEST_RANGE=""; SUGGEST_EXAMPLE=""; SUGGEST_FROM=""; SUGGEST_TO=""
+sorted_used_ips() { printf '%s\n' "${!USED_MAC[@]}" | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n; }
+
+# Gom các dải trống và chọn dải gợi ý.
+compute_plan() {
+    local s e len best_len=0 best_s=0 best_e=0 dist score ex
+    FREE_RANGES=()
+    while read -r s e; do
+        [[ -z $s ]] && continue
+        FREE_RANGES+=("$s $e")
+        len=$(( e - s + 1 )); dist=0
+        # IP đang nhận tự động nằm trong dải DHCP của router nên ưu tiên dải XA IP hiện tại (chỉ xét dải >= 10 địa chỉ);
+        # nếu đã là IP tĩnh thì chọn dải trống lớn nhất.
+        if (( IS_STATIC == 0 )); then
+            if (( CUR_INT < s )); then dist=$(( s - CUR_INT )); elif (( CUR_INT > e )); then dist=$(( CUR_INT - e )); fi
+            (( len >= 10 )) && score=$(( dist * 1000 + len )) || score=$len
+        else score=$len; fi
+        (( score > best_len )) && { best_len=$score; best_s=$s; best_e=$e; }
+    done < <(compress_free_ranges)
+    if (( best_len > 0 )); then
+        # Ví dụ nằm ở đầu xa IP hiện tại của dải, cách mép vài số; tránh số cuối mạng (.254 hay bị router chiếm).
+        if (( CUR_INT > best_e )); then ex=$(( best_s + 3 )); else ex=$(( best_e - 3 )); fi
+        (( ex > best_e )) && ex=$best_e; (( ex < best_s )) && ex=$best_s
+        (( ex > CUR_BCAST - 5 )) && ex=$(( CUR_BCAST - 5 )); (( ex < best_s )) && ex=$best_s
+        SUGGEST_FROM="$(int2ip "$best_s")"; SUGGEST_TO="$(int2ip "$best_e")"; SUGGEST_EXAMPLE="$(int2ip "$ex")"
+        SUGGEST_RANGE="${SUGGEST_FROM} đến ${SUGGEST_TO}"
+    fi
+    return 0
+}
+
 show_ip_plan() {
-    local first=$(( CUR_NET + 1 )) last=$(( CUR_BCAST - 1 )) n=0 ipa s e len best_len=0 best_s=0 best_e=0 cnt=0
+    local first=$(( CUR_NET + 1 )) last=$(( CUR_BCAST - 1 )) n=0 ipa s e len cnt=0 r
+    compute_plan
     echo
     echo "══════════ DẢI IP CỦA MẠNG ══════════"
     echo "  Mạng: $(int2ip "$CUR_NET")/${CUR_PREFIX}   (card ${IFACE}, router ${CUR_GW})"
@@ -278,9 +366,8 @@ show_ip_plan() {
     printf '      %-15s địa chỉ mạng (network)\n' "$(int2ip "$CUR_NET")"
     printf '      %-15s địa chỉ broadcast\n' "$(int2ip "$CUR_BCAST")"
     printf '      %-15s router / gateway\n' "$CUR_GW"
-    for ipa in $(printf '%s\n' "${!USED_MAC[@]}" | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n); do
-        [[ -z $ipa ]] && continue
-        [[ $ipa == "$CUR_GW" ]] && continue
+    for ipa in $(sorted_used_ips); do
+        [[ -z $ipa || $ipa == "$CUR_GW" ]] && continue
         cnt=$(( cnt + 1 ))
         if (( cnt <= 40 )); then printf '      %-15s đang có thiết bị khác dùng (MAC %s)\n' "$ipa" "${USED_MAC[$ipa]}"; fi
     done
@@ -289,29 +376,13 @@ show_ip_plan() {
     echo "  ✓ IP của chính máy này (${CUR_IP}) vẫn chọn lại được (giữ nguyên)."
     echo
     echo "  ○ IP đang trống (chưa thấy thiết bị nào dùng):"
-    while read -r s e; do
-        [[ -z $s ]] && continue
-        n=$(( n + 1 ))
-        len=$(( e - s + 1 ))
+    for r in "${FREE_RANGES[@]}"; do
+        read -r s e <<<"$r"; n=$(( n + 1 )); len=$(( e - s + 1 ))
         (( n <= 12 )) && echo "      $(short_range "$s" "$e")   ($len địa chỉ)"
-        # Chọn dải để gợi ý: IP đang nhận tự động nằm trong dải DHCP của router nên ưu tiên dải XA IP hiện tại
-        # (chỉ xét dải >= 10 địa chỉ); nếu đã là IP tĩnh thì chọn dải trống lớn nhất.
-        local dist=0 score
-        if (( IS_STATIC == 0 )); then
-            if (( CUR_INT < s )); then dist=$(( s - CUR_INT )); elif (( CUR_INT > e )); then dist=$(( CUR_INT - e )); fi
-            (( len >= 10 )) && score=$(( dist * 1000 + len )) || score=$len
-        else score=$len; fi
-        (( score > best_len )) && { best_len=$score; best_s=$s; best_e=$e; }
-    done < <(compress_free_ranges)
+    done
     (( n > 12 )) && echo "      ... và $(( n - 12 )) dải nhỏ khác"
     (( n == 0 )) && echo "      (không còn IP trống trong dải đã quét)"
-    if (( best_len > 0 )); then
-        # Ví dụ nằm ở đầu xa IP hiện tại của dải, cách mép vài số; tránh số cuối mạng (.254 hay bị router chiếm).
-        local ex
-        if (( CUR_INT > best_e )); then ex=$(( best_s + 3 )); else ex=$(( best_e - 3 )); fi
-        (( ex > best_e )) && ex=$best_e; (( ex < best_s )) && ex=$best_s
-        (( ex > CUR_BCAST - 5 )) && ex=$(( CUR_BCAST - 5 )); (( ex < best_s )) && ex=$best_s
-        SUGGEST_RANGE="$(int2ip "$best_s") đến $(int2ip "$best_e")"; SUGGEST_EXAMPLE="$(int2ip "$ex")"
+    if [[ -n $SUGGEST_FROM ]]; then
         echo
         echo "  ★ GỢI Ý: chọn trong khoảng ${SUGGEST_RANGE}  (ví dụ ${SUGGEST_EXAMPLE})"
         (( IS_STATIC == 0 )) && echo "    (IP hiện tại ${CUR_IP} do router tự cấp nên nằm trong dải DHCP; dải gợi ý được chọn xa IP đó để ít bị trùng)"
@@ -320,6 +391,31 @@ show_ip_plan() {
     echo "  Lưu ý: máy đang TẮT hoặc ngủ sẽ không hiện ra ở trên. Để chắc chắn không trùng khi chúng bật lại, nên chọn IP"
     echo "  NGOÀI dải DHCP của router (xem trang quản trị router: DHCP Pool / Start IP – End IP) hoặc đặt DHCP reservation cho máy chủ."
     echo "═════════════════════════════════════"
+}
+
+# Xuất kết quả quét dạng JSON cho trang Cài đặt.
+print_json() {
+    local first=$(( CUR_NET + 1 )) last=$(( CUR_BCAST - 1 )) ipa sep="" r s e
+    compute_plan
+    printf '{"interface":"%s","network":"%s","prefix":%s,"gateway":"%s","current_ip":"%s","is_static":%s,' \
+        "$IFACE" "$(int2ip "$CUR_NET")" "$CUR_PREFIX" "$CUR_GW" "$CUR_IP" "$([[ $IS_STATIC -eq 1 ]] && echo true || echo false)"
+    printf '"range_first":"%s","range_last":"%s","scan_first":"%s","scan_last":"%s",' \
+        "$(int2ip "$first")" "$(int2ip "$last")" "$(int2ip "$SCAN_FIRST")" "$(int2ip "$SCAN_LAST")"
+    printf '"reserved":[{"ip":"%s","reason":"network"},{"ip":"%s","reason":"broadcast"},{"ip":"%s","reason":"gateway"}],' \
+        "$(int2ip "$CUR_NET")" "$(int2ip "$CUR_BCAST")" "$CUR_GW"
+    printf '"used":['
+    for ipa in $(sorted_used_ips); do
+        [[ -z $ipa || $ipa == "$CUR_GW" ]] && continue
+        printf '%s{"ip":"%s","mac":"%s"}' "$sep" "$ipa" "${USED_MAC[$ipa]}"; sep=","
+    done
+    printf '],"free_ranges":['; sep=""
+    for r in "${FREE_RANGES[@]}"; do
+        read -r s e <<<"$r"
+        printf '%s{"from":"%s","to":"%s","count":%s}' "$sep" "$(int2ip "$s")" "$(int2ip "$e")" "$(( e - s + 1 ))"; sep=","
+    done
+    printf '],"suggest":'
+    if [[ -n $SUGGEST_FROM ]]; then printf '{"from":"%s","to":"%s","example":"%s"}' "$SUGGEST_FROM" "$SUGGEST_TO" "$SUGGEST_EXAMPLE"; else printf 'null'; fi
+    printf '}\n'
 }
 
 # Kiểm tra một IP có chọn được không. In lý do ra REASON, trả 0 nếu chọn được.
@@ -344,8 +440,26 @@ check_candidate() {  # ip (không kèm /nn), prefix
 }
 
 # ---------- Quét & hiển thị ----------
-echo "Đang quét mạng $(int2ip "$CUR_NET")/${CUR_PREFIX} để tìm IP đang được dùng (khoảng 5-15 giây)..."
+if ! command -v ping >/dev/null 2>&1; then
+    echo "Máy chưa có lệnh ping, đang cài iputils-ping..." >&2
+    [[ $EUID -eq 0 ]] && apt-get install -y iputils-ping >/dev/null 2>&1 || true
+    command -v ping >/dev/null 2>&1 || echo "CẢNH BÁO: không có ping nên không quét được IP đang dùng. Cài: sudo apt install iputils-ping" >&2
+fi
+
+# --check IP: kiểm tra nhanh một IP (cho trang Cài đặt), in JSON.
+if [[ -n $CHECK_IP ]]; then
+    SCAN_FIRST=$(( CUR_NET + 1 )); SCAN_LAST=$(( CUR_BCAST - 1 ))
+    [[ $CHECK_IP =~ ^[0-9]{1,3}$ ]] && CHECK_IP="$(expand_short_ip "$CHECK_IP")"
+    read_neighbors
+    rc=0; check_candidate "${CHECK_IP%/*}" "$CUR_PREFIX" || rc=$?
+    if [[ $rc -eq 0 ]]; then echo '{"ok":true,"reason":""}'
+    else printf '{"ok":false,"reason":"%s"}\n' "$(printf '%s' "$REASON" | json_escape)"; fi
+    exit 0
+fi
+
+[[ $QUIET -eq 1 ]] || echo "Đang quét mạng $(int2ip "$CUR_NET")/${CUR_PREFIX} để tìm IP đang được dùng (khoảng 5-15 giây)..."
 scan_network
+if [[ $JSON_ONLY -eq 1 ]]; then print_json; exit 0; fi
 show_ip_plan
 if [[ $LIST_ONLY -eq 1 ]]; then exit 0; fi
 
@@ -531,3 +645,4 @@ echo
 echo "    Truy cập: https://${NEW_IP}  (hoặc http://${NEW_IP})"
 [[ $NEW_IP != "$CUR_IP" ]] && echo "    Các máy khác (điện thoại, máy tính tiền) cần mở lại bằng địa chỉ mới; đã lưu trong trình duyệt thì xóa/đổi lối tắt cũ ${CUR_IP}."
 echo "    Nên đặt thêm 'DHCP reservation'/'Address reservation' cho máy này trên router để router không cấp IP ${NEW_IP} cho thiết bị khác."
+if [[ $WEB_MODE -eq 1 ]]; then write_status ok "Đã đổi IP xong."; STATUS_DONE=1; fi

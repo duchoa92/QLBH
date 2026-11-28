@@ -392,6 +392,9 @@ if [[ $WITH_TAILSCALE -eq 1 ]]; then
     fi
 fi
 
+log "Cho phép trang Cài đặt đổi IP máy chủ"
+bash "$APP_DIR/scripts/install-network-helper.sh" || echo "Chưa cài được trợ giúp đổi IP (xem lỗi ở trên); chạy lại: sudo bash scripts/install-network-helper.sh" >&2
+
 log "Tự chạy khi bật máy"
 for svc in cron nginx "$PHP_FPM_SERVICE" mariadb mysql docker; do
     if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "^${svc}.service"; then

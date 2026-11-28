@@ -51,6 +51,9 @@ if [[ $DO_BUILD -eq 1 && -f package.json ]]; then
     npm run build
 fi
 
+log "Cập nhật trợ giúp đổi IP cho trang Cài đặt"
+bash "$APP_DIR/scripts/install-network-helper.sh" || echo "Chưa cài được trợ giúp đổi IP (xem lỗi ở trên)." >&2
+
 log "Phân quyền và xóa cache"
 chown -R "$WEB_USER":"$WEB_USER" storage bootstrap/cache 2>/dev/null || true
 [[ -d public/build ]] && chown -R "$WEB_USER":"$WEB_USER" public/build 2>/dev/null || true

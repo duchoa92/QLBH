@@ -27,6 +27,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RecordDetailController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleReceiptController;
+use App\Http\Controllers\ServerNetworkController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SystemCleanupController;
 use App\Http\Controllers\StockImportController;
@@ -91,6 +92,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/mail/test', [MailSettingsController::class, 'test'])->middleware('permission:settings.edit')->name('settings.mail.test');
     Route::get('/settings/door-camera/status', [DoorCameraSettingsController::class, 'status'])->middleware('permission:settings.edit')->name('settings.door-camera.status');
     Route::post('/settings/door-camera/key', [DoorCameraSettingsController::class, 'regenerateKey'])->middleware('permission:settings.edit')->name('settings.door-camera.key');
+    Route::get('/settings/network/scan', [ServerNetworkController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.network.scan');
+    Route::post('/settings/network/check', [ServerNetworkController::class, 'check'])->middleware('permission:settings.edit')->name('settings.network.check');
+    Route::post('/settings/network/apply', [ServerNetworkController::class, 'apply'])->middleware('permission:settings.edit')->name('settings.network.apply');
+    Route::get('/settings/network/status', [ServerNetworkController::class, 'status'])->middleware('permission:settings.edit')->name('settings.network.status');
     Route::get('/settings/system-cleanup/scan', [SystemCleanupController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.cleanup.scan');
     Route::delete('/settings/system-cleanup', [SystemCleanupController::class, 'destroy'])->middleware('permission:settings.edit')->name('settings.cleanup.destroy');
     Route::get('/backups', [BackupController::class, 'index'])->middleware('permission:backups.manage')->name('backups.index');
