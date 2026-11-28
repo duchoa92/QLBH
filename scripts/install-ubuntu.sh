@@ -5,6 +5,7 @@
 #
 #   --db-user / --db-pass: tạo sẵn tài khoản MySQL/MariaDB (quyền với database tên bắt đầu bằng qlbh) để nhập vào trang /setup.
 #                          Bỏ --db-pass thì script sẽ hỏi mật khẩu. Không cần --with-mariadb nếu máy đã có MySQL.
+#   (Khi chạy trong terminal, script tự hỏi có cố định IP không và cho nhập IP; --no-static-ip để bỏ qua bước này.)
 #   --static-ip [--ip 192.168.x.y/24 --gateway 192.168.x.1 --dns 8.8.8.8,1.1.1.1]: cố định IP máy chủ (mặc định giữ IP hiện tại).
 #   --cloudflare-token <TOKEN>: cài Cloudflare Tunnel để truy cập từ internet (HTTPS hợp lệ, không cần mở cổng router).
 #   --tailscale [--tailscale-key <KEY>]: cài Tailscale (mạng riêng) để chủ cửa hàng truy cập từ xa an toàn.
@@ -19,6 +20,7 @@ PHP_VERSION="8.4"
 WITH_MARIADB=0
 WITH_CAMERA=1
 STATIC_IP=0
+NO_STATIC_IP=0
 STATIC_ARGS=()
 CF_TOKEN=""
 WITH_TAILSCALE=0
@@ -42,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --with-camera) WITH_CAMERA=1; shift ;;
         --no-camera) WITH_CAMERA=0; shift ;;
         --static-ip) STATIC_IP=1; shift ;;
+        --no-static-ip) NO_STATIC_IP=1; shift ;;
         --ip) STATIC_IP=1; STATIC_ARGS+=(--ip "${2:?thiếu giá trị cho --ip}"); shift 2 ;;
         --gateway) STATIC_ARGS+=(--gateway "${2:?thiếu giá trị cho --gateway}"); shift 2 ;;
         --dns) STATIC_ARGS+=(--dns "${2:?thiếu giá trị cho --dns}"); shift 2 ;;
@@ -52,7 +55,7 @@ while [[ $# -gt 0 ]]; do
         --no-nginx) WITH_NGINX=0; shift ;;
         --no-build) BUILD_ASSETS=0; shift ;;
         --rebuild) FORCE_BUILD=1; shift ;;
-        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
         *) echo "Tham số không hợp lệ: $1" >&2; exit 2 ;;
     esac
 done
@@ -73,9 +76,32 @@ if ! getent hosts archive.ubuntu.com >/dev/null 2>&1 || ! (curl -fsS -m 8 -o /de
     echo "CẢNH BÁO: máy chủ chưa ra được internet (hoặc DNS lỗi). Kiểm tra dây mạng/Wi-Fi/router rồi chạy lại; bước tải gói sẽ thất bại." >&2
 fi
 
+# IP đã được cố định chưa? (netplan do script tạo, hoặc NetworkManager đang để manual)
+ip_is_static() {
+    [[ -f /etc/netplan/99-qlbh-static.yaml ]] && return 0
+    command -v nmcli >/dev/null 2>&1 || return 1
+    local dev con
+    dev="$(ip -4 route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')"
+    con="$(nmcli -g GENERAL.CONNECTION device show "$dev" 2>/dev/null)"
+    [[ -n $con && "$(nmcli -g ipv4.method con show "$con" 2>/dev/null)" == manual ]]
+}
+
+# Chạy trong terminal và chưa chọn --no-static-ip: hỏi có cố định IP không.
+if [[ $STATIC_IP -eq 0 && $NO_STATIC_IP -eq 0 && -t 0 ]]; then
+    if ip_is_static; then
+        echo "IP máy chủ đã được cố định: $(hostname -I | awk '{print $1}') (bỏ qua bước đặt IP)."
+    else
+        echo
+        echo "Địa chỉ IP hiện tại của máy chủ: $(hostname -I | awk '{print $1}')"
+        echo "Cố định IP giúp các máy khác luôn vào được cùng một địa chỉ (nên làm)."
+        read -r -p "Cố định IP bây giờ? [Y/n]: " ANS_IP
+        [[ -z $ANS_IP || $ANS_IP =~ ^[YyCc] ]] && STATIC_IP=1
+    fi
+fi
+
 if [[ $STATIC_IP -eq 1 ]]; then
     log "Cố định địa chỉ IP"
-    bash "$APP_DIR/scripts/set-static-ip.sh" "${STATIC_ARGS[@]}" || echo "Chưa cố định được IP (xem lỗi ở trên). Chạy riêng: sudo bash scripts/set-static-ip.sh" >&2
+    bash "$APP_DIR/scripts/set-static-ip.sh" "${STATIC_ARGS[@]}" || echo "Chưa cố định được IP (xem lỗi ở trên). Chạy riêng sau: sudo bash scripts/set-static-ip.sh" >&2
 fi
 
 export DEBIAN_FRONTEND=noninteractive

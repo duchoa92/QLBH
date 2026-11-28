@@ -198,7 +198,15 @@ Nếu IP đổi (khi khởi động lại máy hoặc router), các máy khác s
   Script tự kiểm tra mạng sau khi đổi và **tự quay lại cấu hình cũ nếu mất kết nối**. Muốn quay về tự động nhận IP: `sudo bash scripts/set-static-ip.sh --revert`.
 - **Cách 2: trên router** đặt "DHCP reservation" / "Gắn IP theo địa chỉ MAC" cho laptop. Nên làm thêm cả khi đã dùng cách 1, để router không cấp IP đó cho thiết bị khác.
 
-Có thể gộp vào lệnh cài: `sudo bash scripts/install-ubuntu.sh --https --db-user admin --static-ip`.
+**Ngay khi chạy script cài đặt**, nếu IP chưa cố định thì script hỏi:
+```
+Cố định IP bây giờ? [Y/n]:
+Nhập IP mới cho máy chủ [Enter = giữ 192.168.100.124]:
+Router / gateway [Enter = 192.168.100.1]:
+DNS, cách nhau bằng dấu phẩy [Enter = 192.168.100.1,8.8.8.8,1.1.1.1]:
+Áp dụng cấu hình này? [Y/n]:
+```
+Bạn chỉ cần nhập **IP** (ví dụ `192.168.100.168`, không cần gõ `/24`); các mục còn lại bấm **Enter** để dùng giá trị hiện tại. Script kiểm tra IP hợp lệ, đổi xong tự kiểm tra mạng và **tự quay lại cấu hình cũ nếu mất kết nối**. Nếu đang điều khiển máy qua SSH, đổi IP sẽ ngắt kết nối: kết nối lại bằng IP mới. Muốn bỏ qua bước này: thêm `--no-static-ip`. Chạy không hỏi: `--static-ip --ip 192.168.100.168/24 --gateway 192.168.100.1`.
 **Sau khi đổi IP**, nếu dùng HTTPS hãy chạy lại `sudo bash scripts/install-ubuntu.sh --https` để cấp lại chứng chỉ cho IP mới (điện thoại không cần cài lại chứng chỉ gốc).
 
 ### G2. Truy cập từ internet (ngoài cửa hàng)
