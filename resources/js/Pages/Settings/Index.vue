@@ -455,7 +455,7 @@ const settingGroups = computed(() => [
         cards: [
             { key: 'system', title: 'Thông tin & hệ thống', description: 'Tên, địa chỉ, số điện thoại, tiền tệ, ngày giờ.', icon: Store, tone: 'bg-blue-50 text-blue-700', hover: 'hover:border-blue-300', visible: props.can_edit_settings },
             { key: 'mail', title: 'Email gửi thư', description: 'SMTP để gửi liên kết quên mật khẩu.', icon: Mail, tone: 'bg-indigo-50 text-indigo-700', hover: 'hover:border-indigo-300', visible: props.can_edit_settings },
-            { key: 'network', title: 'Mạng & địa chỉ IP', description: 'Xem IP dùng được, đổi IP máy chủ.', icon: Network, tone: 'bg-teal-50 text-teal-700', hover: 'hover:border-teal-300', visible: props.can_edit_settings },
+            { key: 'network', title: 'Mạng & máy chủ', description: 'Đổi IP, khởi động lại, tắt máy chủ.', icon: Network, tone: 'bg-teal-50 text-teal-700', hover: 'hover:border-teal-300', visible: props.can_edit_settings },
             { key: 'printing', title: 'In ấn', description: 'Hóa đơn, khổ giấy, tem sản phẩm, hợp đồng.', icon: Printer, tone: 'bg-sky-50 text-sky-700', hover: 'hover:border-sky-300', visible: props.can_edit_settings },
         ],
     },
@@ -710,7 +710,7 @@ const bankLockedText = computed(() =>
 
             <!-- ===== THÔNG TIN & HỆ THỐNG ===== -->
             <template v-if="activeModal === 'system'">
-                <SettingCollapse title="Thông tin cửa hàng" description="Hiện trên hóa đơn, phiếu sửa chữa và màn hình POS. Chỗ nào để trống sẽ không in.">
+                <SettingCollapse title="Thông tin cửa hàng" description="Hiện trên hóa đơn và POS. Để trống thì không in.">
                     <div class="grid gap-3 p-4 sm:grid-cols-2">
                         <FloatingInput v-model="form.shop_name" name="shop_name" label="Tên cửa hàng" :error="form.errors.shop_name" />
                         <FloatingInput v-model="form.print_shop_subtitle" name="print_shop_subtitle" label="Ngành hàng / dòng giới thiệu" :error="form.errors.print_shop_subtitle" />
@@ -734,17 +734,17 @@ const bankLockedText = computed(() =>
 
             <!-- ===== IN ẤN ===== -->
             <template v-if="activeModal === 'printing'">
-                <SettingCollapse title="Hóa đơn và khổ giấy" description="Áp dụng cho hóa đơn bán hàng và phiếu sửa chữa. Thông tin cửa hàng chỉnh ở mục “Thông tin & hệ thống”.">
+                <SettingCollapse title="Hóa đơn và khổ giấy" description="Cho hóa đơn bán hàng và phiếu sửa chữa.">
                     <div class="grid gap-3 p-4 sm:grid-cols-3">
                         <FloatingSelect v-model="form.print_template" name="print_template" label="Mẫu hóa đơn" :options="printTemplateOptions" :show-placeholder="false" />
                         <FloatingSelect v-model="form.print_paper_size" name="print_paper_size" label="Khổ giấy" :options="printPaperOptions" />
                         <FloatingSelect v-model="form.print_orientation" name="print_orientation" label="Hướng giấy" :options="printOrientationOptions" />
                     </div>
                 </SettingCollapse>
-                <SettingCollapse title="Tem sản phẩm" description="Khổ tem, nội dung và cỡ chữ; bản xem trước đúng kích thước thật." :default-open="false">
+                <SettingCollapse title="Tem sản phẩm" description="Khổ tem, nội dung, cỡ chữ." :default-open="false">
                     <LabelTemplateEditor v-model="form.label_template" :shop-name="form.shop_name" :errors="form.errors" />
                 </SettingCollapse>
-                <SettingCollapse title="Hợp đồng mua bán" description="Nội dung in trên hợp đồng khi nhập hàng từ khách." :default-open="false">
+                <SettingCollapse title="Hợp đồng mua bán" description="Nội dung in khi nhập hàng từ khách." :default-open="false">
                     <div class="space-y-3 p-4">
                         <FloatingInput v-model="form.purchase_contract_title" name="purchase_contract_title" label="Tiêu đề hợp đồng" :error="form.errors.purchase_contract_title" />
                         <div>
@@ -771,7 +771,7 @@ const bankLockedText = computed(() =>
                             <SettingSwitch
                                 v-model="form.allow_negative_stock"
                                 title="Cho phép tồn kho âm"
-                                description="Bán trước, nhập bù sau. Phần bán vượt tồn chưa có lô nhập nên chưa tính được giá vốn theo lô."
+                                description="Bán trước, nhập bù sau. Phần vượt tồn chưa tính được giá vốn."
                             />
                         </SettingBlock>
                         <SettingBlock>
@@ -800,7 +800,7 @@ const bankLockedText = computed(() =>
                             <SettingSwitch
                                 v-model="form.pos_cost_price_suggestion_enabled"
                                 title="Gợi ý giá nhập trên POS"
-                                description="Nhấn giữ ảnh sản phẩm hoặc dòng IMEI/biến thể để xem giá nhập."
+                                description="Nhấn giữ ảnh hoặc dòng sản phẩm để xem giá nhập."
                             />
                         </SettingBlock>
                         <SettingBlock>
@@ -813,7 +813,7 @@ const bankLockedText = computed(() =>
                                 <SettingSwitch
                                     v-model="form.work_shift_auto_open_enabled"
                                     title="Tự hiện bảng kiểm kê khi vào POS"
-                                    description="Tắt thì mở ca thủ công từ POS."
+                                    description="Tắt: mở ca thủ công từ POS."
                                 />
                             </div>
                         </SettingBlock>
@@ -844,7 +844,7 @@ const bankLockedText = computed(() =>
                             <SettingSwitch
                                 v-model="form.pos_vat_default_enabled"
                                 title="Mặc định tính và cộng VAT"
-                                description="Nhãn VAT theo hàng nhập chỉ để nhận biết, không tự cộng thuế."
+                                description="Chỉ là nhãn nhận biết, không tự cộng thuế."
                             />
                             <FloatingInput
                                 v-model.number="form.pos_vat_rate"
@@ -872,13 +872,13 @@ const bankLockedText = computed(() =>
                             <SettingSwitch
                                 v-model="form.pos_vat_used_enabled"
                                 title="Cho phép tính VAT"
-                                description="Mặc định hàng cũ không chịu VAT. Bật để thu ngân được chọn VAT trên POS và khi sửa hóa đơn."
+                                description="Mặc định hàng cũ không có VAT. Bật để thu ngân tự chọn VAT."
                             />
                             <div v-if="form.pos_vat_used_enabled" class="rounded-lg bg-slate-50 p-3">
                                 <SettingSwitch
                                     v-model="form.pos_vat_used_default"
                                     title="Mặc định chọn tính VAT"
-                                    description="Tắt thì thu ngân tự bấm VAT cho từng dòng hàng cũ."
+                                    description="Tắt: thu ngân tự bấm VAT từng dòng."
                                 />
                             </div>
                         </SettingBlock>
@@ -1007,7 +1007,7 @@ const bankLockedText = computed(() =>
                                     :model-value="Boolean(account.payment_provider)"
                                     :disabled="!can_update_bank_settings"
                                     title="Tự đối soát giao dịch"
-                                    description="Tự nhận biết khách đã chuyển khoản qua ApiPay hoặc SePay."
+                                    description="Tự nhận khách đã chuyển khoản (ApiPay, SePay)."
                                     @update:model-value="setAutoReconcile(account, $event)"
                                 />
                                 <span v-if="account.payment_auto_enabled" class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">ĐANG BẬT</span>
@@ -1024,10 +1024,10 @@ const bankLockedText = computed(() =>
                             />
                             <div v-if="account.payment_provider === 'apipay'" class="mt-2 grid gap-3 sm:grid-cols-2">
                                 <FloatingInput v-model="account.payment_provider_account_id" :name="`bank_accounts_${selectedBankAccountIndex}_provider_account_id`" label="Bank Account Public ID ApiPay" placeholder-text="bk_..." :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
-                                <FloatingInput v-model="account.payment_api_access_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_access_key`" label="ApiPay Access Key" type="password" autocomplete="new-password" :placeholder-text="account.payment_api_access_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'ak_live_… hoặc ak_test_…'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
-                                <FloatingInput v-model="account.payment_api_secret_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_secret_key`" label="ApiPay Secret Key" type="password" autocomplete="new-password" :placeholder-text="account.payment_api_secret_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret key của API Key'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                <FloatingInput v-model="account.payment_api_access_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_access_key`" label="ApiPay Access Key" secret :placeholder-text="account.payment_api_access_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'ak_live_… hoặc ak_test_…'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                <FloatingInput v-model="account.payment_api_secret_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_secret_key`" label="ApiPay Secret Key" secret :placeholder-text="account.payment_api_secret_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret key của API Key'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
                                 <div>
-                                    <FloatingInput v-model="account.payment_webhook_secret" :name="`bank_accounts_${selectedBankAccountIndex}_webhook_secret`" label="Webhook signing secret" type="password" autocomplete="new-password" :placeholder-text="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret ApiPay trả về khi tạo webhook'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                    <FloatingInput v-model="account.payment_webhook_secret" :name="`bank_accounts_${selectedBankAccountIndex}_webhook_secret`" label="Webhook signing secret" secret :placeholder-text="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Secret ApiPay trả về khi tạo webhook'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
                                     <span v-if="account.payment_webhook_secret_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu secret.</span>
                                 </div>
                             </div>
@@ -1036,11 +1036,11 @@ const bankLockedText = computed(() =>
                             </p>
                             <div v-else-if="account.payment_provider === 'sepay'" class="mt-2 grid gap-3 sm:grid-cols-2">
                                 <div>
-                                    <FloatingInput v-model="account.payment_api_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_key`" label="SePay API Key" type="password" autocomplete="new-password" :placeholder-text="account.payment_api_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'API key cấu hình webhook'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                    <FloatingInput v-model="account.payment_api_key" :name="`bank_accounts_${selectedBankAccountIndex}_api_key`" label="SePay API Key" secret :placeholder-text="account.payment_api_key_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'API key cấu hình webhook'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
                                     <span v-if="account.payment_api_key_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu API key.</span>
                                 </div>
                                 <div>
-                                    <FloatingInput v-model="account.payment_webhook_secret" :name="`bank_accounts_${selectedBankAccountIndex}_webhook_secret`" label="Webhook secret tùy chỉnh" type="password" autocomplete="new-password" :placeholder-text="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Không bắt buộc'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
+                                    <FloatingInput v-model="account.payment_webhook_secret" :name="`bank_accounts_${selectedBankAccountIndex}_webhook_secret`" label="Webhook secret tùy chỉnh" secret :placeholder-text="account.payment_webhook_secret_configured ? 'Đã lưu · nhập giá trị mới để thay' : 'Không bắt buộc'" :disabled="!can_update_bank_settings" input-class="disabled:bg-slate-100" />
                                     <span v-if="account.payment_webhook_secret_configured" class="mt-1 block text-[11px] font-normal text-emerald-700">Đã lưu secret.</span>
                                 </div>
                             </div>
@@ -1089,7 +1089,7 @@ const bankLockedText = computed(() =>
                             v-model="form.payment_voice_enabled"
                             :disabled="!can_update_bank_settings"
                             title="Âm báo bằng giọng nói"
-                            description="Đọc thông báo khi đối soát nhận được tiền."
+                            description="Đọc to khi nhận được tiền."
                         />
                         <div v-if="form.payment_voice_enabled" class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
                             <FloatingSelect
@@ -1160,90 +1160,80 @@ const bankLockedText = computed(() =>
                     </div>
                 </SettingCollapse>
 
-                <SettingCollapse title="Nhận diện khuôn mặt" description="Tự nhận ra khách quen khi đến quầy POS." :default-open="false">
+                <SettingCollapse v-model="form.face_recognition_enabled" switchable title="Nhận diện khuôn mặt" description="Nhận ra khách quen tại POS.">
                     <div class="space-y-4 p-4">
-                        <SettingSwitch
-                            v-model="form.face_recognition_enabled"
-                            title="Bật nhận diện khuôn mặt"
-                            description="Cho phép đăng ký khuôn mặt ở trang Khách hàng và gợi ý khách tại POS."
-                        />
                         <template v-if="form.face_recognition_enabled">
                             <div class="space-y-3 rounded-lg bg-slate-50 p-3">
                                 <SettingSwitch
                                     v-model="form.face_notify_modal_enabled"
-                                    title="Hộp thông báo chi tiết khi nhận ra khách"
-                                    description="Hiện tên, SĐT, CCCD, công nợ để nhân viên xác nhận. Tắt thì chỉ hỏi ngay trong ô khách hàng."
+                                    title="Hộp thông tin khi nhận ra khách"
+                                    description="Hiện tên, SĐT, công nợ để xác nhận. Tắt: chỉ gợi ý ở ô khách hàng."
                                 />
                                 <SettingSwitch
                                     v-model="form.face_visit_tracking_enabled"
-                                    title="Ghi nhận lượt khách ra vào"
-                                    description="Lưu mọi người xuất hiện trước camera (cả khách lạ) để thống kê ở trang Lượt khách. Chỉ bật khi cửa hàng đã có biển báo dùng camera."
+                                    title="Ghi nhận lượt khách"
+                                    description="Lưu cả khách lạ để thống kê. Chỉ bật khi đã có biển báo camera."
                                 />
                                 <SettingSwitch
                                     v-if="form.face_visit_tracking_enabled"
                                     v-model="form.face_door_camera_enabled"
-                                    title="Camera cửa chạy nền (Camera AI)"
-                                    description="AI nhận diện liên tục kể cả khi không mở POS; POS hiện video trực tiếp và danh sách khách đang ở cửa."
+                                    title="Camera cửa chạy nền"
+                                    description="AI chạy liên tục kể cả khi không mở POS."
                                 />
                             </div>
 
-                            <SettingCollapse title="Danh sách camera" :description="`${form.face_cameras.length}/8 camera · mỗi camera cần luồng chính và sub-stream H.264`">
-                                <div class="space-y-3 p-3">
-                                    <div class="flex justify-end">
-                                        <button type="button" :disabled="form.face_cameras.length >= 8" class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50" @click="addCamera"><Plus :size="14" />Thêm camera</button>
+                            <SettingCollapse title="Danh sách camera" :description="`${form.face_cameras.length}/8 camera · cần luồng chính và sub-stream H.264`" :default-open="false">
+                                <div class="space-y-2 p-3">
+                                    <div v-for="(camera, index) in form.face_cameras" :key="camera.id" class="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                                        <div class="flex items-center gap-2">
+                                            <FloatingInput v-model="camera.name" class="min-w-0 flex-1" :name="`face_cameras.${index}.name`" label="Tên camera" placeholder-text="Camera lối vào" />
+                                            <label class="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-600"><input v-model="camera.enabled" type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />Bật</label>
+                                            <button v-if="camera.id !== 'door-1'" type="button" class="shrink-0 rounded-md border border-rose-200 bg-rose-50 p-2 text-rose-700" aria-label="Xóa camera" @click="removeCamera(index)"><Trash2 :size="14" /></button>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1.4fr_5rem]">
+                                            <FloatingSelect v-model="camera.brand" :name="`face_cameras.${index}.brand`" label="Hãng" :options="cameraBrandOptions" :show-placeholder="false" />
+                                            <FloatingInput v-model="camera.host" :name="`face_cameras.${index}.host`" label="IP / tên miền" placeholder-text="192.168.1.50" />
+                                            <FloatingInput v-model.number="camera.channel" class="col-span-2 sm:col-span-1" :name="`face_cameras.${index}.channel`" type="number" min="1" max="64" label="Kênh" />
+                                        </div>
+                                        <div v-if="camera.snapshot_url" class="grid gap-2 sm:grid-cols-3">
+                                            <FloatingSelect v-if="!isRtspCamera(camera)" v-model="camera.auth" :name="`face_cameras.${index}.auth`" label="Đăng nhập" :options="faceCctvAuthOptions" :show-placeholder="false" />
+                                            <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.username" :name="`face_cameras.${index}.username`" label="Tài khoản" autocomplete="off" />
+                                            <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.password" :name="`face_cameras.${index}.password`" secret :label="camera.has_password ? 'Mật khẩu (trống = giữ)' : 'Mật khẩu'" />
+                                        </div>
+                                        <SettingCollapse title="Đường dẫn RTSP" :description="camera.snapshot_url ? 'Đã có' : 'Chưa nhập'" :default-open="!camera.snapshot_url">
+                                            <div class="space-y-2 p-3">
+                                                <button type="button" :disabled="camera.brand === 'custom' || !camera.host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset(camera)">Điền theo hãng</button>
+                                                <FloatingInput v-model="camera.snapshot_url" :name="`face_cameras.${index}.snapshot_url`" label="Luồng chính (main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
+                                                <p v-if="form.errors[`face_cameras.${index}.snapshot_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.snapshot_url`] }}</p>
+                                                <FloatingInput v-if="isRtspCamera(camera)" v-model="camera.view_rtsp_url" :name="`face_cameras.${index}.view_rtsp_url`" label="Luồng phụ (sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub..." />
+                                                <p v-if="form.errors[`face_cameras.${index}.view_rtsp_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.view_rtsp_url`] }}</p>
+                                            </div>
+                                        </SettingCollapse>
                                     </div>
-                            <div v-for="(camera, index) in form.face_cameras" :key="camera.id" class="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="min-w-0 flex-1 text-xs font-bold text-slate-800">{{ index === 0 ? 'Camera cửa mặc định' : `Camera bổ sung ${index}` }}</span>
-                                    <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600"><input v-model="camera.enabled" type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Hoạt động</label>
-                                    <button v-if="camera.id !== 'door-1'" type="button" class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700" @click="removeCamera(index)"><Trash2 :size="13" />Xóa</button>
-                                </div>
-                                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                                    <FloatingInput v-model="camera.name" :name="`face_cameras.${index}.name`" label="Tên hiển thị" placeholder-text="Camera lối vào" />
-                                    <FloatingInput v-model="camera.id" :name="`face_cameras.${index}.id`" label="Mã camera" :disabled="index === 0" placeholder-text="camera-2" />
-                                </div>
-                                <div class="grid gap-2 sm:grid-cols-3">
-                                    <FloatingSelect v-model="camera.brand" :name="`face_cameras.${index}.brand`" label="Hãng camera" :options="cameraBrandOptions" :show-placeholder="false" />
-                                    <FloatingInput v-model="camera.host" :name="`face_cameras.${index}.host`" label="IP / tên miền" placeholder-text="192.168.1.50" />
-                                    <FloatingInput v-model.number="camera.channel" :name="`face_cameras.${index}.channel`" type="number" min="1" max="64" label="Kênh" />
-                                </div>
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <button type="button" :disabled="camera.brand === 'custom' || !camera.host" class="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @click="applyCameraPreset(camera)">Điền URL theo hãng</button>
-                                    <span class="text-[11px] text-slate-500">URL tự sửa sẽ được giữ nguyên; sub-stream phải là H.264.</span>
-                                </div>
-                                <FloatingInput v-model="camera.snapshot_url" :name="`face_cameras.${index}.snapshot_url`" label="Luồng chính (RTSP main-stream)" placeholder-text="rtsp://192.168.1.50:554/..." />
-                                <p v-if="form.errors[`face_cameras.${index}.snapshot_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.snapshot_url`] }}</p>
-                                <FloatingInput v-if="isRtspCamera(camera)" v-model="camera.view_rtsp_url" :name="`face_cameras.${index}.view_rtsp_url`" label="Luồng AI và xem trực tiếp (RTSP sub-stream H.264)" placeholder-text="rtsp://192.168.1.50:554/...sub-stream..." />
-                                <p v-if="form.errors[`face_cameras.${index}.view_rtsp_url`]" class="text-xs text-rose-600">{{ form.errors[`face_cameras.${index}.view_rtsp_url`] }}</p>
-                                <div v-if="camera.snapshot_url" class="grid gap-2 sm:grid-cols-3">
-                                    <FloatingSelect v-if="!isRtspCamera(camera)" v-model="camera.auth" :name="`face_cameras.${index}.auth`" label="Đăng nhập" :options="faceCctvAuthOptions" :show-placeholder="false" />
-                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.username" :name="`face_cameras.${index}.username`" label="Tài khoản" autocomplete="off" />
-                                    <FloatingInput v-if="isRtspCamera(camera) || camera.auth !== 'none'" v-model="camera.password" :name="`face_cameras.${index}.password`" type="password" autocomplete="new-password" :label="camera.has_password ? 'Mật khẩu (để trống = giữ nguyên)' : 'Mật khẩu'" />
-                                </div>
-                            </div>
+                                    <button type="button" :disabled="form.face_cameras.length >= 8" class="inline-flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-indigo-300 px-2.5 py-2 text-xs font-semibold text-indigo-700 disabled:opacity-50" @click="addCamera"><Plus :size="14" />Thêm camera</button>
                                 </div>
                             </SettingCollapse>
 
                             <DoorCameraSetup v-if="form.face_visit_tracking_enabled && form.face_door_camera_enabled && door_camera" :info="door_camera" />
 
-                            <SettingCollapse v-if="form.face_visit_tracking_enabled" title="Lưu trữ và tự học" description="Thời gian giữ lịch sử khách và cách bổ sung mẫu khuôn mặt." :default-open="false">
+                            <SettingCollapse v-if="form.face_visit_tracking_enabled" title="Lưu trữ và tự học" description="Thời gian giữ lịch sử và tự học mẫu." :default-open="false">
                                 <div class="space-y-4 p-4">
                                     <div class="max-w-xs">
                                         <FloatingInput v-model="form.face_visit_retention_days" name="face_visit_retention_days" type="number" min="1" max="365" label="Tự xóa lịch sử khách sau (ngày)" />
-                                        <p class="mt-1 text-xs text-slate-500">Hết hạn sẽ xóa lượt đến, ảnh camera và dữ liệu gộp. Ảnh mẫu đã đăng ký chỉ xóa khi xóa dữ liệu khuôn mặt của khách.</p>
+                                        <p class="mt-1 text-xs text-slate-500">Xóa lượt đến và ảnh camera cũ. Ảnh mẫu đã đăng ký được giữ.</p>
                                         <p v-if="form.errors.face_visit_retention_days" class="text-xs text-rose-600">{{ form.errors.face_visit_retention_days }}</p>
                                     </div>
                                     <SettingSwitch
                                         v-model="form.face_auto_learn_enabled"
                                         title="Tự bổ sung mẫu khuôn mặt"
-                                        description="Chỉ lưu thêm khi khách được nhận rõ và cách biệt đủ với người giống thứ hai."
+                                        description="Chỉ thêm khi nhận rõ và không nhầm với người giống."
                                     />
                                     <div v-if="form.face_auto_learn_enabled" class="grid gap-3 sm:grid-cols-3">
                                         <FloatingInput v-model.number="form.face_auto_learn_min_percent" name="face_auto_learn_min_percent" type="number" min="60" max="95" label="Độ giống tối thiểu (%)" />
                                         <FloatingInput v-model.number="form.face_auto_learn_margin_percent" name="face_auto_learn_margin_percent" type="number" min="5" max="50" label="Cách biệt tối thiểu (%)" />
                                         <FloatingInput v-model.number="form.face_auto_learn_cooldown_minutes" name="face_auto_learn_cooldown_minutes" type="number" min="10" max="1440" label="Chờ trước khi học lại (phút)" />
                                     </div>
-                                    <p class="text-[11px] text-slate-500">Engine cố định: YuNet + SFace/OpenVINO, để mẫu đăng ký và luồng nền luôn cùng loại vector.</p>
+                                    <p class="text-[11px] text-slate-500">Dùng YuNet + SFace/OpenVINO cố định để mẫu luôn tương thích.</p>
                                 </div>
                             </SettingCollapse>
                         </template>
@@ -1271,7 +1261,7 @@ const bankLockedText = computed(() =>
         <BaseModal v-if="activeModal === 'mail' && can_edit_settings" title="Email gửi thư" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">
             <MailSettings :mail="mail_settings || {}" />
         </BaseModal>
-        <BaseModal v-if="activeModal === 'network' && can_edit_settings" title="Mạng & địa chỉ IP" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">
+        <BaseModal v-if="activeModal === 'network' && can_edit_settings" title="Mạng & máy chủ" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">
             <NetworkSettings />
         </BaseModal>
         <BaseModal v-if="activeModal === 'cloud' && can_manage_backups" title="Kho lưu trữ đám mây" size="lg" body-class="max-h-[70dvh] overflow-y-auto bg-slate-50/60 p-3 sm:p-4" @close="closeModal">

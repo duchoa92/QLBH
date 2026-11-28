@@ -65,6 +65,9 @@ class HandleInertiaRequests extends Middleware
                 // Cảnh báo lịch chạy nền (sao lưu tự động, nhắc việc) đã ngừng: chỉ cho người quản lý sao lưu.
                 'schedulerHealth' => fn () => $this->schedulerHealthFor($request, $isSetupRequest),
 
+                // Cảnh báo mạng (IP chưa cố định / lệch cấu hình): chỉ cho người có quyền sửa cài đặt, đã cache 10 phút.
+                'networkHealth' => fn () => $this->networkHealthFor($request, $isSetupRequest),
+
                 'flash' => [
                     'success' => fn () => session()->pull('success'),
                     'error' => fn () => session()->pull('error'),
@@ -99,5 +102,17 @@ class HandleInertiaRequests extends Middleware
         }
 
         return \App\Support\SchedulerHealth::problem();
+    }
+
+    private function networkHealthFor(Request $request, bool $isSetupRequest): ?array
+    {
+        if ($isSetupRequest || ! $request->user() || ! $request->user()->can('settings.edit')) {
+            return null;
+        }
+        try {
+            return \App\Support\ServerNetwork::health();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

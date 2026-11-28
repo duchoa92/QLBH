@@ -24,8 +24,12 @@ export function installViewportFix() {
         const focusableField = 'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [contenteditable="true"]'
         let restoreTimer = 0
 
+        // Ô nhập từ 16px trở lên thì iOS không tự phóng to, nên KHÔNG đổi meta viewport: mỗi lần đổi meta Safari tính lại bố cục
+        // và trang bị giật trong lúc bàn phím đang mở.
+        const needsZoomLock = (field) => parseFloat(window.getComputedStyle(field).fontSize) < 16
+
         document.addEventListener('focusin', (event) => {
-            if (!(event.target instanceof HTMLElement) || !event.target.matches(focusableField)) return
+            if (!(event.target instanceof HTMLElement) || !event.target.matches(focusableField) || !needsZoomLock(event.target)) return
             window.clearTimeout(restoreTimer)
             if (viewportMeta.getAttribute('content') !== lockedViewportContent) viewportMeta.setAttribute('content', lockedViewportContent)
         })
@@ -44,22 +48,30 @@ export function installViewportFix() {
     const isEditable = el => el instanceof HTMLElement
         && el.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [contenteditable="true"]')
     let frame = 0
+    let lastH = -1
+    let lastTop = -1
     let widestViewport = viewport.width
     let fullViewportHeight = Math.max(viewport.height, window.innerHeight, document.documentElement.clientHeight)
 
+    // Đưa ô đang gõ vào vùng nhìn thấy: chỉ làm MỘT lần sau khi bàn phím mở xong (đợi viewport hết thay đổi), cuộn tức thì (không smooth),
+    // và chỉ khi ô thật sự bị che. Trước đây hàm này chạy ở mỗi khung hình resize/scroll với scrollIntoView smooth nên trang giật hàng trăm ms.
+    let revealTimer = 0
+    let revealedField = null
+    const isFieldVisible = (field) => {
+        const rect = field.getBoundingClientRect()
+        return rect.top >= viewport.offsetTop + 8 && rect.bottom <= viewport.offsetTop + viewport.height - 8
+    }
     const revealFocusedField = () => {
-        const field = document.activeElement
-        if (!(field instanceof HTMLElement) || !field.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')) return
-
-        // Trang POS toàn màn hình là khung cố định: không cuộn trang để "đưa ô nhập ra giữa" (làm vỡ bố cục).
-        if (root.classList.contains('pos-fullscreen') && !field.closest('[role="dialog"], .base-modal-sheet')) return
-
-        // Chờ Safari/Chrome hoàn tất animation mở bàn phím rồi cuộn ngay vùng chứa ô nhập.
-        window.setTimeout(() => {
-            if (root.classList.contains('kb-open') && document.activeElement === field) {
-                field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
-            }
-        }, 80)
+        window.clearTimeout(revealTimer)
+        revealTimer = window.setTimeout(() => {
+            const field = document.activeElement
+            if (!(field instanceof HTMLElement) || !field.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')) return
+            if (!root.classList.contains('kb-open') || field === revealedField) return
+            // Trang POS toàn màn hình là khung cố định: không cuộn trang để "đưa ô nhập ra giữa" (làm vỡ bố cục).
+            if (root.classList.contains('pos-fullscreen') && !field.closest('[role="dialog"], .base-modal-sheet')) return
+            revealedField = field
+            if (!isFieldVisible(field)) field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' })
+        }, 250)
     }
 
     const update = () => {
@@ -80,15 +92,21 @@ export function installViewportFix() {
         // Bàn phím chỉ thật sự mở khi có một ô nhập đang được focus.
         const keyboardOpen = !zoomed && coveredHeight > 100 && isEditable(document.activeElement)
 
+        // Chỉ ghi lại khi giá trị đổi (>= 2px): ghi liên tục mỗi khung hình khiến modal tính lại bố cục và rung.
         if (keyboardOpen) {
-            root.style.setProperty('--vv-h', `${Math.round(viewport.height)}px`)
-            root.style.setProperty('--vv-top', `${Math.round(viewport.offsetTop)}px`)
+            const h = Math.round(viewport.height)
+            const top = Math.round(viewport.offsetTop)
+            if (Math.abs(h - lastH) >= 2) { root.style.setProperty('--vv-h', `${h}px`); lastH = h }
+            if (Math.abs(top - lastTop) >= 2) { root.style.setProperty('--vv-top', `${top}px`); lastTop = top }
         } else {
-            root.style.removeProperty('--vv-h')
-            root.style.removeProperty('--vv-top')
+            if (lastH !== -1) root.style.removeProperty('--vv-h')
+            if (lastTop !== -1) root.style.removeProperty('--vv-top')
+            lastH = -1
+            lastTop = -1
+            revealedField = null
         }
 
-        root.classList.toggle('kb-open', keyboardOpen)
+        if (root.classList.contains('kb-open') !== keyboardOpen) root.classList.toggle('kb-open', keyboardOpen)
 
         // iOS tự trượt cả trang lên khi bật bàn phím: POS là khung cố định nên đưa về đầu trang.
         if (keyboardOpen && root.classList.contains('pos-fullscreen') && (window.scrollY || window.scrollX)) {
@@ -109,7 +127,7 @@ export function installViewportFix() {
         const field = event.target
         if (!(field instanceof HTMLElement) || !field.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')) return
 
-        window.setTimeout(revealFocusedField, 350)
+        revealFocusedField()
     })
 
     // Rời khỏi ô nhập: gỡ trạng thái kb-open ngay (tránh bị kẹt khi sự kiện resize không bắn).

@@ -71,7 +71,7 @@ const setEncryption = (value) => {
 
             <div class="grid gap-3 sm:grid-cols-2">
                 <FloatingInput id="mail-username" v-model="form.username" label="Tài khoản" autocomplete="off" :error="form.errors.username" />
-                <FloatingInput id="mail-password" v-model="form.password" type="password" label="Mật khẩu" :placeholder-text="passwordPlaceholder" autocomplete="new-password" :error="form.errors.password" />
+                <FloatingInput id="mail-password" v-model="form.password" secret label="Mật khẩu" :placeholder-text="passwordPlaceholder" :error="form.errors.password" />
                 <FloatingInput id="mail-from" v-model="form.from_address" type="email" label="Email gửi đi" :error="form.errors.from_address" />
                 <FloatingInput id="mail-from-name" v-model="form.from_name" label="Tên người gửi" :error="form.errors.from_name" />
             </div>

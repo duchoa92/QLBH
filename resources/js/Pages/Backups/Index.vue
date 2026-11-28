@@ -1,6 +1,6 @@
 <script setup>
 import { router, useForm } from '@inertiajs/vue3'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
     DatabaseBackup,
     Download,
@@ -62,7 +62,19 @@ const restoreForm = useForm({ mode: 'merge', conflict_policy: 'keep_current', co
 const uploadForm = useForm({ backup_file: null, operation_id: null })
 const confirmBox = useConfirm()
 const selectedFileName = ref('')
-const restorePreview = ref(props.restore_preview)
+// Sau khi kiểm tra xong, server chuyển hướng và trang Cài đặt bị dựng lại (đổi URL), làm mất state của hộp đối chiếu.
+// Flash của server đôi khi cũng bị ghi đè bởi các request tiến trình chạy song song. Vì vậy kết quả đối chiếu được lưu tạm
+// trên window để bản dựng lại vẫn mở được hộp thoại, không bị biến mất sau khi chạy 100%.
+const PREVIEW_STASH = '__qlbhRestorePreview'
+const stashPreview = (preview) => { try { window[PREVIEW_STASH] = preview ? { preview, at: Date.now() } : null } catch (_) { /* bỏ qua */ } }
+const takeStashedPreview = () => {
+    try {
+        const item = window[PREVIEW_STASH]
+        window[PREVIEW_STASH] = null
+        return item && Date.now() - item.at < 60000 ? item.preview : null
+    } catch (_) { return null }
+}
+const restorePreview = ref(props.restore_preview || takeStashedPreview())
 const showRestorePreview = ref(Boolean(restorePreview.value))
 const inspectionInProgress = ref(false)
 const inspectionOperation = ref(false)
@@ -204,6 +216,7 @@ const startProgress = (title = 'Đang xử lý sao lưu') => {
                 operationProgress.value = { ...operationProgress.value, ...result, active: result.state === 'running' }
                 if (inspectionOperation.value && result.report?.inspection) {
                     const inspection = result.report.inspection
+                    if (inspection.preview?.summary && inspection.preview?.tables) stashPreview({ ...inspection.preview, backup: inspection.preview.backup || restorePreview.value?.backup })
                     restorePreview.value = {
                         ...restorePreview.value,
                         summary: { ...(restorePreview.value?.summary || {}), ...(inspection.summary || {}) },
@@ -327,6 +340,7 @@ const applyPreviewFromPage = (page) => applyRestorePreview(page?.props?.restore_
 watch(() => props.restore_preview, openRestorePreview, { immediate: true })
 
 const beginRestoreComparison = (backupName, title) => {
+    stashPreview(null)
     comparisonError.value = ''
     inspectionInProgress.value = true
     inspectionOperation.value = true
@@ -334,13 +348,31 @@ const beginRestoreComparison = (backupName, title) => {
     lastPreviewKey.value = backupName
     dismissedPreviewKey.value = null
     showRestorePreview.value = true
-    return startProgress(title)
+    const operationId = startProgress(title)
+    try { window.__qlbhRestoreOp = { id: operationId, at: Date.now() } } catch (_) { /* bỏ qua */ }
+    return operationId
 }
+
+// Nếu trang bị dựng lại đúng lúc kiểm tra xong mà chưa kịp nhận kết quả, lấy lại từ báo cáo tiến trình của server.
+onMounted(async () => {
+    if (restorePreview.value) return
+    let op = null
+    try { op = window.__qlbhRestoreOp; window.__qlbhRestoreOp = null } catch (_) { /* bỏ qua */ }
+    if (!op || Date.now() - op.at > 300000) return
+    try {
+        const response = await fetch(route('backups.progress', { operation: op.id }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+        if (!response.ok) return
+        const result = await response.json()
+        const preview = result?.report?.inspection?.preview
+        if (preview?.summary && preview?.tables && !restorePreview.value) applyRestorePreview(preview)
+    } catch (_) { /* bỏ qua */ }
+})
 
 const finishRestoreComparison = (page) => {
     const preview = page?.props?.restore_preview
         || operationProgress.value.report?.inspection?.preview
     if (preview?.summary && preview?.tables) {
+        stashPreview(null)
         applyRestorePreview({ ...preview, backup: preview.backup || restorePreview.value?.backup })
         return
     }

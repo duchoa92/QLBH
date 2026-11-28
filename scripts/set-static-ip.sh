@@ -10,7 +10,7 @@
 set -euo pipefail
 
 IP_CIDR=""; GATEWAY=""; DNS=""; IFACE=""; REVERT=0; ASSUME_YES=0; LIST_ONLY=0
-JSON_ONLY=0; CHECK_IP=""; APPLY_REQ=0; WEB_MODE=0; STATUS_DONE=0; QUIET=0   # JSON_ONLY/CHECK_IP/APPLY_REQ: dùng cho trang Cài đặt của website
+JSON_ONLY=0; STATUS_ONLY=0; CHECK_IP=""; APPLY_REQ=0; WEB_MODE=0; STATUS_DONE=0; QUIET=0   # JSON_ONLY/CHECK_IP/APPLY_REQ: dùng cho trang Cài đặt của website
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --ip) IP_CIDR="${2:?thiếu giá trị cho --ip}"; shift 2 ;;
@@ -20,6 +20,7 @@ while [[ $# -gt 0 ]]; do
         --revert) REVERT=1; shift ;;
         --list) LIST_ONLY=1; shift ;;
         --json) JSON_ONLY=1; QUIET=1; shift ;;
+        --status) STATUS_ONLY=1; QUIET=1; shift ;;
         --check) CHECK_IP="${2:?thiếu giá trị cho --check}"; QUIET=1; shift 2 ;;
         --apply-request) APPLY_REQ=1; ASSUME_YES=1; shift ;;
         --yes|-y) ASSUME_YES=1; shift ;;
@@ -36,7 +37,7 @@ log() { printf '\n==> %s\n' "$*"; }
 ok()  { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
-[[ $EUID -eq 0 || $LIST_ONLY -eq 1 || $JSON_ONLY -eq 1 || -n $CHECK_IP ]] || { echo "Hãy chạy bằng root: sudo bash $0" >&2; exit 1; }
+[[ $EUID -eq 0 || $LIST_ONLY -eq 1 || $JSON_ONLY -eq 1 || $STATUS_ONLY -eq 1 || -n $CHECK_IP ]] || { echo "Hãy chạy bằng root: sudo bash $0" >&2; exit 1; }
 [[ -z $IFACE || $IFACE =~ ^[A-Za-z0-9._-]{1,15}$ ]] || { echo "Tên card mạng không hợp lệ." >&2; exit 2; }
 
 # ---------- Yêu cầu đổi IP từ trang Cài đặt của website ----------
@@ -438,6 +439,13 @@ check_candidate() {  # ip (không kèm /nn), prefix
     fi
     return 0
 }
+
+# --status: tình trạng nhanh (không quét) cho cảnh báo trong website: IP có đang cố định không, APP_URL có khớp IP máy không.
+if [[ $STATUS_ONLY -eq 1 ]]; then
+    APP_HOST="$(grep -E '^APP_URL=' "$APP_DIR/.env" 2>/dev/null | head -n1 | sed -E 's/^APP_URL=["'"'"']?[a-z]+:\/\/([^\/:"'"'"']+).*/\1/' || true)"
+    printf '{"current_ip":"%s","is_static":%s,"app_url_host":"%s"}\n' "$CUR_IP" "$([[ $IS_STATIC -eq 1 ]] && echo true || echo false)" "$(printf '%s' "$APP_HOST" | json_escape)"
+    exit 0
+fi
 
 # ---------- Quét & hiển thị ----------
 if ! command -v ping >/dev/null 2>&1; then

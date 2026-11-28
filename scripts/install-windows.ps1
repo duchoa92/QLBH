@@ -9,11 +9,15 @@
 .PARAMETER SkipLaragon     Không tự cài Laragon (dùng PHP/Apache có sẵn).
 .PARAMETER SkipFirewall    Không mở cổng 80/443 trong Windows Firewall.
 .PARAMETER SkipScheduler   Không tạo Scheduled Task chạy schedule:run mỗi phút.
+.PARAMETER SkipStaticIp    Không hỏi cố định IP máy chủ (quét mạng, hiện IP dùng được/không dùng được).
+.PARAMETER SkipHelper      Không cài tác vụ nền cho trang Cài đặt (đổi IP, khởi động lại, tắt máy từ website).
 #>
 param(
     [switch] $SkipLaragon,
     [switch] $SkipFirewall,
     [switch] $SkipScheduler,
+    [switch] $SkipStaticIp,
+    [switch] $SkipHelper,
     [string] $LaragonRoot = 'C:\laragon'
 )
 
@@ -138,9 +142,24 @@ if (Test-Path $laragonExe) {
     Warn "Không thấy $laragonExe, bỏ qua bước tự chạy Laragon."
 }
 
+if (-not $SkipHelper) {
+    Step 'Cài trợ giúp cho trang Cài đặt (đổi IP, khởi động lại, tắt máy từ website)'
+    & (Join-Path $PSScriptRoot 'install-windows-helper.ps1') -LaragonRoot $LaragonRoot
+}
+
+if (-not $SkipStaticIp -and [Environment]::UserInteractive) {
+    Step 'Mạng: cố định IP máy chủ'
+    $answer = (Read-Host 'Quét mạng và cố định/đổi IP máy chủ bây giờ? (script hiện IP dùng được và không dùng được) [Y/n]').Trim()
+    if (-not $answer -or $answer -match '^[YyCc]') {
+        & (Join-Path $PSScriptRoot 'windows-network.ps1') -LaragonRoot $LaragonRoot
+        if ($LASTEXITCODE -ne 0) { Warn 'Chưa cố định được IP. Đặt lại sau trong phần mềm: Cài đặt > Mạng & máy chủ, hoặc chạy scripts\windows-network.ps1.' }
+    }
+}
+
 $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(127|169\.254)\.' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1).IPAddress
 Step 'Hoàn tất phần tự động'
 Write-Host "    1) Mở Laragon > Start All (Apache + MySQL)."
 Write-Host "    2) Laragon > Menu > Preferences > General > Document Root = $projectRoot\public  (để truy cập được bằng IP máy, không chỉ qlbh.test)."
 Write-Host "    3) Mở http://localhost/setup  hoặc  http://$ip/setup  để tạo database và tài khoản quản trị."
 Write-Host "    4) Camera điện thoại cần HTTPS: xem docs\HUONG-DAN-CAI-DAT.md mục 'HTTPS cho camera'."
+Write-Host "    5) Đổi IP, khởi động lại, tắt máy sau này: trong phần mềm vào Cài đặt > Mạng & máy chủ."

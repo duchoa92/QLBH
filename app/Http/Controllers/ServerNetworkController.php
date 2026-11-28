@@ -7,8 +7,9 @@ namespace App\Http\Controllers;
 use App\Support\ServerNetwork;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
-/** Mục "Mạng & địa chỉ IP" trong Cài đặt: xem IP dùng được/không dùng được và đổi IP máy chủ. */
+/** Mục "Mạng & máy chủ" trong Cài đặt: xem IP dùng được/không dùng được, đổi IP, khởi động lại / tắt máy chủ. */
 class ServerNetworkController extends Controller
 {
     /** Quét mạng: dải IP, IP không thể chọn, IP còn trống, gợi ý. */
@@ -19,7 +20,9 @@ class ServerNetworkController extends Controller
             return response()->json(['supported' => false, 'message' => $support['message']]);
         }
 
-        return response()->json(['supported' => true] + ServerNetwork::scan() + ['status' => ServerNetwork::status()]);
+        ServerNetwork::forgetHealth();
+
+        return response()->json(['supported' => true, 'os' => PHP_OS_FAMILY] + ServerNetwork::scan() + ['status' => ServerNetwork::status()]);
     }
 
     /** Kiểm tra nhanh một IP trước khi đổi. */
@@ -69,6 +72,33 @@ class ServerNetworkController extends Controller
     /** Trang hỏi mỗi vài giây trong lúc đổi IP. */
     public function status(): JsonResponse
     {
-        return response()->json(['status' => ServerNetwork::status()]);
+        $status = ServerNetwork::status();
+        if (($status['state'] ?? null) !== 'running') {
+            ServerNetwork::forgetHealth();
+        }
+
+        return response()->json(['status' => $status]);
+    }
+
+    /** Khởi động lại hoặc tắt máy chủ. Bắt buộc nhập lại mật khẩu của người đang đăng nhập. */
+    public function power(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', 'in:restart,shutdown'],
+            'password' => ['required', 'string'],
+        ], ['password.required' => 'Nhập mật khẩu của bạn để xác nhận.']);
+
+        if (! Hash::check($data['password'], (string) $request->user()->password)) {
+            return response()->json(['message' => 'Mật khẩu không đúng.', 'errors' => ['password' => ['Mật khẩu không đúng.']]], 422);
+        }
+        $support = ServerNetwork::support();
+        if (! $support['supported']) {
+            return response()->json(['message' => $support['message']], 422);
+        }
+        if (! ServerNetwork::power($data['action'])) {
+            return response()->json(['message' => 'Không gửi được yêu cầu tới máy chủ. Kiểm tra trợ giúp: scripts/install-network-helper.sh (Ubuntu) hoặc scripts\install-windows-helper.ps1 (Windows).'], 500);
+        }
+
+        return response()->json(['started' => true, 'action' => $data['action']], 202);
     }
 }

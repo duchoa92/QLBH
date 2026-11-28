@@ -95,6 +95,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/settings/network/scan', [ServerNetworkController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.network.scan');
     Route::post('/settings/network/check', [ServerNetworkController::class, 'check'])->middleware('permission:settings.edit')->name('settings.network.check');
     Route::post('/settings/network/apply', [ServerNetworkController::class, 'apply'])->middleware('permission:settings.edit')->name('settings.network.apply');
+    Route::post('/settings/network/power', [ServerNetworkController::class, 'power'])->middleware('permission:settings.edit')->name('settings.network.power');
     Route::get('/settings/network/status', [ServerNetworkController::class, 'status'])->middleware('permission:settings.edit')->name('settings.network.status');
     Route::get('/settings/system-cleanup/scan', [SystemCleanupController::class, 'scan'])->middleware('permission:settings.edit')->name('settings.cleanup.scan');
     Route::delete('/settings/system-cleanup', [SystemCleanupController::class, 'destroy'])->middleware('permission:settings.edit')->name('settings.cleanup.destroy');

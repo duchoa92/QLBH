@@ -4,6 +4,7 @@ import { usePage } from '@inertiajs/vue3'
 import { AlertTriangle, LayoutGrid, Search, X } from 'lucide-vue-next'
 import { Link } from '@inertiajs/vue3'
 import { diskAlertCollapsedLevel, setDiskAlertCollapsed } from '@/Stores/diskAlert'
+import { collapsedAlerts, expandAlert } from '@/Stores/systemAlerts'
 import { floatingActionsCount, floatingActionsTarget } from '@/Stores/floatingActions'
 import { openGlobalSearchDialog } from '@/Stores/globalSearch'
 
@@ -127,12 +128,26 @@ watch(() => page.url, () => { open.value = false })
 const onPanelClick = (event) => {
     if (event.target instanceof Element && event.target.closest('button, a')) setTimeout(() => { open.value = false }, 0)
 }
-// Cảnh báo ổ đĩa đã ẩn: gộp vào nút chức năng (nút đổi màu, nhấp nháy, bảng có thêm dòng báo lỗi).
-const disk = computed(() => {
+// Cảnh báo hệ thống đã ẩn (ổ đĩa, lịch chạy nền, mạng): gộp vào nút chức năng (nút đổi màu, nhấp nháy);
+// trong bảng mỗi cảnh báo chỉ hiện MỘT dòng ngắn + nút xử lý + nút "Hiện lại" để đưa thanh cảnh báo trở lại.
+const alerts = computed(() => {
+    const list = []
     const health = page.props.diskHealth
-    return health && diskAlertCollapsedLevel.value === health.level ? health : null
+    if (health && diskAlertCollapsedLevel.value === health.level) {
+        list.push({ id: 'disk', level: health.level === 'danger' ? 'danger' : 'warning', text: `Ổ đĩa: ${health.messages?.[0] || 'sắp đầy'}`, link: route('backups.index'), linkText: health.backup_now ? 'Sao lưu' : 'Xem', restore: () => setDiskAlertCollapsed(null) })
+    }
+    const scheduler = page.props.schedulerHealth
+    if (scheduler && collapsedAlerts.scheduler === (scheduler.backup_enabled ? 'backup' : 'plain')) {
+        list.push({ id: 'scheduler', level: 'danger', text: scheduler.backup_enabled ? 'Lịch chạy nền dừng: sao lưu tự động không chạy' : 'Lịch chạy nền chưa hoạt động', link: scheduler.backup_enabled ? route('backups.index') : null, linkText: 'Sao lưu', restore: () => expandAlert('scheduler') })
+    }
+    const network = page.props.networkHealth
+    if (network && collapsedAlerts.network === network.title) {
+        list.push({ id: 'network', level: 'warning', text: network.title, link: route('settings.index', { section: 'network' }), linkText: 'Xử lý', restore: () => expandAlert('network') })
+    }
+    return list
 })
-const diskDanger = computed(() => disk.value?.level === 'danger')
+const hasAlert = computed(() => alerts.value.length > 0)
+const diskDanger = computed(() => alerts.value.some(item => item.level === 'danger'))
 const openSearch = () => { open.value = false; openGlobalSearchDialog() }
 
 const openUp = computed(() => pos.y + SIZE / 2 > safeH() / 2)
@@ -163,21 +178,12 @@ const panelClass = computed(() => [
                 :style="{ '--fa-shift': openUp ? '10px' : '-10px' }"
                 @click="onPanelClick"
             >
-                <div v-if="disk" class="floating-actions__alert" :class="diskDanger ? 'is-danger' : 'is-warning'" role="alert">
-                    <p class="floating-actions__alert-title">
+                <div v-if="alerts.length" class="floating-actions__alerts">
+                    <div v-for="item in alerts" :key="item.id" class="floating-actions__alert" :class="item.level === 'danger' ? 'is-danger' : 'is-warning'" role="alert">
                         <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
-                        {{ diskDanger ? 'Cảnh báo ổ đĩa nghiêm trọng' : 'Cảnh báo ổ đĩa' }}
-                    </p>
-                    <ul>
-                        <li v-for="message in disk.messages" :key="message">{{ message }}</li>
-                    </ul>
-                    <div v-if="disk.used_percent !== null" class="floating-actions__bar-wrap">
-                        <div class="floating-actions__bar"><span :class="'is-' + (disk.capacity_level || 'ok')" :style="{ width: Math.min(100, disk.used_percent) + '%' }" /></div>
-                        <p class="floating-actions__alert-meta">Đã dùng {{ disk.used_percent }}% · còn trống {{ disk.free_gb }} GB / {{ disk.total_gb }} GB</p>
-                    </div>
-                    <div class="floating-actions__alert-actions">
-                        <Link :href="route('backups.index')">{{ disk.backup_now ? 'Sao lưu ngay' : 'Mở trang sao lưu' }}</Link>
-                        <button type="button" @click.stop="setDiskAlertCollapsed(null)">Hiện thanh cảnh báo</button>
+                        <span class="floating-actions__alert-text">{{ item.text }}</span>
+                        <Link v-if="item.link" :href="item.link" class="floating-actions__alert-link">{{ item.linkText }}</Link>
+                        <button type="button" class="floating-actions__alert-restore" title="Hiện lại thanh cảnh báo" @click.stop="item.restore()">Hiện lại</button>
                     </div>
                 </div>
                 <p v-if="floatingActionsCount" class="px-2 pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Chức năng</p>
@@ -192,8 +198,8 @@ const panelClass = computed(() => [
         <button
             type="button"
             class="floating-actions__fab"
-            :class="{ 'is-open': open, 'has-alert': !!disk, 'is-danger': diskDanger }"
-            :title="open ? 'Đóng' : (disk ? (diskDanger ? 'Có cảnh báo nghiêm trọng về ổ đĩa — bấm để xem' : 'Có cảnh báo về ổ đĩa — bấm để xem') : 'Chức năng (kéo để di chuyển)')"
+            :class="{ 'is-open': open, 'has-alert': hasAlert, 'is-danger': diskDanger }"
+            :title="open ? 'Đóng' : (hasAlert ? (diskDanger ? 'Có cảnh báo nghiêm trọng — bấm để xem' : 'Có cảnh báo — bấm để xem') : 'Chức năng (kéo để di chuyển)')"
             :aria-expanded="open"
             aria-label="Chức năng của trang"
             @pointerdown="onPointerDown"
@@ -205,7 +211,7 @@ const panelClass = computed(() => [
             <span class="floating-actions__ring" />
             <LayoutGrid class="floating-actions__icon floating-actions__icon--menu" />
             <X class="floating-actions__icon floating-actions__icon--close" />
-            <span v-if="disk && !open" class="floating-actions__badge" aria-hidden="true"><AlertTriangle class="h-3 w-3" /></span>
+            <span v-if="hasAlert && !open" class="floating-actions__badge" aria-hidden="true">{{ alerts.length }}</span>
         </button>
     </div>
 </template>
@@ -281,24 +287,17 @@ const panelClass = computed(() => [
 .floating-actions__fab.has-alert:not(.is-open) .floating-actions__icon--menu { animation: fa-blink 1.2s ease-in-out infinite; }
 .floating-actions__badge {
     position: absolute; right: -4px; top: -4px; display: flex; height: 1.25rem; width: 1.25rem; align-items: center; justify-content: center;
-    border-radius: 9999px; background: #fff; color: #dc2626; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35); animation: fa-blink 1.2s ease-in-out infinite;
+    border-radius: 9999px; background: #fff; color: #dc2626; font-size: 0.6875rem; font-weight: 800; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35); animation: fa-blink 1.2s ease-in-out infinite;
 }
 .is-danger .floating-actions__badge { color: #b91c1c; }
-.floating-actions__alert { margin-bottom: 0.375rem; border-radius: 0.75rem; border: 1px solid; padding: 0.5rem 0.625rem; font-size: 0.75rem; line-height: 1.15rem; white-space: normal; }
+.floating-actions__alerts { margin-bottom: 0.375rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.floating-actions__alert { display: flex; align-items: center; gap: 0.375rem; border-radius: 0.625rem; border: 1px solid; padding: 0.3rem 0.5rem; font-size: 0.6875rem; line-height: 1rem; white-space: normal; }
 .floating-actions__alert.is-warning { border-color: #fcd34d; background: #fffbeb; color: #78350f; }
 .floating-actions__alert.is-danger { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
-.floating-actions__alert-title { display: flex; align-items: center; gap: 0.375rem; font-weight: 700; }
-.floating-actions__alert-meta { margin-top: 0.125rem; opacity: 0.85; }
-.floating-actions__bar-wrap { margin-top: 0.375rem; }
-.floating-actions__bar { height: 0.5rem; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.8); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
-.floating-actions__bar span { display: block; height: 100%; border-radius: 999px; background: #059669; }
-.floating-actions__bar span.is-warning { background: #f59e0b; }
-.floating-actions__bar span.is-danger { background: #dc2626; }
-.floating-actions__alert ul { margin-top: 0.25rem; list-style: disc; padding-left: 1rem; }
-.floating-actions__alert-actions { margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.375rem; }
-.floating-actions__alert-actions :is(a, button) { border-radius: 0.5rem; padding: 0.25rem 0.625rem; font-weight: 600; background: rgba(0, 0, 0, 0.07); }
-.floating-actions__alert-actions a { color: #fff; background: #d97706; }
-.is-danger .floating-actions__alert-actions a { background: #dc2626; }
+.floating-actions__alert-text { min-width: 0; flex: 1; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.floating-actions__alert-link, .floating-actions__alert-restore { flex-shrink: 0; border-radius: 0.375rem; padding: 0.125rem 0.4rem; font-weight: 700; font-size: 0.625rem; background: rgba(0, 0, 0, 0.07); color: inherit; }
+.floating-actions__alert-link { color: #fff; background: #d97706; }
+.is-danger .floating-actions__alert-link { background: #dc2626; }
 @keyframes fa-ring-warn { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); } 70%, 100% { box-shadow: 0 0 0 16px rgba(245, 158, 11, 0); } }
 @keyframes fa-ring-danger { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.65); } 70%, 100% { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); } }
 @keyframes fa-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Network, RefreshCw } from 'lucide-vue-next'
+import { Network, Power, RefreshCw, RotateCw } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import FloatingInput from '@/Components/UI/FloatingInput.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 
-// Đổi IP máy chủ ngay trong Cài đặt: quét mạng, hiện IP dùng được / không dùng được, kiểm tra IP nhập vào rồi đổi.
+// Mạng & máy chủ: đổi IP, khởi động lại, tắt máy ngay trong Cài đặt (Ubuntu và Windows).
+// Đổi IP máy chủ: quét mạng, hiện IP dùng được / không dùng được, kiểm tra IP nhập vào rồi đổi.
 // Việc đổi chạy nền trên máy chủ (tự hoàn tác nếu mất mạng). Sau khi đổi, trang tự chuyển sang địa chỉ mới.
 const confirmBox = useConfirm()
 const loading = ref(false)
@@ -14,7 +16,12 @@ const newIp = ref('')
 const gateway = ref('')
 const dns = ref('')
 const showAdvanced = ref(false)
-const phase = ref('idle')       // idle | changing | failed | timeout
+const phase = ref('idle')       // idle | changing | moved | failed | timeout
+const powerPassword = ref('')
+const powerError = ref('')
+const powerPhase = ref('idle') // idle | restarting | shutdown
+let powerTimer = null
+let oldDownSince = 0
 const resultMessage = ref('')
 const targetOrigin = ref('')
 let pollTimer = null
@@ -32,11 +39,23 @@ const scan = async () => {
         if (data.supported === false) error.value = data.message
         else if (data.error) error.value = data.error
         else if (data.status?.state === 'running' && Date.now() / 1000 - data.status.time < 300) { phase.value = 'changing'; startPolling(data.status.new_ip) }
+        else announceLastResult(data.status)
     } catch (e) {
         error.value = e.response?.data?.message || 'Không quét được mạng lúc này.'
     } finally {
         loading.value = false
     }
+}
+
+// Vừa chuyển sang địa chỉ mới sau khi đổi IP: báo kết quả một lần.
+const announceLastResult = (status) => {
+    if (!status || Date.now() / 1000 - status.time > 180) return
+    let seen = null
+    try { seen = window.sessionStorage.getItem('qlbh.ip.announced') } catch { /* bỏ qua */ }
+    if (seen === String(status.time)) return
+    try { window.sessionStorage.setItem('qlbh.ip.announced', String(status.time)) } catch { /* bỏ qua */ }
+    if (status.state === 'ok') toast.success(`Đổi IP thành công: máy chủ đang dùng ${status.new_ip || 'IP mới'}.`)
+    else if (status.state === 'failed') toast.error(`Đổi IP không thành công: ${status.message || 'máy giữ nguyên IP cũ.'}`)
 }
 
 // Cho phép nhập chỉ số cuối (vd 210) hoặc đủ 4 số.
@@ -76,6 +95,7 @@ const submit = () => confirmBox.show({
             })
             phase.value = 'changing'
             resultMessage.value = ''
+            toast.info('Đã gửi yêu cầu đổi IP, vui lòng đợi...')
             startPolling(data.new_ip)
         } catch (e) {
             const errors = e.response?.data?.errors
@@ -85,32 +105,102 @@ const submit = () => confirmBox.show({
 })
 
 // Trong lúc đổi: hỏi kết quả ở địa chỉ cũ; khi địa chỉ cũ không còn vào được thì chờ địa chỉ mới trả lời rồi chuyển sang.
+// Nếu trình duyệt chưa tin chứng chỉ của địa chỉ mới (nên không "gọi thử" được), sau 20 giây hiện nút mở địa chỉ mới bằng tay.
 const startPolling = (ip) => {
     const port = window.location.port ? `:${window.location.port}` : ''
     targetOrigin.value = `${window.location.protocol}//${ip}${port}`
     pollStartedAt = Date.now()
+    oldDownSince = 0
     clearInterval(pollTimer)
     pollTimer = window.setInterval(poll, 3000)
 }
+const goToNewAddress = () => {
+    stopPolling()
+    toast.success(`Đổi IP thành công. Đang chuyển sang ${targetOrigin.value.replace(/^https?:\/\//, '')}...`)
+    window.setTimeout(() => { window.location.href = `${targetOrigin.value}/settings?section=network` }, 1200)
+}
 const poll = async () => {
-    if (Date.now() - pollStartedAt > 4 * 60 * 1000) { stopPolling(); phase.value = 'timeout'; return }
+    if (Date.now() - pollStartedAt > 4 * 60 * 1000) {
+        stopPolling(); phase.value = 'timeout'
+        toast.warning('Chưa thấy máy chủ ở địa chỉ mới. Máy có thể đã tự quay về IP cũ.')
+        return
+    }
+    let reachable = false
     try {
         const { data } = await window.axios.get(route('settings.network.status'), { timeout: 4000 })
+        reachable = true
+        oldDownSince = 0
         const status = data.status
-        if (status?.state === 'failed') { stopPolling(); phase.value = 'failed'; resultMessage.value = status.message || 'Không đổi được IP, máy giữ nguyên IP cũ.'; return }
-        if (status?.state === 'ok' && status.new_ip === window.location.hostname) { stopPolling(); phase.value = 'idle'; scan(); return }
-    } catch { /* địa chỉ cũ không còn vào được: kiểm tra địa chỉ mới bên dưới */ }
+        if (status?.state === 'failed') {
+            stopPolling(); phase.value = 'failed'
+            resultMessage.value = status.message || 'Không đổi được IP, máy giữ nguyên IP cũ.'
+            toast.error('Đổi IP không thành công. Máy giữ nguyên IP cũ.')
+            return
+        }
+        if (status?.state === 'ok') {
+            if (status.new_ip && status.new_ip !== window.location.hostname) { goToNewAddress(); return }
+            stopPolling(); phase.value = 'idle'
+            toast.success('Đổi IP thành công.')
+            scan()
+            return
+        }
+    } catch { if (!oldDownSince) oldDownSince = Date.now() }
+    if (reachable) return
     try {
         await fetch(`${targetOrigin.value}/login`, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3000) })
-        stopPolling()
-        window.location.href = `${targetOrigin.value}/settings?section=network`
-    } catch { /* chưa vào được địa chỉ mới */ }
+        goToNewAddress()
+    } catch {
+        if (phase.value === 'changing' && oldDownSince && Date.now() - oldDownSince > 20000) {
+            phase.value = 'moved'
+            toast.success('Máy chủ đã đổi IP. Bấm "Mở địa chỉ mới" để tiếp tục.')
+        }
+    }
 }
 const stopPolling = () => { clearInterval(pollTimer); pollTimer = null }
 
+// ---- Khởi động lại / tắt máy chủ ----
+const power = (action) => {
+    powerError.value = ''
+    if (!powerPassword.value) { powerError.value = 'Nhập mật khẩu của bạn để xác nhận.'; return }
+    const restart = action === 'restart'
+    confirmBox.show({
+        title: restart ? 'Khởi động lại máy chủ' : 'Tắt máy chủ',
+        message: restart
+            ? 'Máy chủ sẽ khởi động lại: phần mềm tạm ngừng khoảng 1-3 phút. Trang sẽ tự tải lại khi máy chủ sẵn sàng.'
+            : 'Máy chủ sẽ TẮT HẲN: phần mềm ngừng hoạt động cho đến khi có người bấm nút nguồn trên máy chủ. Chắc chắn tắt?',
+        confirmText: restart ? 'Khởi động lại' : 'Tắt máy',
+        onConfirm: async () => {
+            try {
+                await window.axios.post(route('settings.network.power'), { action, password: powerPassword.value })
+            } catch (e) {
+                const message = e.response?.data?.errors?.password?.[0] || e.response?.data?.message || 'Không gửi được yêu cầu.'
+                powerError.value = message
+                toast.error(message)
+                throw new Error(message)
+            }
+            powerPassword.value = ''
+            if (restart) { powerPhase.value = 'restarting'; toast.info('Đang khởi động lại máy chủ...'); watchRestart() }
+            else { powerPhase.value = 'shutdown'; toast.info('Máy chủ đang tắt. Muốn bật lại, bấm nút nguồn trên máy chủ.') }
+        },
+    })
+}
+const watchRestart = () => {
+    const startedAt = Date.now()
+    let wentDown = false
+    clearInterval(powerTimer)
+    powerTimer = window.setInterval(async () => {
+        if (Date.now() - startedAt > 8 * 60 * 1000) { clearInterval(powerTimer); powerPhase.value = 'idle'; toast.warning('Chưa thấy máy chủ chạy lại. Kiểm tra máy chủ.'); return }
+        try {
+            await fetch(`${window.location.origin}/login`, { cache: 'no-store', signal: AbortSignal.timeout(3000) })
+            // Phải thấy máy chủ ngừng trả lời rồi mới chờ nó chạy lại (tránh tải lại quá sớm khi chưa kịp tắt).
+            if (wentDown || Date.now() - startedAt > 60 * 1000) { clearInterval(powerTimer); toast.success('Máy chủ đã chạy lại.'); window.setTimeout(() => window.location.reload(), 800) }
+        } catch { wentDown = true }
+    }, 3000)
+}
+
 const retry = () => { phase.value = 'idle'; resultMessage.value = ''; scan() }
 onMounted(scan)
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => { stopPolling(); clearInterval(powerTimer) })
 </script>
 
 <template>
@@ -127,6 +217,11 @@ onBeforeUnmount(stopPolling)
             <div v-if="phase === 'changing'" class="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
                 <p class="font-bold">Đang đổi IP sang {{ targetOrigin.replace(/^https?:\/\//, '') }}...</p>
                 <p>Kết nối có thể ngắt vài chục giây. Trang sẽ tự chuyển sang địa chỉ mới khi máy chủ sẵn sàng (cần đăng nhập lại vì địa chỉ khác). Nếu mất mạng, máy tự quay về IP cũ.</p>
+            </div>
+            <div v-if="phase === 'moved'" class="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                <p class="font-bold">Đã đổi IP. Máy chủ đang dùng {{ targetOrigin.replace(/^https?:\/\//, '') }}.</p>
+                <p>Nếu trình duyệt báo "không bảo mật", chọn Nâng cao → Tiếp tục. Cần đăng nhập lại ở địa chỉ mới.</p>
+                <a :href="`${targetOrigin}/settings?section=network`" class="inline-block rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">Mở địa chỉ mới</a>
             </div>
             <div v-if="phase === 'failed'" class="space-y-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
                 <p class="font-bold">Không đổi được IP. Máy giữ nguyên cấu hình cũ.</p>
@@ -189,7 +284,7 @@ onBeforeUnmount(stopPolling)
                     <p v-if="!info.free_ranges.length" class="mt-1 text-[11px] text-slate-500">Không còn IP trống trong dải đã quét.</p>
                 </div>
 
-                <p class="text-[11px] leading-relaxed text-slate-500">Máy đang tắt hoặc ngủ sẽ không hiện ở danh sách trên. Nên chọn IP nằm ngoài dải DHCP của router (xem trang quản trị router) hoặc đặt DHCP reservation cho máy chủ để không bị cấp trùng.</p>
+                <p class="text-[11px] leading-relaxed text-slate-500">Máy đang tắt sẽ không hiện ở trên. Nên chọn IP ngoài dải DHCP của router để không bị cấp trùng.</p>
 
                 <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-800" @click="showAdvanced = !showAdvanced">{{ showAdvanced ? 'Ẩn' : 'Hiện' }} tùy chọn nâng cao (gateway, DNS)</button>
                 <div v-if="showAdvanced" class="grid gap-3 sm:grid-cols-2">
@@ -200,6 +295,19 @@ onBeforeUnmount(stopPolling)
                 <div class="flex justify-end pt-1">
                     <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50" :disabled="!canSubmit" @click="submit">Đổi IP</button>
                 </div>
+            </section>
+
+            <section class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900"><Power :size="15" /> Điều khiển máy chủ</h3>
+                <p v-if="powerPhase === 'restarting'" class="rounded-md bg-blue-50 px-2.5 py-1.5 text-xs text-blue-900">Đang khởi động lại... trang sẽ tự tải lại khi máy chủ sẵn sàng.</p>
+                <p v-else-if="powerPhase === 'shutdown'" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">Máy chủ đang tắt. Muốn bật lại, bấm nút nguồn trên máy chủ.</p>
+                <template v-else>
+                    <FloatingInput id="power-password" v-model="powerPassword" secret label="Mật khẩu của bạn (để xác nhận)" :error="powerError" />
+                    <div class="flex flex-wrap justify-end gap-2">
+                        <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="power('restart')"><RotateCw :size="14" /> Khởi động lại</button>
+                        <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700" @click="power('shutdown')"><Power :size="14" /> Tắt máy</button>
+                    </div>
+                </template>
             </section>
         </template>
     </div>

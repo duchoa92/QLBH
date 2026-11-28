@@ -29,10 +29,28 @@ ExecStart=/usr/local/sbin/qlbh-set-static-ip --apply-request
 TimeoutStartSec=300
 UNIT
 
+# Khởi động lại / tắt máy từ trang Cài đặt: chờ 3 giây để trình duyệt nhận được phản hồi rồi mới thực hiện.
+for pair in "reboot:reboot:Khởi động lại" "poweroff:poweroff:Tắt"; do
+    IFS=: read -r unit cmd label <<<"$pair"
+    cat > "/etc/systemd/system/qlbh-${unit}.service" <<UNIT
+[Unit]
+Description=QLBH: ${label} máy chủ theo yêu cầu từ trang Cài đặt
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 3
+ExecStart=${SYSTEMCTL} ${cmd}
+UNIT
+done
+
 SUDOERS=/etc/sudoers.d/qlbh-network
 TMP="$(mktemp)"
-printf '%s ALL=(root) NOPASSWD: %s start --no-block qlbh-ip-change.service\n' "$WEB_USER" "$SYSTEMCTL" > "$TMP"
+{
+    for svc in qlbh-ip-change qlbh-reboot qlbh-poweroff; do
+        printf '%s ALL=(root) NOPASSWD: %s start --no-block %s.service\n' "$WEB_USER" "$SYSTEMCTL" "$svc"
+    done
+} > "$TMP"
 if visudo -cf "$TMP" >/dev/null 2>&1; then install -m 440 -o root -g root "$TMP" "$SUDOERS"; else echo "File sudoers không hợp lệ, không cài." >&2; rm -f "$TMP"; exit 1; fi
 rm -f "$TMP"
 "$SYSTEMCTL" daemon-reload
-echo "  ✓ Trang Cài đặt → 'Mạng & địa chỉ IP' đã sẵn sàng."
+echo "  ✓ Trang Cài đặt → 'Mạng & máy chủ' (đổi IP, khởi động lại, tắt máy) đã sẵn sàng."

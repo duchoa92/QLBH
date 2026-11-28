@@ -42,6 +42,12 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    // Ô nhập khóa/bí mật KHÔNG phải mật khẩu đăng nhập (API key, mật khẩu camera, SMTP...): hiển thị dạng chấm nhưng không dùng
+    // type="password" để Safari/Chrome không hỏi "Lưu mật khẩu?" và không đề xuất mật khẩu mạnh.
+    secret: {
+        type: Boolean,
+        default: false,
+    },
     // Hiện nút X xóa nhanh nội dung khi ô có dữ liệu (dùng cho ô tìm kiếm).
     clearable: {
         type: Boolean,
@@ -91,8 +97,9 @@ const displayValue = computed(() => props.formatThousands
     : props.modelValue)
 const inputType = computed(() => props.formatThousands ? 'text' : props.type)
 const passwordVisible = ref(false)
-const isPassword = computed(() => !props.formatThousands && props.type === 'password')
-const resolvedInputType = computed(() => isPassword.value && passwordVisible.value ? 'text' : inputType.value)
+const isPassword = computed(() => !props.formatThousands && (props.type === 'password' || props.secret))
+const resolvedInputType = computed(() => props.secret ? 'text' : (isPassword.value && passwordVisible.value ? 'text' : inputType.value))
+const secretStyle = computed(() => props.secret && !passwordVisible.value ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : null)
 
 </script>
 
@@ -113,6 +120,14 @@ const resolvedInputType = computed(() => isPassword.value && passwordVisible.val
             @keydown="emit('keydown', $event)"
             @keyup="emit('keyup', $event)"
             :type="resolvedInputType"
+            :style="secretStyle"
+            :autocomplete="secret ? 'off' : $attrs.autocomplete"
+            :autocapitalize="secret ? 'off' : $attrs.autocapitalize"
+            :autocorrect="secret ? 'off' : $attrs.autocorrect"
+            :spellcheck="secret ? 'false' : $attrs.spellcheck"
+            :data-lpignore="secret ? 'true' : undefined"
+            :data-1p-ignore="secret ? 'true' : undefined"
+            :data-form-type="secret ? 'other' : undefined"
             :inputmode="formatThousands ? ($attrs.inputmode || 'numeric') : $attrs.inputmode"
             placeholder=" "
             :class="['peer w-full border border-gray-300 rounded-lg px-2 pt-2.5 pb-2 text-sm focus:border-blue-500 focus:ring-0 transition-all', isPassword ? 'pr-10' : '', inputClass]"
